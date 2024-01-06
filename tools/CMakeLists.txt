@@ -1,20 +1,16 @@
-cmake_minimum_required(VERSION 3.12)
+cmake_minimum_required(VERSION 3.20)
 project(MatrixGraph)
 
 #######################
 # Libraries
 #######################
-include_directories(
-        ${PROJECT_ROOT_DIR}/core
-)
+message(STATUS "PROJECT ROOT: ${PROJECT_ROOT_DIR}")
+include_directories(${PROJECT_ROOT_DIR})
 
 file(GLOB TOOLS_SOURCES
         ${CMAKE_CURRENT_SOURCE_DIR}/common/*.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/util/*.cpp
         )
-
-# find gflag
-find_package(gflags REQUIRED)
 
 # find TBB
 find_package(TBB)
@@ -22,6 +18,8 @@ if (TBB_FOUND)
     message("TBB found")
     add_compile_definitions(TBB_FOUND)
 endif ()
+
+
 
 #######################
 # Tests
@@ -34,4 +32,3 @@ endif ()
 # Artifacts
 #######################
 add_subdirectory(graph_converter)
-add_subdirectory(graph_partitioner)

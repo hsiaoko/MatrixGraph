@@ -9,12 +9,9 @@
 #include <mutex>
 
 #include "core/common/types.h"
-#include "core/components/execution_plan_generator.h"
 #include "core/components/scheduler/CHBL_scheduler.h"
 #include "core/components/scheduler/even_split_scheduler.h"
 #include "core/components/scheduler/round_robin_scheduler.h"
-#include "core/data_structures/match.h"
-#include "core/data_structures/table.h"
 #include "core/gpu/global_func.cuh"
 #include "core/gpu/host_func.cuh"
 #include "core/gpu/kernel_data_structures/kernel_bitmap.cuh"
@@ -26,27 +23,19 @@ namespace core {
 namespace components {
 
 class HostProducer {
-
-  // using ColumnMajor = cutlass::layout::ColumnMajor;
-  // using RowMajor = cutlass::layout::RowMajor;
-  // using CutlassGemm = cutlass::gemm::device::Gemm<float, RowMajor, float,
-  //                                                 RowMajor, float, RowMajor>;
+private:
+  using DataMngr = sics::matrixgraph::core::components::DataMngrBase;
 
 public:
-  HostProducer(int n_partitions, DataMngr *data_mngr,
-               ExecutionPlanGenerator *epg, scheduler::Scheduler *scheduler,
+  HostProducer(DataMngr *data_mngr, scheduler::Scheduler *scheduler,
                std::unordered_map<int, cudaStream_t *> *p_streams,
                std::mutex *p_streams_mtx,
-               // Match *p_match,
                std::unique_lock<std::mutex> *p_hr_start_lck,
-               std::condition_variable *p_hr_start_cv, bool *p_hr_terminable,
-               int prefix_hash_predicate_index = INT_MAX)
-      : n_partitions_(n_partitions), data_mngr_(data_mngr), epg_(epg),
-        p_streams_(p_streams),
-        p_streams_mtx_(p_streams_mtx), // p_match_(p_match),
-        prefix_hash_predicate_index_(prefix_hash_predicate_index),
-        p_hr_start_lck_(p_hr_start_lck), p_hr_start_cv_(p_hr_start_cv),
-        scheduler_(scheduler), p_hr_terminable_(p_hr_terminable) {
+               std::condition_variable *p_hr_start_cv, bool *p_hr_terminable)
+      : data_mngr_(data_mngr), p_streams_(p_streams),
+        p_streams_mtx_(p_streams_mtx), p_hr_start_lck_(p_hr_start_lck),
+        p_hr_start_cv_(p_hr_start_cv), scheduler_(scheduler),
+        p_hr_terminable_(p_hr_terminable) {
 
     cudaGetDeviceCount(&n_device_);
   }
@@ -63,7 +52,8 @@ public:
 
       auto start_time = std::chrono::system_clock::now();
       // AsyncSubmit(*p_stream);
-      Submit();
+      //Submit();
+      SubmitTask();
 
       auto end_time = std::chrono::system_clock::now();
 
@@ -81,6 +71,8 @@ public:
 
     *p_hr_terminable_ = true;
   }
+
+  __host__ void SubmitTask() {}
 
   __host__ void Submit() {
     int M = 10000;
@@ -106,21 +98,15 @@ public:
 
 private:
   int n_device_ = 0;
-  int n_partitions_ = 1;
-
-  int prefix_hash_predicate_index_ = INT_MAX;
 
   std::unique_lock<std::mutex> *p_hr_start_lck_;
   std::condition_variable *p_hr_start_cv_;
 
   scheduler::Scheduler *scheduler_;
   DataMngr *data_mngr_;
-  ExecutionPlanGenerator *epg_;
 
   std::unordered_map<int, cudaStream_t *> *p_streams_;
   std::mutex *p_streams_mtx_;
-
-  // Match *p_match_;
 
   bool *p_hr_terminable_;
 };

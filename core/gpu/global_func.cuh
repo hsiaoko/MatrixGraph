@@ -8,7 +8,6 @@
 #include <mma.h>
 #include <stdio.h>
 
-#include "core/components/execution_plan_generator.h"
 #include "core/gpu/device_func.cuh"
 #include "core/gpu/kernel_data_structures/kernel_bitmap.cuh"
 

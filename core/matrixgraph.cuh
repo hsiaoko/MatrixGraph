@@ -14,43 +14,34 @@
 #include <unordered_map>
 #include <vector>
 
-#include "core/components/data_mngr.h"
-#include "core/components/execution_plan_generator.h"
+#include "core/components/data_mngr/data_mngr_base.h"
+#include "core/components/data_mngr/tiled_matrix_mngr.h"
 #include "core/components/host_producer.h"
 #include "core/components/host_reducer.h"
 #include "core/components/scheduler/CHBL_scheduler.h"
 #include "core/components/scheduler/even_split_scheduler.h"
 #include "core/components/scheduler/round_robin_scheduler.h"
 #include "core/components/scheduler/scheduler.h"
-#include "core/data_structures/match.h"
 
 namespace sics {
 namespace matrixgraph {
 namespace core {
 
-using sics::matrixgraph::core::components::DataMngr;
-using sics::matrixgraph::core::components::ExecutionPlanGenerator;
-using sics::matrixgraph::core::components::HostProducer;
-using sics::matrixgraph::core::components::HostReducer;
-using sics::matrixgraph::core::components::scheduler::kCHBL;
-using sics::matrixgraph::core::components::scheduler::kEvenSplit;
-using sics::matrixgraph::core::components::scheduler::kRoundRobin;
-using sics::matrixgraph::core::data_structures::Match;
-using sics::matrixgraph::core::data_structures::Rule;
+class MatrixGraph {
+private:
+  using DataMngr = sics::matrixgraph::core::components::DataMngrBase;
+  using HostProducer = sics::matrixgraph::core::components::HostProducer;
+  using HostReducer = sics::matrixgraph::core::components::HostReducer;
+  using TiledMatrixMngr = sics::matrixgraph::core::components::TiledMatrixMngr;
 
-class HyperBlocker {
 public:
-  HyperBlocker() = delete;
+  MatrixGraph() = delete;
 
-  HyperBlocker(const std::string &rule_dir, const std::string &data_path_l,
-               const std::string &data_path_r, const std::string &output_path,
-               int n_partitions, int prefix_hash_predicate_index = INT_MAX,
-               const std::string &sep = ",",
-               components::scheduler::SchedulerType scheduler_type = kCHBL)
-      : rule_dir_(rule_dir), data_path_l_(data_path_l),
-        data_path_r_(data_path_r), output_path_(output_path),
-        n_partitions_(n_partitions),
-        prefix_hash_predicate_index_(prefix_hash_predicate_index) {
+  MatrixGraph(const std::string &data_path,
+              sics::matrixgraph::core::components::scheduler::SchedulerType
+                  scheduler_type = sics::matrixgraph::core::components::
+                      scheduler::SchedulerType::kCHBL)
+      : data_path_(data_path) {
 
     Init();
 
@@ -64,41 +55,19 @@ public:
     p_hr_start_cv_ = std::make_unique<std::condition_variable>();
     streams_ = std::make_unique<std::unordered_map<int, cudaStream_t *>>();
 
-    epg_ = std::make_unique<ExecutionPlanGenerator>(rule_dir_);
-
     switch (scheduler_type) {
-    case kCHBL:
+    case sics::matrixgraph::core::components::scheduler::SchedulerType::kCHBL:
       scheduler_ =
           std::make_unique<components::scheduler::CHBLScheduler>(n_device_);
       break;
-    case kEvenSplit:
-      scheduler_ = std::make_unique<components::scheduler::EvenSplitScheduler>(
-          n_device_);
-      break;
-    case kRoundRobin:
-      scheduler_ = std::make_unique<components::scheduler::RoundRobinScheduler>(
-          n_device_);
-      break;
     }
 
-    if (data_path_r_.empty()) {
-      std::cout << "DirtyER" << std::endl;
-      data_mngr_ =
-          std::make_unique<sics::matrixgraph::core::components::DataMngr>(
-              data_path_l_, sep, false);
-    } else {
-      std::cout << "CleanCleanER" << std::endl;
-      data_mngr_ =
-          std::make_unique<sics::matrixgraph::core::components::DataMngr>(
-              data_path_l_, data_path_r_, sep, false);
-    }
-
-    p_match_ = std::make_unique<Match>();
+    data_mngr_ = std::make_unique<TiledMatrixMngr>(data_path_);
 
     p_hr_terminable_ = std::make_unique<bool>(false);
 
     auto end_time = std::chrono::system_clock::now();
-    std::cout << "HyperBlocker.Initialize() elapsed: "
+    std::cout << "MatrixGraph.Initialize() elapsed: "
               << std::chrono::duration_cast<std::chrono::microseconds>(
                      end_time - start_time)
                          .count() /
@@ -106,21 +75,19 @@ public:
               << std::endl;
   }
 
-  ~HyperBlocker() = default;
+  ~MatrixGraph() = default;
 
   void Run() {
 
     auto start_time = std::chrono::system_clock::now();
 
     // ShowDeviceProperties();
-    HostProducer hp(n_partitions_, data_mngr_.get(), epg_.get(),
-                    scheduler_.get(), streams_.get(), p_streams_mtx_.get(),
-                    //p_match_.get(),
-                    p_hr_start_lck_.get(), p_hr_start_cv_.get(),
-                    p_hr_terminable_.get(), prefix_hash_predicate_index_);
-    HostReducer hr(output_path_, scheduler_.get(), streams_.get(),
-                   p_streams_mtx_.get(), p_match_.get(), p_hr_start_lck_.get(),
-                   p_hr_start_cv_.get(), p_hr_terminable_.get());
+    HostProducer hp(data_mngr_.get(), scheduler_.get(), streams_.get(),
+                    p_streams_mtx_.get(), p_hr_start_lck_.get(),
+                    p_hr_start_cv_.get(), p_hr_terminable_.get());
+    HostReducer hr(scheduler_.get(), streams_.get(), p_streams_mtx_.get(),
+                   p_hr_start_lck_.get(), p_hr_start_cv_.get(),
+                   p_hr_terminable_.get());
 
     std::thread hp_thread(&HostProducer::Run, &hp);
     std::thread hr_thread(&HostReducer::Run, &hr);
@@ -131,7 +98,7 @@ public:
 
     auto end_time = std::chrono::system_clock::now();
 
-    std::cout << "HyperBlocker.Run() elapsed: "
+    std::cout << "MatrixGraph.Run() elapsed: "
               << std::chrono::duration_cast<std::chrono::microseconds>(
                      end_time - start_time)
                          .count() /
@@ -171,18 +138,10 @@ public:
     n_device_ = dev;
   }
 
-  std::vector<Rule> rule_vec_;
-
 private:
   int n_device_ = 0;
 
-  const std::string rule_dir_;
-  const std::string data_path_l_;
-  const std::string data_path_r_;
-  const std::string output_path_;
-
-  const int n_partitions_;
-  const int prefix_hash_predicate_index_;
+  const std::string data_path_;
 
   std::unique_ptr<std::mutex> p_streams_mtx_;
 
@@ -190,12 +149,10 @@ private:
   std::unique_ptr<std::unique_lock<std::mutex>> p_hr_start_lck_;
   std::unique_ptr<std::condition_variable> p_hr_start_cv_;
 
-  std::unique_ptr<ExecutionPlanGenerator> epg_;
   std::unique_ptr<DataMngr> data_mngr_;
   std::unique_ptr<std::unordered_map<int, cudaStream_t *>> streams_;
 
   std::unique_ptr<components::scheduler::Scheduler> scheduler_;
-  std::unique_ptr<Match> p_match_;
 
   std::unique_ptr<bool> p_hr_terminable_;
 };

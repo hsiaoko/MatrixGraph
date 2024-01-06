@@ -8,9 +8,7 @@ set(LIBRARY_OUTPUT_PATH ${PROJECT_ROOT_DIR}/lib)
 #######################
 # Libraries
 #######################
-include_directories(
-        ${CMAKE_CURRENT_SOURCE_DIR}
-)
+include_directories(${CMAKE_CURRENT_SOURCE_DIR})
 
 #######################
 # Artifacts
@@ -62,4 +60,6 @@ target_link_libraries(matrixgraph
         gflags
         -lcublas
         -lcurand
+        tbb
+        -static-libstdc++
         )

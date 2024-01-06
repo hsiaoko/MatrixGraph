@@ -1,5 +1,5 @@
-cmake_minimum_required(VERSION 3.12)
-project(graph_systems_tools_graph_convert)
+cmake_minimum_required(VERSION 3.20)
+project(matrixgraph LANGUAGES CXX CUDA)
 
 # Directories
 set(EXECUTABLE_OUTPUT_PATH ${PROJECT_ROOT_DIR}/bin/tools/)
@@ -13,10 +13,10 @@ foreach (appfile ${appfiles})
     get_filename_component(app ${appfile} NAME_WE)
     add_executable("${app}_exec" ${appfile} ${TOOLS_SOURCES})
     target_link_libraries("${app}_exec"
-            graph_systems_core
             yaml-cpp
             gflags
-            ${FOLLY_LIBRARIES}
             ${TBB_LIBRARIES}
-    )
+            tbb
+            -static-libstdc++
+            )
 endforeach ()

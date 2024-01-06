@@ -8,6 +8,7 @@ namespace sics {
 namespace matrixgraph {
 namespace core {
 namespace util {
+namespace atomic {
 
 // @DESCRIPTION
 //
@@ -58,6 +59,7 @@ template <class ET> inline void WriteAdd(ET *a, ET b) {
   } while (!CAS(a, oldV, newV));
 }
 
+} // namespace atomic
 } // namespace util
 } // namespace core
 } // namespace matrixgraph
