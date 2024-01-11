@@ -221,7 +221,6 @@ public:
     edgelist_metadata_.num_edges = n_edges;
     edgelist_metadata_.num_vertices = bitmap.Count();
     edgelist_metadata_.max_vid = max_vid;
-    std::cout << "sss XX" << std::endl;
   }
 
   // Sort edges by source.

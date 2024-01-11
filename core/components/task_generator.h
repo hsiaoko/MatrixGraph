@@ -8,9 +8,15 @@ namespace matrixgraph {
 namespace core {
 namespace components {
 
+class Task() {
+  // ...
+}
+
 class TaskGenerator {
 public:
   TaskGenerator(const std::string &root_path) { root_path_ = root_path; }
+
+  friend class Task;
 
 private:
   std::string root_path_;

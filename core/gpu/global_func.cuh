@@ -8,6 +8,7 @@
 #include <mma.h>
 #include <stdio.h>
 
+#include "core/data_structures/tiled_matrix.cuh"
 #include "core/gpu/device_func.cuh"
 #include "core/gpu/kernel_data_structures/kernel_bitmap.cuh"
 
@@ -15,6 +16,10 @@ namespace sics {
 namespace matrixgraph {
 namespace core {
 namespace gpu {
+
+using sics::matrixgraph::core::data_structures::Tile;
+using VertexID = sics::matrixgraph::core::common::VertexID;
+using TileIndex = sics::matrixgraph::core::common::TileIndex;
 
 // Naive GEMM computation.
 __global__ void NaiveGemm_kernel(int M, int N, int K, float alpha,
@@ -90,6 +95,23 @@ __global__ void TensorCoreGemm_kernel(int M, int N, int K, float alpha,
 
   // Store the output
   nvcuda::wmma::store_matrix_sync(C, c_frag, 16, nvcuda::wmma::mem_row_major);
+}
+
+__global__ void TileGemm_kernel(VertexID n_nz_A, VertexID n_nz_B,
+                                TileIndex *row_ptr_A, TileIndex *row_ptr_B,
+                                TileIndex *row_ptr_C, TileIndex *row_idx_A,
+                                TileIndex *row_idx_B, TileIndex *row_idx_C,
+                                TileIndex *col_idx_A, TileIndex *col_idx_B,
+                                TileIndex *col_idx_C) {
+
+  col_idx_C[0] = 19;
+  row_idx_C[0] = 19;
+  row_ptr_C[0] = 19;
+}
+
+__global__ void TileGemm_kernel1(int *x) {
+  x[0] = 9;
+  return;
 }
 
 } // namespace gpu

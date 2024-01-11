@@ -2,6 +2,7 @@
 #define SICS_MATRIXGRAPH_CORE_DATA_STRUCTURES_TILED_MATRIX_H_
 
 #include <cstring>
+#include <cuda_runtime.h>
 #include <filesystem>
 #include <fstream>
 
@@ -28,6 +29,7 @@ private:
 
 public:
   Mask() = default;
+  ~Mask() { delete bm_; }
 
   Mask(VertexID x, VertexID y) { Init(x, y); }
 
@@ -61,34 +63,68 @@ private:
   using TileIndex = sics::matrixgraph::core::common::TileIndex;
 
 public:
-  Tile(TileIndex tile_size_x, TileIndex tile_size_y) {
-    InitStaticInfo(tile_size_x, tile_size_y);
-  }
+  Tile() = default;
 
   Tile(TileIndex tile_size_x, TileIndex tile_size_y, VertexID tile_x,
        VertexID tile_y, VertexID n_nz) {
-    InitStaticInfo(tile_size_x, tile_size_y);
-    InitDynamicInfo(tile_x, tile_y, n_nz);
+    Init_host(tile_size_x, tile_size_y, tile_x, tile_y, n_nz);
   }
 
-  void InitStaticInfo(TileIndex tile_size_x, TileIndex tile_size_y) {
+  void operator=(const Tile &other) {
+    row_idx_ = other.row_idx_;
+    col_idx_ = other.col_idx_;
+    row_ptr_ = other.row_ptr_;
+  }
+
+  void operator=(const Tile &&other) {
+    row_idx_ = other.row_idx_;
+    col_idx_ = other.col_idx_;
+    row_ptr_ = other.row_ptr_;
+  }
+
+
+  cudaError_t Init_device(TileIndex tile_size_x, TileIndex tile_size_y,
+                          VertexID tile_x, VertexID tile_y, VertexID n_nz) {
     tile_size_x_ = tile_size_x;
     tile_size_y_ = tile_size_y;
-
-    if (row_ptr_ != nullptr)
-      delete[] row_ptr_;
-
-    if (mask_ != nullptr)
-      delete mask_;
-    row_ptr_ = new TileIndex[tile_size_y]();
-    mask_ = new Mask(tile_size_x, tile_size_y);
-  }
-
-  void InitDynamicInfo(VertexID tile_x, VertexID tile_y, VertexID n_nz) {
     tile_x_ = tile_x;
     tile_y_ = tile_y;
     n_nz_ = n_nz;
 
+    if (row_ptr_ != nullptr)
+      cudaFree(row_ptr_);
+    if (mask_ != nullptr)
+      cudaFree(mask_);
+
+    if (row_idx_ != nullptr)
+      cudaFree(row_idx_);
+    if (col_idx_ != nullptr)
+      cudaFree(col_idx_);
+    if (data_ != nullptr)
+      cudaFree(data_);
+
+    cudaMalloc(reinterpret_cast<void **>(&row_ptr_),
+               tile_size_y_ * sizeof(TileIndex));
+    cudaMalloc(reinterpret_cast<void **>(&row_idx_),
+               tile_size_y_ * sizeof(TileIndex));
+    cudaMalloc(reinterpret_cast<void **>(&col_idx_), n_nz_ * sizeof(TileIndex));
+    cudaMalloc(reinterpret_cast<void **>(&data_), n_nz_ * sizeof(VertexLabel));
+
+    return cudaSuccess;
+  }
+
+  void Init_host(TileIndex tile_size_x, TileIndex tile_size_y, VertexID tile_x,
+                 VertexID tile_y, VertexID n_nz) {
+    tile_size_x_ = tile_size_x;
+    tile_size_y_ = tile_size_y;
+    tile_x_ = tile_x;
+    tile_y_ = tile_y;
+    n_nz_ = n_nz;
+
+    if (row_ptr_ != nullptr)
+      delete[] row_ptr_;
+    if (mask_ != nullptr)
+      delete mask_;
     if (row_idx_ != nullptr)
       delete[] row_idx_;
     if (col_idx_ != nullptr)
@@ -96,16 +132,62 @@ public:
     if (data_ != nullptr)
       delete[] data_;
 
-    row_idx_ = new TileIndex[n_nz_]();
+    row_ptr_ = new TileIndex[tile_size_y]();
+    mask_ = new Mask(tile_size_x, tile_size_y);
+    row_idx_ = new TileIndex[tile_size_y_]();
     col_idx_ = new TileIndex[n_nz_]();
     data_ = new VertexLabel[n_nz_]();
   }
 
-  void Show() {
+  cudaError_t MemcpyAsyncHost2Device(const Tile &tile,
+                                     const cudaStream_t &stream) {
+    assert(tile_x_ == tile.tile_x_);
+    assert(tile_y_ == tile.tile_y_);
+    assert(n_nz_ == tile.n_nz_);
+    assert(tile_size_x_ == tile.tile_size_x_);
+    assert(tile_size_y_ == tile.tile_size_y_);
+
+    cudaMemcpyAsync(row_ptr_, tile.row_ptr_, sizeof(TileIndex) * (tile_size_y_),
+                    cudaMemcpyHostToDevice, stream);
+    cudaMemcpyAsync(row_idx_, tile.row_idx_, sizeof(TileIndex) * n_nz_,
+                    cudaMemcpyHostToDevice, stream);
+    cudaMemcpyAsync(col_idx_, tile.col_idx_, sizeof(TileIndex) * n_nz_,
+                    cudaMemcpyHostToDevice, stream);
+    cudaMemcpyAsync(data_, tile.data_, sizeof(TileIndex) * n_nz_,
+                    cudaMemcpyHostToDevice, stream);
+
+    return cudaSuccess;
+  }
+
+  cudaError_t MemcpyAsyncDevice2Host(const Tile &tile,
+                                     const cudaStream_t &stream) {
+    assert(tile_x_ == tile.tile_x_);
+    assert(tile_y_ == tile.tile_y_);
+    assert(n_nz_ == tile.n_nz_);
+    assert(tile_size_x_ == tile.tile_size_x_);
+    assert(tile_size_y_ == tile.tile_size_y_);
+
+    cudaMemcpyAsync(row_ptr_, tile.row_ptr_, sizeof(TileIndex) * (tile_size_y_),
+                    cudaMemcpyDeviceToHost, stream);
+    cudaMemcpyAsync(row_idx_, tile.row_idx_, sizeof(TileIndex) * n_nz_,
+                    cudaMemcpyDeviceToHost, stream);
+    cudaMemcpyAsync(col_idx_, tile.col_idx_, sizeof(TileIndex) * n_nz_,
+                    cudaMemcpyDeviceToHost, stream);
+    cudaMemcpyAsync(data_, tile.data_, sizeof(TileIndex) * n_nz_,
+                    cudaMemcpyDeviceToHost, stream);
+
+    return cudaSuccess;
+  }
+
+  void Show(bool is_transposed = false) {
     std::cout << "**********  Tile: (" << (int)tile_x_ << ", " << (int)tile_y_
               << ")"
               << " n_nz: " << n_nz_ << " ************" << std::endl;
-    std::cout << " row_ptr: ";
+    if (is_transposed) {
+      std::cout << " col_ptr: ";
+    } else {
+      std::cout << " row_ptr: ";
+    }
     for (int i = 0; i < tile_size_y_; i++) {
       std::cout << (int)row_ptr_[i] << " ";
     }
@@ -114,6 +196,7 @@ public:
     for (VertexID i = 0; i < n_nz_; i++) {
       std::cout << (int)row_idx_[i] << " ";
     }
+
     std::cout << std::endl << " col_idx: ";
     for (VertexID i = 0; i < n_nz_; i++) {
       std::cout << (int)col_idx_[i] << " ";
@@ -173,9 +256,34 @@ public:
     memcpy(tile_n_nz_, tile_n_nz, sizeof(VertexID) * (n_nz_tile));
   }
 
-  void *get_data_ptr() const { return data_ptr_; }
+  void Show() {
+    std::cout << "TiledMatrix: " << std::endl;
+    std::cout << "  n_rows: " << metadata_.n_rows << std::endl;
+    std::cout << "  n_cols: " << metadata_.n_cols << std::endl;
+    std::cout << "  n_nz_tile: " << metadata_.n_nz_tile << std::endl;
 
-  Mask *get_mask() const { return mask_; }
+    std::cout << "  tile_ptr: ";
+    for (VertexID i = 0; i < metadata_.n_rows + 1; i++) {
+      std::cout << tile_ptr_[i] << " ";
+    }
+    std::cout << std::endl;
+
+    std::cout << "  tile_col_idx: ";
+    for (VertexID i = 0; i < metadata_.n_nz_tile; i++) {
+      std::cout << tile_col_idx_[i] << " ";
+    }
+    std::cout << std::endl;
+
+    std::cout << "  tile_n_nz: ";
+    for (VertexID i = 0; i < metadata_.n_nz_tile; i++) {
+      std::cout << tile_n_nz_[i] << " ";
+    }
+    std::cout << std::endl;
+
+    for (size_t i = 0; i < metadata_.n_nz_tile; i++) {
+      data_ptr_[i]->Show();
+    }
+  }
 
   void Read(const std::string &root_path) {
 
@@ -189,11 +297,25 @@ public:
       std::cout << "meta.yaml file read failed! " << e.msg << std::endl;
     }
 
+    tile_ptr_ = new VertexID[metadata_.n_rows + 1]();
     tile_n_nz_ = new VertexID[metadata_.n_nz_tile]();
     tile_col_idx_ = new VertexID[metadata_.n_nz_tile]();
 
-    data_ptr_ = new Tile *[metadata_.n_nz_tile]();
+    // Read tile_ptr, tile_col_idx tile_n_nz
+    std::ifstream tile_ptr_file(root_path + "tile_ptr.bin");
+    std::ifstream col_idx_file(root_path + "tile_col_idx.bin");
+    std::ifstream tile_n_nz_file(root_path + "tile_n_nz.bin");
 
+    tile_ptr_file.read(reinterpret_cast<char *>(tile_ptr_),
+                       sizeof(VertexID) * (metadata_.n_rows + 1));
+
+    col_idx_file.read(reinterpret_cast<char *>(tile_col_idx_),
+                      sizeof(VertexID) * metadata_.n_nz_tile);
+    tile_n_nz_file.read(reinterpret_cast<char *>(tile_n_nz_),
+                        sizeof(VertexID) * metadata_.n_nz_tile);
+
+    // Read tiles.
+    data_ptr_ = new Tile *[metadata_.n_nz_tile]();
     for (auto i = 0; i < metadata_.n_nz_tile; i++) {
       std::ifstream data_file(root_path + "tiles/" + std::to_string(i) + ".bin",
                               std::ios::binary);
@@ -218,7 +340,6 @@ public:
       data_file.read(reinterpret_cast<char *>(data_ptr_[i]->data_),
                      sizeof(VertexLabel) * data_ptr_[i]->n_nz_);
 
-      data_ptr_[i]->Show();
       data_file.close();
     }
   }
@@ -237,6 +358,8 @@ public:
     std::ofstream col_idx_file(root_path + "tile_col_idx.bin");
     std::ofstream tile_n_nz_file(root_path + "tile_n_nz.bin");
 
+    tile_ptr_file.write(reinterpret_cast<char *>(tile_ptr_),
+                        sizeof(VertexID) * (metadata_.n_rows + 1));
     col_idx_file.write(reinterpret_cast<char *>(tile_col_idx_),
                        sizeof(VertexID) * metadata_.n_nz_tile);
     tile_n_nz_file.write(reinterpret_cast<char *>(tile_n_nz_),
@@ -246,8 +369,6 @@ public:
     for (auto i = 0; i < metadata_.n_nz_tile; i++) {
       std::ofstream data_file(root_path + "tiles/" + std::to_string(i) +
                               ".bin");
-      std::cout << root_path + "tiles/" + std::to_string(i) + ".bin"
-                << std::endl;
       data_file.write(reinterpret_cast<char *>(&data_ptr_[i]->n_nz_),
                       sizeof(VertexID));
       data_file.write(reinterpret_cast<char *>(&data_ptr_[i]->tile_x_),
@@ -281,10 +402,29 @@ public:
     out_meta_file.close();
   }
 
+  Tile *GetTilebyIdx(VertexID idx) const { return data_ptr_[idx]; }
+
+  void MarkasTransposed() { is_transposed_ = true; }
+
+  void *get_data_ptr() const { return data_ptr_; }
+
+  Mask *get_mask() const { return mask_; }
+
+  VertexID get_tile_ptr_by_id(VertexID idx) const { return tile_ptr_[idx]; }
+
+  TiledMatrixMetadata get_metadata() const { return metadata_; };
+
+  VertexID *get_tile_ptr_ptr() const { return tile_ptr_; }
+  VertexID *get_tile_col_idx_ptr() const { return tile_col_idx_; }
+  VertexID *get_tile_n_nz_ptr() const { return tile_n_nz_; }
+
 private:
+  bool is_transposed_ = false;
+
   TiledMatrixMetadata metadata_;
 
   Tile **data_ptr_;
+
   Mask *mask_;
 
   VertexID *tile_ptr_;

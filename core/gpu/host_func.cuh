@@ -4,6 +4,7 @@
 #include <cublas_v2.h>
 #include <cutlass/gemm/device/gemm.h>
 
+#include "core/data_structures/tiled_matrix.cuh"
 #include "core/util/matrix.h"
 
 namespace sics {
@@ -11,7 +12,12 @@ namespace matrixgraph {
 namespace core {
 namespace gpu {
 
+using sics::matrixgraph::core::common::TileIndex;
+using sics::matrixgraph::core::common::VertexID;
+using sics::matrixgraph::core::data_structures::Tile;
+using sics::matrixgraph::core::data_structures::TiledMatrix;
 using sics::matrixgraph::core::util::AllocateMatrix;
+using sics::matrixgraph::core::util::Bitmap;
 using sics::matrixgraph::core::util::InitializeMatrix_kernel;
 
 /// Define a CUTLASS GEMM template and launch a GEMM kernel.
@@ -411,6 +417,87 @@ cudaError_t cuBLASGemm_host(int M, int N, int K, float alpha, float beta) {
 
   sics::matrixgraph::core::util::FreeDeviceMemory(iA, iB, iC);
   sics::matrixgraph::core::util::FreeDeviceMemory(fA, fB, fC);
+  return cudaSuccess;
+}
+
+cudaError_t TiledMatrixGemm_host(const Tile &tile, const Tile &tile_t,
+                                 const cudaStream_t &stream) {
+  std::cout << "TiledMatrix GEMM" << std::endl;
+
+  cudaError_t result;
+
+  // 1. Allocate device memory.
+  auto tile_device = new Tile();
+  auto tile_t_device = new Tile();
+  auto *tile_output_device = new Tile();
+
+  auto tile_output_host = new Tile();
+
+  result = tile_device->Init_device(tile.tile_size_x_, tile.tile_size_y_,
+                                    tile.tile_x_, tile.tile_y_, tile.n_nz_);
+  if (result != cudaSuccess) {
+    std::cerr << "Failed to allocate matrix: " << cudaGetErrorString(result)
+              << std::endl;
+    return result;
+  }
+
+  result =
+      tile_t_device->Init_device(tile_t.tile_size_x_, tile_t.tile_size_y_,
+                                 tile_t.tile_x_, tile_t.tile_y_, tile_t.n_nz_);
+  if (result != cudaSuccess) {
+    std::cerr << "Failed to allocate matrix: " << cudaGetErrorString(result)
+              << std::endl;
+    return result;
+  }
+
+  auto output_n_nz = tile_t.n_nz_;
+  result = tile_output_device->Init_device(tile.tile_size_x_,
+                                           tile_t.tile_size_y_, tile.tile_x_,
+                                           tile_t.tile_y_, output_n_nz);
+
+  if (result != cudaSuccess) {
+    std::cerr << "Failed to allocate matrix: " << cudaGetErrorString(result)
+              << std::endl;
+    return result;
+  }
+
+  tile_output_host->Init_host(tile.tile_size_x_, tile_t.tile_size_y_,
+                              tile.tile_x_, tile_t.tile_y_, output_n_nz);
+
+  // 2. Transfer data from host to device.
+  result = tile_t_device->MemcpyAsyncHost2Device(tile, stream);
+  if (result != cudaSuccess) {
+    std::cerr << "Failed to copy memory from host to device: "
+              << cudaGetErrorString(result) << std::endl;
+    return result;
+  }
+  result = tile_t_device->MemcpyAsyncHost2Device(tile_t, stream);
+  if (result != cudaSuccess) {
+    std::cerr << "Failed to copy memory from host to device: "
+              << cudaGetErrorString(result) << std::endl;
+    return result;
+  }
+
+  dim3 dimBlock(32);
+  dim3 dimGrid(32);
+
+  // 3. Lunch the kernel function
+  TileGemm_kernel<<<dimGrid, dimBlock, 48 * 1024, stream>>>(
+      tile_device->n_nz_, tile_t_device->n_nz_, tile_device->row_ptr_,
+      tile_t_device->row_ptr_, tile_output_device->row_ptr_,
+      tile_device->row_idx_, tile_t_device->row_idx_,
+      tile_output_device->row_idx_, tile_device->col_idx_,
+      tile_t_device->col_idx_, tile_output_device->col_idx_);
+
+  // 4. Transfer data from device to host.
+  tile_output_host->MemcpyAsyncDevice2Host(*tile_output_device, stream);
+  std::cout << "SHOW" << std::endl;
+  tile_output_host->Show();
+
+
+  // 5. Synchronize the stream.
+  cudaStreamSynchronize(stream);
+  std::cout << "GPU finished" << std::endl;
   return cudaSuccess;
 }
 

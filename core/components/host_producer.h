@@ -16,6 +16,7 @@
 #include "core/gpu/host_func.cuh"
 #include "core/gpu/kernel_data_structures/kernel_bitmap.cuh"
 #include "core/gpu/kernel_data_structures/kernel_table.cuh"
+#include "core/util/set_operations.h"
 
 namespace sics {
 namespace matrixgraph {
@@ -25,6 +26,8 @@ namespace components {
 class HostProducer {
 private:
   using DataMngr = sics::matrixgraph::core::components::DataMngrBase;
+  using TiledMatrixMngr = sics::matrixgraph::core::components::TiledMatrixMngr;
+  using VertexID = sics::matrixgraph::core::common::VertexID;
 
 public:
   HostProducer(DataMngr *data_mngr, scheduler::Scheduler *scheduler,
@@ -40,39 +43,98 @@ public:
     cudaGetDeviceCount(&n_device_);
   }
 
-  void Run() {
+  //  void Run() {
+  //    std::cout << "Host Producer running on " << n_device_ << " devices."
+  //              << std::endl;
+  //
+  //    for (size_t i = 0; i < 1; i++) {
+  //      auto bin_id = 0;
+  //      cudaSetDevice(bin_id);
+  //      cudaStream_t *p_stream = new cudaStream_t;
+  //      cudaStreamCreate(p_stream);
+  //
+  //      auto start_time = std::chrono::system_clock::now();
+  //      // AsyncSubmit(*p_stream);
+  //      // Submit();
+  //      SubmitTask();
+  //
+  //      auto end_time = std::chrono::system_clock::now();
+  //
+  //      std::cout << "Task elapsed: "
+  //                << std::chrono::duration_cast<std::chrono::microseconds>(
+  //                       end_time - start_time)
+  //                           .count() /
+  //                       (double)CLOCKS_PER_SEC
+  //                << std::endl;
+  //
+  //      std::lock_guard<std::mutex> lock(*p_streams_mtx_);
+  //      p_streams_->insert(std::make_pair(i, p_stream));
+  //      p_hr_start_cv_->notify_all();
+  //    }
+  //
+  //    *p_hr_terminable_ = true;
+  //  }
+
+  __host__ void Run() {
     std::cout << "Host Producer running on " << n_device_ << " devices."
               << std::endl;
+    TiledMatrixMngr *tiled_matrix_mngr =
+        reinterpret_cast<TiledMatrixMngr *>(data_mngr_);
+    auto tiled_matrix = tiled_matrix_mngr->GetTiledMatrixPtr();
+    auto tiled_transposed_matrix =
+        tiled_matrix_mngr->GetTransposedTiledMatrixPtr();
 
-    for (size_t i = 0; i < 1; i++) {
-      auto bin_id = 0;
+    tiled_matrix->Show();
+    tiled_transposed_matrix->Show();
+
+    assert(tiled_matrix->get_metadata().n_cols ==
+           tiled_transposed_matrix->get_metadata().n_rows);
+
+    auto max_val = tiled_matrix->get_metadata().n_cols >
+                           tiled_transposed_matrix->get_metadata().n_rows
+                       ? tiled_matrix->get_metadata().n_cols
+                       : tiled_transposed_matrix->get_metadata().n_rows;
+
+    for (VertexID i = 0; i < tiled_matrix->get_metadata().n_rows; i++) {
+
+      // Create a new stream for each task.
+      auto bin_id = i % n_device_;
       cudaSetDevice(bin_id);
       cudaStream_t *p_stream = new cudaStream_t;
       cudaStreamCreate(p_stream);
 
-      auto start_time = std::chrono::system_clock::now();
-      // AsyncSubmit(*p_stream);
-      //Submit();
-      SubmitTask();
+      auto tile_ptr = tiled_matrix->get_tile_ptr_by_id(i);
+      auto tile_ptr_t = tiled_transposed_matrix->get_tile_ptr_by_id(i);
 
-      auto end_time = std::chrono::system_clock::now();
+      auto tile_scope = tiled_matrix->get_tile_ptr_by_id(i + 1) - tile_ptr;
+      auto tile_scope_t =
+          tiled_transposed_matrix->get_tile_ptr_by_id(i + 1) - tile_ptr_t;
 
-      std::cout << "Task elapsed: "
-                << std::chrono::duration_cast<std::chrono::microseconds>(
-                       end_time - start_time)
-                           .count() /
-                       (double)CLOCKS_PER_SEC
-                << std::endl;
+      auto &&intersection = sics::matrixgraph::core::util::set::GetIntersection(
+          tiled_matrix->get_tile_col_idx_ptr() + tile_ptr, tile_scope,
+          tiled_transposed_matrix->get_tile_col_idx_ptr() + tile_ptr_t,
+          tile_scope_t, max_val);
 
-      std::lock_guard<std::mutex> lock(*p_streams_mtx_);
-      p_streams_->insert(std::make_pair(i, p_stream));
-      p_hr_start_cv_->notify_all();
+      std::cout << "Intersection size: " << intersection.size() << std::endl;
+      for (size_t j = 0; j < intersection.size(); j++) {
+        std::cout << "Intersection: " << (intersection[j]).first << ", "
+                  << (intersection[j]).second << std::endl;
+        auto tile =
+            tiled_matrix->GetTilebyIdx(tile_ptr + (intersection[j]).first);
+        auto tile_t = tiled_transposed_matrix->GetTilebyIdx(
+            tile_ptr_t + (intersection[j]).second);
+
+        tile->Show();
+        tile_t->Show();
+
+        sics::matrixgraph::core::gpu::TiledMatrixGemm_host(*tile, *tile_t,
+                                                           *p_stream);
+        std::lock_guard<std::mutex> lock(*p_streams_mtx_);
+        p_streams_->insert(std::make_pair(i, p_stream));
+        p_hr_start_cv_->notify_all();
+      }
     }
-
-    *p_hr_terminable_ = true;
   }
-
-  __host__ void SubmitTask() {}
 
   __host__ void Submit() {
     int M = 10000;

@@ -8,7 +8,7 @@ namespace components {
 
 class DataMngrBase {
 public:
-  virtual void GetData(size_t i, void *data) = 0;
+  virtual void GetData(void *data) = 0;
 };
 
 } // namespace components

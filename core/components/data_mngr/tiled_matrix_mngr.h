@@ -4,7 +4,7 @@
 #include <string>
 
 #include "core/components/data_mngr/data_mngr_base.h"
-#include "core/data_structures/tiled_matrix.h"
+#include "core/data_structures/tiled_matrix.cuh"
 
 namespace sics {
 namespace matrixgraph {
@@ -17,16 +17,27 @@ private:
 
 public:
   TiledMatrixMngr(const std::string &root_path) : root_path_(root_path) {
-    auto p_tiled_matrix = new TiledMatrix();
-    p_tiled_matrix->Read(root_path_);
+    p_tiled_matrix_ = new TiledMatrix();
+    p_tiled_matrix_transposed_ = new TiledMatrix();
+    p_tiled_matrix_->Read(root_path_ + "origin/");
+    p_tiled_matrix_transposed_->Read(root_path_ + "transposed/");
   }
 
-  void GetData(size_t i, void *data) override{
-      // TODO: implement
+  void GetData(void *data) override {
+    // TODO: implement
   };
+
+  TiledMatrix *GetTiledMatrixPtr() {
+    return p_tiled_matrix_;
+  }
+
+  TiledMatrix *GetTransposedTiledMatrixPtr() {
+    return p_tiled_matrix_transposed_;
+  }
 
 private:
   std::string root_path_;
+  TiledMatrix *p_tiled_matrix_transposed_;
   TiledMatrix *p_tiled_matrix_;
 };
 
