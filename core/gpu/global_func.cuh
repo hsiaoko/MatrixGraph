@@ -11,6 +11,7 @@
 #include "core/data_structures/tiled_matrix.cuh"
 #include "core/gpu/device_func.cuh"
 #include "core/gpu/kernel_data_structures/kernel_bitmap.cuh"
+#include "core/util/bitmap.h"
 
 namespace sics {
 namespace matrixgraph {
@@ -20,6 +21,7 @@ namespace gpu {
 using sics::matrixgraph::core::data_structures::Tile;
 using VertexID = sics::matrixgraph::core::common::VertexID;
 using TileIndex = sics::matrixgraph::core::common::TileIndex;
+using VertexLabel = sics::matrixgraph::core::common::VertexLabel;
 
 // Naive GEMM computation.
 __global__ void NaiveGemm_kernel(int M, int N, int K, float alpha,
@@ -97,21 +99,60 @@ __global__ void TensorCoreGemm_kernel(int M, int N, int K, float alpha,
   nvcuda::wmma::store_matrix_sync(C, c_frag, 16, nvcuda::wmma::mem_row_major);
 }
 
-__global__ void TileGemm_kernel(VertexID n_nz_A, VertexID n_nz_B,
-                                TileIndex *row_ptr_A, TileIndex *row_ptr_B,
-                                TileIndex *row_ptr_C, TileIndex *row_idx_A,
-                                TileIndex *row_idx_B, TileIndex *row_idx_C,
-                                TileIndex *col_idx_A, TileIndex *col_idx_B,
-                                TileIndex *col_idx_C) {
+__global__ void TileGemm_kernel(
+    VertexID n_nz_A, VertexID n_nz_B, TileIndex tile_size_x,
+    TileIndex tile_size_y, int *offset, int *n_nz_for_each_row,
+    TileIndex *row_ptr_A, TileIndex *row_ptr_B, TileIndex *row_ptr_C,
+    TileIndex *row_idx_A, TileIndex *row_idx_B, TileIndex *row_idx_C,
+    TileIndex *col_idx_A, TileIndex *col_idx_B, TileIndex *col_idx_C,
+    VertexLabel *data_A, VertexLabel *data_B, VertexLabel *data_C,
+    uint64_t *bit_mask_A, uint64_t *bit_mask_B, uint64_t *bit_mask_C) {
 
-  col_idx_C[0] = 19;
-  row_idx_C[0] = 19;
-  row_ptr_C[0] = 19;
-}
+  unsigned int tid_x = blockIdx.x * (blockDim.x * blockDim.y) + threadIdx.x;
+  unsigned int tid_y = blockIdx.x * (blockDim.x * blockDim.y) + threadIdx.y;
 
-__global__ void TileGemm_kernel1(int *x) {
-  x[0] = 9;
-  return;
+  // GEMM on col_i of A and row_i of B.
+  for (int row_i = tid_y; row_i < tile_size_x; row_i += blockDim.x) {
+    for (int col_i = tid_x; col_i < tile_size_y; col_i += blockDim.y) {
+      if (bit_mask_C[WORD_OFFSET(col_i * tile_size_x + row_i)] &
+          1ul << BIT_OFFSET(4 * row_i + col_i)) {
+
+        TileIndex n_nz_row_A, n_nz_row_B;
+        if (row_i == tile_size_x)
+          n_nz_row_A = n_nz_A - row_ptr_A[row_i];
+        else
+          n_nz_row_A = row_ptr_A[row_i + 1] - row_ptr_A[row_i];
+
+        if (row_i == tile_size_x)
+          n_nz_row_B = n_nz_B - row_ptr_B[row_i];
+        else
+          n_nz_row_B = row_ptr_B[row_i + 1] - row_ptr_B[row_i];
+
+        TileIndex p_A = 0;
+        TileIndex p_B = 0;
+        TileIndex p = 0;
+
+        while (p < n_nz_row_A || p < n_nz_row_B) {
+          if (col_idx_A[p_A] < col_idx_B[p_B]) {
+            p_A++;
+          } else if (col_idx_A[p_A] > col_idx_B[p_B]) {
+            p_B++;
+          } else {
+            int local_offset = atomicAdd(offset, 1);
+            row_idx_C[local_offset] = row_i;
+            col_idx_C[local_offset] = col_i;
+            atomicAdd(data_C + local_offset,
+                      *(data_A + (row_ptr_A[col_i] + p_A)) *
+                          *(data_B + (row_ptr_B[col_i] + p_B)));
+            atomicAdd(n_nz_for_each_row + row_i, 1);
+            p_A++;
+            p_B++;
+          }
+          p = p_A > p_B ? p_A : p_B;
+        }
+      }
+    }
+  }
 }
 
 } // namespace gpu

@@ -4,6 +4,7 @@
 #include <cassert>
 #include <cstdint>
 #include <cstring>
+#include <cuda_runtime.h>
 
 namespace sics {
 namespace matrixgraph {
@@ -23,6 +24,7 @@ class Bitmap {
 public:
   Bitmap() = default;
   Bitmap(size_t size) { Init(size); }
+
   Bitmap(size_t size, uint64_t *init_value) {
     size_ = size;
     data_ = init_value;
@@ -35,6 +37,7 @@ public:
     memcpy(data_, other.GetDataBasePointer(),
            (WORD_OFFSET(size_) + 1) * sizeof(uint64_t));
   };
+
   // move constructor
   Bitmap(Bitmap &&other) noexcept : size_(other.size_), data_(other.data_) {
     other.size_ = 0;
@@ -52,6 +55,7 @@ public:
     }
     return *this;
   };
+
   // move assignment
   Bitmap &operator=(Bitmap &&other) noexcept {
     if (this != &other) {
@@ -154,6 +158,18 @@ public:
   size_t size() const { return size_; }
 
   uint64_t *GetDataBasePointer() const { return data_; }
+
+  uint64_t GetMaxWordOffset() const { return WORD_OFFSET(size_); }
+
+  // @return the fragment of the bitmap at index i
+  // @param i the index point of bitmap.
+  uint64_t GetFragment(int i) const { return *(data_ + WORD_OFFSET(i)); }
+
+  // @return the pointer of fragment of the bitmap at index i
+  // @param i the index point of bitmap.
+  uint64_t *GetPFragment(int i) const { return data_ + WORD_OFFSET(i); }
+
+  void FreeDevice() { cudaFree(data_); }
 
 protected:
   size_t size_ = 0;

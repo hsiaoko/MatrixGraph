@@ -422,8 +422,12 @@ cudaError_t cuBLASGemm_host(int M, int N, int K, float alpha, float beta) {
 
 cudaError_t TiledMatrixGemm_host(const Tile &tile, const Tile &tile_t,
                                  const cudaStream_t &stream) {
-  std::cout << "TiledMatrix GEMM" << std::endl;
+  // std::cout
+  //     << ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>TiledMatrix GEMM"
+  //     << std::endl;
 
+  tile.Show();
+  tile_t.Show();
   cudaError_t result;
 
   // 1. Allocate device memory.
@@ -433,8 +437,31 @@ cudaError_t TiledMatrixGemm_host(const Tile &tile, const Tile &tile_t,
 
   auto tile_output_host = new Tile();
 
-  result = tile_device->Init_device(tile.tile_size_x_, tile.tile_size_y_,
-                                    tile.tile_x_, tile.tile_y_, tile.n_nz_);
+  result = tile_device->InitDevice(tile.get_tile_size_x(),
+                                   tile.get_tile_size_y(), tile.get_tile_x(),
+                                   tile.get_tile_y(), tile.get_n_nz());
+
+  if (result != cudaSuccess) {
+    std::cerr << "Failed to allocate matrix: " << cudaGetErrorString(result)
+              << std::endl;
+    return result;
+  }
+
+  result = tile_t_device->InitDevice(
+      tile_t.get_tile_size_x(), tile_t.get_tile_size_y(), tile_t.get_tile_x(),
+      tile_t.get_tile_y(), tile_t.get_n_nz());
+  if (result != cudaSuccess) {
+    std::cerr << "Failed to allocate matrix: " << cudaGetErrorString(result)
+              << std::endl;
+    return result;
+  }
+
+  tile_output_host->InitAsOutput(tile, tile_t);
+  result = tile_output_device->InitDevice(
+      tile_output_host->get_tile_size_x(), tile_output_host->get_tile_size_y(),
+      tile_output_host->get_tile_x(), tile_output_host->get_tile_y(),
+      tile_output_host->get_n_nz());
+
   if (result != cudaSuccess) {
     std::cerr << "Failed to allocate matrix: " << cudaGetErrorString(result)
               << std::endl;
@@ -442,30 +469,15 @@ cudaError_t TiledMatrixGemm_host(const Tile &tile, const Tile &tile_t,
   }
 
   result =
-      tile_t_device->Init_device(tile_t.tile_size_x_, tile_t.tile_size_y_,
-                                 tile_t.tile_x_, tile_t.tile_y_, tile_t.n_nz_);
+      tile_output_device->MemcpyAsyncHost2Device(*tile_output_host, stream);
   if (result != cudaSuccess) {
-    std::cerr << "Failed to allocate matrix: " << cudaGetErrorString(result)
-              << std::endl;
+    std::cerr << "Failed to copy memory from host to device: "
+              << cudaGetErrorString(result) << std::endl;
     return result;
   }
-
-  auto output_n_nz = tile_t.n_nz_;
-  result = tile_output_device->Init_device(tile.tile_size_x_,
-                                           tile_t.tile_size_y_, tile.tile_x_,
-                                           tile_t.tile_y_, output_n_nz);
-
-  if (result != cudaSuccess) {
-    std::cerr << "Failed to allocate matrix: " << cudaGetErrorString(result)
-              << std::endl;
-    return result;
-  }
-
-  tile_output_host->Init_host(tile.tile_size_x_, tile_t.tile_size_y_,
-                              tile.tile_x_, tile_t.tile_y_, output_n_nz);
 
   // 2. Transfer data from host to device.
-  result = tile_t_device->MemcpyAsyncHost2Device(tile, stream);
+  result = tile_device->MemcpyAsyncHost2Device(tile, stream);
   if (result != cudaSuccess) {
     std::cerr << "Failed to copy memory from host to device: "
               << cudaGetErrorString(result) << std::endl;
@@ -478,26 +490,65 @@ cudaError_t TiledMatrixGemm_host(const Tile &tile, const Tile &tile_t,
     return result;
   }
 
-  dim3 dimBlock(32);
-  dim3 dimGrid(32);
+  dim3 dimBlock(4, 4);
+  dim3 dimGrid(1);
+
+  int *offset_d, *offset_h;
+  cudaMalloc(reinterpret_cast<void **>(&offset_d), sizeof(int));
+  offset_h = new int();
+  cudaMemcpyAsync(offset_d, offset_h, sizeof(int), cudaMemcpyHostToDevice,
+                  stream);
+
+  int *n_nz_for_each_row_d, *n_nz_for_each_row_h;
+  cudaMalloc(reinterpret_cast<void **>(&n_nz_for_each_row_d),
+             sizeof(int) * tile_output_host->get_tile_size_x());
+  n_nz_for_each_row_h = new int[tile_output_host->get_tile_size_x()]();
+  cudaMemcpyAsync(n_nz_for_each_row_d, n_nz_for_each_row_h,
+                  sizeof(int) * tile_output_host->get_tile_size_x(),
+                  cudaMemcpyHostToDevice, stream);
 
   // 3. Lunch the kernel function
   TileGemm_kernel<<<dimGrid, dimBlock, 48 * 1024, stream>>>(
-      tile_device->n_nz_, tile_t_device->n_nz_, tile_device->row_ptr_,
-      tile_t_device->row_ptr_, tile_output_device->row_ptr_,
-      tile_device->row_idx_, tile_t_device->row_idx_,
-      tile_output_device->row_idx_, tile_device->col_idx_,
-      tile_t_device->col_idx_, tile_output_device->col_idx_);
+      tile_device->get_n_nz(), tile_t_device->get_n_nz(),
+      tile_output_device->get_tile_size_x(), tile_device->get_tile_size_y(),
+      offset_d, n_nz_for_each_row_d, tile_device->GetRowPtrPtr(),
+      tile_t_device->GetRowPtrPtr(), tile_output_device->GetRowPtrPtr(),
+      tile_device->GetRowIdxPtr(), tile_t_device->GetRowIdxPtr(),
+      tile_output_device->GetRowIdxPtr(), tile_device->GetColIdxPtr(),
+      tile_t_device->GetColIdxPtr(), tile_output_device->GetColIdxPtr(),
+      tile_device->GetDataPtr(), tile_t_device->GetDataPtr(),
+      tile_output_device->GetDataPtr(),
+      tile_device->GetMaskPtr()->GetDataPtr()->GetDataBasePointer(),
+      tile_t_device->GetMaskPtr()->GetDataPtr()->GetDataBasePointer(),
+      tile_output_device->GetMaskPtr()->GetDataPtr()->GetDataBasePointer());
 
   // 4. Transfer data from device to host.
   tile_output_host->MemcpyAsyncDevice2Host(*tile_output_device, stream);
-  std::cout << "SHOW" << std::endl;
+
+  // 5. Compute row_ptr for the output tile.
+  cudaMemcpyAsync(n_nz_for_each_row_h, n_nz_for_each_row_d,
+                  sizeof(int) * tile_output_host->get_tile_size_x(),
+                  cudaMemcpyDeviceToHost, stream);
+  auto output_tile_ptr_ptr = tile_output_host->GetRowPtrPtr();
+  for (size_t i = 0; i < tile_output_host->get_tile_size_x() - 1; i++) {
+    output_tile_ptr_ptr[i + 1] =
+        output_tile_ptr_ptr[i] + n_nz_for_each_row_h[i];
+  }
+
   tile_output_host->Show();
 
-
-  // 5. Synchronize the stream.
+  // 6. Synchronize the stream.
   cudaStreamSynchronize(stream);
   std::cout << "GPU finished" << std::endl;
+
+  delete offset_h;
+  delete[] n_nz_for_each_row_h;
+
+  tile_t_device->FreeDevice();
+  tile_device->FreeDevice();
+  tile_output_device->FreeDevice();
+  cudaFree(offset_d);
+  cudaFree(n_nz_for_each_row_d);
   return cudaSuccess;
 }
 

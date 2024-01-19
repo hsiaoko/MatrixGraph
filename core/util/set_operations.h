@@ -82,7 +82,6 @@ GetIntersection(const VertexID *p_vec_a, VertexID len_a,
   }
   return intersection;
 }
-
 } // namespace set
 } // namespace util
 } // namespace core
