@@ -118,9 +118,8 @@ public:
         auto p_tile_t = tiled_transposed_matrix->GetTilebyIdx(
             tile_ptr_t + (intersection[j]).second);
 
-
-        //sics::matrixgraph::core::gpu::TiledMatrixGemm_host(*p_tile, *p_tile_t,
-         //                                                  *p_stream);
+        sics::matrixgraph::core::gpu::TiledMatrixGemm_host(*p_tile, *p_tile_t,
+                                                           *p_stream);
         std::lock_guard<std::mutex> lock(*p_streams_mtx_);
         p_streams_->insert(std::make_pair(i, p_stream));
         p_hr_start_cv_->notify_all();

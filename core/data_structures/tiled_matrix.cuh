@@ -31,42 +31,39 @@ public:
   Mask() = default;
   ~Mask() { delete bm_; }
 
-  Mask(TileIndex x, TileIndex y) { Init(x, y); }
+  Mask(TileIndex mask_size) { Init(mask_size); }
 
-  void Init(TileIndex x, TileIndex y) {
-    mask_size_x_ = x;
-    mask_size_y_ = x;
+  void Init(TileIndex mask_size) {
+    mask_size_ = mask_size;
 
-    bm_ = new Bitmap(x * y);
+    bm_ = new Bitmap(mask_size * mask_size);
   }
 
-  void InitDevice(TileIndex x, TileIndex y) {
-    mask_size_x_ = x;
-    mask_size_y_ = y;
+  void InitDevice(TileIndex mask_size) {
+    mask_size_ = mask_size;
 
     uint64_t *init_val;
-    cudaMalloc((void **)&init_val, sizeof(uint64_t) * (WORD_OFFSET(x * y) + 1));
-    bm_ = new Bitmap(x * y, init_val);
+    cudaMalloc((void **)&init_val,
+               sizeof(uint64_t) * (WORD_OFFSET(mask_size_ * mask_size_) + 1));
+    bm_ = new Bitmap(mask_size_ * mask_size_, init_val);
   }
 
-  void FreeDevice(){
-    bm_->FreeDevice();
-  }
+  void FreeDevice() { bm_->FreeDevice(); }
 
-  TileIndex get_mask_size_x() const { return mask_size_x_; }
-  TileIndex get_mask_size_y() const { return mask_size_y_; }
+  TileIndex get_mask_size_x() const { return mask_size_; }
+  TileIndex get_mask_size_y() const { return mask_size_; }
 
   bool GetBit(VertexID x, VertexID y) {
-    return bm_->GetBit(x * mask_size_x_ + y);
+    return bm_->GetBit(x * mask_size_ + y);
   }
 
-  void SetBit(VertexID x, VertexID y) { bm_->SetBit(x * mask_size_x_ + y); }
+  void SetBit(VertexID x, VertexID y) { bm_->SetBit(x * mask_size_ + y); }
 
   void Show() {
-    std::cout << "     MASK     " << (int)mask_size_x_ << "X"
-              << (int)mask_size_y_ << std::endl;
-    for (size_t i = 0; i < mask_size_x_; i++) {
-      for (size_t j = 0; j < mask_size_y_; j++) {
+    std::cout << "     MASK     " << (int)mask_size_ << "X" << (int)mask_size_
+              << std::endl;
+    for (size_t i = 0; i < mask_size_; i++) {
+      for (size_t j = 0; j < mask_size_; j++) {
         std::cout << GetBit(i, j) << " ";
       }
       std::cout << std::endl;
@@ -75,10 +72,9 @@ public:
 
   Bitmap *GetDataPtr() const { return bm_; }
 
-  // mask_size_x_ and mask_size_y should satisfy that 64 % (mask_size_x_ *
-  // mask_size_y_) == 0.
-  TileIndex mask_size_x_ = 4;
-  TileIndex mask_size_y_ = 4;
+  // mask_size_ and mask_size_y should satisfy that 64 % (mask_size_ *
+  // mask_size_) == 0.
+  TileIndex mask_size_ = 4;
 
   Bitmap *bm_ = nullptr;
 };
@@ -92,29 +88,29 @@ private:
 public:
   Tile() = default;
 
-  Tile(TileIndex tile_size_x, TileIndex tile_size_y, VertexID tile_x,
-       VertexID tile_y, VertexID n_nz) {
-    InitHost(tile_size_x, tile_size_y, tile_x, tile_y, n_nz);
+  Tile(TileIndex tile_size, VertexID tile_x, VertexID tile_y, VertexID n_nz) {
+    assert(tile_size == 4 || tile_size == 8);
+    InitHost(tile_size, tile_x, tile_y, n_nz);
   }
 
   void InitAsOutput(const Tile &A, const Tile &A_t) {
     auto mask = GetOutputMask(*(A.GetMaskPtr()), *(A_t.GetMaskPtr()));
 
-    InitHost(A.get_tile_size_x(), A_t.get_tile_size_x(), A.get_tile_x(),
-             A_t.get_tile_x(), mask->GetDataPtr()->Count(), nullptr, nullptr,
-             nullptr, nullptr, mask);
+    InitHost(A.get_tile_size(), A.get_tile_x(), A_t.get_tile_y(),
+             mask->GetDataPtr()->Count(), nullptr, nullptr, nullptr, nullptr,
+             mask);
   }
 
-  cudaError_t InitDevice(TileIndex tile_size_x, TileIndex tile_size_y,
-                         VertexID tile_x, VertexID tile_y, VertexID n_nz) {
-    tile_size_x_ = tile_size_x;
-    tile_size_y_ = tile_size_y;
+  cudaError_t InitDevice(TileIndex tile_size, VertexID tile_x, VertexID tile_y,
+                         VertexID n_nz) {
+    assert(tile_size == 4 || tile_size == 8);
+    tile_size_ = tile_size;
     tile_x_ = tile_x;
     tile_y_ = tile_y;
     n_nz_ = n_nz;
 
-    if (row_ptr_ != nullptr)
-      cudaFree(row_ptr_);
+    if (bar_offset_ != nullptr)
+      cudaFree(bar_offset_);
     if (mask_ != nullptr)
       cudaFree(mask_);
 
@@ -125,28 +121,27 @@ public:
     if (data_ != nullptr)
       cudaFree(data_);
 
-    cudaMalloc(reinterpret_cast<void **>(&row_ptr_),
-               tile_size_y_ * sizeof(TileIndex));
+    cudaMalloc(reinterpret_cast<void **>(&bar_offset_),
+               tile_size_ * sizeof(TileIndex));
     cudaMalloc(reinterpret_cast<void **>(&row_idx_), n_nz_ * sizeof(TileIndex));
     cudaMalloc(reinterpret_cast<void **>(&col_idx_), n_nz_ * sizeof(TileIndex));
     cudaMalloc(reinterpret_cast<void **>(&data_), n_nz_ * sizeof(VertexLabel));
     mask_ = new Mask();
-    mask_->InitDevice(tile_size_x_, tile_size_y_);
+    mask_->InitDevice(tile_size_);
     return cudaSuccess;
   }
 
-  void InitHost(TileIndex tile_size_x, TileIndex tile_size_y, VertexID tile_x,
-                VertexID tile_y, VertexID n_nz, TileIndex *row_ptr = nullptr,
+  void InitHost(TileIndex tile_size, VertexID tile_x, VertexID tile_y,
+                VertexID n_nz, TileIndex *bar_offset = nullptr,
                 TileIndex *row_idx = nullptr, TileIndex *col_idx = nullptr,
                 VertexLabel *data = nullptr, Mask *mask = nullptr) {
-    tile_size_x_ = tile_size_x;
-    tile_size_y_ = tile_size_y;
+    tile_size_ = tile_size;
     tile_x_ = tile_x;
     tile_y_ = tile_y;
     n_nz_ = n_nz;
 
-    if (row_ptr_ != nullptr)
-      delete[] row_ptr_;
+    if (bar_offset_ != nullptr)
+      delete[] bar_offset_;
     if (mask_ != nullptr)
       delete mask_;
     if (row_idx_ != nullptr)
@@ -156,16 +151,16 @@ public:
     if (data_ != nullptr)
       delete[] data_;
 
-    if (row_ptr == nullptr)
-      row_ptr_ = new TileIndex[tile_size_y]();
+    if (bar_offset == nullptr)
+      bar_offset_ = new TileIndex[tile_size_]();
     else
-      row_ptr_ = row_ptr;
+      bar_offset_ = bar_offset;
     if (mask == nullptr)
-      mask_ = new Mask(tile_size_x, tile_size_y);
+      mask_ = new Mask(tile_size_);
     else
       mask_ = mask;
     if (row_idx == nullptr)
-      row_idx_ = new TileIndex[tile_size_y_]();
+      row_idx_ = new TileIndex[tile_size_]();
     else
       row_idx_ = row_idx;
     if (col_idx == nullptr)
@@ -179,7 +174,7 @@ public:
   }
 
   void FreeDevice() {
-    cudaFree(row_ptr_);
+    cudaFree(bar_offset_);
     cudaFree(row_idx_);
     cudaFree(col_idx_);
     cudaFree(data_);
@@ -191,11 +186,11 @@ public:
     assert(tile_x_ == tile.tile_x_);
     assert(tile_y_ == tile.tile_y_);
     assert(n_nz_ == tile.n_nz_);
-    assert(tile_size_x_ == tile.tile_size_x_);
-    assert(tile_size_y_ == tile.tile_size_y_);
+    assert(tile_size_ == tile.tile_size_);
 
-    cudaMemcpyAsync(row_ptr_, tile.row_ptr_, sizeof(TileIndex) * (tile_size_y_),
-                    cudaMemcpyHostToDevice, stream);
+    cudaMemcpyAsync(bar_offset_, tile.bar_offset_,
+                    sizeof(TileIndex) * (tile_size_), cudaMemcpyHostToDevice,
+                    stream);
     cudaMemcpyAsync(row_idx_, tile.row_idx_, sizeof(TileIndex) * n_nz_,
                     cudaMemcpyHostToDevice, stream);
     cudaMemcpyAsync(col_idx_, tile.col_idx_, sizeof(TileIndex) * n_nz_,
@@ -216,11 +211,11 @@ public:
     assert(tile_x_ == tile.tile_x_);
     assert(tile_y_ == tile.tile_y_);
     assert(n_nz_ == tile.n_nz_);
-    assert(tile_size_x_ == tile.tile_size_x_);
-    assert(tile_size_y_ == tile.tile_size_y_);
+    assert(tile_size_ == tile.tile_size_);
 
-    cudaMemcpyAsync(row_ptr_, tile.row_ptr_, sizeof(TileIndex) * (tile_size_y_),
-                    cudaMemcpyDeviceToHost, stream);
+    cudaMemcpyAsync(bar_offset_, tile.bar_offset_,
+                    sizeof(TileIndex) * (tile_size_), cudaMemcpyDeviceToHost,
+                    stream);
     cudaMemcpyAsync(row_idx_, tile.row_idx_, sizeof(TileIndex) * n_nz_,
                     cudaMemcpyDeviceToHost, stream);
     cudaMemcpyAsync(col_idx_, tile.col_idx_, sizeof(TileIndex) * n_nz_,
@@ -240,13 +235,14 @@ public:
     std::cout << "**********  Tile: (" << (int)tile_x_ << ", " << (int)tile_y_
               << ")"
               << " n_nz: " << n_nz_ << " ************" << std::endl;
-    if (is_transposed) {
-      std::cout << " col_ptr: ";
-    } else {
-      std::cout << " row_ptr: ";
+    if (n_nz_ == 0) {
+      std::cout << "   empty" << std::endl
+                << "****************************" << std::endl;
+      return;
     }
-    for (int i = 0; i < tile_size_y_; i++) {
-      std::cout << (int)row_ptr_[i] << " ";
+    std::cout << " bar_offset: ";
+    for (int i = 0; i < tile_size_; i++) {
+      std::cout << (int)bar_offset_[i] << " ";
     }
     std::cout << std::endl << " row_idx: ";
     for (VertexID i = 0; i < n_nz_; i++) {
@@ -271,10 +267,10 @@ public:
   void SetMaskPtr(Mask *ptr) { mask_ = ptr; }
   Mask *GetMaskPtr() const { return mask_; }
 
-  void SetRowPtrPtr(TileIndex *ptr) { row_ptr_ = ptr; }
+  void SetBarOffsetPtr(TileIndex *ptr) { bar_offset_ = ptr; }
   void SetRowIdxPtr(TileIndex *ptr) { row_idx_ = ptr; }
   void SetColIdxPtr(TileIndex *ptr) { col_idx_ = ptr; }
-  TileIndex *GetRowPtrPtr() const { return row_ptr_; }
+  TileIndex *GetBarOffsetPtr() const { return bar_offset_; }
   TileIndex *GetRowIdxPtr() const { return row_idx_; }
   TileIndex *GetColIdxPtr() const { return col_idx_; }
   VertexLabel *GetDataPtr() const { return data_; }
@@ -282,14 +278,12 @@ public:
   void set_n_nz(VertexID val) { n_nz_ = val; }
   void set_tile_x(VertexID val) { tile_x_ = val; }
   void set_tile_y(VertexID val) { tile_y_ = val; }
-  void set_tile_size_x(TileIndex val) { tile_size_x_ = val; }
-  void set_tile_size_y(TileIndex val) { tile_size_y_ = val; }
+  void set_tile_size(TileIndex val) { tile_size_ = val; }
 
   TileIndex get_n_nz() const { return n_nz_; }
   VertexID get_tile_x() const { return tile_x_; }
   VertexID get_tile_y() const { return tile_y_; }
-  TileIndex get_tile_size_x() const { return tile_size_x_; }
-  TileIndex get_tile_size_y() const { return tile_size_y_; }
+  TileIndex get_tile_size() const { return tile_size_; }
 
 private:
   // @description: take as input the two masks of two Matrix and return the mask
@@ -297,23 +291,32 @@ private:
   // @param: mask_a, the first mask, mask_b, the second mask.
   Mask *GetOutputMask(const Mask &mask_a, const Mask &mask_b) {
 
-    Mask *output = new Mask(mask_a.mask_size_x_, mask_b.mask_size_x_);
+    assert(mask_a.mask_size_ == mask_b.mask_size_);
+    Mask *output = new Mask(mask_a.mask_size_);
 
-    uint64_t intersection = 0;
-    for (TileIndex i = 0; i < mask_a.mask_size_x_; i++) {
-      uint64_t scope =
-          ~((0xffffffffffffffff << (mask_a.mask_size_y_ * (i + 1))) |
-            ~(0xffffffffffffffff << (mask_a.mask_size_y_ * (i))));
+    for (TileIndex i = 0; i < mask_a.mask_size_; i++) {
+      uint64_t intersection = 0;
 
-      uint64_t a_f = mask_a.GetDataPtr()->GetFragment(i * mask_a.mask_size_y_);
+      uint64_t scope_A = ~(0xffffffffffffffff << (mask_a.mask_size_ * (i + 1)) |
+                           ~(0xffffffffffffffff << (mask_a.mask_size_ * i)));
 
-      for (TileIndex j = 0; j < mask_b.mask_size_x_; j++) {
+      uint64_t a_f =
+          (mask_a.GetDataPtr()->GetFragment(i * mask_a.mask_size_) & scope_A) >>
+          (mask_a.mask_size_ * i);
+
+      for (TileIndex j = 0; j < mask_b.mask_size_; j++) {
+        uint64_t scope_B =
+            ~(0xffffffffffffffff << (mask_b.mask_size_ * (j + 1)) |
+              ~(0xffffffffffffffff << (mask_b.mask_size_ * j)));
         uint64_t b_f =
-            mask_b.GetDataPtr()->GetFragment(j * mask_b.mask_size_y_);
-        intersection |= ((a_f & scope) & b_f & scope);
+            (mask_b.GetDataPtr()->GetFragment(j * mask_b.mask_size_) &
+             scope_B) >>
+            (mask_b.mask_size_ * j);
+        if ((a_f & b_f) != 0)
+          intersection |= (1 << j);
       }
-      *(output->GetDataPtr()->GetPFragment(i * mask_a.mask_size_y_)) |=
-          intersection;
+      *(output->GetDataPtr()->GetPFragment(i * mask_a.mask_size_)) |=
+          intersection << (mask_a.mask_size_ * i);
     }
     return output;
   };
@@ -324,11 +327,10 @@ private:
   VertexID tile_y_;
   // store the index of tile (x,y)
 
-  TileIndex tile_size_x_;
-  TileIndex tile_size_y_;
-  // store the size of tile, tile_size_x times tile_size_y
+  TileIndex tile_size_;
+  // store the size of tile, tile_size_x times tile_size_
 
-  TileIndex *row_ptr_ = nullptr;
+  TileIndex *bar_offset_ = nullptr;
   TileIndex *row_idx_ = nullptr;
   TileIndex *col_idx_ = nullptr;
   VertexLabel *data_ = nullptr;
@@ -431,19 +433,18 @@ public:
       std::ifstream data_file(root_path + "tiles/" + std::to_string(i) + ".bin",
                               std::ios::binary);
 
-      TileIndex tile_size_x, tile_size_y;
+      TileIndex tile_size;
       VertexID n_nz, tile_x, tile_y;
 
       data_file.read(reinterpret_cast<char *>(&n_nz), sizeof(VertexID));
       data_file.read(reinterpret_cast<char *>(&tile_x), sizeof(VertexID));
       data_file.read(reinterpret_cast<char *>(&tile_y), sizeof(VertexID));
-      data_file.read(reinterpret_cast<char *>(&tile_size_x), sizeof(TileIndex));
-      data_file.read(reinterpret_cast<char *>(&tile_size_y), sizeof(TileIndex));
+      data_file.read(reinterpret_cast<char *>(&tile_size), sizeof(TileIndex));
 
-      data_ptr_[i] = new Tile(tile_size_x, tile_size_y, tile_x, tile_y, n_nz);
+      data_ptr_[i] = new Tile(tile_size, tile_x, tile_y, n_nz);
 
-      data_file.read(reinterpret_cast<char *>(data_ptr_[i]->GetRowPtrPtr()),
-                     sizeof(TileIndex) * data_ptr_[i]->get_tile_size_y());
+      data_file.read(reinterpret_cast<char *>(data_ptr_[i]->GetBarOffsetPtr()),
+                     sizeof(TileIndex) * data_ptr_[i]->get_tile_size());
       data_file.read(reinterpret_cast<char *>(data_ptr_[i]->GetRowIdxPtr()),
                      sizeof(TileIndex) * data_ptr_[i]->get_n_nz());
       data_file.read(reinterpret_cast<char *>(data_ptr_[i]->GetColIdxPtr()),
@@ -496,7 +497,7 @@ public:
       // Init Data
       auto tile_data = data_ptr_[i]->GetDataPtr();
       for (int j = 0; j < data_ptr_[i]->get_n_nz(); j++) {
-        tile_data[j] |= 2;
+        tile_data[j] |= 1;
       }
 
       VertexID n_nz = data_ptr_[i]->get_n_nz();
@@ -505,18 +506,11 @@ public:
       data_file.write(reinterpret_cast<char *>(&n_nz), sizeof(VertexID));
       data_file.write(reinterpret_cast<char *>(&tile_x), sizeof(VertexID));
       data_file.write(reinterpret_cast<char *>(&tile_y), sizeof(VertexID));
+      TileIndex tile_size = data_ptr_[i]->get_tile_size();
+      data_file.write(reinterpret_cast<char *>(&tile_size), sizeof(TileIndex));
 
-      TileIndex tile_size_x = data_ptr_[i]->get_tile_size_x();
-      TileIndex tile_size_y = data_ptr_[i]->get_tile_size_y();
-      data_file.write(reinterpret_cast<char *>(&tile_size_x),
-                      sizeof(TileIndex));
-      data_file.write(reinterpret_cast<char *>(&tile_size_y),
-                      sizeof(TileIndex));
-
-      data_ptr_[i]->set_tile_size_x(tile_size_x);
-      data_ptr_[i]->set_tile_size_y(tile_size_y);
-      data_file.write(reinterpret_cast<char *>(data_ptr_[i]->GetRowPtrPtr()),
-                      sizeof(TileIndex) * data_ptr_[i]->get_tile_size_y());
+      data_file.write(reinterpret_cast<char *>(data_ptr_[i]->GetBarOffsetPtr()),
+                      sizeof(TileIndex) * data_ptr_[i]->get_tile_size());
       data_file.write(reinterpret_cast<char *>(data_ptr_[i]->GetRowIdxPtr()),
                       sizeof(TileIndex) * data_ptr_[i]->get_n_nz());
       data_file.write(reinterpret_cast<char *>(data_ptr_[i]->GetColIdxPtr()),

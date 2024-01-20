@@ -102,7 +102,7 @@ __global__ void TensorCoreGemm_kernel(int M, int N, int K, float alpha,
 __global__ void TileGemm_kernel(
     VertexID n_nz_A, VertexID n_nz_B, TileIndex tile_size_x,
     TileIndex tile_size_y, int *offset, int *n_nz_for_each_row,
-    TileIndex *row_ptr_A, TileIndex *row_ptr_B, TileIndex *row_ptr_C,
+    TileIndex *bar_offset_A, TileIndex *bar_offset_B, TileIndex *bar_offset_C,
     TileIndex *row_idx_A, TileIndex *row_idx_B, TileIndex *row_idx_C,
     TileIndex *col_idx_A, TileIndex *col_idx_B, TileIndex *col_idx_C,
     VertexLabel *data_A, VertexLabel *data_B, VertexLabel *data_C,
@@ -119,14 +119,14 @@ __global__ void TileGemm_kernel(
 
         TileIndex n_nz_row_A, n_nz_row_B;
         if (row_i == tile_size_x)
-          n_nz_row_A = n_nz_A - row_ptr_A[row_i];
+          n_nz_row_A = n_nz_A - bar_offset_A[row_i];
         else
-          n_nz_row_A = row_ptr_A[row_i + 1] - row_ptr_A[row_i];
+          n_nz_row_A = bar_offset_A[row_i + 1] - bar_offset_A[row_i];
 
         if (row_i == tile_size_x)
-          n_nz_row_B = n_nz_B - row_ptr_B[row_i];
+          n_nz_row_B = n_nz_B - bar_offset_B[row_i];
         else
-          n_nz_row_B = row_ptr_B[row_i + 1] - row_ptr_B[row_i];
+          n_nz_row_B = bar_offset_B[row_i + 1] - bar_offset_B[row_i];
 
         TileIndex p_A = 0;
         TileIndex p_B = 0;
@@ -142,8 +142,8 @@ __global__ void TileGemm_kernel(
             row_idx_C[local_offset] = row_i;
             col_idx_C[local_offset] = col_i;
             atomicAdd(data_C + local_offset,
-                      *(data_A + (row_ptr_A[col_i] + p_A)) *
-                          *(data_B + (row_ptr_B[col_i] + p_B)));
+                      *(data_A + (bar_offset_A[col_i] + p_A)) *
+                          *(data_B + (bar_offset_B[col_i] + p_B)));
             atomicAdd(n_nz_for_each_row + row_i, 1);
             p_A++;
             p_B++;

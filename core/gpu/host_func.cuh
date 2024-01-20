@@ -437,8 +437,7 @@ cudaError_t TiledMatrixGemm_host(const Tile &tile, const Tile &tile_t,
 
   auto tile_output_host = new Tile();
 
-  result = tile_device->InitDevice(tile.get_tile_size_x(),
-                                   tile.get_tile_size_y(), tile.get_tile_x(),
+  result = tile_device->InitDevice(tile.get_tile_size(), tile.get_tile_x(),
                                    tile.get_tile_y(), tile.get_n_nz());
 
   if (result != cudaSuccess) {
@@ -447,9 +446,9 @@ cudaError_t TiledMatrixGemm_host(const Tile &tile, const Tile &tile_t,
     return result;
   }
 
-  result = tile_t_device->InitDevice(
-      tile_t.get_tile_size_x(), tile_t.get_tile_size_y(), tile_t.get_tile_x(),
-      tile_t.get_tile_y(), tile_t.get_n_nz());
+  result =
+      tile_t_device->InitDevice(tile_t.get_tile_size(), tile_t.get_tile_x(),
+                                tile_t.get_tile_y(), tile_t.get_n_nz());
   if (result != cudaSuccess) {
     std::cerr << "Failed to allocate matrix: " << cudaGetErrorString(result)
               << std::endl;
@@ -458,9 +457,8 @@ cudaError_t TiledMatrixGemm_host(const Tile &tile, const Tile &tile_t,
 
   tile_output_host->InitAsOutput(tile, tile_t);
   result = tile_output_device->InitDevice(
-      tile_output_host->get_tile_size_x(), tile_output_host->get_tile_size_y(),
-      tile_output_host->get_tile_x(), tile_output_host->get_tile_y(),
-      tile_output_host->get_n_nz());
+      tile_output_host->get_tile_size(), tile_output_host->get_tile_x(),
+      tile_output_host->get_tile_y(), tile_output_host->get_n_nz());
 
   if (result != cudaSuccess) {
     std::cerr << "Failed to allocate matrix: " << cudaGetErrorString(result)
@@ -501,18 +499,18 @@ cudaError_t TiledMatrixGemm_host(const Tile &tile, const Tile &tile_t,
 
   int *n_nz_for_each_row_d, *n_nz_for_each_row_h;
   cudaMalloc(reinterpret_cast<void **>(&n_nz_for_each_row_d),
-             sizeof(int) * tile_output_host->get_tile_size_x());
-  n_nz_for_each_row_h = new int[tile_output_host->get_tile_size_x()]();
+             sizeof(int) * tile_output_host->get_tile_size());
+  n_nz_for_each_row_h = new int[tile_output_host->get_tile_size()]();
   cudaMemcpyAsync(n_nz_for_each_row_d, n_nz_for_each_row_h,
-                  sizeof(int) * tile_output_host->get_tile_size_x(),
+                  sizeof(int) * tile_output_host->get_tile_size(),
                   cudaMemcpyHostToDevice, stream);
 
   // 3. Lunch the kernel function
   TileGemm_kernel<<<dimGrid, dimBlock, 48 * 1024, stream>>>(
       tile_device->get_n_nz(), tile_t_device->get_n_nz(),
-      tile_output_device->get_tile_size_x(), tile_device->get_tile_size_y(),
-      offset_d, n_nz_for_each_row_d, tile_device->GetRowPtrPtr(),
-      tile_t_device->GetRowPtrPtr(), tile_output_device->GetRowPtrPtr(),
+      tile_output_device->get_tile_size(), tile_device->get_tile_size(),
+      offset_d, n_nz_for_each_row_d, tile_device->GetBarOffsetPtr(),
+      tile_t_device->GetBarOffsetPtr(), tile_output_device->GetBarOffsetPtr(),
       tile_device->GetRowIdxPtr(), tile_t_device->GetRowIdxPtr(),
       tile_output_device->GetRowIdxPtr(), tile_device->GetColIdxPtr(),
       tile_t_device->GetColIdxPtr(), tile_output_device->GetColIdxPtr(),
@@ -525,12 +523,14 @@ cudaError_t TiledMatrixGemm_host(const Tile &tile, const Tile &tile_t,
   // 4. Transfer data from device to host.
   tile_output_host->MemcpyAsyncDevice2Host(*tile_output_device, stream);
 
+  tile_output_host->Show();
+
   // 5. Compute row_ptr for the output tile.
   cudaMemcpyAsync(n_nz_for_each_row_h, n_nz_for_each_row_d,
-                  sizeof(int) * tile_output_host->get_tile_size_x(),
+                  sizeof(int) * tile_output_host->get_tile_size(),
                   cudaMemcpyDeviceToHost, stream);
-  auto output_tile_ptr_ptr = tile_output_host->GetRowPtrPtr();
-  for (size_t i = 0; i < tile_output_host->get_tile_size_x() - 1; i++) {
+  auto output_tile_ptr_ptr = tile_output_host->GetBarOffsetPtr();
+  for (size_t i = 0; i < tile_output_host->get_tile_size() - 1; i++) {
     output_tile_ptr_ptr[i + 1] =
         output_tile_ptr_ptr[i] + n_nz_for_each_row_h[i];
   }

@@ -9,7 +9,7 @@
 #include "core/common/types.h"
 #include "core/data_structures/edgelist.h"
 #include "core/data_structures/immutable_csr.h"
-#include "core/data_structures/tiled_matrix.h"
+#include "core/data_structures/tiled_matrix.cuh"
 #include "core/util/bitmap.h"
 
 namespace sics {
@@ -36,7 +36,6 @@ ImmutableCSR *Edgelist2ImmutableCSR(const Edges &edgelist) {
   auto immutable_csr = new ImmutableCSR();
 
   auto edgelist_metadata = edgelist.get_metadata();
-  std::cout << edgelist_metadata.max_vid << std::endl;
   auto aligned_max_vid =
       (((edgelist.get_metadata().max_vid + 1) >> 6) << 6) + 64;
   auto visited = Bitmap(aligned_max_vid);
@@ -96,8 +95,6 @@ ImmutableCSR *Edgelist2ImmutableCSR(const Edges &edgelist) {
                 [&edgelist, &buffer_csr_vertices, &offset_in_edges,
                  &offset_out_edges](auto j) {
                   auto e = edgelist.get_edge_by_index(j);
-                  std::cout << j << " " << e.src << " -> " << e.dst
-                            << std::endl;
                   EdgeIndex offset_out = 0, offset_in = 0;
                   offset_out =
                       __sync_fetch_and_add(offset_out_edges + e.src, 1);
@@ -124,14 +121,12 @@ ImmutableCSR *Edgelist2ImmutableCSR(const Edges &edgelist) {
     vid_map[i] = vid;
     vid++;
   }
-  std::cout << edgelist.get_metadata().num_vertices << std::endl;
   auto buffer_in_offset = new EdgeIndex[edgelist.get_metadata().num_vertices]();
   auto buffer_out_offset =
       new EdgeIndex[edgelist.get_metadata().num_vertices]();
 
   // Compute offset for each vertex.
   for (VertexID i = 1; i < edgelist.get_metadata().num_vertices; i++) {
-    std::cout << buffer_in_offset[i] << std::endl;
     buffer_in_offset[i] = buffer_in_offset[i - 1] + buffer_indegree[i - 1];
     buffer_out_offset[i] = buffer_out_offset[i - 1] + buffer_outdegree[i - 1];
   }
@@ -179,34 +174,32 @@ ImmutableCSR *Edgelist2ImmutableCSR(const Edges &edgelist) {
   return immutable_csr;
 }
 
-TiledMatrix *ImmutableCSR2TiledMatrix(const ImmutableCSR &immutable_csr) {
-  std::cout << "ImmutableCSR2TiledMatrix" << std::endl;
-  immutable_csr.ShowGraph(100);
+TiledMatrix *
+ImmutableCSR2TransposedTiledMatrix(const ImmutableCSR &immutable_csr) {
+  std::cout << "ImmutableCSR2TransposedTiledMatrix" << std::endl;
 
   TiledMatrix *tiled_matrix = new TiledMatrix();
 
-  auto tile_size_x = 4;
-  auto tile_size_y = 4;
+  auto tile_size = 4;
 
-  auto mask = new Mask(tile_size_x, tile_size_y);
+  auto mask = new Mask(tile_size);
 
   // Step 1. Generate the global tile structure of the matrix: tile_ptr,
   // tile_col_idx, tile_n_nz where (1) tile_ptr used to store memory offset of
   // the tiles in tile rows; (2) tile_col_index used to store tile column
   // indices; (3) tile_n_nz used to store the number of non-zeros in each tile.
-
   VertexID n_rows = ceil((float)immutable_csr.get_num_vertices() /
                          (float)mask->get_mask_size_x());
   VertexID n_cols = ceil((float)immutable_csr.get_num_vertices() /
                          (float)mask->get_mask_size_y());
 
-  VertexID *tile_ptr = new VertexID[n_rows + 1]();
+  VertexID *tile_ptr = new VertexID[n_cols + 1]();
 
   std::vector<VertexID> tile_n_nz_vec;
   tile_n_nz_vec.reserve(n_cols);
   tile_n_nz_vec.push_back(0);
-  std::vector<VertexID> tile_col_idx;
-  tile_col_idx.reserve(n_cols);
+  std::vector<VertexID> tile_row_idx;
+  tile_row_idx.reserve(n_cols);
 
   VertexID tile_x_scope = ceil((float)immutable_csr.get_num_vertices() /
                                (float)mask->get_mask_size_x());
@@ -217,6 +210,117 @@ TiledMatrix *ImmutableCSR2TiledMatrix(const ImmutableCSR &immutable_csr) {
 
   std::vector<Tile *> tile_vec;
 
+  // Generate transposed TileMatrix.
+  for (VertexID tile_y = 0; tile_y < tile_y_scope; tile_y++) {
+    VertexID tile_col_offset = 0;
+
+    for (VertexID tile_x = 0; tile_x < tile_x_scope; tile_x++) {
+      bool is_nz_tile = false;
+
+      TileIndex n_nz = 0;
+
+      auto bar_offset = new TileIndex[tile_size]();
+      auto tile_mask = new Mask(tile_size);
+
+      std::vector<TileIndex> row_idx;
+      std::vector<TileIndex> col_idx;
+
+      for (TileIndex y = 0; y < tile_size; y++) {
+        auto uid = tile_y * tile_size + y;
+        auto u = immutable_csr.GetVertexByLocalID(uid);
+        auto nbr_start = tile_x * tile_size;
+        auto nbr_end = (tile_x + 1) * tile_size;
+
+        bool is_nz_y = false;
+        uint8_t n_nz_by_y = 0;
+
+        for (auto nbr = 0; nbr < u.indegree; nbr++) {
+          if (u.incoming_edges[nbr] >= nbr_start &&
+              u.incoming_edges[nbr] < nbr_end) {
+            is_nz_tile = true;
+            is_nz_y = true;
+            n_nz++;
+            n_nz_by_y++;
+            row_idx.push_back(u.incoming_edges[nbr] - nbr_start);
+            col_idx.push_back(y);
+            tile_mask->SetBit(y, u.incoming_edges[nbr] - nbr_start);
+          } else if (u.incoming_edges[nbr] >= nbr_end) {
+            break;
+          }
+        }
+
+        bar_offset[y + 1] = n_nz_by_y + bar_offset[y];
+      }
+
+      if (is_nz_tile) {
+        tile_col_offset++;
+        tile_count++;
+        tile_n_nz_vec.push_back(tile_n_nz_vec.back() + n_nz);
+        tile_row_idx.push_back(tile_x);
+
+        auto tile = new Tile(tile_size, tile_x, tile_y, n_nz);
+        tile->SetBarOffsetPtr(bar_offset);
+        tile->SetMaskPtr(tile_mask);
+        memcpy(tile->GetRowIdxPtr(), row_idx.data(),
+               sizeof(TileIndex) * row_idx.size());
+        memcpy(tile->GetColIdxPtr(), col_idx.data(),
+               sizeof(TileIndex) * col_idx.size());
+
+        tile_vec.emplace_back(tile);
+        mask->SetBit(tile_y, tile_x);
+      } else {
+        delete[] bar_offset;
+        delete tile_mask;
+      }
+    }
+    tile_ptr[tile_y + 1] = tile_col_offset + tile_ptr[tile_y];
+  }
+
+  // Step 2. Construct tiled_matrix.
+  tiled_matrix->Init(n_rows, n_cols, tile_vec.size(), tile_vec.data(), mask,
+                     tile_ptr, tile_row_idx.data(), tile_n_nz_vec.data());
+  tiled_matrix->MarkasTransposed();
+
+  return tiled_matrix;
+}
+
+TiledMatrix *ImmutableCSR2TiledMatrix(const ImmutableCSR &immutable_csr) {
+  std::cout << "ImmutableCSR2TiledMatrix" << std::endl;
+
+  TiledMatrix *tiled_matrix = new TiledMatrix();
+
+  auto tile_size = 4;
+
+  auto mask = new Mask(tile_size);
+
+  // Step 1. Generate the global tile structure of the matrix: tile_ptr,
+  // tile_col_idx, tile_n_nz where (1) tile_ptr used to store memory offset of
+  // the tiles in tile rows; (2) tile_col_index used to store tile column
+  // indices; (3) tile_n_nz used to store the number of non-zeros in each tile.
+  VertexID n_rows = ceil((float)immutable_csr.get_num_vertices() /
+                         (float)mask->get_mask_size_x());
+  VertexID n_cols = ceil((float)immutable_csr.get_num_vertices() /
+                         (float)mask->get_mask_size_y());
+
+  VertexID *tile_ptr = new VertexID[n_rows + 1]();
+
+  std::vector<VertexID> tile_n_nz_vec;
+  tile_n_nz_vec.reserve(n_cols);
+  tile_n_nz_vec.push_back(0);
+  std::vector<VertexID> tile_col_idx, tile_row_idx;
+  tile_col_idx.reserve(n_cols);
+  tile_row_idx.reserve(n_cols);
+
+  VertexID tile_x_scope = ceil((float)immutable_csr.get_num_vertices() /
+                               (float)mask->get_mask_size_x());
+  VertexID tile_y_scope = ceil((float)immutable_csr.get_num_vertices() /
+                               (float)mask->get_mask_size_y());
+
+  VertexID tile_count = 0;
+
+  std::vector<Tile *> tile_vec;
+
+  // Generate TileMatrix.
   for (VertexID tile_x = 0; tile_x < tile_x_scope; tile_x++) {
     VertexID tile_row_offset = 0;
 
@@ -224,20 +328,22 @@ TiledMatrix *ImmutableCSR2TiledMatrix(const ImmutableCSR &immutable_csr) {
       bool is_nz_tile = false;
 
       TileIndex n_nz = 0;
-      auto tile = new Tile(tile_size_x, tile_size_y);
+      auto bar_offset = new TileIndex[tile_size]();
+      auto tile_mask = new Mask(tile_size);
+
       VertexID tile_col_offset = 0;
 
       std::vector<TileIndex> row_idx;
       std::vector<TileIndex> col_idx;
 
-      for (TileIndex x = 0; x < tile_size_x; x++) {
-        auto uid = tile_x * tile_size_x + x;
+      for (TileIndex x = 0; x < tile_size; x++) {
+        auto uid = tile_x * tile_size + x;
         auto u = immutable_csr.GetVertexByLocalID(uid);
-        auto nbr_start = tile_y * tile_size_y;
-        auto nbr_end = (tile_y + 1) * tile_size_y;
+        auto nbr_start = tile_y * tile_size;
+        auto nbr_end = (tile_y + 1) * tile_size;
 
         bool is_nz_x = false;
-        uint8_t n_nz_by_xd = 0;
+        uint8_t n_nz_by_x = 0;
 
         for (auto nbr = 0; nbr < u.outdegree; nbr++) {
           if (u.outgoing_edges[nbr] >= nbr_start &&
@@ -245,16 +351,15 @@ TiledMatrix *ImmutableCSR2TiledMatrix(const ImmutableCSR &immutable_csr) {
             is_nz_tile = true;
             is_nz_x = true;
             n_nz++;
-            n_nz_by_xd++;
+            n_nz_by_x++;
             row_idx.push_back(x);
             col_idx.push_back(u.outgoing_edges[nbr] - nbr_start);
-            tile->SetBit(x, u.outgoing_edges[nbr] - nbr_start);
+            tile_mask->SetBit(x, u.outgoing_edges[nbr] - nbr_start);
           } else if (u.outgoing_edges[nbr] >= nbr_end) {
             break;
           }
         }
-
-        tile->row_ptr_[x + 1] = n_nz_by_xd + tile->row_ptr_[x];
+        bar_offset[x + 1] = n_nz_by_x + bar_offset[x];
       }
 
       if (is_nz_tile) {
@@ -263,25 +368,24 @@ TiledMatrix *ImmutableCSR2TiledMatrix(const ImmutableCSR &immutable_csr) {
         tile_n_nz_vec.push_back(tile_n_nz_vec.back() + n_nz);
         tile_col_idx.push_back(tile_y);
 
-        tile->InitDynamicInfo(tile_x, tile_y, n_nz);
-        memcpy(tile->row_idx_, row_idx.data(),
+        auto tile = new Tile(tile_size, tile_x, tile_y, n_nz);
+        tile->SetBarOffsetPtr(bar_offset);
+        tile->SetMaskPtr(tile_mask);
+        memcpy(tile->GetRowIdxPtr(), row_idx.data(),
                sizeof(TileIndex) * row_idx.size());
-        memcpy(tile->col_idx_, col_idx.data(),
+        memcpy(tile->GetColIdxPtr(), col_idx.data(),
                sizeof(TileIndex) * col_idx.size());
-
-        tile_ptr[tile_x + 1] = tile_row_offset + tile_ptr[tile_x];
-
         tile_vec.emplace_back(tile);
-        tile->Show();
         mask->SetBit(tile_x, tile_y);
-
-        // move tile to a container.
       } else {
-        delete tile;
+        delete[] bar_offset;
+        delete tile_mask;
       }
     }
+    tile_ptr[tile_x + 1] = tile_row_offset + tile_ptr[tile_x];
   }
 
+  // Step 2. Construct tiled_matrix.
   tiled_matrix->Init(n_rows, n_cols, tile_vec.size(), tile_vec.data(), mask,
                      tile_ptr, tile_col_idx.data(), tile_n_nz_vec.data());
 

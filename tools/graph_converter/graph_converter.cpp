@@ -53,6 +53,9 @@ static inline ConvertMode ConvertMode2Enum(const std::string &s) {
 void ConvertEdgelistCSV2TiledMatrix(const std::string &input_path,
                                     const std::string &output_path,
                                     const std::string &sep, bool read_header) {
+  if (!std::filesystem::exists(output_path))
+    std::filesystem::create_directory(output_path);
+
   sics::matrixgraph::core::data_structures::Edges edgelist;
   edgelist.ReadFromCSV(input_path, sep, read_header);
   auto p_immutable_csr =
@@ -62,7 +65,14 @@ void ConvertEdgelistCSV2TiledMatrix(const std::string &input_path,
       sics::matrixgraph::tools::format_converter::ImmutableCSR2TiledMatrix(
           *p_immutable_csr);
 
-  p_tiled_matrix->Write(output_path);
+  p_tiled_matrix->Write(output_path + "origin/");
+
+  auto p_tiled_matrix_transposed = sics::matrixgraph::tools::format_converter::
+      ImmutableCSR2TransposedTiledMatrix(*p_immutable_csr);
+
+  //p_tiled_matrix->Show();
+  //p_tiled_matrix_transposed->Show();
+  p_tiled_matrix_transposed->Write(output_path + "transposed/");
 }
 
 int main(int argc, char **argv) {
