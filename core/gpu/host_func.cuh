@@ -523,8 +523,6 @@ cudaError_t TiledMatrixGemm_host(const Tile &tile, const Tile &tile_t,
   // 4. Transfer data from device to host.
   tile_output_host->MemcpyAsyncDevice2Host(*tile_output_device, stream);
 
-  tile_output_host->Show();
-
   // 5. Compute row_ptr for the output tile.
   cudaMemcpyAsync(n_nz_for_each_row_h, n_nz_for_each_row_d,
                   sizeof(int) * tile_output_host->get_tile_size(),
@@ -535,6 +533,7 @@ cudaError_t TiledMatrixGemm_host(const Tile &tile, const Tile &tile_t,
         output_tile_ptr_ptr[i] + n_nz_for_each_row_h[i];
   }
 
+  std::cout << "\nOUTPUT: " << std::endl;
   tile_output_host->Show();
 
   // 6. Synchronize the stream.
