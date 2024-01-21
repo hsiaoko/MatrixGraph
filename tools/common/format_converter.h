@@ -55,6 +55,7 @@ ImmutableCSR *Edgelist2ImmutableCSR(const Edges &edgelist) {
                 [&edgelist, &visited, &num_in_edges_by_vid,
                  &num_out_edges_by_vid, &min_vid](auto i) {
                   auto e = edgelist.get_edge_by_index(i);
+                  std::cout<<e.src<<"->"<<e.dst<<std::endl;
                   visited.SetBit(e.src);
                   visited.SetBit(e.dst);
                   WriteAdd(num_in_edges_by_vid + e.dst, (VertexID)1);

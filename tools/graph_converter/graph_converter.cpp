@@ -32,7 +32,6 @@ DEFINE_string(i, "", "input path.");
 DEFINE_string(o, "", "output path.");
 DEFINE_string(convert_mode, "", "Conversion mode");
 DEFINE_string(sep, "", "separator to split a line of csv file.");
-DEFINE_bool(read_head, false, "whether to read header of csv.");
 
 enum ConvertMode {
   kEdgelistCSV2TiledMatrix, // default
@@ -52,12 +51,12 @@ static inline ConvertMode ConvertMode2Enum(const std::string &s) {
 // indicates whether to read head.
 void ConvertEdgelistCSV2TiledMatrix(const std::string &input_path,
                                     const std::string &output_path,
-                                    const std::string &sep, bool read_header) {
+                                    const std::string &sep) {
   if (!std::filesystem::exists(output_path))
     std::filesystem::create_directory(output_path);
 
   sics::matrixgraph::core::data_structures::Edges edgelist;
-  edgelist.ReadFromCSV(input_path, sep, read_header);
+  edgelist.ReadFromCSV(input_path, sep);
   auto p_immutable_csr =
       sics::matrixgraph::tools::format_converter::Edgelist2ImmutableCSR(
           edgelist);
@@ -70,8 +69,9 @@ void ConvertEdgelistCSV2TiledMatrix(const std::string &input_path,
   auto p_tiled_matrix_transposed = sics::matrixgraph::tools::format_converter::
       ImmutableCSR2TransposedTiledMatrix(*p_immutable_csr);
 
-  //p_tiled_matrix->Show();
-  //p_tiled_matrix_transposed->Show();
+  p_immutable_csr->ShowGraph(100);
+  p_tiled_matrix->Show();
+  p_tiled_matrix_transposed->Show();
   p_tiled_matrix_transposed->Write(output_path + "transposed/");
 }
 
@@ -90,8 +90,7 @@ int main(int argc, char **argv) {
 
   switch (ConvertMode2Enum(FLAGS_convert_mode)) {
   case kEdgelistCSV2TiledMatrix:
-    ConvertEdgelistCSV2TiledMatrix(FLAGS_i, FLAGS_o, FLAGS_sep,
-                                   FLAGS_read_head);
+    ConvertEdgelistCSV2TiledMatrix(FLAGS_i, FLAGS_o, FLAGS_sep);
     break;
   default:
     return -1;

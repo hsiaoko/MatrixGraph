@@ -141,9 +141,6 @@ __global__ void TileGemm_kernel(
             int local_offset = atomicAdd(offset, 1);
             row_idx_C[local_offset] = row_i;
             col_idx_C[local_offset] = col_i;
-            printf("%d, %d, val: %d, %d\n", row_i, col_i,
-                   *(data_A + (bar_offset_A[row_i] + p_A)),
-                   *(data_B + (bar_offset_B[col_i] + p_B)));
             atomicAdd(data_C + local_offset,
                       *(data_A + (bar_offset_A[row_i] + p_A)) *
                           *(data_B + (bar_offset_B[col_i] + p_B)));

@@ -148,7 +148,7 @@ public:
 
   // Read From CSv
   void ReadFromCSV(const std::string &filename, const std::string &sep,
-                   bool read_header = false, bool compressed = false) {
+                   bool compressed = false) {
     std::ifstream in_file(filename);
 
     in_file.seekg(0, std::ios::end);
@@ -167,8 +167,7 @@ public:
     EdgeIndex index = 0;
     VertexID max_vid = 0, compressed_vid = 0;
     std::string line, vid_str;
-    if (read_header)
-      getline(ss, line, '\n');
+
     while (getline(ss, line, '\n')) {
       if (*line.c_str() == '\0')
         break;
@@ -177,6 +176,7 @@ public:
         VertexID vid = stoll(vid_str);
         sics::matrixgraph::core::util::atomic::WriteMax(&max_vid, vid);
         buffer_edges[index++] = vid;
+        std::cout << "vid: " << vid << std::endl;
       }
     }
     content.clear();
@@ -217,6 +217,7 @@ public:
     delete[] vid_map;
     delete[] compressed_buffer_edges;
 
+    std::cout << "Loaded graph with " << n_edges << std::endl;
     // Compute metadata.
     edgelist_metadata_.num_edges = n_edges;
     edgelist_metadata_.num_vertices = bitmap.Count();
