@@ -176,7 +176,6 @@ public:
         VertexID vid = stoll(vid_str);
         sics::matrixgraph::core::util::atomic::WriteMax(&max_vid, vid);
         buffer_edges[index++] = vid;
-        std::cout << "vid: " << vid << std::endl;
       }
     }
     content.clear();
@@ -217,7 +216,6 @@ public:
     delete[] vid_map;
     delete[] compressed_buffer_edges;
 
-    std::cout << "Loaded graph with " << n_edges << std::endl;
     // Compute metadata.
     edgelist_metadata_.num_edges = n_edges;
     edgelist_metadata_.num_vertices = bitmap.Count();

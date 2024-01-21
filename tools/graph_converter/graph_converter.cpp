@@ -69,9 +69,9 @@ void ConvertEdgelistCSV2TiledMatrix(const std::string &input_path,
   auto p_tiled_matrix_transposed = sics::matrixgraph::tools::format_converter::
       ImmutableCSR2TransposedTiledMatrix(*p_immutable_csr);
 
-  p_immutable_csr->ShowGraph(100);
-  p_tiled_matrix->Show();
-  p_tiled_matrix_transposed->Show();
+  // p_immutable_csr->ShowGraph(100);
+  // p_tiled_matrix->Show();
+  // p_tiled_matrix_transposed->Show();
   p_tiled_matrix_transposed->Write(output_path + "transposed/");
 }
 
