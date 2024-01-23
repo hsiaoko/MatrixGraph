@@ -422,12 +422,7 @@ cudaError_t cuBLASGemm_host(int M, int N, int K, float alpha, float beta) {
 
 cudaError_t TiledMatrixGemm_host(const Tile &tile, const Tile &tile_t,
                                  const cudaStream_t &stream) {
-  // std::cout
-  //     << ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>TiledMatrix GEMM"
-  //     << std::endl;
 
-  tile.Show();
-  tile_t.Show();
   cudaError_t result;
 
   // 1. Allocate device memory.
@@ -533,8 +528,8 @@ cudaError_t TiledMatrixGemm_host(const Tile &tile, const Tile &tile_t,
         output_tile_ptr_ptr[i] + n_nz_for_each_row_h[i];
   }
 
-  std::cout << "\nOUTPUT: " << std::endl;
-  tile_output_host->Show();
+  //std::cout << "\nOUTPUT: " << std::endl;
+  //tile_output_host->Show();
 
   // 6. Synchronize the stream.
   cudaStreamSynchronize(stream);

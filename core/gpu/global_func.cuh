@@ -112,24 +112,24 @@ __global__ void TileGemm_kernel(
   unsigned int tid_y = blockIdx.x * (blockDim.x * blockDim.y) + threadIdx.y;
 
   // GEMM on col_i of A and row_i of B.
-  for (int row_i = tid_y; row_i < tile_size_x; row_i += blockDim.x) {
-    for (int col_i = tid_x; col_i < tile_size_y; col_i += blockDim.y) {
-      if (bit_mask_C[WORD_OFFSET(col_i * tile_size_x + row_i)] &
-          1ul << BIT_OFFSET(4 * row_i + col_i)) {
+  for (int row_i = tid_x; row_i < tile_size_x; row_i += blockDim.x) {
+    for (int col_i = tid_y; col_i < tile_size_y; col_i += blockDim.y) {
+      if (bit_mask_C[WORD_OFFSET(row_i * tile_size_x + col_i)] &
+          1ul << BIT_OFFSET(tile_size_x * row_i + col_i)) {
 
         TileIndex n_nz_row_A, n_nz_row_B;
-        if (row_i == tile_size_x)
+        if (row_i == tile_size_x - 1)
           n_nz_row_A = n_nz_A - bar_offset_A[row_i];
         else
           n_nz_row_A = bar_offset_A[row_i + 1] - bar_offset_A[row_i];
 
-        if (row_i == tile_size_x)
-          n_nz_row_B = n_nz_B - bar_offset_B[row_i];
+        if (col_i == tile_size_x - 1)
+          n_nz_row_B = n_nz_B - bar_offset_B[col_i];
         else
-          n_nz_row_B = bar_offset_B[row_i + 1] - bar_offset_B[row_i];
+          n_nz_row_B = bar_offset_B[col_i + 1] - bar_offset_B[col_i];
 
-        TileIndex p_A = 0;
-        TileIndex p_B = 0;
+        TileIndex p_A = bar_offset_A[row_i];
+        TileIndex p_B = bar_offset_B[col_i];
         TileIndex p = 0;
 
         while (p < n_nz_row_A || p < n_nz_row_B) {
@@ -143,7 +143,7 @@ __global__ void TileGemm_kernel(
             col_idx_C[local_offset] = col_i;
             atomicAdd(data_C + local_offset,
                       *(data_A + (bar_offset_A[row_i] + p_A)) *
-                          *(data_B + (bar_offset_B[col_i] + p_B)));
+                          *(data_B + (bar_offset_B[row_i] + p_B)));
             atomicAdd(n_nz_for_each_row + row_i, 1);
             p_A++;
             p_B++;

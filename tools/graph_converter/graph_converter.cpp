@@ -60,19 +60,20 @@ void ConvertEdgelistCSV2TiledMatrix(const std::string &input_path,
   auto p_immutable_csr =
       sics::matrixgraph::tools::format_converter::Edgelist2ImmutableCSR(
           edgelist);
+
   auto p_tiled_matrix =
       sics::matrixgraph::tools::format_converter::ImmutableCSR2TiledMatrix(
           *p_immutable_csr);
-
   p_tiled_matrix->Write(output_path + "origin/");
 
-  auto p_tiled_matrix_transposed = sics::matrixgraph::tools::format_converter::
+  auto p_tiled_matrix_t = sics::matrixgraph::tools::format_converter::
       ImmutableCSR2TransposedTiledMatrix(*p_immutable_csr);
+  p_tiled_matrix_t->Write(output_path + "transposed/");
 
-  // p_immutable_csr->ShowGraph(100);
-  // p_tiled_matrix->Show();
-  // p_tiled_matrix_transposed->Show();
-  p_tiled_matrix_transposed->Write(output_path + "transposed/");
+  p_tiled_matrix->Show();
+  p_tiled_matrix_t->Show();
+  //delete p_immutable_csr_t;
+  delete p_tiled_matrix_t;
 }
 
 int main(int argc, char **argv) {

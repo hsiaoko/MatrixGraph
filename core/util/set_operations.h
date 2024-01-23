@@ -1,9 +1,9 @@
 #ifndef CORE_UTIL_SET_H_
 #define CORE_UTIL_SET_H_
 
+#include <numeric>
 #include <set>
 #include <vector>
-#include <numeric>
 
 namespace sics {
 namespace matrixgraph {
@@ -32,6 +32,20 @@ GetIntersection(const VertexID *p_vec_a, VertexID len_a,
 
   std::iota(parallel_scope.begin(), parallel_scope.end(), 0);
   std::vector<std::pair<VertexID, VertexID>> intersection;
+
+  std::cout << "GetIntersection" << std::endl;
+
+  std::cout << "A: " << std::endl << "    ";
+
+  for (size_t i = 0; i < len_a; i++) {
+    std::cout << p_vec_a[i] << ", ";
+  }
+
+  std::cout << "\nB: " << std::endl << "    ";
+  for (size_t i = 0; i < len_b; i++) {
+    std::cout << p_vec_b[i] << ", ";
+  }
+  std::cout << std::endl;
 
   if (len_b < len_a) {
     VertexID idx_by_val_b[max_val] = {0};
@@ -79,6 +93,10 @@ GetIntersection(const VertexID *p_vec_a, VertexID len_a,
                       }
                     }
                   });
+  }
+  for (int t = 0; t < intersection.size(); t++) {
+    std::cout << "first: " << intersection[t].first
+              << " second: " << intersection[t].second << std::endl;
   }
   return intersection;
 }

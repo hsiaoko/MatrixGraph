@@ -248,6 +248,25 @@ public:
     return (iter.get_base_ptr() - begin().get_base_ptr());
   };
 
+  void Transpose() {
+    auto parallelism = std::thread::hardware_concurrency();
+    std::vector<VertexID> parallel_scope(parallelism);
+
+    std::iota(parallel_scope.begin(), parallel_scope.end(), 0);
+    std::vector<std::pair<VertexID, VertexID>> intersection;
+
+    auto n_edges = get_metadata().num_edges;
+    auto data = get_base_ptr();
+
+    std::for_each(parallel_scope.begin(), parallel_scope.end(),
+                  [parallelism, n_edges, &data](auto i) {
+                    auto j = i;
+                    for (j; j < n_edges; j += parallelism) {
+                      std::swap(data[j].src, data[j].dst);
+                    }
+                  });
+  }
+
 private:
   Edge *edges_ptr_;
   EdgelistMetadata edgelist_metadata_;

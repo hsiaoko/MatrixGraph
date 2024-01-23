@@ -93,36 +93,42 @@ public:
                        : tiled_transposed_matrix->get_metadata().n_rows;
 
     for (VertexID i = 0; i < tiled_matrix->get_metadata().n_rows; i++) {
-
       // Create a new stream for each task.
       auto bin_id = i % n_device_;
       cudaSetDevice(bin_id);
       cudaStream_t *p_stream = new cudaStream_t;
       cudaStreamCreate(p_stream);
 
-      auto tile_ptr = tiled_matrix->get_tile_ptr_by_id(i);
-      auto tile_ptr_t = tiled_transposed_matrix->get_tile_ptr_by_id(i);
+      auto n_nz_tile_A = tiled_matrix->get_tile_ptr_ptr()[i + 1] -
+                         tiled_matrix->get_tile_ptr_ptr()[i];
 
-      auto tile_scope = tiled_matrix->get_tile_ptr_by_id(i + 1) - tile_ptr;
-      auto tile_scope_t =
-          tiled_transposed_matrix->get_tile_ptr_by_id(i + 1) - tile_ptr_t;
+      if (n_nz_tile_A == 0)
+        continue;
 
-      auto &&intersection = sics::matrixgraph::core::util::set::GetIntersection(
-          tiled_matrix->get_tile_col_idx_ptr() + tile_ptr, tile_scope,
-          tiled_transposed_matrix->get_tile_col_idx_ptr() + tile_ptr_t,
-          tile_scope_t, max_val);
-
-      for (size_t j = 0; j < intersection.size(); j++) {
+      for (int t = 0; t < n_nz_tile_A; t++) {
         auto p_tile =
-            tiled_matrix->GetTilebyIdx(tile_ptr + (intersection[j]).first);
-        auto p_tile_t = tiled_transposed_matrix->GetTilebyIdx(
-            tile_ptr_t + (intersection[j]).second);
+            tiled_matrix->GetTilebyIdx(tiled_matrix->get_tile_ptr_ptr()[i] + t);
+        auto x = p_tile->get_tile_y();
 
-        sics::matrixgraph::core::gpu::TiledMatrixGemm_host(*p_tile, *p_tile_t,
-                                                           *p_stream);
-        std::lock_guard<std::mutex> lock(*p_streams_mtx_);
-        p_streams_->insert(std::make_pair(i, p_stream));
-        p_hr_start_cv_->notify_all();
+        auto n_nz_tile_A_t =
+            tiled_transposed_matrix->get_tile_ptr_ptr()[x + 1] -
+            tiled_transposed_matrix->get_tile_ptr_ptr()[x];
+        if (n_nz_tile_A_t == 0)
+          continue;
+
+        std::cout << "XXXXXXXXXXXXXXXXXXX" << std::endl;
+        // p_tile->Show();
+        for (auto k = 0; k < n_nz_tile_A_t; k++) {
+          auto p_tile_t = tiled_transposed_matrix->GetTilebyIdx(
+              tiled_transposed_matrix->get_tile_ptr_ptr()[x] + k);
+
+          sics::matrixgraph::core::gpu::TiledMatrixGemm_host(*p_tile, *p_tile_t,
+                                                             *p_stream);
+
+          std::lock_guard<std::mutex> lock(*p_streams_mtx_);
+          p_streams_->insert(std::make_pair(i, p_stream));
+          p_hr_start_cv_->notify_all();
+        }
       }
     }
   }

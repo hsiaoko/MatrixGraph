@@ -96,7 +96,7 @@ public:
   void InitAsOutput(const Tile &A, const Tile &A_t) {
     auto mask = GetOutputMask(*(A.GetMaskPtr()), *(A_t.GetMaskPtr()));
 
-    InitHost(A.get_tile_size(), A.get_tile_x(), A_t.get_tile_y(),
+    InitHost(A.get_tile_size(), A.get_tile_x(), A_t.get_tile_x(),
              mask->GetDataPtr()->Count(), nullptr, nullptr, nullptr, nullptr,
              mask);
   }
@@ -350,7 +350,8 @@ public:
 
   void Init(VertexID n_rows, VertexID n_cols, VertexID n_nz_tile,
             Tile **data_ptr, Mask *mask, VertexID *tile_ptr,
-            VertexID *tile_col_idx, VertexID *tile_n_nz) {
+            VertexID *tile_row_idx, VertexID *tile_col_idx,
+            VertexID *tile_n_nz) {
     metadata_.n_rows = n_rows;
     metadata_.n_cols = n_cols;
     metadata_.n_nz_tile = n_nz_tile;
@@ -361,6 +362,9 @@ public:
 
     tile_ptr_ = new VertexID[n_rows + 1]();
     memcpy(tile_ptr_, tile_ptr, sizeof(VertexID) * (n_rows + 1));
+
+    tile_row_idx_ = new VertexID[n_nz_tile]();
+    memcpy(tile_row_idx_, tile_row_idx, sizeof(VertexID) * (n_nz_tile));
 
     tile_col_idx_ = new VertexID[n_nz_tile]();
     memcpy(tile_col_idx_, tile_col_idx, sizeof(VertexID) * (n_nz_tile));
@@ -378,6 +382,12 @@ public:
     std::cout << "  tile_ptr: ";
     for (VertexID i = 0; i < metadata_.n_rows + 1; i++) {
       std::cout << tile_ptr_[i] << " ";
+    }
+    std::cout << std::endl;
+
+    std::cout << "  tile_row_idx: ";
+    for (VertexID i = 0; i < metadata_.n_nz_tile; i++) {
+      std::cout << tile_row_idx_[i] << " ";
     }
     std::cout << std::endl;
 
@@ -411,17 +421,20 @@ public:
     }
 
     tile_ptr_ = new VertexID[metadata_.n_rows + 1]();
-    tile_n_nz_ = new VertexID[metadata_.n_nz_tile]();
+    tile_row_idx_ = new VertexID[metadata_.n_nz_tile]();
     tile_col_idx_ = new VertexID[metadata_.n_nz_tile]();
+    tile_n_nz_ = new VertexID[metadata_.n_nz_tile]();
 
     // Read tile_ptr, tile_col_idx tile_n_nz
     std::ifstream tile_ptr_file(root_path + "tile_ptr.bin");
+    std::ifstream row_idx_file(root_path + "tile_row_idx.bin");
     std::ifstream col_idx_file(root_path + "tile_col_idx.bin");
     std::ifstream tile_n_nz_file(root_path + "tile_n_nz.bin");
 
     tile_ptr_file.read(reinterpret_cast<char *>(tile_ptr_),
                        sizeof(VertexID) * (metadata_.n_rows + 1));
-
+    row_idx_file.read(reinterpret_cast<char *>(tile_row_idx_),
+                      sizeof(VertexID) * metadata_.n_nz_tile);
     col_idx_file.read(reinterpret_cast<char *>(tile_col_idx_),
                       sizeof(VertexID) * metadata_.n_nz_tile);
     tile_n_nz_file.read(reinterpret_cast<char *>(tile_n_nz_),
@@ -479,11 +492,14 @@ public:
 
     // Write tile_ptr, tile_col_idx tile_n_nz
     std::ofstream tile_ptr_file(root_path + "tile_ptr.bin");
+    std::ofstream row_idx_file(root_path + "tile_row_idx.bin");
     std::ofstream col_idx_file(root_path + "tile_col_idx.bin");
     std::ofstream tile_n_nz_file(root_path + "tile_n_nz.bin");
 
     tile_ptr_file.write(reinterpret_cast<char *>(tile_ptr_),
                         sizeof(VertexID) * (metadata_.n_rows + 1));
+    row_idx_file.write(reinterpret_cast<char *>(tile_row_idx_),
+                       sizeof(VertexID) * metadata_.n_nz_tile);
     col_idx_file.write(reinterpret_cast<char *>(tile_col_idx_),
                        sizeof(VertexID) * metadata_.n_nz_tile);
     tile_n_nz_file.write(reinterpret_cast<char *>(tile_n_nz_),
@@ -569,6 +585,7 @@ private:
   Mask *mask_;
 
   VertexID *tile_ptr_;
+  VertexID *tile_row_idx_;
   VertexID *tile_col_idx_;
   VertexID *tile_n_nz_;
 };
