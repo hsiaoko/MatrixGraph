@@ -16,6 +16,7 @@
 
 #include "core/components/data_mngr/data_mngr_base.h"
 #include "core/components/data_mngr/tiled_matrix_mngr.h"
+#include "core/components/execution_plan_generator.h"
 #include "core/components/host_producer.h"
 #include "core/components/host_reducer.h"
 #include "core/components/scheduler/CHBL_scheduler.h"
@@ -30,6 +31,8 @@ namespace core {
 class MatrixGraph {
 private:
   using DataMngr = sics::matrixgraph::core::components::DataMngrBase;
+  using ExecutionPlanGenerator =
+      sics::matrixgraph::core::components::ExecutionPlanGenerator;
   using HostProducer = sics::matrixgraph::core::components::HostProducer;
   using HostReducer = sics::matrixgraph::core::components::HostReducer;
   using TiledMatrixMngr = sics::matrixgraph::core::components::TiledMatrixMngr;
@@ -37,11 +40,11 @@ private:
 public:
   MatrixGraph() = delete;
 
-  MatrixGraph(const std::string &data_path,
+  MatrixGraph(const std::string &data_path, const std::string &pattern_path,
               sics::matrixgraph::core::components::scheduler::SchedulerType
                   scheduler_type = sics::matrixgraph::core::components::
                       scheduler::SchedulerType::kCHBL)
-      : data_path_(data_path) {
+      : data_path_(data_path), pattern_path_(pattern_path) {
 
     Init();
 
@@ -63,6 +66,10 @@ public:
     }
 
     data_mngr_ = std::make_unique<TiledMatrixMngr>(data_path_);
+    execution_plan_generator_ =
+        std::make_unique<ExecutionPlanGenerator>(pattern_path_);
+
+    execution_plan_generator_->GenerateExecutionPlan();
 
     p_hr_terminable_ = std::make_unique<bool>(false);
 
@@ -142,6 +149,7 @@ private:
   int n_device_ = 0;
 
   const std::string data_path_;
+  const std::string pattern_path_;
 
   std::unique_ptr<std::mutex> p_streams_mtx_;
 
@@ -150,6 +158,8 @@ private:
   std::unique_ptr<std::condition_variable> p_hr_start_cv_;
 
   std::unique_ptr<DataMngr> data_mngr_;
+  std::unique_ptr<ExecutionPlanGenerator> execution_plan_generator_;
+
   std::unique_ptr<std::unordered_map<int, cudaStream_t *>> streams_;
 
   std::unique_ptr<components::scheduler::Scheduler> scheduler_;

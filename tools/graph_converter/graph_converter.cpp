@@ -18,12 +18,14 @@
 
 #include "core/common/types.h"
 #include "core/data_structures/edgelist.h"
+#include "core/data_structures/immutable_csr.h"
 #include "core/util/atomic.h"
 #include "core/util/bitmap.h"
 #include "tools/common/format_converter.h"
 
 using sics::matrixgraph::core::common::EdgeIndex;
 using sics::matrixgraph::core::common::VertexID;
+using sics::matrixgraph::core::data_structures::ImmutableCSR;
 using sics::matrixgraph::core::data_structures::TiledMatrix;
 using sics::matrixgraph::core::util::Bitmap;
 using sics::matrixgraph::core::util::atomic::WriteMax;
@@ -35,12 +37,15 @@ DEFINE_string(sep, "", "separator to split a line of csv file.");
 
 enum ConvertMode {
   kEdgelistCSV2TiledMatrix, // default
+  kEdgelistCSV2CSR,         //
   kUndefinedMode
 };
 
 static inline ConvertMode ConvertMode2Enum(const std::string &s) {
   if (s == "edgelistcsv2tiledmatrix")
     return kEdgelistCSV2TiledMatrix;
+  if (s == "edgelistcsv2csr")
+    return kEdgelistCSV2CSR;
   return kUndefinedMode;
 };
 
@@ -72,8 +77,30 @@ void ConvertEdgelistCSV2TiledMatrix(const std::string &input_path,
 
   p_tiled_matrix->Show();
   p_tiled_matrix_t->Show();
-  //delete p_immutable_csr_t;
+
+  delete p_immutable_csr;
   delete p_tiled_matrix_t;
+}
+
+// @DESCRIPTION: convert a edgelist graph from csv file to binary file. Here the
+// compression operations is default in ConvertEdgelist.
+// @PARAMETER: input_path and output_path indicates the input and output path
+// respectively, sep determines the separator for the csv file, read_head
+// indicates whether to read head.
+void ConvertEdgelistCSV2ImmutableCSR(const std::string &input_path,
+                                     const std::string &output_path,
+                                     const std::string &sep) {
+  if (!std::filesystem::exists(output_path))
+    std::filesystem::create_directory(output_path);
+
+  sics::matrixgraph::core::data_structures::Edges edgelist;
+  edgelist.ReadFromCSV(input_path, sep);
+  auto p_immutable_csr =
+      sics::matrixgraph::tools::format_converter::Edgelist2ImmutableCSR(
+          edgelist);
+
+  p_immutable_csr->Write(output_path);
+  delete p_immutable_csr;
 }
 
 int main(int argc, char **argv) {
@@ -92,6 +119,9 @@ int main(int argc, char **argv) {
   switch (ConvertMode2Enum(FLAGS_convert_mode)) {
   case kEdgelistCSV2TiledMatrix:
     ConvertEdgelistCSV2TiledMatrix(FLAGS_i, FLAGS_o, FLAGS_sep);
+    break;
+  case kEdgelistCSV2CSR:
+    ConvertEdgelistCSV2ImmutableCSR(FLAGS_i, FLAGS_o, FLAGS_sep);
     break;
   default:
     return -1;

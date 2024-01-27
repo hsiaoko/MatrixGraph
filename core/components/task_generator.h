@@ -1,5 +1,5 @@
-#ifndef _MATRIXGRAPH_CORE_COMPONENTS_TASKGENERATOR_H_
-#define _MATRIXGRAPH_CORE_COMPONENTS_TASKGENERATOR_H_
+#ifndef _MATRIXGRAPH_CORE_COMPONENTS_EXECUTIONPLAN_GENERATOR_H_
+#define _MATRIXGRAPH_CORE_COMPONENTS_EXECUTIONPLAN_GENERATOR_H_
 
 #include <string>
 
@@ -8,15 +8,15 @@ namespace matrixgraph {
 namespace core {
 namespace components {
 
-class Task() {
+class ExecutionPlan() {
   // ...
 }
 
-class TaskGenerator {
+class ExecutionGenerator {
 public:
   TaskGenerator(const std::string &root_path) { root_path_ = root_path; }
 
-  friend class Task;
+  friend class ExecutionPlan;
 
 private:
   std::string root_path_;
@@ -26,4 +26,4 @@ private:
 } // namespace core
 } // namespace matrixgraph
 } // namespace sics
-#endif // MATRIXGRAPH_CORE_COMPONENTS_TASKGENERATOR_H_
+#endif // MATRIXGRAPH_CORE_COMPONENTS_EXECUTIONPLAN_GENERATOR_H_
