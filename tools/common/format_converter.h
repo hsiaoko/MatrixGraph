@@ -213,10 +213,10 @@ ImmutableCSR2TransposedTiledMatrix(const ImmutableCSR &immutable_csr) {
   std::vector<Tile *> tile_vec;
 
   // Generate transposed TileMatrix.
-  for (VertexID tile_x = 0; tile_x < tile_x_scope; tile_x++) {
+  for (VertexID tile_y = 0; tile_y < tile_y_scope; tile_y++) {
     VertexID tile_col_offset = 0;
+    for (VertexID tile_x = 0; tile_x < tile_x_scope; tile_x++) {
 
-    for (VertexID tile_y = 0; tile_y < tile_y_scope; tile_y++) {
       bool is_nz_tile = false;
 
       TileIndex n_nz = 0;
@@ -257,11 +257,13 @@ ImmutableCSR2TransposedTiledMatrix(const ImmutableCSR &immutable_csr) {
       if (is_nz_tile) {
         tile_col_offset++;
         tile_count++;
-        tile_n_nz_vec.push_back(tile_n_nz_vec.back() + n_nz);
+        tile_n_nz_vec.push_back(tile_n_nz_vec.back() +
+                                tile_mask->GetDataPtr()->Count());
         tile_row_idx.push_back(tile_y);
         tile_col_idx.push_back(tile_x);
 
-        auto tile = new Tile(tile_size, tile_y, tile_x, n_nz);
+        auto tile = new Tile(tile_size, tile_y, tile_x,
+                             tile_mask->GetDataPtr()->Count());
         tile->SetBarOffsetPtr(tile_offset);
         tile->SetMaskPtr(tile_mask);
         memcpy(tile->GetRowIdxPtr(), row_idx.data(),
@@ -276,7 +278,7 @@ ImmutableCSR2TransposedTiledMatrix(const ImmutableCSR &immutable_csr) {
         delete tile_mask;
       }
     }
-    tile_ptr[tile_x + 1] = tile_col_offset + tile_ptr[tile_x];
+    tile_ptr[tile_y + 1] = tile_col_offset + tile_ptr[tile_y];
   }
 
   // Step 2. Construct tiled_matrix.
@@ -369,11 +371,13 @@ TiledMatrix *ImmutableCSR2TiledMatrix(const ImmutableCSR &immutable_csr) {
       if (is_nz_tile) {
         tile_row_offset++;
         tile_count++;
-        tile_n_nz_vec.push_back(tile_n_nz_vec.back() + n_nz);
+        tile_n_nz_vec.push_back(tile_n_nz_vec.back() +
+                                tile_mask->GetDataPtr()->Count());
         tile_row_idx.push_back(tile_x);
         tile_col_idx.push_back(tile_y);
 
-        auto tile = new Tile(tile_size, tile_x, tile_y, n_nz);
+        auto tile = new Tile(tile_size, tile_x, tile_y,
+                             tile_mask->GetDataPtr()->Count());
         tile->SetBarOffsetPtr(tile_offset);
         tile->SetMaskPtr(tile_mask);
         memcpy(tile->GetRowIdxPtr(), row_idx.data(),

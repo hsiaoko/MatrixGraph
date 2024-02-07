@@ -62,9 +62,13 @@ void ConvertEdgelistCSV2TiledMatrix(const std::string &input_path,
 
   sics::matrixgraph::core::data_structures::Edges edgelist;
   edgelist.ReadFromCSV(input_path, sep);
+
+  edgelist.ShowGraph();
   auto p_immutable_csr =
       sics::matrixgraph::tools::format_converter::Edgelist2ImmutableCSR(
           edgelist);
+
+  p_immutable_csr->ShowGraph(100);
 
   auto p_tiled_matrix =
       sics::matrixgraph::tools::format_converter::ImmutableCSR2TiledMatrix(
