@@ -10,6 +10,7 @@
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <stdlib.h>
 #include <thread>
 #include <type_traits>
 
@@ -37,17 +38,68 @@ DEFINE_string(sep, "", "separator to split a line of csv file.");
 
 enum ConvertMode {
   kEdgelistCSV2TiledMatrix, // default
-  kEdgelistCSV2CSR,         //
+  kEdgelistBin2TiledMatrix,
+  kEdgelistCSV2CSR,
   kUndefinedMode
 };
 
 static inline ConvertMode ConvertMode2Enum(const std::string &s) {
   if (s == "edgelistcsv2tiledmatrix")
     return kEdgelistCSV2TiledMatrix;
+  if (s == "edgelistbin2tiledmatrix")
+    return kEdgelistBin2TiledMatrix;
   if (s == "edgelistcsv2csr")
     return kEdgelistCSV2CSR;
   return kUndefinedMode;
 };
+
+void ConvertEdgelistBin2TiledMatrix(const std::string &input_path,
+                                    const std::string &output_path) {
+
+  YAML::Node node = YAML::LoadFile(input_path + "meta.yaml");
+
+  sics::matrixgraph::core::data_structures::EdgelistMetadata edgelist_metadata =
+      {node["EdgelistBin"]["num_vertices"].as<VertexID>(),
+       node["EdgelistBin"]["num_edges"].as<VertexID>(),
+       node["EdgelistBin"]["max_vid"].as<VertexID>()};
+
+  auto buffer_edges =
+      new sics::matrixgraph::core::data_structures::Edge[edgelist_metadata
+                                                             .num_edges]();
+
+  std::ifstream in_file(input_path + "edgelist.bin");
+  if (!in_file) {
+
+    std::cout << "Open file failed: " + input_path + "edgelist.bin"
+              << std::endl;
+    exit(EXIT_FAILURE);
+  }
+  in_file.read(reinterpret_cast<char *>(buffer_edges),
+               sizeof(sics::matrixgraph::core::data_structures::Edge) *
+                   edgelist_metadata.num_edges);
+  sics::matrixgraph::core::data_structures::Edges edgelist(edgelist_metadata,
+                                                           buffer_edges);
+  edgelist.SortBySrc();
+
+  auto p_immutable_csr =
+      sics::matrixgraph::tools::format_converter::Edgelist2ImmutableCSR(
+          edgelist);
+
+  auto p_tiled_matrix =
+      sics::matrixgraph::tools::format_converter::ImmutableCSR2TiledMatrix(
+          *p_immutable_csr);
+  p_tiled_matrix->Write(output_path + "origin/");
+
+  auto p_tiled_matrix_t = sics::matrixgraph::tools::format_converter::
+      ImmutableCSR2TransposedTiledMatrix(*p_immutable_csr);
+  p_tiled_matrix_t->Write(output_path + "transposed/");
+
+  p_tiled_matrix->Show();
+  p_tiled_matrix_t->Show();
+
+  delete p_immutable_csr;
+  delete p_tiled_matrix_t;
+}
 
 // @DESCRIPTION: convert a edgelist graph from csv file to binary file. Here the
 // compression operations is default in ConvertEdgelist.
@@ -63,12 +115,9 @@ void ConvertEdgelistCSV2TiledMatrix(const std::string &input_path,
   sics::matrixgraph::core::data_structures::Edges edgelist;
   edgelist.ReadFromCSV(input_path, sep);
 
-  edgelist.ShowGraph();
   auto p_immutable_csr =
       sics::matrixgraph::tools::format_converter::Edgelist2ImmutableCSR(
           edgelist);
-
-  p_immutable_csr->ShowGraph(100);
 
   auto p_tiled_matrix =
       sics::matrixgraph::tools::format_converter::ImmutableCSR2TiledMatrix(
@@ -123,6 +172,9 @@ int main(int argc, char **argv) {
   switch (ConvertMode2Enum(FLAGS_convert_mode)) {
   case kEdgelistCSV2TiledMatrix:
     ConvertEdgelistCSV2TiledMatrix(FLAGS_i, FLAGS_o, FLAGS_sep);
+    break;
+  case kEdgelistBin2TiledMatrix:
+    ConvertEdgelistBin2TiledMatrix(FLAGS_i, FLAGS_o);
     break;
   case kEdgelistCSV2CSR:
     ConvertEdgelistCSV2ImmutableCSR(FLAGS_i, FLAGS_o, FLAGS_sep);
