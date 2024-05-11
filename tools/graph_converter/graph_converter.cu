@@ -19,14 +19,17 @@
 
 #include "core/common/types.h"
 #include "core/data_structures/edgelist.h"
-#include "core/data_structures/immutable_csr.h"
+#include "core/data_structures/immutable_csr.cuh"
 #include "core/util/atomic.h"
 #include "core/util/bitmap.h"
+#include "core/util/cuda_check.cuh"
 #include "tools/common/format_converter.h"
 
 using sics::matrixgraph::core::common::EdgeIndex;
 using sics::matrixgraph::core::common::VertexID;
 using sics::matrixgraph::core::data_structures::ImmutableCSR;
+using sics::matrixgraph::core::data_structures::kOrigin;
+using sics::matrixgraph::core::data_structures::kTransposed;
 using sics::matrixgraph::core::data_structures::TiledMatrix;
 using sics::matrixgraph::core::util::Bitmap;
 using sics::matrixgraph::core::util::atomic::WriteMax;
@@ -35,6 +38,7 @@ DEFINE_string(i, "", "input path.");
 DEFINE_string(o, "", "output path.");
 DEFINE_string(convert_mode, "", "Conversion mode");
 DEFINE_string(sep, "", "separator to split a line of csv file.");
+DEFINE_uint32(tile_size, 64, "the size of single tile");
 
 enum ConvertMode {
   kEdgelistCSV2TiledMatrix, // default
@@ -54,7 +58,8 @@ static inline ConvertMode ConvertMode2Enum(const std::string &s) {
 };
 
 void ConvertEdgelistBin2TiledMatrix(const std::string &input_path,
-                                    const std::string &output_path) {
+                                    const std::string &output_path,
+                                    size_t tile_size) {
 
   YAML::Node node = YAML::LoadFile(input_path + "meta.yaml");
 
@@ -81,24 +86,30 @@ void ConvertEdgelistBin2TiledMatrix(const std::string &input_path,
                                                            buffer_edges);
   edgelist.SortBySrc();
 
+  CUDA_LOG_INFO("Converting Edgelist to ImmutableCSR done.");
   auto p_immutable_csr =
       sics::matrixgraph::tools::format_converter::Edgelist2ImmutableCSR(
           edgelist);
+  p_immutable_csr->ShowGraph(3);
 
-  auto p_tiled_matrix =
-      sics::matrixgraph::tools::format_converter::ImmutableCSR2TiledMatrix(
-          *p_immutable_csr);
-  p_tiled_matrix->Write(output_path + "origin/");
+  auto start_time = std::chrono::system_clock::now();
 
-  auto p_tiled_matrix_t = sics::matrixgraph::tools::format_converter::
-      ImmutableCSR2TransposedTiledMatrix(*p_immutable_csr);
-  p_tiled_matrix_t->Write(output_path + "transposed/");
+  auto tiled_matrix_ptr = new TiledMatrix(*p_immutable_csr, tile_size);
+  CUDA_LOG_INFO("Converting ImmutableCSR to TiledMatrix done.");
 
-  p_tiled_matrix->Show();
-  p_tiled_matrix_t->Show();
+  tiled_matrix_ptr->Write(output_path + "origin/");
+  tiled_matrix_ptr->Show();
+
+  auto end_time = std::chrono::system_clock::now();
+  std::cout << "Generating TiledMatrix elapsed: "
+            << std::chrono::duration_cast<std::chrono::microseconds>(end_time -
+                                                                     start_time)
+                       .count() /
+                   (double)CLOCKS_PER_SEC
+            << std::endl;
 
   delete p_immutable_csr;
-  delete p_tiled_matrix_t;
+  delete tiled_matrix_ptr;
 }
 
 // @DESCRIPTION: convert a edgelist graph from csv file to binary file. Here the
@@ -108,31 +119,37 @@ void ConvertEdgelistBin2TiledMatrix(const std::string &input_path,
 // indicates whether to read head.
 void ConvertEdgelistCSV2TiledMatrix(const std::string &input_path,
                                     const std::string &output_path,
-                                    const std::string &sep) {
+                                    const std::string &sep, size_t tile_size) {
   if (!std::filesystem::exists(output_path))
     std::filesystem::create_directory(output_path);
 
   sics::matrixgraph::core::data_structures::Edges edgelist;
   edgelist.ReadFromCSV(input_path, sep);
 
+  CUDA_LOG_INFO("Converting Edgelist to ImmutableCSR done.");
   auto p_immutable_csr =
       sics::matrixgraph::tools::format_converter::Edgelist2ImmutableCSR(
           edgelist);
+  p_immutable_csr->ShowGraph(3);
 
-  auto p_tiled_matrix =
-      sics::matrixgraph::tools::format_converter::ImmutableCSR2TiledMatrix(
-          *p_immutable_csr);
-  p_tiled_matrix->Write(output_path + "origin/");
+  auto start_time = std::chrono::system_clock::now();
 
-  auto p_tiled_matrix_t = sics::matrixgraph::tools::format_converter::
-      ImmutableCSR2TransposedTiledMatrix(*p_immutable_csr);
-  p_tiled_matrix_t->Write(output_path + "transposed/");
+  auto tiled_matrix_ptr = new TiledMatrix(*p_immutable_csr, tile_size);
+  CUDA_LOG_INFO("Converting ImmutableCSR to TiledMatrix done.");
 
-  p_tiled_matrix->Show();
-  p_tiled_matrix_t->Show();
+  tiled_matrix_ptr->Write(output_path + "origin/");
+  tiled_matrix_ptr->Show();
+
+  auto end_time = std::chrono::system_clock::now();
+  std::cout << "Generating TiledMatrix elapsed: "
+            << std::chrono::duration_cast<std::chrono::microseconds>(end_time -
+                                                                     start_time)
+                       .count() /
+                   (double)CLOCKS_PER_SEC
+            << std::endl;
 
   delete p_immutable_csr;
-  delete p_tiled_matrix_t;
+  delete tiled_matrix_ptr;
 }
 
 // @DESCRIPTION: convert a edgelist graph from csv file to binary file. Here the
@@ -171,10 +188,11 @@ int main(int argc, char **argv) {
 
   switch (ConvertMode2Enum(FLAGS_convert_mode)) {
   case kEdgelistCSV2TiledMatrix:
-    ConvertEdgelistCSV2TiledMatrix(FLAGS_i, FLAGS_o, FLAGS_sep);
+    ConvertEdgelistCSV2TiledMatrix(FLAGS_i, FLAGS_o, FLAGS_sep,
+                                   FLAGS_tile_size);
     break;
   case kEdgelistBin2TiledMatrix:
-    ConvertEdgelistBin2TiledMatrix(FLAGS_i, FLAGS_o);
+    ConvertEdgelistBin2TiledMatrix(FLAGS_i, FLAGS_o, FLAGS_tile_size);
     break;
   case kEdgelistCSV2CSR:
     ConvertEdgelistCSV2ImmutableCSR(FLAGS_i, FLAGS_o, FLAGS_sep);

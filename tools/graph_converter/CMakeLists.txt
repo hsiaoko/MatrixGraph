@@ -7,16 +7,17 @@ set(EXECUTABLE_OUTPUT_PATH ${PROJECT_ROOT_DIR}/bin/tools/)
 #######################
 # Artifacts
 #######################
-file(GLOB appfiles "${CMAKE_CURRENT_SOURCE_DIR}/*.cpp")
+file(GLOB appfiles "${CMAKE_CURRENT_SOURCE_DIR}/*.cu")
 foreach (appfile ${appfiles})
     message(STATUS "Found tool: ${appfile}")
     get_filename_component(app ${appfile} NAME_WE)
     add_executable("${app}_exec" ${appfile} ${TOOLS_SOURCES})
     target_link_libraries("${app}_exec"
+            PRIVATE
             yaml-cpp
             gflags
-            ${TBB_LIBRARIES}
             tbb
-            -static-libstdc++
+            #-static-libstdc++
+            matrixgraph_core
             )
 endforeach ()
