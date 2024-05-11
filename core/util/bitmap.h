@@ -4,7 +4,6 @@
 #include <cassert>
 #include <cstdint>
 #include <cstring>
-#include <cuda_runtime.h>
 
 namespace sics {
 namespace matrixgraph {

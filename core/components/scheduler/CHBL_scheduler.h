@@ -2,7 +2,10 @@
 #define HYPERBLOCKER_CORE_COMPONENTS_SCHEDULER_CHBL_SCHEDULER_H_
 
 #include "core/components/scheduler/scheduler.h"
+
 #include <cuda_runtime.h>
+
+#include <iostream>
 #include <unordered_map>
 #include <utility>
 
@@ -51,7 +54,7 @@ public:
   int GetAvailableThreads(int bin_id = 0) {
     auto iter = available_threads_by_ball_id_.find(bin_id);
     if (iter != available_threads_by_ball_id_.end()) {
-      //std::cout << iter->second << std::endl;
+      // std::cout << iter->second << std::endl;
       return iter->second;
     }
     return 0;

@@ -2,6 +2,7 @@
 #define HYPERBLOCKER_CORE_COMMON_TYPES_H_
 
 #include <climits>
+#include <stdint.h>
 
 #define EQUALITIES 'e'
 #define SIM 's'
@@ -22,14 +23,17 @@ namespace common {
 typedef uint32_t GraphID; // uint32_t: 0 ~ 4,294,967,295
 typedef uint32_t VertexID;
 typedef uint32_t VertexIndex;
-typedef uint8_t TileIndex;
+typedef uint16_t TileIndex;
 typedef uint32_t VertexLabel;
 typedef uint32_t VertexDegree;
 typedef uint32_t VertexCount;
 typedef uint64_t EdgeIndex;
 
+
 #define MAX_VERTEX_ID std::numeric_limits<VertexID>::max()
 #define DEFAULT_TILE_NUM 1024
+
+#define CHECK MAX_VERTEX_ID
 
 } // namespace common
 } // namespace core
