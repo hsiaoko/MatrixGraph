@@ -146,6 +146,22 @@ public:
     return Iterator(&edges_ptr_[edgelist_metadata_.num_edges - 1]);
   }
 
+  void WriteToBinary(const std::string &filename) {
+    std::ofstream out_data_file(filename + "edgelist.bin");
+    std::ofstream out_meta_file(filename + "meta.yaml");
+
+    out_data_file.write(reinterpret_cast<char *>(edges_ptr_),
+                        sizeof(VertexID) * edgelist_metadata_.num_vertices);
+
+    YAML::Node node;
+    node["EdgelistBin"]["num_vertices"] = edgelist_metadata_.num_vertices;
+    node["EdgelistBin"]["num_edges"] = edgelist_metadata_.num_edges;
+    node["EdgelistBin"]["max_vid"] = edgelist_metadata_.max_vid;
+    out_meta_file << node << std::endl;
+
+    out_data_file.close();
+    out_meta_file.close();
+  }
   // Read From CSv
   void ReadFromCSV(const std::string &filename, const std::string &sep,
                    bool compressed = false) {
@@ -257,4 +273,5 @@ private:
 } // namespace core
 } // namespace matrixgraph
 } // namespace sics
+
 #endif // SICS_MATRIXGRAPH_CORE_DATA_STRUCTURES_EDGELIST_H_

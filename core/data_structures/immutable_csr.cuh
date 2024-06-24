@@ -35,18 +35,31 @@ private:
   using VertexLabel = sics::matrixgraph::core::common::VertexLabel;
   using EdgeIndex = sics::matrixgraph::core::common::EdgeIndex;
 
+  struct VidCountPair {
+    bool operator<(const VidCountPair &other) const {
+      return count > other.count;
+    }
+
+    VertexID vid = 0;
+    VertexID count = 0;
+  };
+
 public:
   explicit ImmutableCSR(SubGraphMetadata metadata) : metadata_(metadata) {}
 
   ImmutableCSR() = default;
 
-  void ShowGraph(VertexID display_num = 0) const;
+  void PrintGraph(VertexID display_num = 0) const;
+
+  void PrintGraphAbs(VertexID display_num = 0) const;
 
   void Write(const std::string &root_path, GraphID gid = 0);
 
   void Read(const std::string &root_path);
 
   void SortByDegree();
+
+  void SortByDistance(VertexID sim_granularity);
 
   GraphID get_gid() const { return metadata_.gid; }
   VertexID get_num_vertices() const { return metadata_.num_vertices; }
@@ -124,30 +137,20 @@ public:
     return outdegree_base_pointer_[i];
   }
 
-  ImmutableCSRVertex GetVertexByLocalID(VertexID i) const {
-    ImmutableCSRVertex v;
-    v.vid = GetGlobalIDByLocalID(i);
-    if (get_num_incoming_edges() > 0) {
-      v.indegree = GetInDegreeByLocalID(i);
-      v.incoming_edges = incoming_edges_base_pointer_ + GetInOffsetByLocalID(i);
-    }
-    if (get_num_outgoing_edges() > 0) {
-      v.outdegree = GetOutDegreeByLocalID(i);
-      v.outgoing_edges =
-          outgoing_edges_base_pointer_ + GetOutOffsetByLocalID(i);
-    }
-    return v;
-  }
+  ImmutableCSRVertex GetVertexByLocalID(VertexID i) const;
 
   void SetNumVertices(VertexID num_vertices) {
     metadata_.num_vertices = num_vertices;
   }
+
   void SetNumIncomingEdges(EdgeIndex num_incoming_edges) {
     metadata_.num_incoming_edges = num_incoming_edges;
   }
+
   void SetNumOutgoingEdges(EdgeIndex num_outgoing_edges) {
     metadata_.num_outgoing_edges = num_outgoing_edges;
   }
+
   void SetMaxVid(VertexID max_vid) { metadata_.max_vid = max_vid; }
   void SetMinVid(VertexID min_vid) { metadata_.min_vid = min_vid; }
 

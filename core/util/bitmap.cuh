@@ -130,6 +130,8 @@ public:
   void SetBit(size_t i) {
     if (i > size_)
       return;
+    if (GetBit(i))
+      return;
     __sync_fetch_and_or(data_ + WORD_OFFSET(i), 1ul << BIT_OFFSET(i));
   }
 
@@ -152,6 +154,27 @@ public:
       count += (size_t)x;
     }
     return count;
+  }
+
+  size_t PreElementCount(size_t idx) const {
+    size_t count = 0;
+    for (size_t i = 0; i <= WORD_OFFSET(idx); i++) {
+      uint64_t x = 0;
+      if (i == WORD_OFFSET(idx)) {
+        x = data_[i];
+        x = (x << 0x3f - BIT_OFFSET(idx)) >> (0x3f - BIT_OFFSET(idx));
+      } else {
+        x = data_[i];
+      }
+      x = (x & (0x5555555555555555)) + ((x >> 1) & (0x5555555555555555));
+      x = (x & (0x3333333333333333)) + ((x >> 2) & (0x3333333333333333));
+      x = (x & (0x0f0f0f0f0f0f0f0f)) + ((x >> 4) & (0x0f0f0f0f0f0f0f0f));
+      x = (x & (0x00ff00ff00ff00ff)) + ((x >> 8) & (0x00ff00ff00ff00ff));
+      x = (x & (0x0000ffff0000ffff)) + ((x >> 16) & (0x0000ffff0000ffff));
+      x = (x & (0x00000000ffffffff)) + ((x >> 32) & (0x00000000ffffffff));
+      count += (size_t)x;
+    }
+    return count - 1;
   }
 
   size_t size() const { return size_; }

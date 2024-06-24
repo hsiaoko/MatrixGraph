@@ -44,6 +44,7 @@ enum ConvertMode {
   kEdgelistCSV2TiledMatrix, // default
   kEdgelistBin2TiledMatrix,
   kEdgelistCSV2CSR,
+  kEdgelistCSV2EdgelistBin,
   kUndefinedMode
 };
 
@@ -52,10 +53,23 @@ static inline ConvertMode ConvertMode2Enum(const std::string &s) {
     return kEdgelistCSV2TiledMatrix;
   if (s == "edgelistbin2tiledmatrix")
     return kEdgelistBin2TiledMatrix;
-  if (s == "edgelistcsv2csr")
-    return kEdgelistCSV2CSR;
+  if (s == "edgelistcsv2edgelistbin")
+    return kEdgelistCSV2EdgelistBin;
   return kUndefinedMode;
 };
+
+void ConvertEdgelistCSV2EdgelistBin(const std::string &input_path,
+                                    const std::string &output_path,
+                                    const std::string &sep,
+                                    bool read_head = false) {
+  std::cout<<"ConvertEdgelistCSV2EdgelistBin"<<std::endl;
+  if (!std::filesystem::exists(output_path))
+    std::filesystem::create_directory(output_path);
+
+  sics::matrixgraph::core::data_structures::Edges edgelist;
+  edgelist.ReadFromCSV(input_path, sep);
+  edgelist.WriteToBinary(output_path);
+}
 
 void ConvertEdgelistBin2TiledMatrix(const std::string &input_path,
                                     const std::string &output_path,
@@ -90,7 +104,10 @@ void ConvertEdgelistBin2TiledMatrix(const std::string &input_path,
   auto p_immutable_csr =
       sics::matrixgraph::tools::format_converter::Edgelist2ImmutableCSR(
           edgelist);
-  p_immutable_csr->ShowGraph(3);
+  p_immutable_csr->PrintGraph(100);
+  // p_immutable_csr->SortByDistance(tile_size);
+  p_immutable_csr->SortByDegree();
+  p_immutable_csr->PrintGraph(100);
 
   auto start_time = std::chrono::system_clock::now();
 
@@ -130,7 +147,11 @@ void ConvertEdgelistCSV2TiledMatrix(const std::string &input_path,
   auto p_immutable_csr =
       sics::matrixgraph::tools::format_converter::Edgelist2ImmutableCSR(
           edgelist);
-  p_immutable_csr->ShowGraph(3);
+  // p_immutable_csr->SortByDegree();
+  p_immutable_csr->PrintGraph(100);
+  p_immutable_csr->SortByDistance(tile_size);
+  // p_immutable_csr->SortByDegree();
+  p_immutable_csr->PrintGraph(100);
 
   auto start_time = std::chrono::system_clock::now();
 
@@ -168,6 +189,7 @@ void ConvertEdgelistCSV2ImmutableCSR(const std::string &input_path,
   auto p_immutable_csr =
       sics::matrixgraph::tools::format_converter::Edgelist2ImmutableCSR(
           edgelist);
+  p_immutable_csr->SortByDegree();
 
   p_immutable_csr->Write(output_path);
   delete p_immutable_csr;
@@ -196,6 +218,9 @@ int main(int argc, char **argv) {
     break;
   case kEdgelistCSV2CSR:
     ConvertEdgelistCSV2ImmutableCSR(FLAGS_i, FLAGS_o, FLAGS_sep);
+    break;
+  case kEdgelistCSV2EdgelistBin:
+    ConvertEdgelistCSV2EdgelistBin(FLAGS_i, FLAGS_o, FLAGS_sep);
     break;
   default:
     return -1;

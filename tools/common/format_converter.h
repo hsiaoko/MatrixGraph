@@ -190,7 +190,6 @@ ImmutableCSR *Edgelist2ImmutableCSR(const Edges &edgelist) {
 
   // Fill edges.
   vid = 0;
-
 #ifdef TBB_FOUND
   std::for_each(std::execution::par, parallel_scope_vertices.begin(),
                 parallel_scope_vertices.end(),

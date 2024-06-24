@@ -178,15 +178,14 @@ void TiledMatrix::Init(const ImmutableCSR &immutable_csr, size_t tile_size) {
   std::iota(worker.begin(), worker.end(), 0);
   auto step = worker.size();
 
-  auto mask = new Mask(tile_size);
-
   size_t max_n_nz_tile =
       std::max(size_t(pow((immutable_csr.get_num_vertices() / tile_size), 2)),
                (size_t)1) +
       64;
 
-  CUDA_LOG_INFO(max_n_nz_tile);
   util::Bitmap is_tile_exist(max_n_nz_tile);
+  is_tile_exist.Clear();
+
   struct TileBaseInfo {
     VertexID n_nz;
     VertexID tile_offset;
@@ -197,37 +196,38 @@ void TiledMatrix::Init(const ImmutableCSR &immutable_csr, size_t tile_size) {
   VertexID n_rows = ceil(immutable_csr.get_num_vertices() / (float)tile_size);
 
   CUDA_LOG_INFO("Step0: Get Non-empty tiles.");
-  std::for_each(std::execution::par, worker.begin(), worker.end(),
-                [step, &immutable_csr, &is_tile_exist, tile_size, &mtx,
-                 &tile_id_2_base_info, n_rows](auto w) {
-                  for (auto vid = w; vid < immutable_csr.get_num_vertices();
-                       vid += step) {
-                    auto v = immutable_csr.GetVertexByLocalID(vid);
-                    VertexID tile_x = (vid / (tile_size));
-                    for (int nbr = 0; nbr < v.outdegree; nbr++) {
-                      VertexID tile_y = ceil(v.outgoing_edges[nbr] / tile_size);
-                      VertexID tile_id = XYToTileId(tile_x, tile_y, n_rows);
-                      if (is_tile_exist.GetBit(tile_id)) {
-                        std::lock_guard<std::mutex> lock(mtx);
-                        auto iter = tile_id_2_base_info->find(tile_id);
-                        sics::matrixgraph::core::util::atomic::WriteAdd(
-                            &(iter->second.n_nz), (VertexID)1);
-                      } else {
-                        {
-                          std::lock_guard<std::mutex> lock(mtx);
-                          TileBaseInfo base_info = {1, 0};
-                          tile_id_2_base_info->insert(
-                              std::make_pair(tile_id, base_info));
-                          is_tile_exist.SetBit(tile_id);
-                        }
-                      }
-                    }
-                  }
-                });
+  std::for_each(
+      std::execution::par, worker.begin(), worker.end(),
+      [step, &immutable_csr, &is_tile_exist, tile_size, &mtx,
+       &tile_id_2_base_info, n_rows](auto w) {
+        for (auto local_vid = w; local_vid < immutable_csr.get_num_vertices();
+             local_vid += step) {
+          auto v = immutable_csr.GetVertexByLocalID(local_vid);
+          VertexID tile_x = (local_vid / (tile_size));
+          for (int nbr = 0; nbr < v.outdegree; nbr++) {
+            VertexID tile_y = ceil(v.outgoing_edges[nbr] / tile_size);
+            VertexID tile_id = XYToTileId(tile_x, tile_y, n_rows);
+            if (is_tile_exist.GetBit(tile_id)) {
+              std::lock_guard<std::mutex> lock(mtx);
+              auto iter = tile_id_2_base_info->find(tile_id);
+              sics::matrixgraph::core::util::atomic::WriteAdd(
+                  &(iter->second.n_nz), (VertexID)1);
+            } else {
+              {
+                std::lock_guard<std::mutex> lock(mtx);
+                TileBaseInfo base_info = {1, 0};
+                tile_id_2_base_info->insert(std::make_pair(tile_id, base_info));
+                is_tile_exist.SetBit(tile_id);
+              }
+            }
+          }
+        }
+      });
 
   size_t n_nz_tile = is_tile_exist.Count();
   std::cout << "n_nz_tile: " << n_nz_tile << std::endl;
 
+  while(1);
   Tile **data_ptr = new Tile *[n_nz_tile];
   std::vector<Tile *> data_ptr_vec;
   data_ptr_vec.reserve(n_nz_tile);
@@ -244,8 +244,8 @@ void TiledMatrix::Init(const ImmutableCSR &immutable_csr, size_t tile_size) {
   CUDA_LOG_INFO("Step1: Construct tiles.");
   for (int tile_id = 0; tile_id < max_n_nz_tile; tile_id++) {
     if (is_tile_exist.GetBit(tile_id)) {
-      if (tile_id % 100000 == 0)
-        std::cout << tile_id << "/" << n_nz_tile << std::endl;
+      if (tile_ptr_offset % 10000000 == 0)
+        std::cout << tile_ptr_offset << "/" << n_nz_tile << std::endl;
 
       VertexID tile_x, tile_y;
       TileIdToXY(tile_id, n_rows, &tile_x, &tile_y);
@@ -269,16 +269,16 @@ void TiledMatrix::Init(const ImmutableCSR &immutable_csr, size_t tile_size) {
       std::execution::par, worker.begin(), worker.end(),
       [step, &immutable_csr, tile_size, &data_ptr, &tile_id_2_base_info,
        n_rows](auto w) {
-        for (auto vid = w; vid < immutable_csr.get_num_vertices();
-             vid += step) {
-          auto v = immutable_csr.GetVertexByLocalID(vid);
-          VertexID tile_x = (vid / (tile_size));
+        for (auto local_vid = w; local_vid < immutable_csr.get_num_vertices();
+             local_vid += step) {
+          auto v = immutable_csr.GetVertexByLocalID(local_vid);
+          VertexID tile_x = (local_vid / (tile_size));
           for (int nbr = 0; nbr < v.outdegree; nbr++) {
             VertexID tile_y = ceil(v.outgoing_edges[nbr] / tile_size);
             auto tile_id = XYToTileId(tile_x, tile_y, n_rows);
             auto tile_offset =
                 tile_id_2_base_info->find(tile_id)->second.tile_offset;
-            auto x = vid % tile_size;
+            auto x = local_vid % tile_size;
             auto y = v.outgoing_edges[nbr] % tile_size;
             auto tile = data_ptr[tile_offset];
             auto mask = tile->GetMaskPtr();
@@ -288,14 +288,15 @@ void TiledMatrix::Init(const ImmutableCSR &immutable_csr, size_t tile_size) {
       });
 
   CUDA_LOG_INFO("Step3: Fill data into tile");
-  std::for_each(std::execution::par, worker.begin(), worker.end(),
+  std::for_each(std::execution::par,
+                worker.begin(), worker.end(),
                 [step, n_nz_tile, tile_size, &data_ptr](auto w) {
-                  for (auto i = w; i < n_nz_tile; i += step) {
+                  for (VertexID i = w; i < n_nz_tile; i += step) {
                     auto tile = data_ptr[i];
                     auto offset = 0;
-                    for (auto x = 0; x < tile_size; x++) {
+                    for (TileIndex x = 0; x < tile_size; x++) {
                       tile->GetBarOffsetPtr()[x] = offset;
-                      for (auto y = 0; y < tile_size; y++) {
+                      for (TileIndex y = 0; y < tile_size; y++) {
                         if (tile->GetBit(x, y)) {
                           tile->GetRowIdxPtr()[offset] = x;
                           tile->GetColIdxPtr()[offset] = y;
@@ -304,7 +305,7 @@ void TiledMatrix::Init(const ImmutableCSR &immutable_csr, size_t tile_size) {
                       }
                     }
                     tile->GetBarOffsetPtr()[tile_size - 1] = offset;
-                    // tile->Show();
+                 //   tile->Show();
                   }
                 });
 
@@ -318,96 +319,6 @@ void TiledMatrix::Init(const ImmutableCSR &immutable_csr, size_t tile_size) {
 
   CUDA_LOG_INFO("finished ###");
 
-  VertexID *tile_id_to_tile_ptr_idx = new VertexID[max_n_nz_tile]();
-
-  // VertexID tile_col_idx[is_tile_exist.Count()] = {0};
-  // VertexID tile_row_idx[is_tile_exist.Count()] = {0};
-  // VertexID tile_n_nz[is_tile_exist.Count() + 1] = {0};
-  // VertexID tile_ptr[tile_size + 1] = {0};
-
-  // Assistant data structure in
-  VertexID *tile_id_to_tile_ptr_offset = new VertexID[max_n_nz_tile]();
-
-  //  for (int tile_id = 0; tile_id < max_n_nz_tile; tile_id++) {
-  //    if (n_nz_element_in_tile[tile_id] > 0) {
-  //      VertexID tile_x = (tile_id / (tile_size));
-  //      VertexID tile_y = tile_id % (tile_size);
-  //      n_tile_per_row[tile_x]++;
-  //      tile_id_to_tile_ptr_idx[tile_id] = tile_ptr_offset;
-  //      data_ptr[tile_ptr_offset] =
-  //          new Tile(tile_size, tile_x, tile_y,
-  //          n_nz_element_in_tile[tile_id]);
-  //      tile_n_nz[tile_ptr_offset] = n_nz_element_in_tile[tile_id];
-  //      tile_col_idx[tile_ptr_offset] = tile_y;
-  //      tile_row_idx[tile_ptr_offset] = tile_x;
-  //      tile_id_to_tile_ptr_offset[tile_id] = tile_ptr_offset;
-  //      tile_ptr_offset++;
-  //    }
-  //  }
-  //  for (int i = 0; i < tile_size; i++) {
-  //    tile_ptr[i + 1] = n_tile_per_row[i] + tile_ptr[i];
-  //  }
-  //  CUDA_LOG_INFO("###");
-
-  // Fill edge into tile.
-  // std::for_each(worker.begin(), worker.end(),
-  //              [step, &immutable_csr, tile_size, &n_nz_element_in_tile,
-  //               &tile_id_to_tile_ptr_offset, &data_ptr](auto w) {
-  //                for (auto vid = w; vid < immutable_csr.get_num_vertices();
-  //                     vid += step) {
-  //                  auto v = immutable_csr.GetVertexByLocalID(vid);
-  //                  VertexID tile_x = (vid / (tile_size));
-  //                  for (int nbr = 0; nbr < v.outdegree; nbr++) {
-  //                    VertexID tile_y = ceil(v.outgoing_edges[nbr] /
-  //                    tile_size); auto tile_id = tile_x * tile_size + tile_y;
-  //                    auto tile_offset = tile_id_to_tile_ptr_offset[tile_id];
-  //                    auto tile = data_ptr[tile_offset];
-  //                    auto x = vid % tile_size;
-  //                    auto y = v.outgoing_edges[nbr] % tile_size;
-  //                    auto mask = tile->GetMaskPtr();
-  //                    mask->SetBit(x, y);
-  //                  }
-  //                }
-  //              });
-
-  // for (int i = 0; i < 3; i++) {
-  //   //  for (int i = 0; i < is_tile_exist.Count(); i++) {
-  //   CUDA_LOG_INFO(i);
-
-  //  data_ptr[i]->Show();
-  //}
-
-  // std::for_each(worker.begin(), worker.end(),
-  //               [step, &immutable_csr, &is_tile_exist, tile_size,
-  //                &n_nz_element_in_tile](auto w) {
-  //                 for (auto vid = w; vid < immutable_csr.get_num_vertices();
-  //                      vid += step) {
-  //                 }
-  //               });
-
-  // std::unordered_map<VertexID, Tile *> tile_map;
-  // std::for_each(worker.begin(), worker.end(),
-  //               [step, tile_size, &immutable_csr, &is_tile_exist, n_nz_tile,
-  //                &mtx, &tile_map](auto w) {
-  //                 for (auto tile_id = w; tile_id < n_nz_tile; tile_id +=
-  //                 step) {
-  //                   if (n_nz_element_in_tile[tile_id] > 0) {
-  //                     if (auto search = tile_map.find(tile_id);
-  //                         search != tile_map.end()) {
-  //                       std::lock_guard<std::mutex> lock(mtx);
-  //                       // tile_map.insert();
-  //                       auto tile_x = (tile_id / tile_size) % tile_size;
-  //                       auto tile_y = tile_id % tile_size;
-  //                     }
-  //                     // auto tile = new Tile(tile_size, tile_x, tile_y,
-  //                     // tile_mask->GetDataPtr()->Count());
-  //                     // dict.insert(std::make_pair(tile_id, new Tile));
-  //                   }
-  //                 }
-  //               });
-
-  while (1)
-    ;
   delete[] tile_col_idx;
   delete[] tile_row_idx;
   delete[] tile_n_nz;
