@@ -14,27 +14,8 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++20")
 
 # Directories
 set(LIBRARY_OUTPUT_PATH ${PROJECT_ROOT_DIR}/core/lib)
+set(TOOLS_SRC_PATH ${PROJECT_ROOT_DIR}/tools)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR})
-
-#######################
-# Libraries
-#######################
-# CUDA
-#if (${CMAKE_VERSION} VERSION_LESS_EQUAL "3.13.4")
-#    cuda_select_nvcc_arch_flags(ARCH_FLAGS "Auto") # optional argument for arch to add
-#    message("ARCH_FLAGS = ${ARCH_FLAGS}")
-#    string(REPLACE "-gencode;" "--generate-code=" ARCH_FLAGS "${ARCH_FLAGS}")
-#    string(APPEND CMAKE_CUDA_FLAGS "${ARCH_FLAGS}")
-#else ()
-#    include(FindCUDA/select_compute_arch)
-#    CUDA_DETECT_INSTALLED_GPUS(INSTALLED_GPU_CCS_1)
-#    string(STRIP "${INSTALLED_GPU_CCS_1}" INSTALLED_GPU_CCS_2)
-#    string(REPLACE " " ";" INSTALLED_GPU_CCS_3 "${INSTALLED_GPU_CCS_2}")
-#    string(REPLACE "." "" CUDA_ARCH_LIST "${INSTALLED_GPU_CCS_3}")
-#    SET(CMAKE_CUDA_ARCHITECTURES ${CUDA_ARCH_LIST})
-#    set_property(GLOBAL PROPERTY CUDA_ARCHITECTURES "${CUDA_ARCH_LIST}")
-#endif ()
-#set_property(matrixgraph_core TARGET PROPERTY CUDA_ARCHITECTURES 70-real 72-virtual)
 
 # TBB
 find_package(TBB)
@@ -51,17 +32,20 @@ endif ()
 file(GLOB CORE_SOURCES
         "*.cu"
         "components/*.cu"
+        "io/*.cu"
         "data_structures/*.cu"
         "util/*.cu"
         "task/*.cu"
         "task/kernel/*.cu"
         )
 
+
 file(GLOB CORE_HEADERS
         "*.h"
         "*.cuh"
         "components/*.h"
         "components/*.cuh"
+        "io/*.cuh"
         "components/scheduler/*.h"
         "components/scheduler/*.cuh"
         "data_structures/*.h"

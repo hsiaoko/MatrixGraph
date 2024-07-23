@@ -11,7 +11,7 @@
 #endif
 
 #include "core/util/atomic.h"
-#include "core/util/bitmap.cuh"
+#include "core/util/bitmap.h"
 
 namespace sics {
 namespace matrixgraph {
@@ -70,7 +70,7 @@ void ImmutableCSR::PrintGraph(VertexID display_num) const {
 }
 
 void ImmutableCSR::Write(const std::string &root_path, GraphID gid) {
-  std::cout << "Write" << std::endl;
+  std::cout << "Write: " << root_path << std::endl;
 
   if (!std::filesystem::exists(root_path))
     std::filesystem::create_directory(root_path);
@@ -126,6 +126,7 @@ void ImmutableCSR::Write(const std::string &root_path, GraphID gid) {
   out_node["GraphMetadata"]["num_subgraphs"] = 1;
   out_node["GraphMetadata"]["subgraphs"] = subgraph_metadata_vec;
   out_meta_file << out_node << std::endl;
+  std::cout << "Write Successfully" << std::endl;
   out_meta_file.close();
 }
 
@@ -191,13 +192,13 @@ void ImmutableCSR::Read(const std::string &root_path) {
   // Read the label.
   label_file.read(reinterpret_cast<char *>(vertex_label_base_pointer_.get()),
                   file_size);
-  PrintGraph(100);
+  std::cout << "Read Successfully" << std::endl;
   data_file.close();
 }
 
 ImmutableCSRVertex ImmutableCSR::GetVertexByLocalID(VertexID i) const {
   ImmutableCSRVertex v;
-  v.vid = GetGlobalIDByLocalID(i);
+  v.vid = i;
   if (get_num_incoming_edges() > 0) {
     v.indegree = GetInDegreeByLocalID(i);
     v.incoming_edges = incoming_edges_base_pointer_ + GetInOffsetByLocalID(i);
@@ -210,7 +211,6 @@ ImmutableCSRVertex ImmutableCSR::GetVertexByLocalID(VertexID i) const {
 }
 
 void ImmutableCSR::SortByDegree() {
-  std::cout << "SortByDegree" << std::endl;
   auto parallelism = std::thread::hardware_concurrency();
   std::vector<size_t> worker(parallelism);
   std::mutex mtx;
@@ -218,8 +218,9 @@ void ImmutableCSR::SortByDegree() {
   auto step = worker.size();
 
   auto n_vertices = get_num_vertices();
-  VidCountPair *vids_and_degrees = new VidCountPair[n_vertices];
+  VidCountPair *vids_and_degrees = new VidCountPair[n_vertices]();
 
+  std::cout << "[SortByDegree] Computing degree of each vertex" << std::endl;
   std::for_each(std::execution::par, worker.begin(), worker.end(),
                 [this, step, &vids_and_degrees, n_vertices](auto w) {
                   for (auto vid = w; vid < n_vertices; vid += step) {
@@ -228,7 +229,10 @@ void ImmutableCSR::SortByDegree() {
                   }
                 });
 
-  std::sort(vids_and_degrees, vids_and_degrees + n_vertices);
+  std::cout << "[SortByDegree] Sorting" << std::endl;
+  std::sort(std::execution::par, vids_and_degrees,
+            vids_and_degrees + n_vertices,
+            [](const auto a, const auto b) { return a.count > b.count; });
 
   auto new_buffer_globalid = new VertexID[get_num_vertices()]();
   auto new_buffer_indegree = new VertexID[get_num_vertices()]();
@@ -238,6 +242,7 @@ void ImmutableCSR::SortByDegree() {
   auto new_buffer_in_edges = new VertexID[get_num_incoming_edges()]();
   auto new_buffer_out_edges = new VertexID[get_num_outgoing_edges()]();
 
+  std::cout << "[SortByDegree] Computing offset" << std::endl;
   for (VertexID i = 0; i < n_vertices - 1; i++) {
     auto local_vid = vids_and_degrees[i].vid;
     new_buffer_out_offset[i + 1] =
@@ -246,8 +251,9 @@ void ImmutableCSR::SortByDegree() {
         new_buffer_in_offset[i] + GetInDegreeByLocalID(local_vid);
   }
 
-  VertexID new_id_by_old_id[n_vertices];
+  auto *new_id_by_old_id = new VertexID[n_vertices]();
 
+  std::cout << "[SortByDegree] Replacing old val by new val." << std::endl;
   std::for_each(std::execution::par, worker.begin(), worker.end(),
                 [this, step, n_vertices, &new_id_by_old_id, &vids_and_degrees,
                  &new_buffer_globalid, &new_buffer_indegree,
@@ -273,6 +279,7 @@ void ImmutableCSR::SortByDegree() {
                 });
 
   // re-assign id for each vertex.
+  std::cout << "[SortByDegree] Reassigning id for each vertex" << std::endl;
   std::for_each(
       std::execution::par, worker.begin(), worker.end(),
       [this, step, n_vertices, &new_id_by_old_id, &vids_and_degrees,
@@ -285,28 +292,23 @@ void ImmutableCSR::SortByDegree() {
         }
       });
 
-  // std::ofstream out_file;
-  // out_file.open("/data/zhuxiaoke/workspace/graph-systems_workspace/"
-  //               "edgelist_bin/roadNet/roadNet_degree.csv");
-  // for (int i = 0; i < get_num_vertices(); i++) {
-  //   out_file << vids_and_degrees[i].degree << "\n";
-  // }
-  // out_file.close();
-
-  delete[] globalid_by_localid_base_pointer_;
+  std::cout << "[SortByDegree] Done!" << std::endl;
+  // delete[] globalid_by_localid_base_pointer_;
   SetGlobalIDBuffer(new_buffer_globalid);
-  delete[] incoming_edges_base_pointer_;
+  //  delete[] incoming_edges_base_pointer_;
   SetIncomingEdgesBuffer(new_buffer_in_edges);
-  delete[] outgoing_edges_base_pointer_;
+  //  delete[] outgoing_edges_base_pointer_;
   SetOutgoingEdgesBuffer(new_buffer_out_edges);
-  delete[] indegree_base_pointer_;
+  //  delete[] indegree_base_pointer_;
   SetInDegreeBuffer(new_buffer_indegree);
-  delete[] outdegree_base_pointer_;
+  //  delete[] outdegree_base_pointer_;
   SetOutDegreeBuffer(new_buffer_outdegree);
-  delete[] in_offset_base_pointer_;
+  //  delete[] in_offset_base_pointer_;
   SetInOffsetBuffer(new_buffer_in_offset);
-  delete[] out_offset_base_pointer_;
+  //  delete[] out_offset_base_pointer_;
   SetOutOffsetBuffer(new_buffer_out_offset);
+  //  delete[] new_id_by_old_id;
+  std::cout << "[SortByDegree] Done!" << std::endl;
 }
 
 void ImmutableCSR::SortByDistance(VertexID sim_granularity) {

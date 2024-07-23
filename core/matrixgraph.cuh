@@ -20,6 +20,7 @@
 #include "core/components/scheduler/round_robin_scheduler.h"
 #include "core/components/scheduler/scheduler.h"
 #include "core/task/matrix_multiplier.cuh"
+#include "core/task/ppr_query.cuh"
 #include "core/task/task_base.cuh"
 #include "core/util/cuda_check.cuh"
 

@@ -32,6 +32,12 @@ void MatrixGraph::Run(GPUTaskType task_type, TaskBase *task_ptr) {
   }
   case task::kMatrixAnalysis:
     break;
+  case task::kPPRQuery: {
+    std::cout << "[PPR Query]" << std::endl;
+    auto task = reinterpret_cast<task::PPRQuery *>(task_ptr);
+    task->Run();
+    break;
+  }
   default:
     break;
   }

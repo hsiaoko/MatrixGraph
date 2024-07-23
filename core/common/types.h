@@ -39,4 +39,5 @@ typedef uint64_t EdgeIndex;
 } // namespace core
 } // namespace matrixgraph
 } // namespace sics
+
 #endif // MATRIXGRAPH_CORE_COMMON_TYPES_H_

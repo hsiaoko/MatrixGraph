@@ -7,10 +7,12 @@
 #include <vector>
 
 #include "core/common/types.h"
+#include "core/data_structures/bit_tiled_matrix.cuh"
 #include "core/data_structures/edgelist.h"
 #include "core/data_structures/immutable_csr.cuh"
-#include "core/data_structures/tiled_matrix.cuh"
 #include "core/util/bitmap.h"
+#include "core/util/cuda_check.cuh"
+#include "tools/common/types.h"
 
 #ifdef TBB_FOUND
 #include <execution>
@@ -24,15 +26,61 @@ namespace format_converter {
 using sics::matrixgraph::core::common::EdgeIndex;
 using sics::matrixgraph::core::common::TileIndex;
 using sics::matrixgraph::core::common::VertexID;
+using sics::matrixgraph::core::data_structures::BitTiledMatrix;
+using BitTile = sics::matrixgraph::core::data_structures::BitTile;
+using sics::matrixgraph::core::data_structures::Edge;
+using sics::matrixgraph::core::data_structures::EdgelistMetadata;
 using sics::matrixgraph::core::data_structures::Edges;
 using sics::matrixgraph::core::data_structures::ImmutableCSR;
-using sics::matrixgraph::core::data_structures::Mask;
-using sics::matrixgraph::core::data_structures::Tile;
-using sics::matrixgraph::core::data_structures::TiledMatrix;
 using sics::matrixgraph::core::util::Bitmap;
 using sics::matrixgraph::core::util::atomic::WriteAdd;
 using sics::matrixgraph::core::util::atomic::WriteMin;
 using Vertex = sics::matrixgraph::core::data_structures::ImmutableCSRVertex;
+using GraphID = sics::matrixgraph::core::common::GraphID;
+using sics::matrixgraph::core::util::atomic::WriteAdd;
+using sics::matrixgraph::core::util::atomic::WriteMax;
+
+Edges *ImmutableCSR2Edgelist(const ImmutableCSR &immutable_csr) {
+  auto parallelism = std::thread::hardware_concurrency();
+  std::vector<size_t> worker(parallelism);
+  std::iota(worker.begin(), worker.end(), 0);
+  auto step = worker.size();
+
+  EdgeIndex n_edges = immutable_csr.get_num_outgoing_edges();
+
+  EdgelistMetadata edgelist_metadata{
+      .num_vertices = immutable_csr.get_num_vertices(),
+      .num_edges = immutable_csr.get_num_outgoing_edges(),
+      .max_vid = immutable_csr.get_max_vid(),
+      .min_vid = 0};
+
+  auto *edge_ptr = new Edge[n_edges]();
+
+  std::cout << "[ImmutableCSR2Edgelist] Converting immutable csr to edge buffer"
+            << std::endl;
+  std::for_each(std::execution::par, worker.begin(), worker.end(),
+                [step, &immutable_csr, &edge_ptr](auto w) {
+                  for (VertexID vid = w; vid < immutable_csr.get_num_vertices();
+                       vid += step) {
+
+                    auto offset = immutable_csr.GetOutOffsetByLocalID(vid);
+                    auto degree = immutable_csr.GetOutDegreeByLocalID(vid);
+                    auto *out_edges =
+                        immutable_csr.GetOutgoingEdgesByLocalID(vid);
+
+                    VertexID global_id =
+                        immutable_csr.GetGlobalIDByLocalID(vid);
+                    for (EdgeIndex i = 0; i < degree; i++) {
+                      Edge e;
+                      e.src = global_id;
+                      e.dst = out_edges[i];
+                      edge_ptr[offset + i] = e;
+                    }
+                  }
+                });
+
+  return new Edges(edgelist_metadata, edge_ptr);
+}
 
 ImmutableCSR *Edgelist2ImmutableCSR(const Edges &edgelist) {
   auto parallelism = std::thread::hardware_concurrency();
@@ -160,7 +208,12 @@ ImmutableCSR *Edgelist2ImmutableCSR(const Edges &edgelist) {
   delete[] offset_out_edges;
 
   // Construct CSR graph.
-  auto buffer_globalid = new VertexID[edgelist.get_metadata().num_vertices]();
+  VertexID *buffer_globalid = nullptr;
+  if (edgelist.get_localid_to_globalid_ptr() == nullptr) {
+    buffer_globalid = new VertexID[edgelist.get_metadata().num_vertices]();
+  } else {
+    buffer_globalid = edgelist.get_localid_to_globalid_ptr();
+  }
   auto buffer_indegree = new VertexID[edgelist.get_metadata().num_vertices]();
   auto buffer_outdegree = new VertexID[edgelist.get_metadata().num_vertices]();
 
@@ -169,12 +222,13 @@ ImmutableCSR *Edgelist2ImmutableCSR(const Edges &edgelist) {
   for (VertexID i = 0; i < aligned_max_vid; i++) {
     if (!visited.GetBit(i))
       continue;
-    buffer_globalid[vid] = buffer_csr_vertices[i].vid;
+    // buffer_globalid[vid] = buffer_csr_vertices[i].vid;
     buffer_indegree[vid] = buffer_csr_vertices[i].indegree;
     buffer_outdegree[vid] = buffer_csr_vertices[i].outdegree;
     vid_map[i] = vid;
     vid++;
   }
+
   auto buffer_in_offset = new EdgeIndex[edgelist.get_metadata().num_vertices]();
   auto buffer_out_offset =
       new EdgeIndex[edgelist.get_metadata().num_vertices]();
@@ -259,6 +313,101 @@ ImmutableCSR *Edgelist2ImmutableCSR(const Edges &edgelist) {
   immutable_csr->SetMinVid(min_vid);
 
   return immutable_csr;
+}
+
+BitTiledMatrix *Edgelist2BitTiledMatrix(const Edges &edges, size_t tile_size,
+                                        size_t block_scope) {
+  auto parallelism = std::thread::hardware_concurrency();
+  std::vector<size_t> worker(parallelism);
+  std::iota(worker.begin(), worker.end(), 0);
+  auto step = worker.size();
+
+  auto *bit_tiled_matrix = new BitTiledMatrix();
+
+  VertexID n_strips = ceil((float)block_scope / (float)tile_size);
+
+  auto tile_visited = new Bitmap(n_strips * n_strips);
+
+  std::cout << "[Edgelist2BitTiledMatrix] n_strips: " << n_strips << std::endl;
+
+  VertexID n_nz_tile_per_row[n_strips] = {0};
+  std::for_each(
+      std::execution::par, worker.begin(), worker.end(),
+      [step, &edges, block_scope, tile_size, &tile_visited, &n_nz_tile_per_row,
+       n_strips](auto w) {
+        for (auto eid = w; eid < edges.get_metadata().num_edges; eid += step) {
+
+          auto e = edges.get_edge_by_index(eid);
+          auto *localid_to_globalid = edges.get_localid_to_globalid_ptr();
+
+          auto tile_x = (localid_to_globalid[e.src] % block_scope) / n_strips;
+          auto tile_y = (localid_to_globalid[e.dst] % block_scope) / n_strips;
+
+          if (!tile_visited->GetBit(tile_x * n_strips + tile_y)) {
+            tile_visited->SetBit(tile_x * n_strips + tile_y);
+            WriteAdd(&n_nz_tile_per_row[tile_x], (VertexID)1);
+          }
+        }
+      });
+
+  size_t n_nz_tile = tile_visited->Count();
+  bit_tiled_matrix->Init(n_nz_tile, tile_size, n_strips, tile_visited);
+
+  auto *tile_offset_row = bit_tiled_matrix->GetTileOffsetRowPtr();
+
+  for (size_t _ = 0; _ < n_strips; _++) {
+    tile_offset_row[_ + 1] = tile_offset_row[_] + n_nz_tile_per_row[_];
+  }
+
+  std::cout << "[Edgelist2BitTiledMatrix] Creating None Zero Tile: "
+            << n_nz_tile << " in total" << std::endl;
+  std::for_each(
+      std::execution::par, worker.begin(), worker.end(),
+      [step, &edges, block_scope, tile_size, &tile_visited, &bit_tiled_matrix,
+       &n_nz_tile_per_row, n_strips](auto w) {
+        for (auto eid = w; eid < edges.get_metadata().num_edges; eid += step) {
+          auto *localid_to_globalid = edges.get_localid_to_globalid_ptr();
+
+          auto e = edges.get_edge_by_index(eid);
+
+          auto x_within_tile =
+              (localid_to_globalid[e.src] % block_scope) % n_strips;
+          auto y_within_tile =
+              (localid_to_globalid[e.dst] % block_scope) % n_strips;
+
+          auto tile_x = (localid_to_globalid[e.src] % block_scope) / n_strips;
+          auto tile_y = (localid_to_globalid[e.dst] % block_scope) / n_strips;
+
+          auto tile_row_offset =
+              bit_tiled_matrix->GetNzTileBitmapPtr()->PreElementCount(
+                  tile_x * n_strips + tile_y);
+
+          auto *tile_row_idx = bit_tiled_matrix->GetTileRowIdxPtr();
+          tile_row_idx[tile_row_offset] = tile_x;
+
+          auto *tile_col_idx = bit_tiled_matrix->GetTileColIdxPtr();
+          tile_col_idx[tile_row_offset] = tile_y;
+
+          auto *tile = bit_tiled_matrix->GetTileByIdx(tile_row_offset);
+
+          tile->SetBit(x_within_tile, y_within_tile);
+        }
+      });
+
+  for (int i = 0; i < n_strips; i++) {
+    for (int j = 0; j < n_strips; j++) {
+      // std::cout << bit_tiled_matrix->IsNzTile(i, j) << " ";
+    }
+    // std::cout << std::endl;
+  }
+
+  for (int i = 0; i < n_nz_tile; i++) {
+    std::cout << "offset: " << i << std::endl;
+    bit_tiled_matrix->GetTileByIdx(i)->Print();
+  }
+
+  std::cout << "[Edgelist2BitTiledMatrix] Done!" << std::endl;
+  return bit_tiled_matrix;
 }
 
 } // namespace format_converter

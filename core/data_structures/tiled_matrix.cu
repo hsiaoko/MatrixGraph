@@ -13,7 +13,7 @@
 #endif
 
 #include "core/util/atomic.h"
-#include "core/util/bitmap.cuh"
+#include "core/util/bitmap.h"
 #include "core/util/cuda_check.cuh"
 
 namespace sics {
@@ -227,7 +227,6 @@ void TiledMatrix::Init(const ImmutableCSR &immutable_csr, size_t tile_size) {
   size_t n_nz_tile = is_tile_exist.Count();
   std::cout << "n_nz_tile: " << n_nz_tile << std::endl;
 
-  while(1);
   Tile **data_ptr = new Tile *[n_nz_tile];
   std::vector<Tile *> data_ptr_vec;
   data_ptr_vec.reserve(n_nz_tile);
@@ -288,7 +287,8 @@ void TiledMatrix::Init(const ImmutableCSR &immutable_csr, size_t tile_size) {
       });
 
   CUDA_LOG_INFO("Step3: Fill data into tile");
-  std::for_each(std::execution::par,
+  std::for_each(
+      //std::execution::par,
                 worker.begin(), worker.end(),
                 [step, n_nz_tile, tile_size, &data_ptr](auto w) {
                   for (VertexID i = w; i < n_nz_tile; i += step) {
@@ -305,7 +305,7 @@ void TiledMatrix::Init(const ImmutableCSR &immutable_csr, size_t tile_size) {
                       }
                     }
                     tile->GetBarOffsetPtr()[tile_size - 1] = offset;
-                 //   tile->Show();
+                    tile->Show();
                   }
                 });
 

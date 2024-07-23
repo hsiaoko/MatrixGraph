@@ -44,6 +44,7 @@ void GPUTaskManager::ReleaseStream(size_t task_id) {
     streams_by_task_id_.erase(iter);
   }
 }
+
 } // namespace components
 } // namespace core
 } // namespace matrixgraph

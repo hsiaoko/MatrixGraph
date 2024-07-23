@@ -15,6 +15,7 @@ namespace task {
 enum GPUTaskType {
   kGEMM, // Default task type
   kMatrixAnalysis,
+  kPPRQuery,
   // Other types.
 };
 

@@ -4,6 +4,7 @@
 #include <cassert>
 #include <cstdint>
 #include <cstring>
+#include <iostream>
 
 namespace sics {
 namespace matrixgraph {
@@ -154,7 +155,40 @@ public:
     return count;
   }
 
+  size_t PreElementCount(size_t idx) const {
+    if (idx > size_)
+      return Count();
+    size_t count = 0;
+    size_t bm_size = WORD_OFFSET(idx);
+    size_t idx_offset = WORD_OFFSET(idx);
+    size_t idx_bit_offset = BIT_OFFSET(idx);
+
+    for (size_t i = 0; i <= bm_size; i++) {
+      uint64_t x = 0;
+      if (i == idx_offset) {
+        uint64_t mask = (1ul << idx_bit_offset) - 1;
+        x = data_[i] & mask;
+      } else {
+        x = data_[i];
+      }
+      x = (x & (0x5555555555555555)) + ((x >> 1) & (0x5555555555555555));
+      x = (x & (0x3333333333333333)) + ((x >> 2) & (0x3333333333333333));
+      x = (x & (0x0f0f0f0f0f0f0f0f)) + ((x >> 4) & (0x0f0f0f0f0f0f0f0f));
+      x = (x & (0x00ff00ff00ff00ff)) + ((x >> 8) & (0x00ff00ff00ff00ff));
+      x = (x & (0x0000ffff0000ffff)) + ((x >> 16) & (0x0000ffff0000ffff));
+      x = (x & (0x00000000ffffffff)) + ((x >> 32) & (0x00000000ffffffff));
+      count += (size_t)x;
+    }
+
+    return count;
+  }
+
   size_t size() const { return size_; }
+  uint64_t *data() const { return data_; }
+
+  size_t GetBufferSize() const {
+    return sizeof(uint64_t) * (WORD_OFFSET(size_) + 1);
+  }
 
   uint64_t *GetDataBasePointer() const { return data_; }
 
@@ -179,4 +213,5 @@ protected:
 } // namespace core
 } // namespace matrixgraph
 } // namespace sics
+
 #endif // CORE_UTIL_BITMAP_H_

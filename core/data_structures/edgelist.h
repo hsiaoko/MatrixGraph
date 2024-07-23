@@ -2,11 +2,15 @@
 #define SICS_MATRIXGRAPH_CORE_DATA_STRUCTURES_EDGELIST_H_
 
 #include <cstring>
+#include <iostream>
+
+#include <yaml-cpp/yaml.h>
 
 #ifdef TBB_FOUND
 #include <execution>
 #endif
 
+#include "core/common/consts.h"
 #include "core/common/types.h"
 #include "core/util/atomic.h"
 #include "core/util/bitmap.h"
@@ -22,9 +26,10 @@ private:
   using EdgeIndex = sics::matrixgraph::core::common::EdgeIndex;
 
 public:
-  VertexID num_vertices;
-  EdgeIndex num_edges;
-  VertexID max_vid;
+  VertexID num_vertices = 0;
+  EdgeIndex num_edges = 0;
+  VertexID max_vid = 0;
+  VertexID min_vid = sics::matrixgraph::core::common::kMaxVertexID;
 };
 
 struct Edge {
@@ -37,7 +42,6 @@ public:
 
   bool operator<(const Edge &b) const { return src < b.src; }
 
-public:
   VertexID src;
   VertexID dst;
 };
@@ -132,12 +136,7 @@ public:
     edges_ptr_ = new Edge[edgelist_metadata.num_edges]();
   }
 
-  Edges(const Edges &edges) {
-    edgelist_metadata_ = edges.get_metadata();
-    edges_ptr_ = new Edge[edgelist_metadata_.num_edges]();
-    memcpy(edges_ptr_, edges.get_base_ptr(),
-           sizeof(Edge) * edgelist_metadata_.num_edges);
-  }
+  Edges(const Edges &edges);
 
   ~Edges() { delete[] edges_ptr_; }
 
@@ -146,115 +145,21 @@ public:
     return Iterator(&edges_ptr_[edgelist_metadata_.num_edges - 1]);
   }
 
-  void WriteToBinary(const std::string &filename) {
-    std::ofstream out_data_file(filename + "edgelist.bin");
-    std::ofstream out_meta_file(filename + "meta.yaml");
+  void WriteToBinary(const std::string &filename);
 
-    out_data_file.write(reinterpret_cast<char *>(edges_ptr_),
-                        sizeof(VertexID) * edgelist_metadata_.num_vertices);
-
-    YAML::Node node;
-    node["EdgelistBin"]["num_vertices"] = edgelist_metadata_.num_vertices;
-    node["EdgelistBin"]["num_edges"] = edgelist_metadata_.num_edges;
-    node["EdgelistBin"]["max_vid"] = edgelist_metadata_.max_vid;
-    out_meta_file << node << std::endl;
-
-    out_data_file.close();
-    out_meta_file.close();
-  }
   // Read From CSv
   void ReadFromCSV(const std::string &filename, const std::string &sep,
-                   bool compressed = false) {
-    std::ifstream in_file(filename);
+                   bool compressed = true);
 
-    in_file.seekg(0, std::ios::end);
-    size_t length = in_file.tellg();
-    in_file.seekg(0, std::ios::beg);
-
-    char *buff = new char[length]();
-    in_file.read(buff, length);
-    std::string content(buff, length);
-
-    EdgeIndex n_edges = count(content.begin(), content.end(), '\n');
-    auto buffer_edges = new VertexID[n_edges * 2]();
-    std::stringstream ss(content);
-    delete[] buff;
-
-    EdgeIndex index = 0;
-    VertexID max_vid = 0, compressed_vid = 0;
-    std::string line, vid_str;
-
-    while (getline(ss, line, '\n')) {
-      if (*line.c_str() == '\0')
-        break;
-      std::stringstream ss_line(line);
-      while (getline(ss_line, vid_str, *sep.c_str())) {
-        VertexID vid = stoll(vid_str);
-        sics::matrixgraph::core::util::atomic::WriteMax(&max_vid, vid);
-        buffer_edges[index++] = vid;
-      }
-    }
-    content.clear();
-    in_file.close();
-
-    auto aligned_max_vid = (((max_vid + 1) >> 6) << 6) + 64;
-    edges_ptr_ = new Edge[n_edges]();
-    Bitmap bitmap(aligned_max_vid);
-
-    auto vid_map = new VertexID[aligned_max_vid]();
-    auto compressed_buffer_edges = new VertexID[n_edges * 2]();
-
-    // Compute the mapping between origin vid to compressed vid.
-    for (EdgeIndex index = 0; index < n_edges * 2; index++) {
-      if (!bitmap.GetBit(buffer_edges[index])) {
-        bitmap.SetBit(buffer_edges[index]);
-        vid_map[buffer_edges[index]] = compressed_vid++;
-      }
-    }
-
-    if (compressed) {
-      // Compress vid and buffer graph.
-      for (EdgeIndex i = 0; i < n_edges * 2; i++) {
-        compressed_buffer_edges[i] = vid_map[buffer_edges[i]];
-      }
-      for (EdgeIndex i = 0; i < n_edges; i++) {
-        edges_ptr_[i].src = compressed_buffer_edges[2 * i];
-        edges_ptr_[i].dst = compressed_buffer_edges[2 * i + 1];
-      }
-    } else {
-      for (EdgeIndex i = 0; i < n_edges; i++) {
-        edges_ptr_[i].src = buffer_edges[2 * i];
-        edges_ptr_[i].dst = buffer_edges[2 * i + 1];
-      }
-    }
-
-    delete[] buffer_edges;
-    delete[] vid_map;
-    delete[] compressed_buffer_edges;
-
-    // Compute metadata.
-    edgelist_metadata_.num_edges = n_edges;
-    edgelist_metadata_.num_vertices = bitmap.Count();
-    edgelist_metadata_.max_vid = max_vid;
-  }
+  void ReassignVertexIDs();
 
   // Sort edges by source.
-  void SortBySrc() {
-#ifdef TBB_FOUND
-    std::sort(std::execution::par, edges_ptr_,
-              edges_ptr_ + edgelist_metadata_.num_edges);
-#else
-    std::sort(edges_ptr_, edges_ptr_ + edgelist_metadata_.num_edges);
-#endif
-  }
+  void SortBySrc();
 
-  void ShowGraph() {
-    for (EdgeIndex i = 0; i < edgelist_metadata_.num_edges; i++) {
-      std::cout << edges_ptr_[i].src << " " << edges_ptr_[i].dst << std::endl;
-    }
-  }
+  void ShowGraph(EdgeIndex n_edges = 3) const;
 
   Edge *get_base_ptr() const { return edges_ptr_; }
+  VertexID *get_localid_to_globalid_ptr() const { return localid_to_globalid_; }
   EdgelistMetadata get_metadata() const { return edgelist_metadata_; }
 
   VertexID get_src_by_index(size_t i) const { return edges_ptr_[i].src; }
@@ -264,7 +169,13 @@ public:
     return (iter.get_base_ptr() - begin().get_base_ptr());
   };
 
+  VertexID get_globalid_by_localid(VertexID localid) const;
+
+  void SetLocalIDToGlobalID(VertexID *localid_to_globalid);
+
 private:
+  VertexID *localid_to_globalid_ = nullptr;
+
   Edge *edges_ptr_;
   EdgelistMetadata edgelist_metadata_;
 };

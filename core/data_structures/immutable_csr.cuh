@@ -61,6 +61,8 @@ public:
 
   void SortByDistance(VertexID sim_granularity);
 
+  void ReOrder(VertexID tile_size);
+
   GraphID get_gid() const { return metadata_.gid; }
   VertexID get_num_vertices() const { return metadata_.num_vertices; }
   EdgeIndex get_num_incoming_edges() const {
