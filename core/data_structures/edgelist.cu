@@ -166,6 +166,21 @@ void Edges::ReassignVertexIDs() {
   delete[] vid_map;
 }
 
+void Edges::Transpose() {
+  auto parallelism = std::thread::hardware_concurrency();
+  std::vector<size_t> worker(parallelism);
+  std::iota(worker.begin(), worker.end(), 0);
+  auto step = worker.size();
+  std::for_each(std::execution::par, worker.begin(), worker.end(),
+                [this, step](auto w) {
+                  for (auto i = w; i < get_metadata().num_edges; i += step) {
+                    VertexID tmp = edges_ptr_[i].src;
+                    edges_ptr_[i].src = edges_ptr_[i].dst; // swap src and dst
+                    edges_ptr_[i].dst = tmp;
+                  }
+                });
+}
+
 void Edges::SortBySrc() {
 #ifdef TBB_FOUND
   std::sort(std::execution::par, edges_ptr_,

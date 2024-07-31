@@ -328,8 +328,6 @@ BitTiledMatrix *Edgelist2BitTiledMatrix(const Edges &edges, size_t tile_size,
 
   auto tile_visited = new Bitmap(n_strips * n_strips);
 
-  std::cout << "[Edgelist2BitTiledMatrix] n_strips: " << n_strips << std::endl;
-
   VertexID n_nz_tile_per_row[n_strips] = {0};
   std::for_each(
       std::execution::par, worker.begin(), worker.end(),
@@ -340,8 +338,8 @@ BitTiledMatrix *Edgelist2BitTiledMatrix(const Edges &edges, size_t tile_size,
           auto e = edges.get_edge_by_index(eid);
           auto *localid_to_globalid = edges.get_localid_to_globalid_ptr();
 
-          auto tile_x = (localid_to_globalid[e.src] % block_scope) / n_strips;
-          auto tile_y = (localid_to_globalid[e.dst] % block_scope) / n_strips;
+          auto tile_x = (localid_to_globalid[e.src] % block_scope) / tile_size;
+          auto tile_y = (localid_to_globalid[e.dst] % block_scope) / tile_size;
 
           if (!tile_visited->GetBit(tile_x * n_strips + tile_y)) {
             tile_visited->SetBit(tile_x * n_strips + tile_y);
@@ -366,17 +364,18 @@ BitTiledMatrix *Edgelist2BitTiledMatrix(const Edges &edges, size_t tile_size,
       [step, &edges, block_scope, tile_size, &tile_visited, &bit_tiled_matrix,
        &n_nz_tile_per_row, n_strips](auto w) {
         for (auto eid = w; eid < edges.get_metadata().num_edges; eid += step) {
+
           auto *localid_to_globalid = edges.get_localid_to_globalid_ptr();
 
           auto e = edges.get_edge_by_index(eid);
 
           auto x_within_tile =
-              (localid_to_globalid[e.src] % block_scope) % n_strips;
+              (localid_to_globalid[e.src] % block_scope) % tile_size;
           auto y_within_tile =
-              (localid_to_globalid[e.dst] % block_scope) % n_strips;
+              (localid_to_globalid[e.dst] % block_scope) % tile_size;
 
-          auto tile_x = (localid_to_globalid[e.src] % block_scope) / n_strips;
-          auto tile_y = (localid_to_globalid[e.dst] % block_scope) / n_strips;
+          auto tile_x = (localid_to_globalid[e.src] % block_scope) / tile_size;
+          auto tile_y = (localid_to_globalid[e.dst] % block_scope) / tile_size;
 
           auto tile_row_offset =
               bit_tiled_matrix->GetNzTileBitmapPtr()->PreElementCount(
@@ -393,18 +392,6 @@ BitTiledMatrix *Edgelist2BitTiledMatrix(const Edges &edges, size_t tile_size,
           tile->SetBit(x_within_tile, y_within_tile);
         }
       });
-
-  for (int i = 0; i < n_strips; i++) {
-    for (int j = 0; j < n_strips; j++) {
-      // std::cout << bit_tiled_matrix->IsNzTile(i, j) << " ";
-    }
-    // std::cout << std::endl;
-  }
-
-  for (int i = 0; i < n_nz_tile; i++) {
-    std::cout << "offset: " << i << std::endl;
-    bit_tiled_matrix->GetTileByIdx(i)->Print();
-  }
 
   std::cout << "[Edgelist2BitTiledMatrix] Done!" << std::endl;
   return bit_tiled_matrix;

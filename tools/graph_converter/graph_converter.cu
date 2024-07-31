@@ -50,6 +50,7 @@ enum ConvertMode {
   kEdgelistBin2TiledMatrix,
   kEdgelistCSV2BitTiledMatrix,
   kEdgelistBin2BitTiledMatrix,
+  kEdgelistBin2TransposedEdgelistBin,
   kGridEdgelistBin2BitTiledMatrix,
   kCSRBin2BitTiledMatrix,
   kEdgelistBin2CSRBin,
@@ -66,12 +67,16 @@ static inline ConvertMode ConvertMode2Enum(const std::string &s) {
     return kEdgelistCSV2BitTiledMatrix;
   if (s == "edgelistbin2bittiledmatrix")
     return kEdgelistBin2BitTiledMatrix;
+  if (s == "edgelistbin2csrbin")
+    return kEdgelistBin2CSRBin;
   if (s == "csrbin2bittiledmatrix")
     return kCSRBin2BitTiledMatrix;
   if (s == "csrbin2edgelistbin")
     return kCSRBin2EdgelistBin;
   if (s == "edgelistbin2tiledmatrix")
     return kEdgelistBin2TiledMatrix;
+  if (s == "edgelistbin2transposededgelistbin")
+    return kEdgelistBin2TransposedEdgelistBin;
   if (s == "edgelistcsv2edgelistbin")
     return kEdgelistCSV2EdgelistBin;
   if (s == "edgelistcsv2csrbin")
@@ -106,6 +111,10 @@ int main(int argc, char **argv) {
   case kEdgelistBin2CSRBin:
     sics::matrixgraph::tools::converter::ConvertEdgelistBin2CSRBin(
         FLAGS_i, FLAGS_o, FLAGS_tile_size);
+    break;
+  case kEdgelistBin2TransposedEdgelistBin:
+    sics::matrixgraph::tools::converter::
+        ConvertEdgelistBin2TransposedEdgelistBin(FLAGS_i, FLAGS_o);
     break;
   case kEdgelistCSV2CSRBin:
     sics::matrixgraph::tools::converter::ConvertEdgelistCSV2ImmutableCSR(

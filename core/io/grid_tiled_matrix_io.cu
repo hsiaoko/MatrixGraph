@@ -1,6 +1,7 @@
 #include "core/io/grid_tiled_matrix_io.cuh"
 
 #include <cmath>
+#include <fstream>
 #include <yaml-cpp/yaml.h>
 
 #include "core/data_structures/metadata.h"
@@ -18,7 +19,7 @@ using EdgeIndex = sics::matrixgraph::core::common::EdgeIndex;
 using GraphID = sics::matrixgraph::core::common::GraphID;
 
 void GridTiledMatrixIO::Read(const std::string &input_path,
-                             GridTiledMatrix *grid_tiled_matrix) {
+                             GridTiledMatrix **grid_tiled_matrix) {
   YAML::Node node = YAML::LoadFile(input_path + "meta.yaml");
 
   GridGraphMetadata grid_tiled_matrix_metadata = {
@@ -26,9 +27,7 @@ void GridTiledMatrixIO::Read(const std::string &input_path,
       .n_vertices = node["GridGraphMetadata"]["n_vertices"].as<VertexID>(),
       .n_edges = node["GridGraphMetadata"]["n_edges"].as<EdgeIndex>()};
 
-  // std::cout << grid_tiled_matrix_metadata.n_vertices << std::endl;
-
-  grid_tiled_matrix = new GridTiledMatrix(grid_tiled_matrix_metadata);
+  *grid_tiled_matrix = new GridTiledMatrix(grid_tiled_matrix_metadata);
 
   BitTiledMatrixIO bit_tiled_matrix_io;
 
@@ -36,18 +35,33 @@ void GridTiledMatrixIO::Read(const std::string &input_path,
        gid++) {
     std::string block_dir = input_path + "block" + std::to_string(gid) + "/";
 
-    std::cout << block_dir << std::endl;
     auto *bit_tiled_matrix_ptr =
-        grid_tiled_matrix->GetBitTileMatrixPtrByIdx(gid);
+        (*grid_tiled_matrix)->GetBitTileMatrixPtrByIdx(gid);
 
-    std::cout << "out 1|" << bit_tiled_matrix_ptr << std::endl;
     bit_tiled_matrix_io.Read(block_dir, bit_tiled_matrix_ptr);
-    std::cout << "out 2|" << bit_tiled_matrix_ptr << std::endl;
+  }
+}
 
-    bit_tiled_matrix_ptr->Print();
+void GridTiledMatrixIO::Write(const std::string &output_path,
+                              const GridTiledMatrix &grid_tiled_matrix) {
+
+  auto meta = grid_tiled_matrix.get_metadata();
+
+  BitTiledMatrixIO bit_tiled_matrix_io;
+  for (size_t _ = 0; _ < pow(meta.n_chunks, 2); _++) {
+    std::string block_dir = output_path + "block" + std::to_string(_) + "/";
+    BitTiledMatrixIO::Write(block_dir,
+                            *grid_tiled_matrix.GetBitTileMatrixPtrByIdx(_));
   }
 
-  grid_tiled_matrix->Print();
+  std::ofstream out_meta_file(output_path + "meta.yaml");
+  YAML::Node out_node;
+  out_node["GridGraphMetadata"]["n_vertices"] = meta.n_vertices;
+  out_node["GridGraphMetadata"]["n_edges"] = meta.n_edges;
+  out_node["GridGraphMetadata"]["n_chunks"] = meta.n_chunks;
+
+  out_meta_file << out_node << std::endl;
+  out_meta_file.close();
 }
 
 } // namespace io

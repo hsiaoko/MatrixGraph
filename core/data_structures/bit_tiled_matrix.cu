@@ -36,11 +36,13 @@ void BitTiledMatrix::Init(const TiledMatrixMetadata &metadata) {
   metadata_.n_nz_tile = metadata.n_nz_tile;
   metadata_.tile_size = metadata.tile_size;
 
-  bit_tile_vec_.reserve(metadata.n_nz_tile);
+  bit_tile_vec_.resize(metadata_.n_nz_tile);
 
-  for(VertexID _ = 0; _ < metadata.n_nz_tile; _++){
-    bit_tile_vec_.push_back(new BitTile());
-  }
+  std::generate(std::execution::par, bit_tile_vec_.begin(), bit_tile_vec_.end(),
+                []() { return new BitTile(); });
+
+  std::for_each(std::execution::par, bit_tile_vec_.begin(), bit_tile_vec_.end(),
+                [this](auto &tile) { return tile->Init(metadata_.tile_size); });
 
   if (tile_row_idx_ != nullptr)
     delete[] tile_row_idx_;
@@ -51,10 +53,10 @@ void BitTiledMatrix::Init(const TiledMatrixMetadata &metadata) {
   if (nz_tile_bm_ != nullptr)
     delete nz_tile_bm_;
 
-  tile_row_idx_ = new VertexID[metadata.n_nz_tile]();
-  tile_col_idx_ = new VertexID[metadata.n_nz_tile]();
-  tile_offset_row_ = new VertexID[metadata.n_strips + 1]();
-  nz_tile_bm_ = new Bitmap(pow(metadata.n_strips, 2));
+  tile_row_idx_ = new VertexID[metadata_.n_nz_tile]();
+  tile_col_idx_ = new VertexID[metadata_.n_nz_tile]();
+  tile_offset_row_ = new VertexID[metadata_.n_strips + 1]();
+  nz_tile_bm_ = new Bitmap(pow(metadata_.n_strips, 2));
 }
 
 void BitTiledMatrix::Init(size_t n_nz_tile, size_t tile_size, size_t n_strips,
@@ -79,18 +81,18 @@ void BitTiledMatrix::Print() const {
   if (metadata_.n_nz_tile == 0)
     return;
   std::cout << "[BitTiledMatrix Print]" << std::endl;
-  std::cout << " * tile_offset_row: ";
+ // std::cout << " * tile_offset_row: ";
 
-  for (VertexID _ = 0; _ < metadata_.n_strips + 1; _++) {
-    std::cout << " " << tile_offset_row_[_];
-  }
-  std::cout << std::endl;
+ // for (VertexID _ = 0; _ < metadata_.n_strips + 1; _++) {
+ //   std::cout << " " << tile_offset_row_[_];
+ // }
+ // std::cout << std::endl;
 
-  std::cout << " * offset to idx: " << std::endl;
-  for (VertexID _ = 0; _ < metadata_.n_nz_tile; _++) {
-    std::cout << "offset: " << _ << ", x: " << tile_row_idx_[_]
-              << " y: " << tile_col_idx_[_] << std::endl;
-  }
+ // std::cout << " * offset to idx: " << std::endl;
+ // for (VertexID _ = 0; _ < metadata_.n_nz_tile; _++) {
+ //   std::cout << "offset: " << _ << ", x: " << tile_row_idx_[_]
+ //             << " y: " << tile_col_idx_[_] << std::endl;
+ // }
 
   for (VertexID _ = 0; _ < metadata_.n_strips; _++) {
     for (VertexID __ = 0; __ < metadata_.n_strips; __++) {
@@ -101,7 +103,7 @@ void BitTiledMatrix::Print() const {
   }
 
   for (VertexID _ = 0; _ < metadata_.n_nz_tile; _++) {
-    GetTileByIdx(_)->Print();
+   // GetTileByIdx(_)->Print();
   }
 }
 

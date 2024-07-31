@@ -31,7 +31,6 @@ using sics::matrixgraph::core::util::atomic::WriteMax;
 void BitTiledMatrixIO::Write(const std::string &output_path,
                              const BitTiledMatrix &bit_tiled_matrix) {
 
-  std::cout << "[Write BitTiledMatrix] root_dir: " << output_path << std::endl;
   // Create dir of grid of gid.
   if (!std::filesystem::exists(output_path))
     std::filesystem::create_directory(output_path);
@@ -42,22 +41,18 @@ void BitTiledMatrixIO::Write(const std::string &output_path,
 
   auto metadata = bit_tiled_matrix.GetMetadata();
 
+  std::cout << "[Write BitTiledMatrix] root_dir: " << output_path
+            << " n_nz_tile: " << metadata.n_nz_tile << std::endl;
   for (VertexID _ = 0; _ < metadata.n_nz_tile; _++) {
     std::ofstream out_data_file(output_path + "tiles/" + std::to_string(_) +
                                 ".bin");
-    std::ofstream out_data_t_file(output_path + "tiles/" + std::to_string(_) +
-                                  "_t.bin");
 
     auto *bit_tile = bit_tiled_matrix.GetTileByIdx(_);
 
     auto bm = bit_tile->GetBM();
-    auto bm_t = bit_tile->GetBMT();
-
     out_data_file.write((char *)bm->data(), bm->GetBufferSize());
-    out_data_t_file.write((char *)bm_t->data(), bm->GetBufferSize());
 
     out_data_file.close();
-    out_data_t_file.close();
   }
 
   std::ofstream out_row_idx_file(output_path + "meta_buf/row_idx.bin");
@@ -96,6 +91,7 @@ void BitTiledMatrixIO::Write(const std::string &output_path,
   out_tile_offset_row_file.close();
   out_nz_tile_bm.close();
   out_meta_file.close();
+  std::cout << "[Write BitTiledMatrix] Done!" << std::endl;
 }
 
 void BitTiledMatrixIO::Read(const std::string &input_path,
@@ -118,28 +114,17 @@ void BitTiledMatrixIO::Read(const std::string &input_path,
 
   bit_tiled_matrix->Init(metadata);
 
-  std::cout << bit_tiled_matrix << std::endl;
-
   auto *nz_tile_bm = new util::Bitmap(pow(metadata.n_strips, 2));
 
   for (VertexID _ = 0; _ < metadata.n_nz_tile; _++) {
     std::ifstream in_data_file(input_path + "tiles/" + std::to_string(_) +
                                ".bin");
-    std::ifstream in_data_t_file(input_path + "tiles/" + std::to_string(_) +
-                                 "_t.bin");
 
     auto *bit_tile_ptr = bit_tiled_matrix->GetTileByIdx(_);
-    bit_tile_ptr->Init(metadata.tile_size);
-
-    //    auto *bit_tile_ptr = new BitTile(metadata.tile_size);
     in_data_file.read(reinterpret_cast<char *>(bit_tile_ptr->GetBM()->data()),
                       bit_tile_ptr->GetBM()->GetBufferSize());
-    in_data_t_file.read(
-        reinterpret_cast<char *>(bit_tile_ptr->GetBMT()->data()),
-        bit_tile_ptr->GetBMT()->GetBufferSize());
 
     in_data_file.close();
-    in_data_t_file.close();
   }
 
   std::ifstream in_row_idx_file(input_path + "meta_buf/row_idx.bin");

@@ -29,11 +29,15 @@ public:
   void Init(size_t n_nz_tile, size_t tile_size, size_t n_strips,
             Bitmap *nz_tile_bm);
 
+  void Init(VertexID tile_size, VertexID n_strips, Bitmap *bm);
+
   void SetNzBitmapPtr(Bitmap *nz_bitmap_ptr) { nz_tile_bm_ = nz_bitmap_ptr; }
 
   bool IsNzTile(size_t x, size_t y) const {
     return nz_tile_bm_->GetBit(x * metadata_.n_strips + y);
   }
+
+  void InitBitTileVec();
 
   void Print() const;
 

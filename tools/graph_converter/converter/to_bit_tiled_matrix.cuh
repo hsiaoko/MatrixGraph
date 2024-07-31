@@ -54,7 +54,7 @@ static void ConvertGridGraph2BitTiledMatrix(const std::string &input_path,
 
     std::string block_dir = output_path + "block" + std::to_string(gid) + "/";
 
-    edges_blocks[gid].ShowGraph();
+    edges_blocks[gid].ShowGraph(3);
 
     auto *bit_tile_matrix =
         Edgelist2BitTiledMatrix(edges_blocks[gid], tile_size, block_scope);
@@ -67,8 +67,6 @@ static void ConvertGridGraph2BitTiledMatrix(const std::string &input_path,
   YAML::Node out_node;
   out_node["GridGraphMetadata"]["n_vertices"] = meta.num_vertices;
   out_node["GridGraphMetadata"]["n_edges"] = meta.num_edges;
-  out_node["GridGraphMetadata"]["max_vid"] = meta.max_vid;
-  out_node["GridGraphMetadata"]["min_vid"] = meta.min_vid;
   out_node["GridGraphMetadata"]["n_chunks"] = n_chunks;
 
   out_meta_file << out_node << std::endl;

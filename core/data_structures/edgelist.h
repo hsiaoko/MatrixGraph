@@ -153,6 +153,7 @@ public:
 
   void ReassignVertexIDs();
 
+  void Transpose();
   // Sort edges by source.
   void SortBySrc();
 

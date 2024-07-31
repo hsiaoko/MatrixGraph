@@ -3,6 +3,7 @@
 
 #include <cuda_runtime.h>
 
+#include "core/data_structures/host_buffer.cuh"
 #include "core/util/cuda_check.cuh"
 
 namespace sics {
@@ -129,12 +130,7 @@ public:
   //   Size of the device buffer
   size_t GetSize() const { return s_; };
 
-  size_t GetElementSize() const {
-    if (std::is_same<T, char>::value) {
-      return STRING_BUFFER_ELEMENT_SIZE;
-    }
-    return sizeof(T);
-  }
+  size_t GetElementSize() const { return sizeof(T); }
 
 private:
   void SetPtr(T *val) { ptr_ = val; }
@@ -148,4 +144,5 @@ private:
 } // namespace core
 } // namespace matrixgraph
 } // namespace sics
+
 #endif // MATRIXGRAPH_CORE_DATA_STRUCTURES_DEVICE_BUFFER_CUH_

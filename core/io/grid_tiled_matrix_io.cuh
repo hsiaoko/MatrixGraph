@@ -40,7 +40,7 @@ public:
   // @PARAMETERS
   //  input_root_path: the root path of the input data.
   static void Read(const std::string &input_path,
-                   GridTiledMatrix *grid_tiled_matrix);
+                   GridTiledMatrix **grid_tiled_matrix);
 };
 
 } // namespace io

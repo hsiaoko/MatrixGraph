@@ -31,16 +31,12 @@ public:
 
   util::Bitmap *GetBM() const { return bm_; }
 
-  util::Bitmap *GetBMT() const { return bm_t_; }
-
   uint32_t tile_size() const;
 
 private:
   uint32_t tile_id = 0;
 
   util::Bitmap *bm_ = nullptr;
-
-  util::Bitmap *bm_t_ = nullptr;
 };
 
 } // namespace data_structures

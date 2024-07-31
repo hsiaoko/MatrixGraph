@@ -16,9 +16,9 @@ template <typename T> struct Buffer {
   // Size of the buffer (byte)
   size_t size;
 
-  uint8_t *GetRawData() const { return (uint8_t *)data; }
+  T *GetPtr() const { return data; }
 
-  T GetElement(size_t index) const { return data[index]; }
+  size_t GetSize() const { return size; };
 
   size_t GetElementSize() const { return sizeof(T); }
 };
@@ -27,4 +27,5 @@ template <typename T> struct Buffer {
 } // namespace core
 } // namespace matrixgraph
 } // namespace sics
+
 #endif // MATRIXGRAPH_CORE_DATA_STRUCTURES_HOST_BUFFER_CUH_
