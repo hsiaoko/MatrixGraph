@@ -24,10 +24,7 @@ public:
 
   ~BitTiledMatrix();
 
-  void Init(const TiledMatrixMetadata &metadata);
-
-  void Init(size_t n_nz_tile, size_t tile_size, size_t n_strips,
-            Bitmap *nz_tile_bm);
+  void Init(const TiledMatrixMetadata &metadata, Bitmap *nz_tile_bm = nullptr);
 
   void Init(VertexID tile_size, VertexID n_strips, Bitmap *bm);
 
@@ -41,8 +38,6 @@ public:
 
   void Print() const;
 
-  BitTile *GetTileByIdx(uint32_t idx) const { return bit_tile_vec_[idx]; }
-
   TiledMatrixMetadata GetMetadata() const { return metadata_; }
 
   VertexID *GetTileOffsetRowPtr() const { return tile_offset_row_; }
@@ -53,12 +48,18 @@ public:
 
   Bitmap *GetNzTileBitmapPtr() const { return nz_tile_bm_; }
 
+  uint64_t *GetDataPtrByIdx(uint32_t idx) const;
+
+  uint64_t *GetDataPtr() const { return data_; }
+
+  uint64_t GetDataBufferSize() const;
+
 private:
   TiledMatrixMetadata metadata_;
 
   Bitmap *nz_tile_bm_ = nullptr;
 
-  std::vector<BitTile *> bit_tile_vec_;
+  uint64_t *data_ = nullptr;
 
   VertexID *tile_offset_row_ = nullptr;
   VertexID *tile_row_idx_ = nullptr;

@@ -1,5 +1,7 @@
 #include "core/matrixgraph.cuh"
 
+#include <ctime>
+
 namespace sics {
 namespace matrixgraph {
 namespace core {

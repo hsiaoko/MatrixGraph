@@ -20,6 +20,7 @@ public:
   // @Brif: Deleted copy constructor and copy assignment operator to prevent
   // copying
   DeviceOwnedBuffer(const DeviceOwnedBuffer<T> &) = delete;
+
   DeviceOwnedBuffer &operator=(const DeviceOwnedBuffer<T> &) = delete;
 
   // @Brif: Move constructor and move assignment operator
@@ -93,6 +94,15 @@ public:
       cudaFree(ptr_);
     s_ = s;
     CUDA_CHECK(cudaMalloc(&ptr_, s_));
+    CUDA_CHECK(cudaMemset(ptr_, 0, s_));
+  }
+
+  void Init(size_t s, const cudaStream_t &stream) {
+    if (ptr_ != nullptr)
+      cudaFree(ptr_);
+    s_ = s;
+    CUDA_CHECK(cudaMalloc(&ptr_, s_));
+    CUDA_CHECK(cudaMemsetAsync(ptr_, 0, s_, stream));
   }
 
   // Brif: Copy data from device to host asynchronously with the specified

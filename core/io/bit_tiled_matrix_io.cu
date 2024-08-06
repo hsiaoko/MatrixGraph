@@ -34,8 +34,6 @@ void BitTiledMatrixIO::Write(const std::string &output_path,
   // Create dir of grid of gid.
   if (!std::filesystem::exists(output_path))
     std::filesystem::create_directory(output_path);
-  if (!std::filesystem::exists(output_path + "/tiles"))
-    std::filesystem::create_directory(output_path + "/tiles");
   if (!std::filesystem::exists(output_path + "/meta_buf"))
     std::filesystem::create_directory(output_path + "/meta_buf");
 
@@ -43,23 +41,13 @@ void BitTiledMatrixIO::Write(const std::string &output_path,
 
   std::cout << "[Write BitTiledMatrix] root_dir: " << output_path
             << " n_nz_tile: " << metadata.n_nz_tile << std::endl;
-  for (VertexID _ = 0; _ < metadata.n_nz_tile; _++) {
-    std::ofstream out_data_file(output_path + "tiles/" + std::to_string(_) +
-                                ".bin");
-
-    auto *bit_tile = bit_tiled_matrix.GetTileByIdx(_);
-
-    auto bm = bit_tile->GetBM();
-    out_data_file.write((char *)bm->data(), bm->GetBufferSize());
-
-    out_data_file.close();
-  }
 
   std::ofstream out_row_idx_file(output_path + "meta_buf/row_idx.bin");
   std::ofstream out_col_idx_file(output_path + "meta_buf/col_idx.bin");
   std::ofstream out_tile_offset_row_file(output_path +
                                          "meta_buf/tile_offset_row.bin");
   std::ofstream out_nz_tile_bm(output_path + "meta_buf/nz_tile_bm.bin");
+  std::ofstream out_data(output_path + "meta_buf/data.bin");
 
   out_row_idx_file.write(
       reinterpret_cast<char *>(bit_tiled_matrix.GetTileRowIdxPtr()),
@@ -76,6 +64,9 @@ void BitTiledMatrixIO::Write(const std::string &output_path,
   out_nz_tile_bm.write(
       reinterpret_cast<char *>(bit_tiled_matrix.GetNzTileBitmapPtr()->data()),
       bit_tiled_matrix.GetNzTileBitmapPtr()->GetBufferSize());
+
+  out_data.write(reinterpret_cast<char *>(bit_tiled_matrix.GetDataPtr()),
+                 bit_tiled_matrix.GetDataBufferSize());
 
   std::ofstream out_meta_file(output_path + "meta.yaml");
   YAML::Node out_node;
@@ -116,22 +107,12 @@ void BitTiledMatrixIO::Read(const std::string &input_path,
 
   auto *nz_tile_bm = new util::Bitmap(pow(metadata.n_strips, 2));
 
-  for (VertexID _ = 0; _ < metadata.n_nz_tile; _++) {
-    std::ifstream in_data_file(input_path + "tiles/" + std::to_string(_) +
-                               ".bin");
-
-    auto *bit_tile_ptr = bit_tiled_matrix->GetTileByIdx(_);
-    in_data_file.read(reinterpret_cast<char *>(bit_tile_ptr->GetBM()->data()),
-                      bit_tile_ptr->GetBM()->GetBufferSize());
-
-    in_data_file.close();
-  }
-
   std::ifstream in_row_idx_file(input_path + "meta_buf/row_idx.bin");
   std::ifstream in_col_idx_file(input_path + "meta_buf/col_idx.bin");
   std::ifstream in_tile_offset_row_file(input_path +
                                         "meta_buf/tile_offset_row.bin");
   std::ifstream in_nz_tile_bm(input_path + "meta_buf/nz_tile_bm.bin");
+  std::ifstream in_data(input_path + "meta_buf/data.bin");
 
   in_row_idx_file.read(
       reinterpret_cast<char *>(bit_tiled_matrix->GetTileRowIdxPtr()),
@@ -148,6 +129,9 @@ void BitTiledMatrixIO::Read(const std::string &input_path,
   in_nz_tile_bm.read(
       reinterpret_cast<char *>(bit_tiled_matrix->GetNzTileBitmapPtr()->data()),
       bit_tiled_matrix->GetNzTileBitmapPtr()->GetBufferSize());
+
+  in_data.read(reinterpret_cast<char *>(bit_tiled_matrix->GetDataPtr()),
+               bit_tiled_matrix->GetDataBufferSize());
 
   in_row_idx_file.close();
   in_col_idx_file.close();

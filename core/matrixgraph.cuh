@@ -5,7 +5,6 @@
 #include <device_launch_parameters.h>
 
 #include <condition_variable>
-#include <ctime>
 #include <iostream>
 #include <memory>
 #include <mutex>

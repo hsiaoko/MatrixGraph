@@ -11,7 +11,6 @@ namespace task {
 namespace kernel {
 
 class MatrixOperationsKernelWrapper {
-private:
 public:
   // deleting copy constructor
   MatrixOperationsKernelWrapper(const MatrixOperationsKernelWrapper &obj) =
@@ -30,6 +29,13 @@ public:
                const data_structures::DeviceOwnedBuffer<uint64_t> &matrix_b_buf,
                data_structures::DeviceOwnedBuffer<uint64_t> *matrix_c_buf,
                uint32_t m, uint32_t k, uint32_t n);
+
+  static void MatrixBitCount(
+      const cudaStream_t &stream,
+      const data_structures::DeviceOwnedBuffer<uint64_t> &matrix_buf,
+      data_structures::DeviceOwnedBuffer<uint64_t> *count_buf,
+      uint64_t size
+      );
 
 private:
   MatrixOperationsKernelWrapper() = default;

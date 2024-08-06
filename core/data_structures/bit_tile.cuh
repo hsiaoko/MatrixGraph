@@ -25,8 +25,6 @@ public:
 
   bool GetBit(VertexID x, VertexID y) const;
 
-  void Transpose();
-
   void Print() const;
 
   util::Bitmap *GetBM() const { return bm_; }
