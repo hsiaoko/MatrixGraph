@@ -105,4 +105,5 @@ GetIntersection(const VertexID *p_vec_a, VertexID len_a,
 } // namespace core
 } // namespace matrixgraph
 } // namespace sics
+
 #endif // CORE_UTIL_ATOMIC_H_
