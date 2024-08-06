@@ -50,7 +50,6 @@ get_aligned_k_bits(uint64_t *data, uint64_t start, uint64_t end) {
 
   uint64_t result = 0;
   uint64_t mask = ((1ull << (end_bit - start_bit)) - 1) << start_bit;
-  //| (1ull << (end_bit - start_bit));
 
   result = (data[start_word] & mask) >> start_bit;
   return result;
@@ -111,8 +110,8 @@ void MatrixOperationsKernelWrapper::MatrixBitAnd(
     const data_structures::DeviceOwnedBuffer<uint64_t> &matrix_b_buf,
     data_structures::DeviceOwnedBuffer<uint64_t> *matrix_c_buf, uint32_t m,
     uint32_t k, uint32_t n) {
-  dim3 dimBlock(1);
-  dim3 dimGrid(1);
+  dim3 dimBlock(64);
+  dim3 dimGrid(64);
 
   ParametersForMatrixBitAnd params{.matrix_a = matrix_a_buf.GetPtr(),
                                    .matrix_b = matrix_b_buf.GetPtr(),
