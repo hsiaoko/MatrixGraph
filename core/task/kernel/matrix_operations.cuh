@@ -30,12 +30,19 @@ public:
                data_structures::DeviceOwnedBuffer<uint64_t> *matrix_c_buf,
                uint32_t m, uint32_t k, uint32_t n);
 
-  static void MatrixBitCount(
+  static void
+  MatrixBitCount(const cudaStream_t &stream,
+                 const data_structures::DeviceOwnedBuffer<uint64_t> &matrix_buf,
+                 data_structures::DeviceOwnedBuffer<uint64_t> *count_buf,
+                 uint64_t size);
+
+  static void InitBitTiledMatrixMetadataByLayoutMatrix(
       const cudaStream_t &stream,
-      const data_structures::DeviceOwnedBuffer<uint64_t> &matrix_buf,
-      data_structures::DeviceOwnedBuffer<uint64_t> *count_buf,
-      uint64_t size
-      );
+      const data_structures::DeviceOwnedBuffer<uint64_t> &layout_matrix,
+      data_structures::DeviceOwnedBuffer<uint32_t> *tile_offset_row,
+      data_structures::DeviceOwnedBuffer<uint32_t> *tile_row_idx,
+      data_structures::DeviceOwnedBuffer<uint32_t> *tile_col_idx,
+      uint32_t tile_size);
 
 private:
   MatrixOperationsKernelWrapper() = default;

@@ -15,6 +15,7 @@
 #include "core/data_structures/grid_tiled_matrix.cuh"
 #include "core/data_structures/host_buffer.cuh"
 #include "core/data_structures/metadata.h"
+#include "core/data_structures/unified_buffer.cuh"
 #include "core/io/grid_tiled_matrix_io.cuh"
 #include "core/task/kernel/matrix_operations.cuh"
 #include "core/util/bitmap.h"
@@ -30,7 +31,14 @@ using GirdTiledMatrix =
     sics::matrixgraph::core::data_structures::GridTiledMatrix;
 using DeviceOwnedBufferUint64 =
     sics::matrixgraph::core::data_structures::DeviceOwnedBuffer<uint64_t>;
+using DeviceOwnedBufferUint32 =
+    sics::matrixgraph::core::data_structures::DeviceOwnedBuffer<uint32_t>;
+using UnifiedOwnedBufferUint32 =
+    sics::matrixgraph::core::data_structures::UnifiedOwnedBuffer<uint32_t>;
+using UnifiedOwnedBufferUint64 =
+    sics::matrixgraph::core::data_structures::UnifiedOwnedBuffer<uint64_t>;
 using BufferUint64 = sics::matrixgraph::core::data_structures::Buffer<uint64_t>;
+using BufferUint32 = sics::matrixgraph::core::data_structures::Buffer<uint32_t>;
 using DeviceOwnedBufferUint64 =
     sics::matrixgraph::core::data_structures::DeviceOwnedBuffer<uint64_t>;
 using MatrixOperationsKernelWrapper =
@@ -38,6 +46,14 @@ using MatrixOperationsKernelWrapper =
 using Bitmap = sics::matrixgraph::core::util::Bitmap;
 using TiledMatrixMetadata =
     sics::matrixgraph::core::data_structures::TiledMatrixMetadata;
+
+// CUDA kernel to add elements of two arrays
+__global__ void add(int n, float *x, float *y) {
+  int index = blockIdx.x * blockDim.x + threadIdx.x;
+  int stride = blockDim.x * gridDim.x;
+  for (int i = index; i < n; i += stride)
+    y[i] = x[i] + y[i];
+}
 
 static uint32_t hash_function(uint64_t x) {
   x ^= x >> 16;
@@ -58,7 +74,7 @@ __host__ void PPRQuery::LoadData() {
   C_ = new GridTiledMatrix(A_->get_metadata());
 }
 
-__host__ void PPRQuery::ComputeLayoutMatrix() {
+__host__ void PPRQuery::InitC() {
   auto parallelism = std::thread::hardware_concurrency();
   std::vector<size_t> worker(parallelism);
   std::mutex mtx;
@@ -75,7 +91,7 @@ __host__ void PPRQuery::ComputeLayoutMatrix() {
 
   VertexID M = A_->get_metadata().n_chunks;
   VertexID K = A_->get_metadata().n_chunks;
-  VertexID N = A_->get_metadata().n_chunks;
+  VertexID N = B_->get_metadata().n_chunks;
 
   VertexID n_chunks = A_->get_metadata().n_chunks;
 
@@ -86,12 +102,27 @@ __host__ void PPRQuery::ComputeLayoutMatrix() {
   buffers_matrix_b.resize(N * K);
   buffers_matrix_c.resize(M * N);
 
+  std::vector<BufferUint32> tile_offset_row;
+  std::vector<BufferUint32> tile_row_idx;
+  std::vector<BufferUint32> tile_col_idx;
+  tile_offset_row.resize(M * N);
+  tile_row_idx.resize(M * N);
+  tile_col_idx.resize(M * N);
+
   std::vector<DeviceOwnedBufferUint64> device_owned_buffers_matrix_a;
   std::vector<DeviceOwnedBufferUint64> device_owned_buffers_matrix_b;
   std::vector<DeviceOwnedBufferUint64> device_owned_buffers_matrix_c;
   device_owned_buffers_matrix_a.resize(M * K);
   device_owned_buffers_matrix_b.resize(K * N);
   device_owned_buffers_matrix_c.resize(M * N);
+
+  std::vector<DeviceOwnedBufferUint32> device_owned_tile_offset_row;
+  std::vector<DeviceOwnedBufferUint32> device_owned_tile_row_idx;
+  std::vector<DeviceOwnedBufferUint32> device_owned_tile_col_idx;
+  device_owned_tile_offset_row.resize(M * N);
+  device_owned_tile_row_idx.resize(M * N);
+  device_owned_tile_col_idx.resize(M * N);
+
   std::vector<cudaStream_t> p_streams_vec;
   p_streams_vec.resize(M * N);
 
@@ -135,12 +166,6 @@ __host__ void PPRQuery::ComputeLayoutMatrix() {
                       buffers_matrix_c[i * N + j].GetSize(), p_stream);
                 }
               }
-
-              // std::cout << "  Submit (" << i << "," << k << ") X (" << k <<
-              // ", "
-              //           << j << ") "
-              //           << " to " << hash_function(i * N + j) % 4 <<
-              //           std::endl;
 
               auto &matrix_a_buf = buffers_matrix_a[i * K + k];
               matrix_a_buf.data = block_a->GetNzTileBitmapPtr()->data();
@@ -199,7 +224,6 @@ __host__ void PPRQuery::ComputeLayoutMatrix() {
                 });
 
   std::cout << "[PPRQuery] Copying data back to host ..." << std::endl;
-
   // Copy data back to the host.
   std::for_each(
       std::execution::par, worker.begin(), worker.end(),
@@ -260,6 +284,139 @@ __host__ void PPRQuery::ComputeLayoutMatrix() {
             bit_tiled_matrix_ptr->Init(
                 metadata, new Bitmap(n_strips * tile_size,
                                      buffers_matrix_c[i * N + j].GetPtr()));
+            bit_tiled_matrix_ptr->Print();
+          }
+        }
+      });
+
+  std::cout << "[PPRQuery] Initialize BitTiledMatrix metadata." << std::endl;
+  std::for_each(
+      // std::execution::par,
+      worker.begin(), worker.end(),
+      [this, M, N, K, step, &device_owned_buffers_matrix_c_count,
+       &device_owned_buffers_matrix_c, &tile_offset_row, &tile_row_idx,
+       &tile_col_idx, &device_owned_tile_offset_row, &device_owned_tile_row_idx,
+       &device_owned_tile_col_idx,
+
+       &p_streams_vec, &buffers_matrix_c_count, &buffers_matrix_c, n_strips,
+       n_chunks, tile_size, &mtx](auto w) {
+        for (VertexID i = w; i < M; i += step) {
+          for (VertexID j = 0; j < N; j++) {
+            if (device_owned_buffers_matrix_c[i * N + j].GetPtr() == nullptr) {
+              continue;
+            }
+            VertexID n_nz_tile = *buffers_matrix_c_count[i * N + j].GetPtr();
+            if (n_nz_tile == 0)
+              continue;
+            cudaStream_t &p_stream = p_streams_vec[i * N + j];
+
+            cudaSetDevice(hash_function(i * N + j) % 4);
+            auto *bit_tiled_matrix_ptr =
+                C_->GetBitTileMatrixPtrByIdx(i * N + j);
+            bit_tiled_matrix_ptr->Print();
+
+            tile_col_idx[i * N + j].data =
+                bit_tiled_matrix_ptr->GetTileColIdxPtr();
+            tile_col_idx[i * N + j].size =
+                bit_tiled_matrix_ptr->GetMetadata().n_nz_tile *
+                sizeof(VertexID);
+
+            tile_row_idx[i * N + j].data =
+                bit_tiled_matrix_ptr->GetTileRowIdxPtr();
+            tile_row_idx[i * N + j].size =
+                bit_tiled_matrix_ptr->GetMetadata().n_nz_tile *
+                sizeof(VertexID);
+
+            tile_offset_row[i * N + j].data =
+                bit_tiled_matrix_ptr->GetTileOffsetRowPtr();
+            tile_offset_row[i * N + j].size =
+                (bit_tiled_matrix_ptr->GetMetadata().n_strips + 1) *
+                sizeof(VertexID);
+
+            device_owned_tile_offset_row[i * N + j].Init(
+                tile_offset_row[i * N + j], p_stream);
+            device_owned_tile_row_idx[i * N + j].Init(tile_row_idx[i * N + j],
+                                                      p_stream);
+            device_owned_tile_col_idx[i * N + j].Init(tile_col_idx[i * N + j],
+                                                      p_stream);
+
+            MatrixOperationsKernelWrapper::
+                InitBitTiledMatrixMetadataByLayoutMatrix(
+                    p_stream, device_owned_buffers_matrix_c[i * N + j],
+                    &device_owned_tile_offset_row[i * N + j],
+                    &device_owned_tile_row_idx[i * N + j],
+                    &device_owned_tile_col_idx[i * N + j],
+                    bit_tiled_matrix_ptr->GetMetadata().tile_size);
+          }
+        }
+      });
+
+  std::for_each(
+      std::execution::par, worker.begin(), worker.end(),
+      [this, M, N, K, step, &device_owned_buffers_matrix_c_count,
+       &device_owned_buffers_matrix_c, &tile_offset_row, &tile_row_idx,
+       &tile_col_idx, &device_owned_tile_offset_row, &device_owned_tile_row_idx,
+       &device_owned_tile_col_idx,
+
+       &p_streams_vec, &buffers_matrix_c_count, &buffers_matrix_c, n_strips,
+       n_chunks, tile_size, &mtx](auto w) {
+        for (VertexID i = w; i < M; i += step) {
+          for (VertexID j = 0; j < N; j++) {
+            if (device_owned_buffers_matrix_c[i * N + j].GetPtr() == nullptr) {
+              continue;
+            }
+            VertexID n_nz_tile = *buffers_matrix_c_count[i * N + j].GetPtr();
+            if (n_nz_tile == 0)
+              continue;
+            cudaStream_t &p_stream = p_streams_vec[i * N + j];
+
+            cudaSetDevice(hash_function(i * N + j) % 4);
+
+            cudaMemcpyAsync(tile_offset_row[i * N + j].GetPtr(),
+                            device_owned_tile_offset_row[i * N + j].GetPtr(),
+                            device_owned_tile_offset_row[i * N + j].GetSize(),
+                            cudaMemcpyDeviceToHost, p_stream);
+
+            cudaMemcpyAsync(tile_row_idx[i * N + j].GetPtr(),
+                            device_owned_tile_row_idx[i * N + j].GetPtr(),
+                            device_owned_tile_row_idx[i * N + j].GetSize(),
+                            cudaMemcpyDeviceToHost, p_stream);
+
+            cudaMemcpyAsync(tile_col_idx[i * N + j].GetPtr(),
+                            device_owned_tile_col_idx[i * N + j].GetPtr(),
+                            device_owned_tile_col_idx[i * N + j].GetSize(),
+                            cudaMemcpyDeviceToHost, p_stream);
+          }
+        }
+      });
+  cudaDeviceSynchronize();
+
+  std::cout << "[PPRQuery] Printing ..." << std::endl;
+  std::for_each(
+      std::execution::par, worker.begin(), worker.end(),
+      [this, M, N, K, step, &device_owned_buffers_matrix_c_count,
+       &device_owned_buffers_matrix_c, &tile_offset_row, &tile_row_idx,
+       &tile_col_idx, &device_owned_tile_offset_row, &device_owned_tile_row_idx,
+       &device_owned_tile_col_idx,
+
+       &p_streams_vec, &buffers_matrix_c_count, &buffers_matrix_c, n_strips,
+       n_chunks, tile_size, &mtx](auto w) {
+        for (VertexID i = w; i < M; i += step) {
+          for (VertexID j = 0; j < N; j++) {
+            if (device_owned_buffers_matrix_c[i * N + j].GetPtr() == nullptr) {
+              continue;
+            }
+            VertexID n_nz_tile = *buffers_matrix_c_count[i * N + j].GetPtr();
+            if (n_nz_tile == 0)
+              continue;
+            cudaStream_t &p_stream = p_streams_vec[i * N + j];
+
+            auto *bit_tiled_matrix_ptr =
+                C_->GetBitTileMatrixPtrByIdx(i * N + j);
+            auto tile_offset_row = bit_tiled_matrix_ptr->GetTileOffsetRowPtr();
+            for (int t = 0; t < n_nz_tile; t++)
+              tile_offset_row[t + 1] += tile_offset_row[t];
+            tile_offset_row[0] = 0;
             // bit_tiled_matrix_ptr->Print();
           }
         }
@@ -277,19 +434,556 @@ __host__ void PPRQuery::ComputeLayoutMatrix() {
   std::cout << "[PPRQuery] Done!" << std::endl;
 }
 
+__host__ void PPRQuery::FillTiles() {
+  auto parallelism = std::thread::hardware_concurrency();
+  std::vector<size_t> worker(parallelism);
+  std::mutex mtx;
+  std::iota(worker.begin(), worker.end(), 0);
+  auto step = worker.size();
+
+  auto block_a = A_->GetBitTileMatrixPtrByIdx(0);
+  VertexID n_strips = block_a->GetMetadata().n_strips;
+  VertexID tile_size = block_a->GetMetadata().tile_size;
+  VertexID M = A_->get_metadata().n_chunks;
+  VertexID K = A_->get_metadata().n_chunks;
+  VertexID N = B_->get_metadata().n_chunks;
+  std::vector<cudaStream_t> p_streams_vec;
+  p_streams_vec.resize(M * N);
+
+  std::cout << "[FillTiles]"
+            << " Start - n_strips: " << n_strips << ", tile_size: " << tile_size
+            << std::endl;
+
+  std::vector<BufferUint64> layout_matrix_c;
+  std::vector<BufferUint32> tile_offset_row_a;
+  std::vector<BufferUint32> tile_offset_row_b;
+  std::vector<BufferUint32> tile_offset_row_c;
+  std::vector<BufferUint32> tile_row_idx_a;
+  std::vector<BufferUint32> tile_row_idx_b;
+  std::vector<BufferUint32> tile_row_idx_c;
+  std::vector<BufferUint32> tile_col_idx_a;
+  std::vector<BufferUint32> tile_col_idx_b;
+  std::vector<BufferUint32> tile_col_idx_c;
+  std::vector<BufferUint64> data_a;
+  std::vector<BufferUint64> data_b;
+  std::vector<BufferUint64> data_c;
+
+  layout_matrix_c.resize(M * N);
+  tile_offset_row_a.resize(M * K);
+  tile_offset_row_b.resize(N * K);
+  tile_offset_row_c.resize(M * N);
+  tile_row_idx_a.resize(M * K);
+  tile_row_idx_b.resize(N * K);
+  tile_row_idx_c.resize(M * N);
+  tile_col_idx_a.resize(M * K);
+  tile_col_idx_b.resize(N * K);
+  tile_col_idx_c.resize(M * N);
+  data_a.resize(M * K);
+  data_b.resize(N * K);
+  data_c.resize(M * N);
+
+  std::vector<UnifiedOwnedBufferUint64> unified_layout_matrix_c;
+  std::vector<UnifiedOwnedBufferUint32> unified_tile_offset_row_a;
+  std::vector<UnifiedOwnedBufferUint32> unified_tile_offset_row_b;
+  std::vector<UnifiedOwnedBufferUint32> unified_tile_offset_row_c;
+  std::vector<UnifiedOwnedBufferUint32> unified_tile_row_idx_a;
+  std::vector<UnifiedOwnedBufferUint32> unified_tile_row_idx_b;
+  std::vector<UnifiedOwnedBufferUint32> unified_tile_row_idx_c;
+  std::vector<UnifiedOwnedBufferUint32> unified_tile_col_idx_a;
+  std::vector<UnifiedOwnedBufferUint32> unified_tile_col_idx_b;
+  std::vector<UnifiedOwnedBufferUint32> unified_tile_col_idx_c;
+  std::vector<UnifiedOwnedBufferUint64> unified_data_a;
+  std::vector<UnifiedOwnedBufferUint64> unified_data_b;
+  std::vector<UnifiedOwnedBufferUint64> unified_data_c;
+
+  unified_layout_matrix_c.resize(M * N);
+  unified_tile_offset_row_a.resize(M * K);
+  unified_tile_offset_row_b.resize(N * K);
+  unified_tile_offset_row_c.resize(M * N);
+  unified_tile_row_idx_a.resize(M * K);
+  unified_tile_row_idx_b.resize(N * K);
+  unified_tile_row_idx_c.resize(M * N);
+  unified_tile_col_idx_a.resize(M * K);
+  unified_tile_col_idx_b.resize(N * K);
+  unified_tile_col_idx_c.resize(M * N);
+  unified_data_a.resize(M * K);
+  unified_data_b.resize(N * K);
+  unified_data_c.resize(M * N);
+
+  std::cout << "[FillTiles] Initializing buffers for results, i.e, C_."
+            << std::endl;
+  std::for_each(
+      std::execution::par, worker.begin(), worker.end(),
+      [this, M, N, K, step, &p_streams_vec, tile_size, &mtx, &layout_matrix_c,
+       &tile_offset_row_c, &tile_row_idx_c, &tile_col_idx_c, &data_c,
+       &unified_layout_matrix_c, &unified_tile_offset_row_c,
+       &unified_tile_row_idx_c, &unified_tile_col_idx_c,
+       &unified_data_c](auto w) {
+        for (VertexID i = w; i < M; i += step) {
+          for (VertexID j = 0; j < N; j++) {
+
+            auto block_c = C_->GetBitTileMatrixPtrByIdx(i * N + j);
+            if (block_c == nullptr)
+              continue;
+
+            if (block_c->GetMetadata().n_nz_tile == 0)
+              continue;
+
+            layout_matrix_c[i * N + j].data =
+                block_c->GetNzTileBitmapPtr()->data();
+
+            layout_matrix_c[i * N + j].size =
+                block_c->GetNzTileBitmapPtr()->size();
+
+            tile_offset_row_c[i * N + j].data = block_c->GetTileOffsetRowPtr();
+            tile_offset_row_c[i * N + j].size =
+                sizeof(VertexID) * (block_c->GetMetadata().n_strips + 1);
+
+            tile_row_idx_c[i * N + j].data = block_c->GetTileOffsetRowPtr();
+            tile_row_idx_c[i * N + j].size =
+                block_c->GetMetadata().n_nz_tile * sizeof(VertexID);
+
+            tile_col_idx_c[i * N + j].data = block_c->GetTileOffsetRowPtr();
+            tile_col_idx_c[i * N + j].size =
+                block_c->GetMetadata().n_nz_tile * sizeof(VertexID);
+
+            auto tile_buffer_size =
+                sizeof(uint64_t) *
+                std::max(1u, WORD_OFFSET(block_c->GetMetadata().tile_size *
+                                         block_c->GetMetadata().tile_size));
+
+            data_c[i * N + j].data = block_c->GetDataPtr();
+            data_c[i * N + j].size =
+                tile_buffer_size * block_c->GetMetadata().n_nz_tile;
+
+            cudaStream_t &p_stream = p_streams_vec[i * N + j];
+            cudaStreamCreate(&p_stream);
+
+            unified_layout_matrix_c[i * N + j].Init(layout_matrix_c[i * N + j]);
+
+            unified_tile_offset_row_c[i * N + j].Init(
+                tile_offset_row_c[i * N + j]);
+
+            unified_tile_row_idx_c[i * N + j].Init(tile_row_idx_c[i * N + j]);
+            unified_tile_col_idx_c[i * N + j].Init(tile_col_idx_c[i * N + j]);
+            unified_data_c[i * N + j].Init(data_c[i * N + j]);
+          }
+        }
+      });
+
+  // Init input Buffer for A_ and B, respectively.
+  std::cout << "[FillTiles] Initializing input buffers for A and B."
+            << std::endl;
+  std::for_each(
+      std::execution::par, worker.begin(), worker.end(),
+      [this, M, N, K, step, &p_streams_vec, tile_size, &mtx, &tile_offset_row_a,
+       &tile_row_idx_a, &tile_col_idx_a, &data_a, &unified_tile_offset_row_a,
+       &unified_tile_row_idx_a, &unified_tile_col_idx_a,
+       &unified_data_a](auto w) {
+        for (VertexID i = w; i < M; i += step) {
+          for (VertexID k = 0; k < K; k++) {
+            auto block_a = A_->GetBitTileMatrixPtrByIdx(i * K + k);
+            if (block_a->GetMetadata().n_nz_tile == 0)
+              continue;
+
+            tile_offset_row_a[i * K + k].data = block_a->GetTileOffsetRowPtr();
+            tile_offset_row_a[i * K + k].size =
+                sizeof(VertexID) * (block_a->GetMetadata().n_strips + 1);
+
+            tile_row_idx_a[i * K + k].data = block_a->GetTileRowIdxPtr();
+            tile_row_idx_a[i * K + k].size =
+                block_a->GetMetadata().n_nz_tile * sizeof(VertexID);
+
+            tile_col_idx_a[i * K + k].data = block_a->GetTileColIdxPtr();
+            tile_col_idx_a[i * K + k].size =
+                block_a->GetMetadata().n_nz_tile * sizeof(VertexID);
+
+            auto tile_buffer_size =
+                sizeof(uint64_t) *
+                std::max(1u, WORD_OFFSET(block_a->GetMetadata().tile_size *
+                                         block_a->GetMetadata().tile_size));
+
+            data_a[i * K + k].data = block_a->GetDataPtr();
+            data_a[i * K + k].size =
+                tile_buffer_size * block_a->GetMetadata().n_nz_tile;
+
+            unified_tile_offset_row_a[i * K + k].Init(
+                tile_offset_row_a[i * K + k]);
+            unified_tile_row_idx_a[i * K + k].Init(tile_row_idx_a[i * K + k]);
+            unified_tile_col_idx_a[i * K + k].Init(tile_col_idx_a[i * K + k]);
+            unified_data_a[i * K + k].Init(data_a[i * K + k]);
+          }
+        }
+      });
+
+  std::for_each(
+      std::execution::par, worker.begin(), worker.end(),
+      [this, M, N, K, step, &p_streams_vec, tile_size, &mtx, &tile_offset_row_b,
+       &tile_row_idx_b, &tile_col_idx_b, &data_b, &unified_tile_offset_row_b,
+       &unified_tile_row_idx_b, &unified_tile_col_idx_b,
+       &unified_data_b](auto w) {
+        for (VertexID i = w; i < N; i += step) {
+          for (VertexID k = 0; k < K; k++) {
+            auto block_b = A_->GetBitTileMatrixPtrByIdx(i * K + k);
+            if (block_b->GetMetadata().n_nz_tile == 0)
+              continue;
+
+            tile_offset_row_b[i * K + k].data = block_b->GetTileOffsetRowPtr();
+            tile_offset_row_b[i * K + k].size =
+                sizeof(VertexID) * (block_b->GetMetadata().n_strips + 1);
+
+            tile_row_idx_b[i * K + k].data = block_b->GetTileRowIdxPtr();
+            tile_row_idx_b[i * K + k].size =
+                block_b->GetMetadata().n_nz_tile * sizeof(VertexID);
+
+            tile_col_idx_b[i * K + k].data = block_b->GetTileColIdxPtr();
+            tile_col_idx_b[i * K + k].size =
+                block_b->GetMetadata().n_nz_tile * sizeof(VertexID);
+
+            auto tile_buffer_size =
+                sizeof(uint64_t) *
+                std::max(1u, WORD_OFFSET(block_b->GetMetadata().tile_size *
+                                         block_b->GetMetadata().tile_size));
+
+            data_b[i * K + k].data = block_b->GetDataPtr();
+            data_b[i * K + k].size =
+                tile_buffer_size * block_b->GetMetadata().n_nz_tile;
+
+            unified_tile_offset_row_b[i * K + k].Init(
+                tile_offset_row_b[i * K + k]);
+            unified_tile_row_idx_b[i * K + k].Init(tile_row_idx_b[i * K + k]);
+            unified_tile_col_idx_b[i * K + k].Init(tile_col_idx_b[i * K + k]);
+            unified_data_b[i * K + k].Init(data_b[i * K + k]);
+          }
+        }
+      });
+
+  // Submit Kernel to fill edges into tiles.
+  std::for_each(std::execution::par, worker.begin(), worker.end(),
+                [this, M, N, K, step, &p_streams_vec, tile_size, &mtx,
+                 &tile_offset_row_a, &tile_row_idx_a, &tile_col_idx_a, &data_a,
+                 &unified_tile_offset_row_a, &unified_tile_row_idx_a,
+                 &unified_tile_col_idx_a, &unified_data_a, &tile_offset_row_b,
+                 &tile_row_idx_b, &tile_col_idx_b, &data_b,
+                 &unified_tile_offset_row_b, &unified_tile_row_idx_b,
+                 &unified_tile_col_idx_b, &unified_data_b](auto w) {
+                  for (VertexID k = w; k < K; k += step) {
+                    for (VertexID i = 0; i < M; i++) {
+                      for (VertexID j = 0; j < N; j++) {
+                      }
+                    }
+                  }
+                });
+}
+
+//__host__ void PPRQuery::FillTiles() {
+//  auto parallelism = std::thread::hardware_concurrency();
+//  std::vector<size_t> worker(parallelism);
+//  std::mutex mtx;
+//  std::iota(worker.begin(), worker.end(), 0);
+//  auto step = worker.size();
+//
+//  auto block_a = A_->GetBitTileMatrixPtrByIdx(0);
+//  VertexID n_strips = block_a->GetMetadata().n_strips;
+//  VertexID tile_size = block_a->GetMetadata().tile_size;
+//  VertexID M = A_->get_metadata().n_chunks;
+//  VertexID K = A_->get_metadata().n_chunks;
+//  VertexID N = B_->get_metadata().n_chunks;
+//  std::vector<cudaStream_t> p_streams_vec;
+//  p_streams_vec.resize(M * N);
+//
+//  std::cout << "[FillTiles]"
+//            << " Start - n_strips: " << n_strips << ", tile_size: " <<
+//            tile_size
+//            << std::endl;
+//
+//  std::vector<BufferUint64> buffers_matrix_c;
+//
+//  std::vector<BufferUint32> tile_offset_row_a;
+//  std::vector<BufferUint32> tile_offset_row_b;
+//  std::vector<BufferUint32> tile_offset_row_c;
+//  std::vector<BufferUint32> tile_row_idx_a;
+//  std::vector<BufferUint32> tile_row_idx_b;
+//  std::vector<BufferUint32> tile_row_idx_c;
+//  std::vector<BufferUint32> tile_col_idx_a;
+//  std::vector<BufferUint32> tile_col_idx_b;
+//  std::vector<BufferUint32> tile_col_idx_c;
+//  std::vector<BufferUint64> data_a;
+//  std::vector<BufferUint64> data_b;
+//  std::vector<BufferUint64> data_c;
+//
+//  buffers_matrix_c.resize(M * N);
+//  tile_offset_row_a.resize(M * K);
+//  tile_offset_row_b.resize(N * K);
+//  tile_offset_row_c.resize(M * N);
+//  tile_row_idx_a.resize(M * K);
+//  tile_row_idx_b.resize(N * K);
+//  tile_row_idx_c.resize(M * N);
+//  tile_col_idx_a.resize(M * K);
+//  tile_col_idx_b.resize(N * K);
+//  tile_col_idx_c.resize(M * N);
+//  data_a.resize(M * K);
+//  data_b.resize(N * K);
+//  data_c.resize(M * N);
+//
+//  std::vector<DeviceOwnedBufferUint64> device_owned_buffers_matrix_c;
+//
+//  std::vector<DeviceOwnedBufferUint32> device_tile_offset_row_a;
+//  std::vector<DeviceOwnedBufferUint32> device_tile_offset_row_b;
+//  std::vector<DeviceOwnedBufferUint32> device_tile_offset_row_c;
+//  std::vector<DeviceOwnedBufferUint32> device_tile_row_idx_a;
+//  std::vector<DeviceOwnedBufferUint32> device_tile_row_idx_b;
+//  std::vector<DeviceOwnedBufferUint32> device_tile_row_idx_c;
+//  std::vector<DeviceOwnedBufferUint32> device_tile_col_idx_a;
+//  std::vector<DeviceOwnedBufferUint32> device_tile_col_idx_b;
+//  std::vector<DeviceOwnedBufferUint32> device_tile_col_idx_c;
+//  std::vector<DeviceOwnedBufferUint64> device_data_a;
+//  std::vector<DeviceOwnedBufferUint64> device_data_b;
+//  std::vector<DeviceOwnedBufferUint64> device_data_c;
+//
+//  device_owned_buffers_matrix_c.resize(M * N);
+//  device_tile_offset_row_a.resize(M * K);
+//  device_tile_offset_row_b.resize(N * K);
+//  device_tile_offset_row_c.resize(M * N);
+//  device_tile_row_idx_a.resize(M * K);
+//  device_tile_row_idx_b.resize(N * K);
+//  device_tile_row_idx_c.resize(M * N);
+//  device_tile_col_idx_a.resize(M * K);
+//  device_tile_col_idx_b.resize(N * K);
+//  device_tile_col_idx_c.resize(M * N);
+//  device_data_a.resize(M * K);
+//  device_data_b.resize(N * K);
+//  device_data_c.resize(M * N);
+//
+//  std::cout << "[FillTiles] Initializing buffers for results, i.e, C_."
+//            << std::endl;
+//  // Init result DeviceOwnedBuffer for Filling.
+//  std::for_each(
+//      // std::execution::par,
+//      worker.begin(), worker.end(),
+//      [this, M, N, K, step, &p_streams_vec, tile_size, &mtx,
+//      &buffers_matrix_c,
+//       &tile_offset_row_c, &tile_row_idx_c, &tile_col_idx_c, &data_c,
+//       &device_owned_buffers_matrix_c, &device_tile_offset_row_c,
+//       &device_tile_row_idx_c, &device_tile_col_idx_c, &device_data_c](auto w)
+//       {
+//        for (VertexID i = w; i < M; i += step) {
+//          for (VertexID j = 0; j < N; j++) {
+//
+//            auto block_c = C_->GetBitTileMatrixPtrByIdx(i * N + j);
+//            if (block_c == nullptr)
+//              continue;
+//
+//            if (block_c->GetMetadata().n_nz_tile == 0)
+//              continue;
+//
+//            buffers_matrix_c[i * N + j].data =
+//                block_c->GetNzTileBitmapPtr()->data();
+//
+//            buffers_matrix_c[i * N + j].size =
+//                block_c->GetNzTileBitmapPtr()->size();
+//
+//            tile_offset_row_c[i * N + j].data =
+//            block_c->GetTileOffsetRowPtr(); tile_offset_row_c[i * N + j].size
+//            =
+//                sizeof(VertexID) * (block_c->GetMetadata().n_strips + 1);
+//
+//            tile_row_idx_c[i * N + j].data = block_c->GetTileOffsetRowPtr();
+//            tile_row_idx_c[i * N + j].size =
+//                block_c->GetMetadata().n_nz_tile * sizeof(VertexID);
+//
+//            tile_col_idx_c[i * N + j].data = block_c->GetTileOffsetRowPtr();
+//            tile_col_idx_c[i * N + j].size =
+//                block_c->GetMetadata().n_nz_tile * sizeof(VertexID);
+//
+//            auto tile_buffer_size =
+//                sizeof(uint64_t) *
+//                std::max(1u, WORD_OFFSET(block_c->GetMetadata().tile_size *
+//                                         block_c->GetMetadata().tile_size));
+//
+//            data_c[i * N + j].data = block_c->GetDataPtr();
+//            data_c[i * N + j].size =
+//                tile_buffer_size * block_c->GetMetadata().n_nz_tile;
+//
+//            cudaStream_t &p_stream = p_streams_vec[i * N + j];
+//            cudaStreamCreate(&p_stream);
+//
+//            device_owned_buffers_matrix_c[i * N + j].Init(
+//                buffers_matrix_c[i * N + j], p_stream);
+//
+//            device_tile_offset_row_c[i * N + j].Init(
+//                tile_offset_row_c[i * N + j], p_stream);
+//            device_tile_row_idx_c[i * N + j].Init(tile_row_idx_c[i * N + j],
+//                                                  p_stream);
+//            device_tile_col_idx_c[i * N + j].Init(tile_col_idx_c[i * N + j],
+//                                                  p_stream);
+//
+//            device_data_c[i * N + j].Init(data_c[i * N + j], p_stream);
+//          }
+//        }
+//      });
+//
+//  // Init input Buffer for A_ and B.
+//  std::cout << "[FillTiles] Initializing input buffers for A and B."
+//            << std::endl;
+//  std::for_each(
+//      std::execution::par, worker.begin(), worker.end(),
+//      [this, M, N, K, step, &p_streams_vec, tile_size, &mtx,
+//      &tile_offset_row_a,
+//       &tile_row_idx_a, &tile_col_idx_a, &data_a](auto w) {
+//        for (VertexID i = w; i < M; i += step) {
+//          for (VertexID k = 0; k < K; k++) {
+//            auto block_a = A_->GetBitTileMatrixPtrByIdx(i * K + k);
+//            if (block_a->GetMetadata().n_nz_tile == 0)
+//              continue;
+//
+//            tile_offset_row_a[i * K + k].data =
+//            block_a->GetTileOffsetRowPtr(); tile_offset_row_a[i * K + k].size
+//            =
+//                sizeof(VertexID) * (block_a->GetMetadata().n_strips + 1);
+//
+//            tile_row_idx_a[i * K + k].data = block_a->GetTileRowIdxPtr();
+//            tile_row_idx_a[i * K + k].size =
+//                block_a->GetMetadata().n_nz_tile * sizeof(VertexID);
+//
+//            tile_col_idx_a[i * K + k].data = block_a->GetTileColIdxPtr();
+//            tile_col_idx_a[i * K + k].size =
+//                block_a->GetMetadata().n_nz_tile * sizeof(VertexID);
+//
+//            auto tile_buffer_size =
+//                sizeof(uint64_t) *
+//                std::max(1u, WORD_OFFSET(block_a->GetMetadata().tile_size *
+//                                         block_a->GetMetadata().tile_size));
+//
+//            data_a[i * K + k].data = block_a->GetDataPtr();
+//            data_a[i * K + k].size =
+//                tile_buffer_size * block_a->GetMetadata().n_nz_tile;
+//          }
+//        }
+//      });
+//
+//  std::for_each(
+//      std::execution::par, worker.begin(), worker.end(),
+//      [this, M, N, K, step, &p_streams_vec, tile_size, &mtx,
+//      &tile_offset_row_b,
+//       &tile_row_idx_b, &tile_col_idx_b, &data_b](auto w) {
+//        for (VertexID i = w; i < N; i += step) {
+//          for (VertexID k = 0; k < K; k++) {
+//
+//            auto block_b = B_->GetBitTileMatrixPtrByIdx(i * K + k);
+//            if (block_b->GetMetadata().n_nz_tile == 0)
+//              continue;
+//
+//            tile_row_idx_b[i * K + k].data = block_b->GetTileRowIdxPtr();
+//            tile_row_idx_b[i * K + k].size =
+//                block_b->GetMetadata().n_nz_tile * sizeof(VertexID);
+//
+//            tile_col_idx_b[i * K + k].data = block_b->GetTileColIdxPtr();
+//            tile_col_idx_b[i * K + k].size =
+//                block_b->GetMetadata().n_nz_tile * sizeof(VertexID);
+//
+//            tile_offset_row_b[i * K + k].data =
+//            block_b->GetTileOffsetRowPtr(); tile_offset_row_b[i * K + k].size
+//            =
+//                sizeof(VertexID) * (block_b->GetMetadata().n_strips + 1);
+//
+//            auto tile_buffer_size =
+//                sizeof(uint64_t) *
+//                std::max(1u, WORD_OFFSET(block_b->GetMetadata().tile_size *
+//                                         block_b->GetMetadata().tile_size));
+//
+//            data_b[i * K + k].data = block_b->GetDataPtr();
+//            data_b[i * K + k].size =
+//                tile_buffer_size * block_b->GetMetadata().n_nz_tile;
+//          }
+//        }
+//      });
+//
+//  // Submit Kernel to fill edges into tiles.
+//  std::for_each(std::execution::par, worker.begin(), worker.end(),
+//                [this, M, N, K, step, &p_streams_vec, tile_size, &mtx,
+//                 &device_owned_buffers_matrix_c](auto w) {
+//                  for (VertexID k = w; k < K; k += step) {
+//                    for (VertexID i = 0; i < M; i++) {
+//                      for (VertexID j = 0; j < N; j++) {
+//                        auto block_a = A_->GetBitTileMatrixPtrByIdx(i * K +
+//                        k); auto block_b = B_->GetBitTileMatrixPtrByIdx(j * K
+//                        + k);
+//
+//                        if (block_a->GetMetadata().n_nz_tile == 0)
+//                          continue;
+//                        if (block_b->GetMetadata().n_nz_tile == 0)
+//                          continue;
+//
+//                        cudaStream_t &p_stream = p_streams_vec[i * N + j];
+//
+//                        // device_tile_offset_row_a[i * K + k].Init(
+//                        //     tile_offset_row_b[i * k + k], p_stream);
+//
+//                        // device_tile_offset_row_b[j * k + k].Init(
+//                        //     tile_offset_row_b[j * k + k], p_stream);
+//
+//                        // device_tile_offset_row_c[i * N + j].Init(
+//                        //     tile_offset_row_c[i * N + j], p_stream);
+//                      }
+//                    }
+//                  }
+//                });
+//
+//  int N_ = 512;
+//  float *x, *y;
+//
+//  // Allocate Unified Memory -- accessible from CPU or GPU
+//  cudaMallocManaged(&x, N_ * sizeof(float));
+//  cudaMallocManaged(&y, N_ * sizeof(float));
+//
+//  // initialize x and y arrays on the host
+//  for (int i = 0; i < N_; i++) {
+//    x[i] = 1.0f;
+//    y[i] = 2.0f;
+//  }
+//
+//  // Launch kernel on 1M elements on the GPU
+//  int blockSize = 256;
+//  int numBlocks = (N_ + blockSize - 1) / blockSize;
+//  for (int i = 0; i < 512; i += 64) {
+//    cudaSetDevice(i % 3);
+//
+//    add<<<numBlocks, blockSize>>>(N_, x + i, y + i);
+//  }
+//
+//  // Wait for GPU to finish before accessing on host
+//  cudaDeviceSynchronize();
+//
+//  // Check for errors (all values should be 3.0f)
+//
+//  float maxError = 0.0f;
+//  std::cout << "y: "
+//            << " N_" << N_;
+//  for (int i = 0; i < N_; i++) {
+//    std::cout << y[i] << " ";
+//  }
+//  std::cout << std::endl;
+//
+//  // Free memory
+//  cudaFree(x);
+//  cudaFree(y);
+//}
+
 __host__ void PPRQuery::Run() {
   // Step1 Compute Layout Matrix
 
-  auto start_time = std::chrono::system_clock::now();
-  ComputeLayoutMatrix();
-  auto end_time = std::chrono::system_clock::now();
+  auto start_time_0 = std::chrono::system_clock::now();
+  InitC();
+  auto start_time_1 = std::chrono::system_clock::now();
 
-  std::cout << "[PPRQuery::Run] Step1 elapsed:"
-            << std::chrono::duration_cast<std::chrono::microseconds>(end_time -
-                                                                     start_time)
+  std::cout << "[PPRQuery::Run] Step1 InitC() elapsed:"
+            << std::chrono::duration_cast<std::chrono::microseconds>(
+                   start_time_1 - start_time_1)
                        .count() /
                    (double)CLOCKS_PER_SEC
             << std::endl;
+  FillTiles();
 }
 
 } // namespace task

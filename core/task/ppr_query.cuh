@@ -32,13 +32,14 @@ public:
     LoadData();
   }
 
-
   __host__ void Run();
 
 private:
-  __host__ void ComputeLayoutMatrix();
-
   __host__ void LoadData();
+
+  __host__ void InitC();
+
+  __host__ void FillTiles();
 
   GridTiledMatrix *A_;
   GridTiledMatrix *B_;
