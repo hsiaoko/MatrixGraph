@@ -65,7 +65,7 @@ public:
       cudaFree(ptr_);
     s_ = h_buf.size;
     CUDA_CHECK(cudaMallocManaged(&ptr_, s_));
-    memset(ptr_, 0, s_);
+    memcpy(ptr_, h_buf.GetPtr(), s_);
   }
 
   // Initialize the UnifiedOwnedBuffer<T> with a buffer size
