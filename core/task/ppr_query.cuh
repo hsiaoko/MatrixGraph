@@ -37,9 +37,11 @@ public:
 private:
   __host__ void LoadData();
 
-  __host__ void InitC();
+  __host__ void InitResultMatrix();
 
-  __host__ void FillTiles();
+  __host__ void InitResultMatrixUnifiedMemory();
+
+  __host__ void FillTilesUnifiedMemory();
 
   GridTiledMatrix *A_;
   GridTiledMatrix *B_;

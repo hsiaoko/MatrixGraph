@@ -3,6 +3,8 @@
 #include <cuda_runtime.h>
 #include <iostream>
 
+#include "core/util/cuda_check.cuh"
+
 namespace sics {
 namespace matrixgraph {
 namespace core {
@@ -294,6 +296,10 @@ void MatrixOperationsKernelWrapper::MatrixBitAnd(
                                    .n = n};
 
   matrix_and_kernel<<<dimBlock, dimGrid, 0, stream>>>(params);
+  cudaError_t err = cudaGetLastError();
+  if (err != cudaSuccess) {
+    CUDA_CHECK(err);
+  }
 }
 
 void MatrixOperationsKernelWrapper::MatrixBitCount(
@@ -308,6 +314,10 @@ void MatrixOperationsKernelWrapper::MatrixBitCount(
       .count = reinterpret_cast<unsigned long long *>(count_buf->GetPtr()),
       .size = size};
   matrix_count_kernel<<<dimBlock, dimGrid, 0, stream>>>(params);
+  cudaError_t err = cudaGetLastError();
+  if (err != cudaSuccess) {
+    CUDA_CHECK(err);
+  }
 }
 
 void MatrixOperationsKernelWrapper::InitBitTiledMatrixMetadataByLayoutMatrix(
@@ -331,6 +341,10 @@ void MatrixOperationsKernelWrapper::InitBitTiledMatrixMetadataByLayoutMatrix(
 
   init_bit_tiled_matrix_metadata_kernel<<<dimBlock, dimGrid, 0, stream>>>(
       params);
+  cudaError_t err = cudaGetLastError();
+  if (err != cudaSuccess) {
+    CUDA_CHECK(err);
+  }
 }
 
 void MatrixOperationsKernelWrapper::FillTiles(
@@ -380,6 +394,10 @@ void MatrixOperationsKernelWrapper::FillTiles(
       .data_c = (unsigned long long *)(data_c->GetPtr())};
 
   fill_tiles_kernel<<<dimBlock, dimGrid, 0, stream>>>(params);
+  cudaError_t err = cudaGetLastError();
+  if (err != cudaSuccess) {
+    CUDA_CHECK(err);
+  }
 }
 
 } // namespace kernel
