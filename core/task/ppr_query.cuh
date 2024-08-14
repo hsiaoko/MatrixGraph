@@ -43,6 +43,8 @@ private:
 
   __host__ void FillTilesUnifiedMemory();
 
+  __host__ void FillTiles();
+
   GridTiledMatrix *A_;
   GridTiledMatrix *B_;
 

@@ -565,8 +565,7 @@ __host__ void PPRQuery::FillTilesUnifiedMemory() {
   unified_data_b.resize(N * K);
   unified_data_c.resize(M * N);
 
-  std::cout << "[FillTiles] Initializing buffers for results, i.e, C_."
-            << std::endl;
+  std::cout << "[FillTiles] Initializing buffers for results ..." << std::endl;
   std::for_each(
       std::execution::par, worker.begin(), worker.end(),
       [this, M, N, K, step, &p_streams_vec, tile_size, tile_buffer_size, &mtx,
@@ -697,6 +696,7 @@ __host__ void PPRQuery::FillTilesUnifiedMemory() {
   std::vector<int> work_load;
   work_load.resize(4);
   std::cout << "[FillTiles] Filling tiles ..." << std::endl;
+  auto start_time_1 = std::chrono::system_clock::now();
   std::for_each(
       std::execution::par, worker.begin(), worker.end(),
       [this, M, N, K, step, &p_streams_vec, tile_size, tile_buffer_size,
@@ -750,6 +750,7 @@ __host__ void PPRQuery::FillTilesUnifiedMemory() {
           }
         }
       });
+  auto start_time_2 = std::chrono::system_clock::now();
 
   for (int i = 0; i < 4; i++) {
     std::cout << "Device: " << i << " holds " << work_load[i] << " | ";
@@ -757,10 +758,18 @@ __host__ void PPRQuery::FillTilesUnifiedMemory() {
   std::cout << std::endl;
 
   cudaDeviceSynchronize();
+  std::cout << "[FillTiles] Time - Filling tiles elapse: "
+            << std::chrono::duration_cast<std::chrono::microseconds>(
+                   start_time_2 - start_time_1)
+                       .count() /
+                   (double)CLOCKS_PER_SEC
+            << std::endl;
+
   std::cout << "[FillTiles] Copying result to the result matrix ..."
             << std::endl;
   std::for_each(
-      std::execution::par, worker.begin(), worker.end(),
+      // std::execution::par,
+      worker.begin(), worker.end(),
       [this, M, N, K, step, &p_streams_vec, tile_size, tile_buffer_size,
        n_strips, &mtx, &unified_layout_matrix_c, &unified_tile_offset_row_a,
        &unified_tile_row_idx_a, &unified_tile_col_idx_a, &unified_data_a,
@@ -778,9 +787,102 @@ __host__ void PPRQuery::FillTilesUnifiedMemory() {
 
             memcpy(block_c->GetDataPtr(), unified_data_c[i * N + j].GetPtr(),
                    unified_data_c[i * N + j].GetSize());
+            // block_c->Print();
           }
         }
       });
+
+  std::for_each(p_streams_vec.begin(), p_streams_vec.end(),
+                [](auto &s) { cudaStreamDestroy(s); });
+}
+
+__host__ void PPRQuery::FillTiles() {
+  auto parallelism = std::thread::hardware_concurrency();
+  std::vector<size_t> worker(parallelism);
+  std::mutex mtx;
+  std::iota(worker.begin(), worker.end(), 0);
+  auto step = worker.size();
+
+  auto block_a = A_->GetBitTileMatrixPtrByIdx(0);
+  VertexID n_strips = block_a->GetMetadata().n_strips;
+  VertexID tile_size = block_a->GetMetadata().tile_size;
+  auto tile_buffer_size =
+      sizeof(uint64_t) * std::max(1u, WORD_OFFSET(tile_size * tile_size));
+
+  VertexID M = A_->get_metadata().n_chunks;
+  VertexID K = A_->get_metadata().n_chunks;
+  VertexID N = B_->get_metadata().n_chunks;
+  std::vector<cudaStream_t> p_streams_vec;
+  p_streams_vec.resize(M * N);
+  std::for_each(std::execution::par, worker.begin(), worker.end(),
+                [this, M, N, K, step, &p_streams_vec, &mtx](auto w) {
+                  for (VertexID i = w; i < N; i += step) {
+                    for (VertexID j = 0; j < M; j++) {
+                      cudaSetDevice(hash_function(i * N + j) % 4);
+                      cudaStreamCreate(&p_streams_vec[i * N + j]);
+                    }
+                  }
+                });
+
+  std::cout << "[FillTiles]"
+            << " Start - n_strips: " << n_strips << ", tile_size: " << tile_size
+            << std::endl;
+
+  std::vector<BufferUint64> layout_matrix_c;
+  std::vector<BufferUint32> tile_offset_row_a;
+  std::vector<BufferUint32> tile_offset_row_b;
+  std::vector<BufferUint32> tile_offset_row_c;
+  std::vector<BufferUint32> tile_row_idx_a;
+  std::vector<BufferUint32> tile_row_idx_b;
+  std::vector<BufferUint32> tile_row_idx_c;
+  std::vector<BufferUint32> tile_col_idx_a;
+  std::vector<BufferUint32> tile_col_idx_b;
+  std::vector<BufferUint32> tile_col_idx_c;
+  std::vector<BufferUint64> data_a;
+  std::vector<BufferUint64> data_b;
+  std::vector<BufferUint64> data_c;
+
+  layout_matrix_c.resize(M * N);
+  tile_offset_row_a.resize(M * K);
+  tile_offset_row_b.resize(N * K);
+  tile_offset_row_c.resize(M * N);
+  tile_row_idx_a.resize(M * K);
+  tile_row_idx_b.resize(N * K);
+  tile_row_idx_c.resize(M * N);
+  tile_col_idx_a.resize(M * K);
+  tile_col_idx_b.resize(N * K);
+  tile_col_idx_c.resize(M * N);
+  data_a.resize(M * K);
+  data_b.resize(N * K);
+  data_c.resize(M * N);
+
+  std::vector<DeviceOwnedBufferUint64> device_layout_matrix_c;
+  std::vector<DeviceOwnedBufferUint32> device_tile_offset_row_a;
+  std::vector<DeviceOwnedBufferUint32> device_tile_offset_row_b;
+  std::vector<DeviceOwnedBufferUint32> device_tile_offset_row_c;
+  std::vector<DeviceOwnedBufferUint32> device_tile_row_idx_a;
+  std::vector<DeviceOwnedBufferUint32> device_tile_row_idx_b;
+  std::vector<DeviceOwnedBufferUint32> device_tile_row_idx_c;
+  std::vector<DeviceOwnedBufferUint32> device_tile_col_idx_a;
+  std::vector<DeviceOwnedBufferUint32> device_tile_col_idx_b;
+  std::vector<DeviceOwnedBufferUint32> device_tile_col_idx_c;
+  std::vector<DeviceOwnedBufferUint64> device_data_a;
+  std::vector<DeviceOwnedBufferUint64> device_data_b;
+  std::vector<DeviceOwnedBufferUint64> device_data_c;
+
+  device_layout_matrix_c.resize(M * N);
+  device_tile_offset_row_a.resize(M * K);
+  device_tile_offset_row_b.resize(N * K);
+  device_tile_offset_row_c.resize(M * N);
+  device_tile_row_idx_a.resize(M * K);
+  device_tile_row_idx_b.resize(N * K);
+  device_tile_row_idx_c.resize(M * N);
+  device_tile_col_idx_a.resize(M * K);
+  device_tile_col_idx_b.resize(N * K);
+  device_tile_col_idx_c.resize(M * N);
+  device_data_a.resize(M * K);
+  device_data_b.resize(N * K);
+  device_data_c.resize(M * N);
 
   std::for_each(p_streams_vec.begin(), p_streams_vec.end(),
                 [](auto &s) { cudaStreamDestroy(s); });

@@ -240,42 +240,77 @@ static __global__ void fill_tiles_kernel(ParametersFillTiles params) {
     unsigned int x = params.tile_row_idx_c[i];
     unsigned int y = params.tile_col_idx_c[i];
 
+    unsigned long long *matrix_c = params.data_c + params.tile_unit * i;
+
     unsigned int nz_tile_line_x =
         params.tile_offset_row_a[x + 1] - params.tile_offset_row_a[x];
 
     unsigned int nz_tile_line_y =
         params.tile_offset_row_b[y + 1] - params.tile_offset_row_b[y];
 
-    unsigned int *idx_intersection_l =
-        new unsigned int[min(nz_tile_line_x, nz_tile_line_y)]();
-    unsigned int *idx_intersection_r =
-        new unsigned int[min(nz_tile_line_x, nz_tile_line_y)]();
-    unsigned int n_intersections = 0;
+    unsigned nz_idx_x = 0;
+    unsigned nz_idx_y = 0;
 
-    find_intersection(nz_tile_line_x, nz_tile_line_y,
-                      params.tile_col_idx_a + params.tile_offset_row_a[x],
-                      params.tile_col_idx_b + params.tile_offset_row_b[y],
-                      idx_intersection_l, idx_intersection_r, &n_intersections);
-    for (int l = 0; l < n_intersections; l++) {
-      // perform bit and between (params.tile_offset_row_a[x] +
-      // idx_intersection_l[l])-th  tile and (params.tile_offset_row_b[y] +
-      // idx_intersection_r[r])-th tile.
+    while (nz_idx_x < nz_tile_line_x && nz_idx_y < nz_tile_line_y) {
+      if (*(params.tile_col_idx_a + params.tile_offset_row_a[x] + nz_idx_x) <
+          *(params.tile_col_idx_b + params.tile_offset_row_a[y] + nz_idx_y)) {
+        nz_idx_x++;
+      } else if (*(params.tile_col_idx_a + params.tile_offset_row_a[x] +
+                   nz_idx_x) > *(params.tile_col_idx_b +
+                                 params.tile_offset_row_a[y] + nz_idx_y)) {
+        nz_idx_y++;
+      } else {
+        // perform bit and between (params.tile_offset_row_a[x] +
+        // idx_intersection_l[l])-th  tile and (params.tile_offset_row_b[y] +
+        // idx_intersection_r[r])-th tile.
 
-      unsigned long long *matrix_a =
-          params.data_a + params.tile_unit * (params.tile_offset_row_a[x] +
-                                              idx_intersection_l[l]);
-      unsigned long long *matrix_b =
-          params.data_b + params.tile_unit * (params.tile_offset_row_b[y] +
-                                              idx_intersection_r[l]);
+        unsigned long long *matrix_a =
+            params.data_a +
+            params.tile_unit * (params.tile_offset_row_a[x] + nz_idx_x);
+        unsigned long long *matrix_b =
+            params.data_b +
+            params.tile_unit * (params.tile_offset_row_b[y] + nz_idx_y);
 
-      unsigned long long *matrix_c = params.data_c + params.tile_unit * i;
+        single_thread_matrix_bit_and(params.tile_size, matrix_a, matrix_b,
+                                     matrix_c);
 
-      single_thread_matrix_bit_and(params.tile_size, matrix_a, matrix_b,
-                                   matrix_c);
+        nz_idx_x++;
+        nz_idx_y++;
+      }
     }
+    // *matrix_c = 4;
 
-    delete[] idx_intersection_l;
-    delete[] idx_intersection_r;
+    // unsigned int *idx_intersection_l =
+    //     new unsigned int[min(nz_tile_line_x, nz_tile_line_y)]();
+    // unsigned int *idx_intersection_r =
+    //     new unsigned int[min(nz_tile_line_x, nz_tile_line_y)]();
+    // unsigned int n_intersections = 0;
+
+    // find_intersection(nz_tile_line_x, nz_tile_line_y,
+    //                   params.tile_col_idx_a + params.tile_offset_row_a[x],
+    //                   params.tile_col_idx_b + params.tile_offset_row_b[y],
+    //                   idx_intersection_l, idx_intersection_r,
+    //                   &n_intersections);
+    ////for (int l = 0; l < n_intersections; l++) {
+    ////  // perform bit and between (params.tile_offset_row_a[x] +
+    ////  // idx_intersection_l[l])-th  tile and (params.tile_offset_row_b[y] +
+    ////  // idx_intersection_r[r])-th tile.
+
+    ////  unsigned long long *matrix_a =
+    ////      params.data_a + params.tile_unit * (params.tile_offset_row_a[x] +
+    ////                                          idx_intersection_l[l]);
+    ////  unsigned long long *matrix_b =
+    ////      params.data_b + params.tile_unit * (params.tile_offset_row_b[y] +
+    ////                                          idx_intersection_r[l]);
+
+    ////  unsigned long long *matrix_c = params.data_c + params.tile_unit * i;
+
+    ////  single_thread_matrix_bit_and(params.tile_size, matrix_a, matrix_b,
+    ////                               matrix_c);
+    ////}
+
+    // delete[] idx_intersection_l;
+    // delete[] idx_intersection_r;
   }
 }
 
@@ -307,8 +342,8 @@ void MatrixOperationsKernelWrapper::MatrixBitCount(
     const data_structures::DeviceOwnedBuffer<uint64_t> &matrix_buf,
     data_structures::DeviceOwnedBuffer<uint64_t> *count_buf, uint64_t size) {
 
-  dim3 dimBlock(64);
-  dim3 dimGrid(64);
+  dim3 dimBlock(256);
+  dim3 dimGrid(256);
   ParametersForMatrixBitCount params{
       .data = reinterpret_cast<unsigned long long *>(matrix_buf.GetPtr()),
       .count = reinterpret_cast<unsigned long long *>(count_buf->GetPtr()),
@@ -364,8 +399,8 @@ void MatrixOperationsKernelWrapper::FillTiles(
     const data_structures::UnifiedOwnedBuffer<uint64_t> &data_b,
     data_structures::UnifiedOwnedBuffer<uint64_t> *data_c) {
 
-  dim3 dimBlock(64);
-  dim3 dimGrid(64);
+  dim3 dimBlock(256);
+  dim3 dimGrid(128);
 
   auto tile_unit = max(1u, (WORD_OFFSET(tile_size * tile_size)));
   auto tile_buffer_size =
