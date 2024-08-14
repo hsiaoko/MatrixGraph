@@ -45,6 +45,8 @@ private:
 
   __host__ void FillTiles();
 
+  __host__ void Count(const GridTiledMatrix & G);
+
   GridTiledMatrix *A_;
   GridTiledMatrix *B_;
 

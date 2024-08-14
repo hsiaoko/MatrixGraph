@@ -888,6 +888,10 @@ __host__ void PPRQuery::FillTiles() {
                 [](auto &s) { cudaStreamDestroy(s); });
 }
 
+__host__ void PPRQuery::Count(const GridTiledMatrix &G) {
+
+}
+
 __host__ void PPRQuery::Run() {
 
   auto start_time_0 = std::chrono::system_clock::now();
