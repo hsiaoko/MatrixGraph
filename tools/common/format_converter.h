@@ -1,7 +1,9 @@
 #ifndef MATRIXGRAPH_CORE_COMMON_FORMAT_CONVERTER_H_
 #define MATRIXGRAPH_CORE_COMMON_FORMAT_CONVERTER_H_
 
+#include <chrono>
 #include <cmath>
+#include <iomanip>
 #include <list>
 #include <numeric>
 #include <vector>
@@ -10,8 +12,10 @@
 #include "core/data_structures/bit_tiled_matrix.cuh"
 #include "core/data_structures/edgelist.h"
 #include "core/data_structures/immutable_csr.cuh"
+#include "core/data_structures/metadata.h"
 #include "core/util/bitmap.h"
 #include "core/util/cuda_check.cuh"
+#include "core/util/gpu_bitmap.cuh"
 #include "tools/common/types.h"
 
 #ifdef TBB_FOUND
@@ -33,12 +37,15 @@ using sics::matrixgraph::core::data_structures::EdgelistMetadata;
 using sics::matrixgraph::core::data_structures::Edges;
 using sics::matrixgraph::core::data_structures::ImmutableCSR;
 using sics::matrixgraph::core::util::Bitmap;
+using sics::matrixgraph::core::util::GPUBitmap;
 using sics::matrixgraph::core::util::atomic::WriteAdd;
 using sics::matrixgraph::core::util::atomic::WriteMin;
 using Vertex = sics::matrixgraph::core::data_structures::ImmutableCSRVertex;
 using GraphID = sics::matrixgraph::core::common::GraphID;
 using sics::matrixgraph::core::util::atomic::WriteAdd;
 using sics::matrixgraph::core::util::atomic::WriteMax;
+using TiledMatrixMetadata =
+    sics::matrixgraph::core::data_structures::TiledMatrixMetadata;
 
 Edges *ImmutableCSR2Edgelist(const ImmutableCSR &immutable_csr) {
   auto parallelism = std::thread::hardware_concurrency();
@@ -317,16 +324,16 @@ ImmutableCSR *Edgelist2ImmutableCSR(const Edges &edgelist) {
 
 BitTiledMatrix *Edgelist2BitTiledMatrix(const Edges &edges, size_t tile_size,
                                         size_t block_scope) {
+
   auto parallelism = std::thread::hardware_concurrency();
   std::vector<size_t> worker(parallelism);
   std::iota(worker.begin(), worker.end(), 0);
   auto step = worker.size();
-
   auto *bit_tiled_matrix = new BitTiledMatrix();
 
   VertexID n_strips = ceil((float)block_scope / (float)tile_size);
 
-  auto tile_visited = new Bitmap(n_strips * n_strips);
+  auto tile_visited = new GPUBitmap(n_strips * n_strips);
 
   VertexID n_nz_tile_per_row[n_strips] = {0};
   std::for_each(
@@ -348,8 +355,15 @@ BitTiledMatrix *Edgelist2BitTiledMatrix(const Edges &edges, size_t tile_size,
         }
       });
 
-  size_t n_nz_tile = tile_visited->Count();
-  bit_tiled_matrix->Init(n_nz_tile, tile_size, n_strips, tile_visited);
+  size_t n_nz_tile = tile_visited->GPUCount();
+
+  TiledMatrixMetadata metadata = {
+      .n_strips = n_strips,
+      .n_nz_tile = n_nz_tile,
+      .tile_size = tile_size,
+  };
+
+  bit_tiled_matrix->Init(metadata, tile_visited);
 
   auto *tile_offset_row = bit_tiled_matrix->GetTileOffsetRowPtr();
 
@@ -377,9 +391,48 @@ BitTiledMatrix *Edgelist2BitTiledMatrix(const Edges &edges, size_t tile_size,
           auto tile_x = (localid_to_globalid[e.src] % block_scope) / tile_size;
           auto tile_y = (localid_to_globalid[e.dst] % block_scope) / tile_size;
 
-          auto tile_row_offset =
-              bit_tiled_matrix->GetNzTileBitmapPtr()->PreElementCount(
-                  tile_x * n_strips + tile_y);
+          size_t tile_row_offset = 0;
+          // if (tile_x * n_strips + tile_y < 33554432) {
+          if (1) {
+            auto start_time_0 = std::chrono::system_clock::now();
+            tile_row_offset =
+                bit_tiled_matrix->GetNzTileBitmapPtr()->PreElementCount(
+                    tile_x * n_strips + tile_y);
+            auto start_time_1 = std::chrono::system_clock::now();
+            if (eid % 30000 == 0) {
+              std::cout
+                  << "w: " << w << "|" << std::setprecision(3)
+                  << (float)eid / (float)edges.get_metadata().num_edges << " "
+                  << eid << "/ " << edges.get_metadata().num_edges << " "
+                  << tile_x * n_strips + tile_y << " cpu time"
+                  << std::chrono::duration_cast<std::chrono::microseconds>(
+                         start_time_1 - start_time_0)
+                             .count() /
+                         (double)CLOCKS_PER_SEC
+                  << std::endl;
+            }
+          } else {
+            auto start_time_0 = std::chrono::system_clock::now();
+
+            tile_row_offset =
+                bit_tiled_matrix->GetNzTileBitmapPtr()->GPUPreElementCount(
+                    tile_x * n_strips + tile_y);
+
+            auto start_time_1 = std::chrono::system_clock::now();
+
+            if (eid % 30000 == 0) {
+              std::cout
+                  << "w: " << w << "|" << std::setprecision(3)
+                  << (float)eid / (float)edges.get_metadata().num_edges << " "
+                  << eid << "/ " << edges.get_metadata().num_edges << " "
+                  << tile_x * n_strips + tile_y << " gpu time"
+                  << std::chrono::duration_cast<std::chrono::microseconds>(
+                         start_time_1 - start_time_0)
+                             .count() /
+                         (double)CLOCKS_PER_SEC
+                  << std::endl;
+            }
+          }
 
           auto *tile_row_idx = bit_tiled_matrix->GetTileRowIdxPtr();
           tile_row_idx[tile_row_offset] = tile_x;
@@ -387,12 +440,13 @@ BitTiledMatrix *Edgelist2BitTiledMatrix(const Edges &edges, size_t tile_size,
           auto *tile_col_idx = bit_tiled_matrix->GetTileColIdxPtr();
           tile_col_idx[tile_row_offset] = tile_y;
 
-          auto *tile = bit_tiled_matrix->GetTileByIdx(tile_row_offset);
+          auto *tile_ptr = bit_tiled_matrix->GetDataPtrByIdx(tile_row_offset);
 
-          tile->SetBit(x_within_tile, y_within_tile);
+          __sync_fetch_and_or(
+              tile_ptr + WORD_OFFSET(x_within_tile * tile_size + y_within_tile),
+              1ull << BIT_OFFSET(x_within_tile * tile_size + y_within_tile));
         }
       });
-
   std::cout << "[Edgelist2BitTiledMatrix] Done!" << std::endl;
   return bit_tiled_matrix;
 }

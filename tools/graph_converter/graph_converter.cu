@@ -28,14 +28,10 @@
 #include "tools/graph_converter/converter/to_bit_tiled_matrix.cuh"
 #include "tools/graph_converter/converter/to_edgelist.cuh"
 #include "tools/graph_converter/converter/to_immutable_csr.cuh"
-#include "tools/graph_converter/converter/to_tiled_matrix.cuh"
 
 using sics::matrixgraph::core::common::EdgeIndex;
 using sics::matrixgraph::core::common::VertexID;
 using sics::matrixgraph::core::data_structures::ImmutableCSR;
-using sics::matrixgraph::core::data_structures::kOrigin;
-using sics::matrixgraph::core::data_structures::kTransposed;
-using sics::matrixgraph::core::data_structures::TiledMatrix;
 using sics::matrixgraph::core::util::Bitmap;
 using sics::matrixgraph::core::util::atomic::WriteMax;
 
@@ -100,14 +96,6 @@ int main(int argc, char **argv) {
   }
 
   switch (ConvertMode2Enum(FLAGS_convert_mode)) {
-  case kEdgelistCSV2TiledMatrix:
-    sics::matrixgraph::tools::converter::ConvertEdgelistCSV2TiledMatrix(
-        FLAGS_i, FLAGS_o, FLAGS_sep, FLAGS_tile_size);
-    break;
-  case kEdgelistBin2TiledMatrix:
-    sics::matrixgraph::tools::converter::ConvertEdgelistBin2TiledMatrix(
-        FLAGS_i, FLAGS_o, FLAGS_tile_size);
-    break;
   case kEdgelistBin2CSRBin:
     sics::matrixgraph::tools::converter::ConvertEdgelistBin2CSRBin(
         FLAGS_i, FLAGS_o, FLAGS_tile_size);

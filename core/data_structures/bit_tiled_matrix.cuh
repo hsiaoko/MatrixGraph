@@ -7,6 +7,8 @@
 #include "core/data_structures/bit_tile.cuh"
 #include "core/data_structures/metadata.h"
 #include "core/util/bitmap.h"
+#include "core/util/gpu_bitmap.cuh"
+#include "core/util/bitmap_no_ownership.h"
 
 namespace sics {
 namespace matrixgraph {
@@ -18,17 +20,21 @@ class BitTiledMatrix {
       sics::matrixgraph::core::data_structures::TiledMatrixMetadata;
   using VertexID = sics::matrixgraph::core::common::VertexID;
   using Bitmap = sics::matrixgraph::core::util::Bitmap;
+  using GPUBitmap = sics::matrixgraph::core::util::GPUBitmap;
+  using BitmapNoOwnerShip = sics::matrixgraph::core::util::BitmapNoOwnerShip;
 
 public:
   BitTiledMatrix() = default;
 
   ~BitTiledMatrix();
 
-  void Init(const TiledMatrixMetadata &metadata, Bitmap *nz_tile_bm = nullptr);
+  void Init(const TiledMatrixMetadata &metadata, GPUBitmap *nz_tile_bm = nullptr);
 
   void Init(VertexID tile_size, VertexID n_strips, Bitmap *bm);
 
-  void SetNzBitmapPtr(Bitmap *nz_bitmap_ptr) { nz_tile_bm_ = nz_bitmap_ptr; }
+  //void SetNzBitmapPtr(Bitmap *nz_bitmap_ptr) { nz_tile_bm_ = nz_bitmap_ptr; }
+
+  void SetNzBitmapPtr(GPUBitmap *nz_bitmap_ptr) { nz_tile_bm_ = nz_bitmap_ptr; }
 
   bool IsNzTile(size_t x, size_t y) const {
     return nz_tile_bm_->GetBit(x * metadata_.n_strips + y);
@@ -46,7 +52,7 @@ public:
 
   VertexID *GetTileColIdxPtr() const { return tile_col_idx_; }
 
-  Bitmap *GetNzTileBitmapPtr() const { return nz_tile_bm_; }
+  GPUBitmap *GetNzTileBitmapPtr() const { return nz_tile_bm_; }
 
   uint64_t *GetDataPtrByIdx(uint32_t idx) const;
 
@@ -57,7 +63,7 @@ public:
 private:
   TiledMatrixMetadata metadata_;
 
-  Bitmap *nz_tile_bm_ = nullptr;
+  GPUBitmap *nz_tile_bm_ = nullptr;
 
   uint64_t *data_ = nullptr;
 

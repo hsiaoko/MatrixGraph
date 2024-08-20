@@ -12,7 +12,6 @@
 #include "core/components/scheduler/CHBL_scheduler.h"
 #include "core/components/scheduler/even_split_scheduler.h"
 #include "core/components/scheduler/round_robin_scheduler.h"
-#include "core/data_structures/tiled_matrix.cuh"
 #include "core/task/task_base.cuh"
 
 namespace sics {
@@ -23,9 +22,6 @@ namespace components {
 // Class for managing GPU tasks and resources
 class GPUTaskManager {
 private:
-  using TiledMatrix = sics::matrixgraph::core::data_structures::TiledMatrix;
-  using Tile = sics::matrixgraph::core::data_structures::Tile;
-  using Mask = sics::matrixgraph::core::data_structures::Mask;
   using VertexID = sics::matrixgraph::core::common::VertexID;
   using TaskBase = sics::matrixgraph::core::task::TaskBase;
   using GPUTaskType = sics::matrixgraph::core::task::GPUTaskType;

@@ -61,6 +61,11 @@ public:
       const data_structures::UnifiedOwnedBuffer<uint64_t> &data_b,
       data_structures::UnifiedOwnedBuffer<uint64_t> *data_c);
 
+  static void Count(const cudaStream_t &stream, size_t tile_size,
+                    size_t n_strips, size_t n_nz_tile,
+                    const data_structures::UnifiedOwnedBuffer<uint64_t> &data,
+                    data_structures::UnifiedOwnedBuffer<uint64_t> *count);
+
 private:
   MatrixOperationsKernelWrapper() = default;
 

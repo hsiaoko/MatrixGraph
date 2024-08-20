@@ -5,7 +5,6 @@
 
 #include "core/common/types.h"
 #include "core/data_structures/grid_tiled_matrix.cuh"
-#include "core/task/kernel/gemm.cuh"
 #include "core/task/task_base.cuh"
 
 namespace sics {
@@ -45,7 +44,7 @@ private:
 
   __host__ void FillTiles();
 
-  __host__ void Count(const GridTiledMatrix & G);
+  __host__ void Count(const GridTiledMatrix &G);
 
   GridTiledMatrix *A_;
   GridTiledMatrix *B_;

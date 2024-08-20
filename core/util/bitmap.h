@@ -23,12 +23,8 @@ namespace util {
 class Bitmap {
 public:
   Bitmap() = default;
-  Bitmap(size_t size) { Init(size); }
 
-  Bitmap(size_t size, uint64_t *init_value) {
-    size_ = size;
-    data_ = init_value;
-  }
+  Bitmap(size_t size) { Init(size); }
 
   // copy constructor
   Bitmap(const Bitmap &other) {
@@ -42,6 +38,11 @@ public:
   Bitmap(Bitmap &&other) noexcept : size_(other.size_), data_(other.data_) {
     other.size_ = 0;
     other.data_ = nullptr;
+  }
+
+  ~Bitmap() {
+    delete[] data_;
+    size_ = 0;
   }
 
   // copy assignment
@@ -67,11 +68,6 @@ public:
     }
     return *this;
   };
-
-  ~Bitmap() {
-    delete[] data_;
-    size_ = 0;
-  }
 
   void Init(size_t size) {
     delete[] data_;

@@ -64,6 +64,13 @@ struct ParametersFillTiles {
   unsigned long long *data_c;
 };
 
+struct ParametersCount {
+  unsigned n_nz_tile;
+  unsigned n_uint64_t;
+  unsigned long long *data;
+  unsigned long long *count;
+};
+
 __device__ static inline uint64_t get_bit(uint64_t *data, size_t i,
                                           size_t size) {
   if (i > size)
@@ -93,10 +100,6 @@ __device__ static inline uint64_t set_bit(unsigned long long *data,
   atomicOr(data + WORD_OFFSET(i), (1ull << BIT_OFFSET(i)));
 }
 
-__device__ static inline bool get_bit(uint64_t *data, uint64_t i) {
-  return data[WORD_OFFSET(i)] & (1ull << BIT_OFFSET(i));
-}
-
 __device__ static inline size_t pre_element_count(const uint64_t *data,
                                                   uint64_t idx) {
 
@@ -123,6 +126,22 @@ __device__ static inline size_t pre_element_count(const uint64_t *data,
   }
 
   return count;
+}
+
+__device__ static inline bool get_bit(uint64_t *data, uint64_t i) {
+  return data[WORD_OFFSET(i)] & (1ull << BIT_OFFSET(i));
+}
+
+__device__ static inline unsigned long long
+count_per_uint64_t(unsigned long long x) {
+
+  x = (x & (0x5555555555555555)) + ((x >> 1) & (0x5555555555555555));
+  x = (x & (0x3333333333333333)) + ((x >> 2) & (0x3333333333333333));
+  x = (x & (0x0f0f0f0f0f0f0f0f)) + ((x >> 4) & (0x0f0f0f0f0f0f0f0f));
+  x = (x & (0x00ff00ff00ff00ff)) + ((x >> 8) & (0x00ff00ff00ff00ff));
+  x = (x & (0x0000ffff0000ffff)) + ((x >> 16) & (0x0000ffff0000ffff));
+  x = (x & (0x00000000ffffffff)) + ((x >> 32) & (0x00000000ffffffff));
+  return x;
 }
 
 __device__ static inline bool single_thread_matrix_bit_and(
@@ -278,40 +297,18 @@ static __global__ void fill_tiles_kernel(ParametersFillTiles params) {
         nz_idx_y++;
       }
     }
-    // *matrix_c = 4;
-
-    // unsigned int *idx_intersection_l =
-    //     new unsigned int[min(nz_tile_line_x, nz_tile_line_y)]();
-    // unsigned int *idx_intersection_r =
-    //     new unsigned int[min(nz_tile_line_x, nz_tile_line_y)]();
-    // unsigned int n_intersections = 0;
-
-    // find_intersection(nz_tile_line_x, nz_tile_line_y,
-    //                   params.tile_col_idx_a + params.tile_offset_row_a[x],
-    //                   params.tile_col_idx_b + params.tile_offset_row_b[y],
-    //                   idx_intersection_l, idx_intersection_r,
-    //                   &n_intersections);
-    ////for (int l = 0; l < n_intersections; l++) {
-    ////  // perform bit and between (params.tile_offset_row_a[x] +
-    ////  // idx_intersection_l[l])-th  tile and (params.tile_offset_row_b[y] +
-    ////  // idx_intersection_r[r])-th tile.
-
-    ////  unsigned long long *matrix_a =
-    ////      params.data_a + params.tile_unit * (params.tile_offset_row_a[x] +
-    ////                                          idx_intersection_l[l]);
-    ////  unsigned long long *matrix_b =
-    ////      params.data_b + params.tile_unit * (params.tile_offset_row_b[y] +
-    ////                                          idx_intersection_r[l]);
-
-    ////  unsigned long long *matrix_c = params.data_c + params.tile_unit * i;
-
-    ////  single_thread_matrix_bit_and(params.tile_size, matrix_a, matrix_b,
-    ////                               matrix_c);
-    ////}
-
-    // delete[] idx_intersection_l;
-    // delete[] idx_intersection_r;
   }
+}
+
+static __global__ void count_kernel(ParametersCount params) {
+  unsigned int tid = blockIdx.x * blockDim.x + threadIdx.x;
+  unsigned int step = blockDim.x * gridDim.x;
+
+  unsigned long long local_count = 0;
+  for (unsigned i = tid; i < params.n_uint64_t; i += step) {
+    local_count += count_per_uint64_t(params.data[i]);
+  }
+  atomicAdd(params.count, local_count);
 }
 
 void MatrixOperationsKernelWrapper::MatrixBitAnd(
@@ -429,6 +426,26 @@ void MatrixOperationsKernelWrapper::FillTiles(
       .data_c = (unsigned long long *)(data_c->GetPtr())};
 
   fill_tiles_kernel<<<dimBlock, dimGrid, 0, stream>>>(params);
+  cudaError_t err = cudaGetLastError();
+  if (err != cudaSuccess) {
+    CUDA_CHECK(err);
+  }
+}
+
+void MatrixOperationsKernelWrapper::Count(
+    const cudaStream_t &stream, size_t tile_size, size_t n_strips,
+    size_t n_nz_tile, const data_structures::UnifiedOwnedBuffer<uint64_t> &data,
+    data_structures::UnifiedOwnedBuffer<uint64_t> *count) {
+
+  dim3 dimBlock(256);
+  dim3 dimGrid(256);
+
+  unsigned n_uint64_t = data.GetSize() / sizeof(uint64_t);
+  ParametersCount params{.n_uint64_t = n_uint64_t,
+                         .data = (unsigned long long *)(data.GetPtr()),
+                         .count = (unsigned long long *)(count->GetPtr())};
+
+  count_kernel<<<dimGrid, dimBlock, 0, stream>>>(params);
   cudaError_t err = cudaGetLastError();
   if (err != cudaSuccess) {
     CUDA_CHECK(err);

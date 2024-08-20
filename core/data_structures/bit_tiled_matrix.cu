@@ -12,6 +12,7 @@
 #endif
 
 #include "core/util/bitmap.h"
+#include "core/util/bitmap_no_ownership.h"
 #include "core/util/cuda_check.cuh"
 
 namespace sics {
@@ -19,10 +20,11 @@ namespace matrixgraph {
 namespace core {
 namespace data_structures {
 
+using VertexID = sics::matrixgraph::core::common::VertexID;
+using BitmapNoOwnerShip = sics::matrixgraph::core::util::BitmapNoOwnerShip;
+
 #define WORD_OFFSET(i) (i >> 6)
 #define BIT_OFFSET(i) (i & 0x3f)
-
-using VertexID = sics::matrixgraph::core::common::VertexID;
 
 BitTiledMatrix::~BitTiledMatrix() {
   delete[] tile_row_idx_;
@@ -32,8 +34,7 @@ BitTiledMatrix::~BitTiledMatrix() {
 }
 
 void BitTiledMatrix::Init(const TiledMatrixMetadata &metadata,
-                          Bitmap *nz_tile_bm) {
-  // assert(metadata.n_nz_tile != 0);
+                          GPUBitmap *nz_tile_bm) {
 
   metadata_.n_strips = metadata.n_strips;
   metadata_.n_nz_tile = metadata.n_nz_tile;
@@ -66,7 +67,7 @@ void BitTiledMatrix::Init(const TiledMatrixMetadata &metadata,
     CUDA_CHECK(cudaHostAlloc((void **)&bm_data,
                              sizeof(uint64_t) * (WORD_OFFSET(bm_size) + 1),
                              cudaHostAllocDefault));
-    nz_tile_bm_ = new Bitmap(bm_size, bm_data);
+    nz_tile_bm_ = new GPUBitmap(bm_size, bm_data);
   } else {
     nz_tile_bm_ = nz_tile_bm;
   }

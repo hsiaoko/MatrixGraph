@@ -20,6 +20,7 @@
 #include "core/task/kernel/matrix_operations.cuh"
 #include "core/util/atomic.h"
 #include "core/util/bitmap.h"
+#include "core/util/bitmap_no_ownership.h"
 
 namespace sics {
 namespace matrixgraph {
@@ -45,6 +46,8 @@ using DeviceOwnedBufferUint64 =
 using MatrixOperationsKernelWrapper =
     sics::matrixgraph::core::task::kernel::MatrixOperationsKernelWrapper;
 using Bitmap = sics::matrixgraph::core::util::Bitmap;
+using GPUBitmap = sics::matrixgraph::core::util::GPUBitmap;
+using BitmapNoOwnerShip = sics::matrixgraph::core::util::BitmapNoOwnerShip;
 using sics::matrixgraph::core::util::atomic::WriteAdd;
 using TiledMatrixMetadata =
     sics::matrixgraph::core::data_structures::TiledMatrixMetadata;
@@ -195,12 +198,14 @@ __host__ void PPRQuery::InitResultMatrix() {
               }
 
               auto &matrix_a_buf = buffers_matrix_a[i * K + k];
-              matrix_a_buf.data = block_a->GetNzTileBitmapPtr()->data();
+              matrix_a_buf.data =
+                  (uint64_t *)block_a->GetNzTileBitmapPtr()->data();
               matrix_a_buf.size =
                   block_a->GetNzTileBitmapPtr()->GetBufferSize();
 
               auto &matrix_b_buf = buffers_matrix_b[j * K + k];
-              matrix_b_buf.data = block_b->GetNzTileBitmapPtr()->data();
+              matrix_b_buf.data =
+                  (uint64_t *)block_b->GetNzTileBitmapPtr()->data();
               matrix_b_buf.size =
                   block_b->GetNzTileBitmapPtr()->GetBufferSize();
 
@@ -322,8 +327,8 @@ __host__ void PPRQuery::InitResultMatrix() {
                                          .n_nz_tile = n_nz_tile,
                                          .tile_size = tile_size};
             bit_tiled_matrix_ptr->Init(
-                metadata, new Bitmap(n_strips * tile_size,
-                                     buffers_matrix_c[i * N + j].GetPtr()));
+                metadata, new GPUBitmap(n_strips * tile_size,
+                                        buffers_matrix_c[i * N + j].GetPtr()));
           }
         }
       });
@@ -372,7 +377,7 @@ __host__ void PPRQuery::InitResultMatrix() {
             device_owned_tile_col_idx[i * N + j].Init(tile_col_idx[i * N + j],
                                                       p_stream);
             device_owned_tile_count_row[i * N + j].Init(
-                tile_count_row[i * N + j], p_stream);
+                sizeof(VertexID) * (n_strips + 1), p_stream);
 
             MatrixOperationsKernelWrapper::
                 InitBitTiledMatrixMetadataByLayoutMatrix(
@@ -582,7 +587,7 @@ __host__ void PPRQuery::FillTilesUnifiedMemory() {
               continue;
 
             layout_matrix_c[i * N + j].data =
-                block_c->GetNzTileBitmapPtr()->data();
+                (uint64_t *)block_c->GetNzTileBitmapPtr()->data();
 
             layout_matrix_c[i * N + j].size =
                 block_c->GetNzTileBitmapPtr()->size();
@@ -603,14 +608,18 @@ __host__ void PPRQuery::FillTilesUnifiedMemory() {
             data_c[i * N + j].size =
                 tile_buffer_size * block_c->GetMetadata().n_nz_tile;
 
-            unified_layout_matrix_c[i * N + j].Init(layout_matrix_c[i * N + j]);
+            {
+              std::lock_guard<std::mutex> lock(mtx);
+              unified_layout_matrix_c[i * N + j].Init(
+                  layout_matrix_c[i * N + j]);
 
-            unified_tile_offset_row_c[i * N + j].Init(
-                tile_offset_row_c[i * N + j]);
+              unified_tile_offset_row_c[i * N + j].Init(
+                  tile_offset_row_c[i * N + j]);
 
-            unified_tile_row_idx_c[i * N + j].Init(tile_row_idx_c[i * N + j]);
-            unified_tile_col_idx_c[i * N + j].Init(tile_col_idx_c[i * N + j]);
-            unified_data_c[i * N + j].Init(data_c[i * N + j]);
+              unified_tile_row_idx_c[i * N + j].Init(tile_row_idx_c[i * N + j]);
+              unified_tile_col_idx_c[i * N + j].Init(tile_col_idx_c[i * N + j]);
+              unified_data_c[i * N + j].Init(data_c[i * N + j]);
+            }
           }
         }
       });
@@ -646,11 +655,14 @@ __host__ void PPRQuery::FillTilesUnifiedMemory() {
             data_a[i * K + k].size =
                 tile_buffer_size * block_a->GetMetadata().n_nz_tile;
 
-            unified_tile_offset_row_a[i * K + k].Init(
-                tile_offset_row_a[i * K + k]);
-            unified_tile_row_idx_a[i * K + k].Init(tile_row_idx_a[i * K + k]);
-            unified_tile_col_idx_a[i * K + k].Init(tile_col_idx_a[i * K + k]);
-            unified_data_a[i * K + k].Init(data_a[i * K + k]);
+            {
+              std::lock_guard<std::mutex> lock(mtx);
+              unified_tile_offset_row_a[i * K + k].Init(
+                  tile_offset_row_a[i * K + k]);
+              unified_tile_row_idx_a[i * K + k].Init(tile_row_idx_a[i * K + k]);
+              unified_tile_col_idx_a[i * K + k].Init(tile_col_idx_a[i * K + k]);
+              unified_data_a[i * K + k].Init(data_a[i * K + k]);
+            }
           }
         }
       });
@@ -683,15 +695,19 @@ __host__ void PPRQuery::FillTilesUnifiedMemory() {
             data_b[i * K + k].size =
                 tile_buffer_size * block_b->GetMetadata().n_nz_tile;
 
-            unified_tile_offset_row_b[i * K + k].Init(
-                tile_offset_row_b[i * K + k]);
-            unified_tile_row_idx_b[i * K + k].Init(tile_row_idx_b[i * K + k]);
-            unified_tile_col_idx_b[i * K + k].Init(tile_col_idx_b[i * K + k]);
-            unified_data_b[i * K + k].Init(data_b[i * K + k]);
+            {
+              std::lock_guard<std::mutex> lock(mtx);
+              unified_tile_offset_row_b[i * K + k].Init(
+                  tile_offset_row_b[i * K + k]);
+              unified_tile_row_idx_b[i * K + k].Init(tile_row_idx_b[i * K + k]);
+              unified_tile_col_idx_b[i * K + k].Init(tile_col_idx_b[i * K + k]);
+              unified_data_b[i * K + k].Init(data_b[i * K + k]);
+            }
           }
         }
       });
 
+  cudaDeviceSynchronize();
   // Submit Kernel to fill edges into tiles.
   std::vector<int> work_load;
   work_load.resize(4);
@@ -727,25 +743,29 @@ __host__ void PPRQuery::FillTilesUnifiedMemory() {
               if (block_c->GetMetadata().n_nz_tile == 0)
                 continue;
 
-              cudaSetDevice(hash_function(i * N + j) % 4);
-              cudaStream_t &p_stream = p_streams_vec[i * N + j];
               WriteAdd(&work_load[hash_function(i * N + j) % 4], 1);
-              MatrixOperationsKernelWrapper::FillTiles(
-                  p_stream, tile_size, n_strips,
-                  block_a->GetMetadata().n_nz_tile,
-                  block_b->GetMetadata().n_nz_tile,
-                  block_c->GetMetadata().n_nz_tile,
-                  unified_layout_matrix_c[i * N + j],
-                  unified_tile_offset_row_a[i * K + k],
-                  unified_tile_offset_row_b[j * K + k],
-                  unified_tile_offset_row_c[i * N + j],
-                  unified_tile_row_idx_a[i * K + k],
-                  unified_tile_row_idx_b[j * K + k],
-                  unified_tile_row_idx_c[i * N + j],
-                  unified_tile_col_idx_a[i * K + k],
-                  unified_tile_col_idx_b[j * K + k],
-                  unified_tile_col_idx_c[i * N + j], unified_data_a[i * K + k],
-                  unified_data_b[j * K + k], &unified_data_c[i * N + j]);
+              {
+                std::lock_guard<std::mutex> lock(mtx);
+                cudaSetDevice(hash_function(i * N + j) % 4);
+                cudaStream_t &p_stream = p_streams_vec[i * N + j];
+                MatrixOperationsKernelWrapper::FillTiles(
+                    p_stream, tile_size, n_strips,
+                    block_a->GetMetadata().n_nz_tile,
+                    block_b->GetMetadata().n_nz_tile,
+                    block_c->GetMetadata().n_nz_tile,
+                    unified_layout_matrix_c[i * N + j],
+                    unified_tile_offset_row_a[i * K + k],
+                    unified_tile_offset_row_b[j * K + k],
+                    unified_tile_offset_row_c[i * N + j],
+                    unified_tile_row_idx_a[i * K + k],
+                    unified_tile_row_idx_b[j * K + k],
+                    unified_tile_row_idx_c[i * N + j],
+                    unified_tile_col_idx_a[i * K + k],
+                    unified_tile_col_idx_b[j * K + k],
+                    unified_tile_col_idx_c[i * N + j],
+                    unified_data_a[i * K + k], unified_data_b[j * K + k],
+                    &unified_data_c[i * N + j]);
+              }
             }
           }
         }
@@ -757,7 +777,6 @@ __host__ void PPRQuery::FillTilesUnifiedMemory() {
   }
   std::cout << std::endl;
 
-  cudaDeviceSynchronize();
   std::cout << "[FillTiles] Time - Filling tiles elapse: "
             << std::chrono::duration_cast<std::chrono::microseconds>(
                    start_time_2 - start_time_1)
@@ -768,8 +787,7 @@ __host__ void PPRQuery::FillTilesUnifiedMemory() {
   std::cout << "[FillTiles] Copying result to the result matrix ..."
             << std::endl;
   std::for_each(
-      // std::execution::par,
-      worker.begin(), worker.end(),
+      std::execution::par, worker.begin(), worker.end(),
       [this, M, N, K, step, &p_streams_vec, tile_size, tile_buffer_size,
        n_strips, &mtx, &unified_layout_matrix_c, &unified_tile_offset_row_a,
        &unified_tile_row_idx_a, &unified_tile_col_idx_a, &unified_data_a,
@@ -777,21 +795,27 @@ __host__ void PPRQuery::FillTilesUnifiedMemory() {
        &unified_tile_col_idx_b, &unified_data_b, &unified_tile_offset_row_c,
        &unified_tile_row_idx_c, &unified_tile_col_idx_c,
        &unified_data_c](auto w) {
-        for (VertexID i = w; i < N; i += step) {
-          for (VertexID j = 0; j < M; j++) {
+        for (VertexID i = w; i < M; i += step) {
+          for (VertexID j = 0; j < N; j++) {
             auto block_c = C_->GetBitTileMatrixPtrByIdx(i * N + j);
             if (block_c == nullptr)
               continue;
             if (block_c->GetMetadata().n_nz_tile == 0)
               continue;
 
-            memcpy(block_c->GetDataPtr(), unified_data_c[i * N + j].GetPtr(),
-                   unified_data_c[i * N + j].GetSize());
-            // block_c->Print();
+            cudaStream_t &p_stream = p_streams_vec[i * N + j];
+            {
+              std::lock_guard<std::mutex> lock(mtx);
+              CUDA_CHECK(cudaMemcpyAsync(block_c->GetDataPtr(),
+                                         unified_data_c[i * N + j].GetPtr(),
+                                         unified_data_c[i * N + j].GetSize(),
+                                         cudaMemcpyDefault, p_stream));
+            }
           }
         }
       });
 
+  cudaDeviceSynchronize();
   std::for_each(p_streams_vec.begin(), p_streams_vec.end(),
                 [](auto &s) { cudaStreamDestroy(s); });
 }
@@ -889,7 +913,90 @@ __host__ void PPRQuery::FillTiles() {
 }
 
 __host__ void PPRQuery::Count(const GridTiledMatrix &G) {
+  auto parallelism = std::thread::hardware_concurrency();
+  std::vector<size_t> worker(parallelism);
+  std::mutex mtx;
+  std::iota(worker.begin(), worker.end(), 0);
+  auto step = worker.size();
 
+  auto block = G.GetBitTileMatrixPtrByIdx(0);
+
+  VertexID n_strips = block->GetMetadata().n_strips;
+  VertexID tile_size = block->GetMetadata().tile_size;
+  auto tile_buffer_size =
+      sizeof(uint64_t) * std::max(1u, WORD_OFFSET(tile_size * tile_size));
+
+  VertexID M = G.get_metadata().n_chunks;
+  VertexID K = G.get_metadata().n_chunks;
+  VertexID N = G.get_metadata().n_chunks;
+  std::vector<cudaStream_t> p_streams_vec;
+  p_streams_vec.resize(M * N);
+  std::for_each(std::execution::par, worker.begin(), worker.end(),
+                [this, M, N, K, step, &p_streams_vec, &mtx](auto w) {
+                  for (VertexID i = w; i < N; i += step) {
+                    for (VertexID j = 0; j < M; j++) {
+                      cudaSetDevice(hash_function(i * N + j) % 4);
+                      cudaStreamCreate(&p_streams_vec[i * N + j]);
+                    }
+                  }
+                });
+
+  std::vector<BufferUint64> data;
+  data.resize(M * N);
+  std::vector<UnifiedOwnedBufferUint64> unified_data;
+  unified_data.resize(M * N);
+  std::vector<UnifiedOwnedBufferUint64> unified_count;
+  unified_count.resize(M * N);
+
+  std::cout << "[Count]"
+            << " Start - n_strips: " << n_strips << ", tile_size: " << tile_size
+            << std::endl;
+
+  std::for_each(
+      std::execution::par, worker.begin(), worker.end(),
+      [this, M, N, K, step, &p_streams_vec, tile_size, &G, tile_buffer_size,
+       n_strips, &mtx, &data, &unified_data, &unified_count](auto w) {
+        for (VertexID i = w; i < M; i += step) {
+          for (VertexID j = 0; j < N; j++) {
+            unified_count[i * N + j].Init(sizeof(uint64_t));
+
+            auto block = G.GetBitTileMatrixPtrByIdx(i * N + j);
+
+            if (block == nullptr)
+              continue;
+            if (block->GetMetadata().n_nz_tile == 0)
+              continue;
+
+            data[i * N + j].data = block->GetDataPtr();
+            data[i * N + j].size =
+                tile_buffer_size * block->GetMetadata().n_nz_tile;
+
+            {
+              std::lock_guard<std::mutex> lock(mtx);
+              unified_data[i * N + j].Init(data[i * N + j]);
+              // std::cout << "(" << i << "," << j << std::endl;
+              // block->Print();
+
+              cudaStream_t &p_stream = p_streams_vec[i * N + j];
+              cudaSetDevice(hash_function(i * N + j) % 4);
+              MatrixOperationsKernelWrapper::Count(
+                  p_stream, tile_size, n_strips, block->GetMetadata().n_nz_tile,
+                  unified_data[i * N + j], &unified_count[i * N + j]);
+            }
+          }
+        }
+      });
+
+  cudaDeviceSynchronize();
+
+  uint64_t total_count = 0;
+  int i = 0;
+  std::for_each(unified_count.begin(), unified_count.end(),
+                [this, &total_count, step, &i](auto &w) {
+                  WriteAdd(&total_count, *w.GetPtr());
+                });
+
+  std::cout << "[Count] done! total_count:" << total_count << std::endl;
 }
 
 __host__ void PPRQuery::Run() {
@@ -908,10 +1015,19 @@ __host__ void PPRQuery::Run() {
 
   FillTilesUnifiedMemory();
   auto start_time_2 = std::chrono::system_clock::now();
-
   std::cout << "[PPRQuery] Run Step2 FillTiles() elapsed:"
             << std::chrono::duration_cast<std::chrono::microseconds>(
                    start_time_2 - start_time_1)
+                       .count() /
+                   (double)CLOCKS_PER_SEC
+            << std::endl;
+
+  Count(*C_);
+
+  auto start_time_3 = std::chrono::system_clock::now();
+  std::cout << "[PPRQuery] Run Step3 Count() elapsed:"
+            << std::chrono::duration_cast<std::chrono::microseconds>(
+                   start_time_3 - start_time_2)
                        .count() /
                    (double)CLOCKS_PER_SEC
             << std::endl;

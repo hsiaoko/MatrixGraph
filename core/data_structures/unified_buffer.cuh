@@ -65,7 +65,7 @@ public:
       cudaFree(ptr_);
     s_ = h_buf.size;
     CUDA_CHECK(cudaMallocManaged(&ptr_, s_));
-    memcpy(ptr_, h_buf.GetPtr(), s_);
+    CUDA_CHECK(cudaMemcpy(ptr_, h_buf.GetPtr(), s_, cudaMemcpyDefault));
   }
 
   // Initialize the UnifiedOwnedBuffer<T> with a buffer size
@@ -76,8 +76,7 @@ public:
       cudaFree(ptr_);
     s_ = s;
     CUDA_CHECK(cudaMallocManaged(&ptr_, s_));
-    memset(ptr_, 0, s_);
-    // CUDA_CHECK(cudaMemset(ptr_, 0, s_));
+    CUDA_CHECK(cudaMemset(ptr_, 0, s_));
   }
 
   // @Brif: Get the device buffer pointer

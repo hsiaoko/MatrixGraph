@@ -59,6 +59,7 @@ static void ConvertGridGraph2BitTiledMatrix(const std::string &input_path,
     auto *bit_tile_matrix =
         Edgelist2BitTiledMatrix(edges_blocks[gid], tile_size, block_scope);
 
+    std::cout << "Write block " << gid << " to " << block_dir << std::endl;
     BitTiledMatrixIO::Write(block_dir, *bit_tile_matrix);
   }
 
