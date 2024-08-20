@@ -1,6 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-#project(matrixgraph LANGUAGES CXX CUDA)
-project(matrixgraph)
+project(matrixgraph LANGUAGES CXX CUDA)
 
 ###### Cmake options ######
 
@@ -23,7 +22,7 @@ message(STATUS "Using compiler: ${CMAKE_CXX_COMPILER} - ${CMAKE_CXX_COMPILER_VER
 set(PROJECT_ROOT_DIR ${CMAKE_CURRENT_SOURCE_DIR})
 set(THIRD_PARTY_ROOT ${CMAKE_CURRENT_SOURCE_DIR}/third_party)
 set(EXECUTABLE_OUTPUT_PATH ${PROJECT_ROOT_DIR}/bin)
-set(LIBRARY_OUTPUT_PATH  ${PROJECT_ROOT_DIR}/lib)
+set(LIBRARY_OUTPUT_PATH ${PROJECT_ROOT_DIR}/lib)
 set(CMAKE_MODULE_PATH ${PROJECT_ROOT_DIR}/cmake)
 set(LIBRARY_ROOT_DIR ${PROJECT_ROOT_DIR}/lib)
 
@@ -75,6 +74,4 @@ include_directories(
 
 add_subdirectory(core)
 add_subdirectory(tools)
-
-
 add_subdirectory(apps)
