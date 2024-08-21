@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(matrixgraph LANGUAGES CXX CUDA)
+project(matrixgraph_tools LANGUAGES CXX CUDA)
 
 # Directories
 set(EXECUTABLE_OUTPUT_PATH ${PROJECT_ROOT_DIR}/bin/tools/)
@@ -21,7 +21,7 @@ foreach (appfile ${appfiles})
             PRIVATE
             yaml-cpp
             gflags
-            tbb
+            TBB::tbb
             stdc++fs
             matrixgraph_core
             )

@@ -2,10 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
-
-#ifdef TBB_FOUND
 #include <execution>
-#endif
 
 namespace sics {
 namespace matrixgraph {

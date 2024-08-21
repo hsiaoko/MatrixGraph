@@ -18,9 +18,10 @@ foreach (appfile ${appfiles})
     get_filename_component(app ${appfile} NAME_WE)
     add_executable("${app}_exec" ${appfile} ${TOOLS_SOURCES} ${PARTITION_SOURCES})
     target_link_libraries("${app}_exec"
+            PRIVATE
             matrixgraph_core
             yaml-cpp
             gflags
-            ${TBB_LIBRARIES}
+            TBB::tbb
             )
 endforeach ()

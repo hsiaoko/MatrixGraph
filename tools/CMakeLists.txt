@@ -13,15 +13,6 @@ file(GLOB TOOLS_SOURCES
         ${CMAKE_CURRENT_SOURCE_DIR}/util/*.cpp
         )
 
-
-# find TBB
-find_package(TBB)
-if (TBB_FOUND)
-    message("TBB found")
-    add_compile_definitions(TBB_FOUND)
-endif ()
-
-
 #######################
 # Tests
 #######################

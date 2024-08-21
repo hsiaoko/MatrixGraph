@@ -1,6 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
 project(matrixgraph_core LANGUAGES CUDA)
-#project(matrixgraph_core)
 
 #######################
 # Cmake options
@@ -13,17 +12,9 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++20")
 #set(CUDA_NVCC_FLAGS ${CUDA_NVCC_FLAGS} --gpu-architecture sm_21 -std=c++20)
 
 # Directories
-set(LIBRARY_OUTPUT_PATH ${PROJECT_ROOT_DIR}/lib)
+set(LIBRARY_OUTPUT_PATH ${PROJECT_ROOT_DIR}/core/lib)
 set(TOOLS_SRC_PATH ${PROJECT_ROOT_DIR}/tools)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR})
-
-# TBB
-find_package(TBB)
-if (TBB_FOUND)
-    message(STATUS "TBB found")
-    add_compile_definitions(TBB_FOUND)
-endif ()
-
 
 #######################
 # Artifacts
@@ -73,11 +64,9 @@ target_link_libraries(matrixgraph_core
         yaml-cpp
         -lcublas
         #-lcurand
-        tbb
+        TBB::tbb
         -static-libstdc++
         )
 target_compile_features(matrixgraph_core PUBLIC cxx_std_20)
 set_target_properties(matrixgraph_core
         PROPERTIES CUDA_SEPARABLE_COMPILATION ON)
-
-#target_compile_options(matrixgraph_core PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:-gencode arch=compute_50,code=sm_50>)

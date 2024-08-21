@@ -39,6 +39,13 @@ if (USE_JEMALLOC)
     endif ()
 endif ()
 
+# TBB
+find_package(TBB)
+if (TBB_FOUND)
+    message(STATUS "TBB found")
+    add_compile_definitions(TBB_FOUND)
+endif ()
+
 ###### Add third party to the project, if necessary ######
 # googleTest
 if (TEST)
