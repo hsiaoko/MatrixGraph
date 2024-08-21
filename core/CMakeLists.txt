@@ -12,7 +12,7 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++20")
 #set(CUDA_NVCC_FLAGS ${CUDA_NVCC_FLAGS} --gpu-architecture sm_21 -std=c++20)
 
 # Directories
-set(LIBRARY_OUTPUT_PATH ${PROJECT_ROOT_DIR}/core/lib)
+set(LIBRARY_OUTPUT_PATH ${PROJECT_ROOT_DIR}/lib)
 set(TOOLS_SRC_PATH ${PROJECT_ROOT_DIR}/tools)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR})
 
