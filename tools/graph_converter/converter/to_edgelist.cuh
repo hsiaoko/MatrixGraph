@@ -45,9 +45,9 @@ static void ConvertImmutableCSR2EdgelistBin(const std::string &input_path,
       sics::matrixgraph::tools::format_converter::ImmutableCSR2Edgelist(csr);
 
   edges_ptr->ShowGraph(3);
-  std::cout << "[ConvertImmutableCSR2EdgelistBin] Done!" << std::endl;
 
   edges_ptr->WriteToBinary(output_path);
+  std::cout << "[ConvertImmutableCSR2EdgelistBin] Done!" << std::endl;
 }
 
 static void

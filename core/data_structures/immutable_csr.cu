@@ -10,6 +10,7 @@
 #include <execution>
 #endif
 
+#include "core/common/consts.h"
 #include "core/util/atomic.h"
 #include "core/util/bitmap.h"
 
@@ -17,6 +18,10 @@ namespace sics {
 namespace matrixgraph {
 namespace core {
 namespace data_structures {
+
+using sics::matrixgraph::core::util::atomic::WriteAdd;
+using sics::matrixgraph::core::util::atomic::WriteMax;
+using sics::matrixgraph::core::util::atomic::WriteMin;
 
 void ImmutableCSR::PrintGraphAbs(VertexID display_num) const {
   std::cout << "### GID: " << metadata_.gid
@@ -253,6 +258,9 @@ void ImmutableCSR::SortByDegree() {
 
   auto *new_id_by_old_id = new VertexID[n_vertices]();
 
+  metadata_.max_vid = 0;
+  metadata_.min_vid = common::kMaxVertexID;
+
   std::cout << "[SortByDegree] Replacing old val by new val." << std::endl;
   std::for_each(std::execution::par, worker.begin(), worker.end(),
                 [this, step, n_vertices, &new_id_by_old_id, &vids_and_degrees,
@@ -260,12 +268,15 @@ void ImmutableCSR::SortByDegree() {
                  &new_buffer_outdegree, &new_buffer_in_offset,
                  &new_buffer_out_offset, &new_buffer_in_edges,
                  &new_buffer_out_edges](auto w) {
-                  for (auto i = w; i < n_vertices; i += step) {
+                  for (VertexID i = w; i < n_vertices; i += step) {
                     auto local_vid = vids_and_degrees[i].vid;
                     new_id_by_old_id[local_vid] = i;
                     new_buffer_globalid[i] = i;
                     new_buffer_indegree[i] = GetInDegreeByLocalID(local_vid);
                     new_buffer_outdegree[i] = GetOutDegreeByLocalID(local_vid);
+
+                    WriteMax(&metadata_.max_vid, i);
+                    WriteMin(&metadata_.min_vid, i);
 
                     auto in_edge_ptr = GetIncomingEdgesBasePointer();
                     auto out_edge_ptr = GetOutgoingEdgesBasePointer();
@@ -292,22 +303,15 @@ void ImmutableCSR::SortByDegree() {
         }
       });
 
-  std::cout << "[SortByDegree] Done!" << std::endl;
-  // delete[] globalid_by_localid_base_pointer_;
+  delete[] globalid_by_localid_base_pointer_;
   SetGlobalIDBuffer(new_buffer_globalid);
-  //  delete[] incoming_edges_base_pointer_;
   SetIncomingEdgesBuffer(new_buffer_in_edges);
-  //  delete[] outgoing_edges_base_pointer_;
   SetOutgoingEdgesBuffer(new_buffer_out_edges);
-  //  delete[] indegree_base_pointer_;
   SetInDegreeBuffer(new_buffer_indegree);
-  //  delete[] outdegree_base_pointer_;
   SetOutDegreeBuffer(new_buffer_outdegree);
-  //  delete[] in_offset_base_pointer_;
   SetInOffsetBuffer(new_buffer_in_offset);
-  //  delete[] out_offset_base_pointer_;
   SetOutOffsetBuffer(new_buffer_out_offset);
-  //  delete[] new_id_by_old_id;
+  delete[] new_id_by_old_id;
   std::cout << "[SortByDegree] Done!" << std::endl;
 }
 
@@ -536,6 +540,9 @@ void ImmutableCSR::SortByDistance(VertexID sim_granularity) {
         new_buffer_in_offset[i] + GetInDegreeByLocalID(local_vid);
   }
 
+  metadata_.max_vid = 0;
+  metadata_.min_vid = common::kMaxVertexID;
+
   std::for_each(std::execution::par, worker.begin(), worker.end(),
                 [this, step, n_vertices, &vids_and_overlapped_count,
                  &vids_and_degrees, &vids_and_out_degrees, &vids_and_in_degrees,
@@ -543,11 +550,14 @@ void ImmutableCSR::SortByDistance(VertexID sim_granularity) {
                  &new_buffer_outdegree, &new_buffer_in_offset,
                  &new_buffer_out_offset, &new_buffer_in_edges,
                  &new_buffer_out_edges](auto w) {
-                  for (auto i = w; i < n_vertices; i += step) {
+                  for (VertexID i = w; i < n_vertices; i += step) {
                     auto local_vid = vids_and_degrees[i].vid;
                     new_buffer_globalid[i] = i;
                     new_buffer_indegree[i] = GetInDegreeByLocalID(local_vid);
                     new_buffer_outdegree[i] = GetOutDegreeByLocalID(local_vid);
+
+                    WriteMax(&metadata_.max_vid, i);
+                    WriteMin(&metadata_.min_vid, i);
 
                     auto in_edge_ptr = GetIncomingEdgesBasePointer();
                     auto out_edge_ptr = GetOutgoingEdgesBasePointer();
@@ -561,6 +571,7 @@ void ImmutableCSR::SortByDistance(VertexID sim_granularity) {
                 });
 
   // Reassign vertex id to each vertex.
+
   auto n_outgoing_edges = get_num_outgoing_edges();
   std::for_each(std::execution::par, worker.begin(), worker.end(),
                 [this, step, n_outgoing_edges, &vid_map, &new_buffer_in_edges,

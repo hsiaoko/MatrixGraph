@@ -64,4 +64,5 @@ template <class ET> inline void WriteAdd(ET *a, ET b) {
 } // namespace core
 } // namespace matrixgraph
 } // namespace sics
+
 #endif // CORE_UTIL_ATOMIC_H_
