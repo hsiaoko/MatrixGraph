@@ -57,6 +57,8 @@ public:
 
   void Read(const std::string &root_path);
 
+  void ParseBasePtr(uint8_t *graph_base_pointer);
+
   void SortByDegree();
 
   void SortByDistance(VertexID sim_granularity);
@@ -78,6 +80,9 @@ public:
 
   void SetGlobalIDBuffer(VertexID *buffer) {
     globalid_by_localid_base_pointer_ = buffer;
+  }
+  void SetEdgesGlobalIDBuffer(VertexID *buffer) {
+    edges_globalid_by_localid_base_pointer_ = buffer;
   }
   void SetInDegreeBuffer(VertexID *buffer) { indegree_base_pointer_ = buffer; }
   void SetOutDegreeBuffer(VertexID *buffer) {
@@ -104,6 +109,9 @@ public:
   VertexID *GetGloablIDBasePointer() const {
     return globalid_by_localid_base_pointer_;
   }
+  VertexID *GetEdgesGloablIDBasePointer() const {
+    return edges_globalid_by_localid_base_pointer_;
+  }
   VertexID *GetInDegreeBasePointer() const { return indegree_base_pointer_; }
   VertexID *GetOutDegreeBasePointer() const { return outdegree_base_pointer_; }
   EdgeIndex *GetInOffsetBasePointer() const { return in_offset_base_pointer_; }
@@ -119,6 +127,9 @@ public:
 
   VertexID GetGlobalIDByLocalID(VertexID i) const {
     return globalid_by_localid_base_pointer_[i];
+  }
+  VertexID GetEdgeGlobalIDByLocalID(VertexID i) const {
+    return edges_globalid_by_localid_base_pointer_[i];
   }
   VertexID GetInOffsetByLocalID(VertexID i) const {
     return in_offset_base_pointer_[i];
@@ -155,6 +166,7 @@ public:
 
   void SetMaxVid(VertexID max_vid) { metadata_.max_vid = max_vid; }
   void SetMinVid(VertexID min_vid) { metadata_.min_vid = min_vid; }
+  void SetGid(VertexID gid) { metadata_.gid = gid; }
 
 protected:
   // Metadata to build the CSR.
@@ -163,13 +175,14 @@ protected:
   // Serialized data in CSR format.
   std::unique_ptr<uint8_t[]> graph_base_pointer_;
 
-  VertexID *globalid_by_localid_base_pointer_;
-  VertexID *incoming_edges_base_pointer_;
-  VertexID *outgoing_edges_base_pointer_;
-  VertexID *indegree_base_pointer_;
-  VertexID *outdegree_base_pointer_;
-  EdgeIndex *in_offset_base_pointer_;
-  EdgeIndex *out_offset_base_pointer_;
+  VertexID *globalid_by_localid_base_pointer_ = nullptr;
+  VertexID *edges_globalid_by_localid_base_pointer_ = nullptr;
+  VertexID *incoming_edges_base_pointer_ = nullptr;
+  VertexID *outgoing_edges_base_pointer_ = nullptr;
+  VertexID *indegree_base_pointer_ = nullptr;
+  VertexID *outdegree_base_pointer_ = nullptr;
+  EdgeIndex *in_offset_base_pointer_ = nullptr;
+  EdgeIndex *out_offset_base_pointer_ = nullptr;
 
   std::unique_ptr<VertexLabel[]> vertex_label_base_pointer_;
 };

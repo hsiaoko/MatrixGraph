@@ -185,16 +185,13 @@ void Edges::Transpose() {
 }
 
 void Edges::SortBySrc() {
-#ifdef TBB_FOUND
   std::sort(std::execution::par, edges_ptr_,
             edges_ptr_ + edgelist_metadata_.num_edges);
-#else
-  std::sort(edges_ptr_, edges_ptr_ + edgelist_metadata_.num_edges);
-#endif
 }
 
 void Edges::ShowGraph(EdgeIndex n_edges) const {
-  std::cout << "[ShowGraph]" << std::endl;
+  std::cout << "[ShowGraph] n_edges:" << edgelist_metadata_.num_edges
+            << ", n_vertices:" << edgelist_metadata_.num_vertices << std::endl;
   EdgeIndex min_n_edges = min(edgelist_metadata_.num_edges, n_edges);
   if (localid_to_globalid_ != nullptr) {
     for (EdgeIndex i = 0; i < min_n_edges; i++) {
