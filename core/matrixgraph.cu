@@ -2,6 +2,8 @@
 
 #include <ctime>
 
+#include "core/task/gemm.cuh"
+
 namespace sics {
 namespace matrixgraph {
 namespace core {
@@ -28,8 +30,8 @@ void MatrixGraph::Run(GPUTaskType task_type, TaskBase *task_ptr) {
   auto prepare_end_time = std::chrono::system_clock::now();
   switch (task_type) {
   case task::kGEMM: {
-    //  auto task = reinterpret_cast<task::MatrixMultiplier *>(task_ptr);
-    //  task->Run();
+    auto task = reinterpret_cast<task::GEMM *>(task_ptr);
+    task->Run();
     break;
   }
   case task::kMatrixAnalysis:

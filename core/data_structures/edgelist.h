@@ -151,6 +151,9 @@ public:
   void ReadFromCSV(const std::string &filename, const std::string &sep,
                    bool compressed = true);
 
+  // Read From Bin
+  void ReadFromBin(const std::string &filename);
+
   void ReassignVertexIDs();
 
   void Transpose();

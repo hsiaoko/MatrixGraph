@@ -27,7 +27,7 @@ typedef uint16_t TileIndex;
 typedef uint32_t VertexLabel;
 typedef uint32_t VertexDegree;
 typedef uint32_t VertexCount;
-typedef uint64_t EdgeIndex;
+typedef uint32_t EdgeIndex;
 
 
 #define MAX_VERTEX_ID std::numeric_limits<VertexID>::max()

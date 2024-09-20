@@ -12,7 +12,7 @@ namespace matrixgraph {
 namespace core {
 namespace data_structures {
 
-class GridCSRMatrix {
+class GridCSRTiledMatrix {
 private:
   using GridGraphMetadata =
       sics::matrixgraph::core::data_structures::GridGraphMetadata;
@@ -20,7 +20,7 @@ private:
   using VertexID = sics::matrixgraph::core::common::VertexID;
 
 public:
-  GridCSRMatrix(const GridGraphMetadata &metadata);
+  GridCSRTiledMatrix(const GridGraphMetadata &metadata);
 
   void SetMetadata(const GridGraphMetadata &metadata) { metadata_ = metadata; }
 

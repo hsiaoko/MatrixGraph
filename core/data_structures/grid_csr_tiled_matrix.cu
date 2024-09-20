@@ -1,4 +1,4 @@
-#include "core/data_structures/grid_csr_matrix.cuh"
+#include "core/data_structures/grid_csr_tiled_matrix.cuh"
 
 #include <algorithm>
 #include <cmath>
@@ -12,7 +12,7 @@ namespace data_structures {
 using GraphID = sics::matrixgraph::core::common::GraphID;
 using VertexID = sics::matrixgraph::core::common::VertexID;
 
-GridCSRMatrix::GridCSRMatrix(const GridGraphMetadata &metadata) {
+GridCSRTiledMatrix::GridCSRTiledMatrix(const GridGraphMetadata &metadata) {
   metadata_ = metadata;
   tiled_matrix_vec_.resize(pow(metadata_.n_chunks, 2));
 
@@ -20,8 +20,8 @@ GridCSRMatrix::GridCSRMatrix(const GridGraphMetadata &metadata) {
                 tiled_matrix_vec_.end(), []() { return new CSRTiledMatrix(); });
 }
 
-void GridCSRMatrix::Print() const {
-  std::cout << "[GridCSRMatrix Print] " << metadata_.n_chunks << "x"
+void GridCSRTiledMatrix::Print() const {
+  std::cout << "[GridCSRTiledMatrix Print] " << metadata_.n_chunks << "x"
             << metadata_.n_chunks << std::endl;
   for (GraphID x = 0; x < metadata_.n_chunks; x++) {
     for (GraphID y = 0; y < metadata_.n_chunks; y++) {

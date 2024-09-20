@@ -26,6 +26,7 @@
 #include "core/util/cuda_check.cuh"
 #include "tools/common/format_converter.h"
 #include "tools/graph_converter/converter/to_bit_tiled_matrix.cuh"
+#include "tools/graph_converter/converter/to_csr_tiled_matrix.cuh"
 #include "tools/graph_converter/converter/to_edgelist.cuh"
 #include "tools/graph_converter/converter/to_immutable_csr.cuh"
 
@@ -48,11 +49,14 @@ enum ConvertMode {
   kEdgelistBin2BitTiledMatrix,
   kEdgelistBin2TransposedEdgelistBin,
   kGridEdgelistBin2BitTiledMatrix,
+  kGridEdgelistBin2CSRTiledMatrix,
   kCSRBin2BitTiledMatrix,
   kEdgelistBin2CSRBin,
   kEdgelistCSV2CSRBin,
   kEdgelistCSV2EdgelistBin,
   kCSRBin2EdgelistBin,
+  kEdgelistCSV2CGGraphCSR,
+  kEdgelistBin2CGGraphCSR,
   kUndefinedMode
 };
 
@@ -79,6 +83,12 @@ static inline ConvertMode ConvertMode2Enum(const std::string &s) {
     return kEdgelistCSV2CSRBin;
   if (s == "gridedgelistbin2bittiledmatrix")
     return kGridEdgelistBin2BitTiledMatrix;
+  if (s == "gridedgelistbin2csrtiledmatrix")
+    return kGridEdgelistBin2CSRTiledMatrix;
+  if (s == "edgelistcsv2cggraphcsr")
+    return kEdgelistCSV2CGGraphCSR;
+  if (s == "edgelistbin2cggraphcsr")
+    return kEdgelistBin2CGGraphCSR;
   return kUndefinedMode;
 };
 
@@ -97,8 +107,8 @@ int main(int argc, char **argv) {
 
   switch (ConvertMode2Enum(FLAGS_convert_mode)) {
   case kEdgelistBin2CSRBin:
-    sics::matrixgraph::tools::converter::ConvertEdgelistBin2CSRBin(
-        FLAGS_i, FLAGS_o, FLAGS_tile_size);
+    sics::matrixgraph::tools::converter::ConvertEdgelistBin2CSRBin(FLAGS_i,
+                                                                   FLAGS_o);
     break;
   case kEdgelistBin2TransposedEdgelistBin:
     sics::matrixgraph::tools::converter::
@@ -112,13 +122,25 @@ int main(int argc, char **argv) {
     sics::matrixgraph::tools::converter::ConvertEdgelistCSV2EdgelistBin(
         FLAGS_i, FLAGS_o, FLAGS_sep);
     break;
+  case kCSRBin2EdgelistBin:
+    sics::matrixgraph::tools::converter::ConvertImmutableCSR2EdgelistBin(
+        FLAGS_i, FLAGS_o);
+    break;
   case kGridEdgelistBin2BitTiledMatrix:
     sics::matrixgraph::tools::converter::ConvertGridGraph2BitTiledMatrix(
         FLAGS_i, FLAGS_o, FLAGS_tile_size);
     break;
-  case kCSRBin2EdgelistBin:
-    sics::matrixgraph::tools::converter::ConvertImmutableCSR2EdgelistBin(
-        FLAGS_i, FLAGS_o);
+  case kGridEdgelistBin2CSRTiledMatrix:
+    sics::matrixgraph::tools::converter::ConvertGridGraph2CSRTiledMatrix(
+        FLAGS_i, FLAGS_o, FLAGS_tile_size);
+    break;
+  case kEdgelistCSV2CGGraphCSR:
+    sics::matrixgraph::tools::converter::ConvertEdgelistCSV2CGGraphCSR(
+        FLAGS_i, FLAGS_o, FLAGS_sep);
+    break;
+  case kEdgelistBin2CGGraphCSR:
+    sics::matrixgraph::tools::converter::ConvertEdgelistBin2CGGraphCSR(FLAGS_i,
+                                                                       FLAGS_o);
     break;
   default:
     exit(EXIT_FAILURE);

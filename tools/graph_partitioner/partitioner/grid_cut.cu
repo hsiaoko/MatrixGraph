@@ -50,7 +50,7 @@ void GridCutPartitioner::RunPartitioner() {
 
   sics::matrixgraph::core::data_structures::EdgelistMetadata edgelist_metadata =
       {node["EdgelistBin"]["num_vertices"].as<VertexID>(),
-       node["EdgelistBin"]["num_edges"].as<VertexID>(),
+       node["EdgelistBin"]["num_edges"].as<EdgeIndex>(),
        node["EdgelistBin"]["max_vid"].as<VertexID>()};
 
   auto buffer_edges =
@@ -76,7 +76,7 @@ void GridCutPartitioner::RunPartitioner() {
       ceil((edges.get_metadata().max_vid + 1) / (float)n_partitions_);
 
   auto size_per_bucket = new EdgeIndex[n_partitions_ * n_partitions_]();
-  auto *n_edges_for_each_block = new VertexID[n_partitions_ * n_partitions_]();
+  auto *n_edges_for_each_block = new EdgeIndex[n_partitions_ * n_partitions_]();
   auto *max_vid_for_each_block = new VertexID[n_partitions_ * n_partitions_]();
   auto *min_vid_for_each_block = new VertexID[n_partitions_ * n_partitions_]();
   Bitmap vertices_bm_for_each_block[n_partitions_ * n_partitions_];
@@ -99,7 +99,8 @@ void GridCutPartitioner::RunPartitioner() {
           auto edge = edges.get_edge_by_index(eid);
           auto x = edge.src / scope_per_chunk;
           auto y = edge.dst / scope_per_chunk;
-          WriteAdd(&n_edges_for_each_block[x * n_partitions_ + y], (VertexID)1);
+          WriteAdd(&n_edges_for_each_block[x * n_partitions_ + y],
+                   (EdgeIndex)1);
 
           WriteMax(&max_vid_for_each_block[x * n_partitions_ + y], edge.src);
           WriteMax(&max_vid_for_each_block[x * n_partitions_ + y], edge.dst);

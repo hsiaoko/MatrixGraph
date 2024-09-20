@@ -1,4 +1,4 @@
-#include "core/data_structures/grid_tiled_matrix.cuh"
+#include "core/data_structures/grid_bit_tiled_matrix.cuh"
 
 #include <algorithm>
 #include <cmath>
@@ -12,7 +12,7 @@ namespace data_structures {
 using GraphID = sics::matrixgraph::core::common::GraphID;
 using VertexID = sics::matrixgraph::core::common::VertexID;
 
-GridTiledMatrix::GridTiledMatrix(const GridGraphMetadata &metadata) {
+GridBitTiledMatrix::GridBitTiledMatrix(const GridGraphMetadata &metadata) {
   metadata_ = metadata;
   tiled_matrix_vec_.resize(pow(metadata_.n_chunks, 2));
 
@@ -20,8 +20,8 @@ GridTiledMatrix::GridTiledMatrix(const GridGraphMetadata &metadata) {
                 tiled_matrix_vec_.end(), []() { return new BitTiledMatrix(); });
 }
 
-void GridTiledMatrix::Print() const {
-  std::cout << "[GridTiledMatrix Print] " << metadata_.n_chunks << "x"
+void GridBitTiledMatrix::Print() const {
+  std::cout << "[GridBitTiledMatrix Print] " << metadata_.n_chunks << "x"
             << metadata_.n_chunks << std::endl;
   for (GraphID x = 0; x < metadata_.n_chunks; x++) {
     for (GraphID y = 0; y < metadata_.n_chunks; y++) {

@@ -49,6 +49,28 @@ void Edges::WriteToBinary(const std::string &output_path) {
   out_meta_file.close();
 }
 
+void Edges::ReadFromBin(const std::string &input_path) {
+  YAML::Node node = YAML::LoadFile(input_path + "meta.yaml");
+
+  edgelist_metadata_ = {node["EdgelistBin"]["num_vertices"].as<VertexID>(),
+                        node["EdgelistBin"]["num_edges"].as<EdgeIndex>(),
+                        node["EdgelistBin"]["max_vid"].as<VertexID>()};
+
+  edges_ptr_ =
+      new sics::matrixgraph::core::data_structures::Edge[edgelist_metadata_
+                                                             .num_edges]();
+
+  std::ifstream in_file(input_path + "edgelist.bin");
+  if (!in_file) {
+
+    std::cout << "Open file failed: " + input_path + "edgelist.bin"
+              << std::endl;
+    exit(EXIT_FAILURE);
+  }
+  in_file.read(reinterpret_cast<char *>(edges_ptr_),
+               sizeof(Edge) * edgelist_metadata_.num_edges);
+}
+
 void Edges::ReadFromCSV(const std::string &filename, const std::string &sep,
                         bool compressed) {
   std::ifstream in_file(filename);

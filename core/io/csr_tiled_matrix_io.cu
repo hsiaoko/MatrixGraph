@@ -29,6 +29,8 @@ using sics::matrixgraph::core::util::atomic::WriteMax;
 void CSRTiledMatrixIO::Write(const std::string &output_path,
                              const CSRTiledMatrix &csr_tiled_matrix) {
 
+  csr_tiled_matrix.Print();
+
   // Create dir of grid of gid.
   if (!std::filesystem::exists(output_path))
     std::filesystem::create_directory(output_path);
@@ -40,50 +42,53 @@ void CSRTiledMatrixIO::Write(const std::string &output_path,
   std::cout << "[Write BitTiledMatrix] root_dir: " << output_path
             << " n_nz_tile: " << metadata.n_nz_tile << std::endl;
 
-  std::ofstream out_row_idx_file(output_path + "meta_buf/row_idx.bin");
-  std::ofstream out_col_idx_file(output_path + "meta_buf/col_idx.bin");
-  std::ofstream out_tile_offset_row_file(output_path +
-                                         "meta_buf/tile_offset_row.bin");
-  std::ofstream out_nz_tile_bm(output_path + "meta_buf/nz_tile_bm.bin");
-  std::ofstream csr_offset(output_path + "meta_buf/csr_offset.bin");
-  std::ofstream out_data(output_path + "meta_buf/data.bin");
-
-  out_row_idx_file.write(
-      reinterpret_cast<char *>(csr_tiled_matrix.GetTileRowIdxPtr()),
-      sizeof(VertexID) * metadata.n_nz_tile);
-
-  out_col_idx_file.write(
-      reinterpret_cast<char *>(csr_tiled_matrix.GetTileColIdxPtr()),
-      sizeof(VertexID) * metadata.n_nz_tile);
-
-  out_tile_offset_row_file.write(
-      reinterpret_cast<char *>(csr_tiled_matrix.GetTileOffsetRowPtr()),
-      sizeof(VertexID) * (metadata.n_strips + 1));
-
-  out_nz_tile_bm.write(
-      reinterpret_cast<char *>(csr_tiled_matrix.GetNzTileBitmapPtr()->data()),
-      csr_tiled_matrix.GetNzTileBitmapPtr()->GetBufferSize());
-
-  csr_offset.write(reinterpret_cast<char *>(csr_tiled_matrix.GetCSROffsetPtr()),
-                   sizeof(uint64_t) * (metadata.n_nz_tile + 1));
-
-  out_data.write(reinterpret_cast<char *>(csr_tiled_matrix.GetDataPtr()),
-                 csr_tiled_matrix.GetDataBufferSize());
-
   std::ofstream out_meta_file(output_path + "meta.yaml");
   YAML::Node out_node;
 
-  out_node["BitTiledMatrixMetadata"]["n_strips"] = metadata.n_strips;
-  out_node["BitTiledMatrixMetadata"]["n_nz_tile"] = metadata.n_nz_tile;
-  out_node["BitTiledMatrixMetadata"]["tile_size"] = metadata.tile_size;
+  out_node["CSRTiledMatrixMetadata"]["n_strips"] = metadata.n_strips;
+  out_node["CSRTiledMatrixMetadata"]["n_nz_tile"] = metadata.n_nz_tile;
+  out_node["CSRTiledMatrixMetadata"]["tile_size"] = metadata.tile_size;
 
   out_meta_file << out_node << std::endl;
 
-  out_row_idx_file.close();
-  out_col_idx_file.close();
-  out_tile_offset_row_file.close();
-  out_nz_tile_bm.close();
-  out_meta_file.close();
+  if (metadata.n_nz_tile != 0) {
+    std::ofstream out_row_idx_file(output_path + "meta_buf/row_idx.bin");
+    std::ofstream out_col_idx_file(output_path + "meta_buf/col_idx.bin");
+    std::ofstream out_tile_offset_row_file(output_path +
+                                           "meta_buf/tile_offset_row.bin");
+    std::ofstream out_nz_tile_bm(output_path + "meta_buf/nz_tile_bm.bin");
+    std::ofstream csr_offset(output_path + "meta_buf/csr_offset.bin");
+    std::ofstream out_data(output_path + "meta_buf/data.bin");
+
+    out_row_idx_file.write(
+        reinterpret_cast<char *>(csr_tiled_matrix.GetTileRowIdxPtr()),
+        sizeof(VertexID) * metadata.n_nz_tile);
+
+    out_col_idx_file.write(
+        reinterpret_cast<char *>(csr_tiled_matrix.GetTileColIdxPtr()),
+        sizeof(VertexID) * metadata.n_nz_tile);
+
+    out_tile_offset_row_file.write(
+        reinterpret_cast<char *>(csr_tiled_matrix.GetTileOffsetRowPtr()),
+        sizeof(VertexID) * (metadata.n_strips + 1));
+
+    out_nz_tile_bm.write(
+        reinterpret_cast<char *>(csr_tiled_matrix.GetNzTileBitmapPtr()->data()),
+        csr_tiled_matrix.GetNzTileBitmapPtr()->GetBufferSize());
+
+    csr_offset.write(
+        reinterpret_cast<char *>(csr_tiled_matrix.GetCSROffsetPtr()),
+        sizeof(uint64_t) * (metadata.n_nz_tile + 1));
+
+    out_data.write(reinterpret_cast<char *>(csr_tiled_matrix.GetDataPtr()),
+                   csr_tiled_matrix.GetDataBufferSize());
+
+    out_row_idx_file.close();
+    out_col_idx_file.close();
+    out_tile_offset_row_file.close();
+    out_nz_tile_bm.close();
+    out_meta_file.close();
+  }
   std::cout << "[Write BitTiledMatrix] Done!" << std::endl;
 }
 
@@ -94,16 +99,18 @@ void CSRTiledMatrixIO::Read(const std::string &input_path,
   YAML::Node in_node = YAML::LoadFile(input_path + "meta.yaml");
 
   TiledMatrixMetadata metadata{
-      .n_strips = in_node["BitTiledMatrixMetadata"]["n_strips"].as<VertexID>(),
+      .n_strips = in_node["CSRTiledMatrixMetadata"]["n_strips"].as<VertexID>(),
       .n_nz_tile =
-          in_node["BitTiledMatrixMetadata"]["n_nz_tile"].as<VertexID>(),
+          in_node["CSRTiledMatrixMetadata"]["n_nz_tile"].as<VertexID>(),
       .tile_size =
-          in_node["BitTiledMatrixMetadata"]["tile_size"].as<VertexID>()};
+          in_node["CSRTiledMatrixMetadata"]["tile_size"].as<VertexID>()};
 
   if (metadata.n_nz_tile == 0) {
     csr_tiled_matrix = nullptr;
     return;
   }
+  std::cout << metadata.n_strips << " " << metadata.n_nz_tile << " "
+            << metadata.tile_size << std::endl;
 
   csr_tiled_matrix->Init(metadata);
 
@@ -115,6 +122,7 @@ void CSRTiledMatrixIO::Read(const std::string &input_path,
                                         "meta_buf/tile_offset_row.bin");
   std::ifstream in_nz_tile_bm(input_path + "meta_buf/nz_tile_bm.bin");
   std::ifstream in_data(input_path + "meta_buf/data.bin");
+  std::ifstream csr_offset(input_path + "meta_buf/csr_offset.bin");
 
   in_row_idx_file.read(
       reinterpret_cast<char *>(csr_tiled_matrix->GetTileRowIdxPtr()),
@@ -134,6 +142,9 @@ void CSRTiledMatrixIO::Read(const std::string &input_path,
 
   in_data.read(reinterpret_cast<char *>(csr_tiled_matrix->GetDataPtr()),
                csr_tiled_matrix->GetDataBufferSize());
+
+  csr_offset.read(reinterpret_cast<char *>(csr_tiled_matrix->GetCSROffsetPtr()),
+                  sizeof(uint64_t) * (metadata.n_nz_tile + 1));
 
   in_row_idx_file.close();
   in_col_idx_file.close();

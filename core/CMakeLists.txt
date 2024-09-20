@@ -63,10 +63,9 @@ add_library(matrixgraph_core STATIC ${CORE_SOURCES} ${CORE_HEADERS})
 target_link_libraries(matrixgraph_core
         yaml-cpp
         -lcublas
-        #-lcurand
         TBB::tbb
         -static-libstdc++
         )
-target_compile_features(matrixgraph_core PUBLIC cxx_std_20)
+#target_compile_features(matrixgraph_core PUBLIC cxx_std_20)
 set_target_properties(matrixgraph_core
         PROPERTIES CUDA_SEPARABLE_COMPILATION ON)

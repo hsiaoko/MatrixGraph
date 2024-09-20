@@ -1,10 +1,10 @@
-#ifndef MATRIXGRAPH_CORE_COMPONENTS_PPR_QUERY_CUH_
-#define MATRIXGRAPH_CORE_COMPONENTS_PPR_QUERY_CUH_
+#ifndef MATRIXGRAPH_CORE_TASK_GEMM_CUH_
+#define MATRIXGRAPH_CORE_TASK_GEMM_CUH_
 
 #include <string>
 
 #include "core/common/types.h"
-#include "core/data_structures/grid_bit_tiled_matrix.cuh"
+#include "core/data_structures/grid_csr_tiled_matrix.cuh"
 #include "core/task/task_base.cuh"
 
 namespace sics {
@@ -12,19 +12,18 @@ namespace matrixgraph {
 namespace core {
 namespace task {
 
-class PPRQuery : public TaskBase {
+class GEMM : public TaskBase {
 private:
   using VertexID = sics::matrixgraph::core::common::VertexID;
   using TileIndex = sics::matrixgraph::core::common::TileIndex;
   using VertexLabel = sics::matrixgraph::core::common::VertexLabel;
-  using GridBitTiledMatrix =
-      sics::matrixgraph::core::data_structures::GridBitTiledMatrix;
+  using GridCSRTiledMatrix =
+      sics::matrixgraph::core::data_structures::GridCSRTiledMatrix;
 
 public:
-  PPRQuery(const std::string &input_path,
-           const std::string &input_path_transposed,
+  GEMM(const std::string &input_path, const std::string &input_path_transposed,
 
-           const std::string &output_path, size_t count)
+       const std::string &output_path, size_t count)
       : input_path_(input_path), input_path_transposed_(input_path_transposed),
         output_path_(output_path), count_(count) {
 
@@ -44,12 +43,11 @@ private:
 
   __host__ void FillTiles();
 
-  __host__ void Count(const GridBitTiledMatrix &G);
+  __host__ void Count(const GridCSRTiledMatrix &G);
 
-  GridBitTiledMatrix *A_;
-  GridBitTiledMatrix *B_;
-
-  GridBitTiledMatrix *C_;
+  GridCSRTiledMatrix *A_;
+  GridCSRTiledMatrix *B_;
+  GridCSRTiledMatrix *C_;
 
   const std::string input_path_;
   const std::string input_path_transposed_;
@@ -63,4 +61,4 @@ private:
 } // namespace matrixgraph
 } // namespace sics
 
-#endif // MATRIXGRAPH_CORE_COMPONENTS_MATRIXMULTIPLIER_CUH_
+#endif // MATRIXGRAPH_CORE_COMPONENTS_GEMM_CUH_

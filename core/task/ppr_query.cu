@@ -12,11 +12,11 @@
 #endif
 
 #include "core/data_structures/device_buffer.cuh"
-#include "core/data_structures/grid_tiled_matrix.cuh"
+#include "core/data_structures/grid_bit_tiled_matrix.cuh"
 #include "core/data_structures/host_buffer.cuh"
 #include "core/data_structures/metadata.h"
 #include "core/data_structures/unified_buffer.cuh"
-#include "core/io/grid_tiled_matrix_io.cuh"
+#include "core/io/grid_bit_tiled_matrix_io.cuh"
 #include "core/task/kernel/matrix_operations.cuh"
 #include "core/util/atomic.h"
 #include "core/util/bitmap.h"
@@ -27,10 +27,10 @@ namespace matrixgraph {
 namespace core {
 namespace task {
 
-using sics::matrixgraph::core::data_structures::GridTiledMatrix;
-using sics::matrixgraph::core::io::GridTiledMatrixIO;
+using sics::matrixgraph::core::data_structures::GridBitTiledMatrix;
+using sics::matrixgraph::core::io::GridBitTiledMatrixIO;
 using GirdTiledMatrix =
-    sics::matrixgraph::core::data_structures::GridTiledMatrix;
+    sics::matrixgraph::core::data_structures::GridBitTiledMatrix;
 using DeviceOwnedBufferUint64 =
     sics::matrixgraph::core::data_structures::DeviceOwnedBuffer<uint64_t>;
 using DeviceOwnedBufferUint32 =
@@ -70,13 +70,13 @@ static uint32_t hash_function(uint64_t x) {
 }
 
 __host__ void PPRQuery::LoadData() {
-  GridTiledMatrixIO grid_tiled_matrix_io;
+  GridBitTiledMatrixIO grid_tiled_matrix_io;
 
   grid_tiled_matrix_io.Read(input_path_, &A_);
   grid_tiled_matrix_io.Read(input_path_transposed_, &B_);
   // A_->Print();
   // B_->Print();
-  C_ = new GridTiledMatrix(A_->get_metadata());
+  C_ = new GridBitTiledMatrix(A_->get_metadata());
 }
 
 __host__ void PPRQuery::InitResultMatrix() {
@@ -912,7 +912,7 @@ __host__ void PPRQuery::FillTiles() {
                 [](auto &s) { cudaStreamDestroy(s); });
 }
 
-__host__ void PPRQuery::Count(const GridTiledMatrix &G) {
+__host__ void PPRQuery::Count(const GridBitTiledMatrix &G) {
   auto parallelism = std::thread::hardware_concurrency();
   std::vector<size_t> worker(parallelism);
   std::mutex mtx;

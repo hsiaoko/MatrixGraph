@@ -8,6 +8,7 @@
 #include <numeric>
 #include <thread>
 
+#include "core/data_structures/immutable_csr.cuh"
 #include "core/util/bitmap.h"
 #include "core/util/bitmap_no_ownership.h"
 #include "core/util/cuda_check.cuh"
@@ -17,10 +18,14 @@ namespace matrixgraph {
 namespace core {
 namespace data_structures {
 
+using ImmutableCSR = sics::matrixgraph::core::data_structures::ImmutableCSR;
+
 void CSRTiledMatrix::Print() const {
   if (metadata_.n_nz_tile == 0)
     return;
-  std::cout << "[CSRTiledMatrix Print]" << std::endl;
+  std::cout << "[CSRTiledMatrix Print], n_nz_tile: " << metadata_.n_nz_tile
+            << std::endl;
+
   std::cout << " * tile_offset_row: ";
 
   for (VertexID _ = 0; _ < metadata_.n_strips + 1; _++) {
@@ -39,6 +44,14 @@ void CSRTiledMatrix::Print() const {
                 << " ";
     }
     std::cout << std::endl;
+  }
+  std::cout << std::endl;
+
+  for (VertexID _ = 0; _ < metadata_.n_nz_tile; _++) {
+    auto *csr_base_ptr = GetCSRBasePtrByIdx(_);
+    ImmutableCSR csr(GetCSRMetadataByIdx(_));
+    csr.ParseBasePtr(csr_base_ptr);
+    csr.PrintGraph();
   }
   std::cout << std::endl;
 }
@@ -68,6 +81,17 @@ void CSRTiledMatrix::Init(const TiledMatrixMetadata &metadata,
 
   metadata_vec_.resize(metadata_.n_nz_tile);
   nz_tile_bm_ = nz_tile_bm;
+
+  if (nz_tile_bm == nullptr) {
+    uint64_t *bm_data;
+    size_t bm_size = pow(metadata_.n_strips, 2);
+    CUDA_CHECK(cudaHostAlloc((void **)&bm_data,
+                             sizeof(uint64_t) * (WORD_OFFSET(bm_size) + 1),
+                             cudaHostAllocDefault));
+    nz_tile_bm_ = new GPUBitmap(bm_size, bm_data);
+  } else {
+    nz_tile_bm_ = nz_tile_bm;
+  }
 }
 
 void CSRTiledMatrix::Init(VertexID tile_size, VertexID n_strips, Bitmap *bm) {}

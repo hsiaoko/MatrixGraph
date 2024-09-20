@@ -93,10 +93,10 @@ void ImmutableCSR::ParseBasePtr(uint8_t *graph_base_pointer) {
       metadata_.num_vertices));
   SetOutOffsetBuffer(reinterpret_cast<EdgeIndex *>(
       reinterpret_cast<VertexID *>(in_offset_base_pointer_) +
-      metadata_.num_vertices));
+      metadata_.num_vertices + 1));
   SetIncomingEdgesBuffer(reinterpret_cast<VertexID *>(
       reinterpret_cast<EdgeIndex *>(out_offset_base_pointer_) +
-      metadata_.num_vertices));
+      metadata_.num_vertices + 1));
   SetOutgoingEdgesBuffer(reinterpret_cast<VertexID *>(
       incoming_edges_base_pointer_ + metadata_.num_incoming_edges));
   SetEdgesGlobalIDBuffer(reinterpret_cast<VertexID *>(
@@ -125,9 +125,9 @@ void ImmutableCSR::Write(const std::string &root_path, GraphID gid) {
   out_data_file.write(reinterpret_cast<char *>(GetOutDegreeBasePointer()),
                       sizeof(VertexID) * get_num_vertices());
   out_data_file.write(reinterpret_cast<char *>(GetInOffsetBasePointer()),
-                      sizeof(EdgeIndex) * get_num_vertices());
+                      sizeof(EdgeIndex) * (get_num_vertices() + 1));
   out_data_file.write(reinterpret_cast<char *>(GetOutOffsetBasePointer()),
-                      sizeof(EdgeIndex) * get_num_vertices());
+                      sizeof(EdgeIndex) * (get_num_vertices() + 1));
   out_data_file.write(reinterpret_cast<char *>(GetIncomingEdgesBasePointer()),
                       sizeof(VertexID) * get_num_outgoing_edges());
   out_data_file.write(reinterpret_cast<char *>(GetOutgoingEdgesBasePointer()),
@@ -213,10 +213,10 @@ void ImmutableCSR::Read(const std::string &root_path) {
       metadata_.num_vertices));
   SetOutOffsetBuffer(reinterpret_cast<EdgeIndex *>(
       reinterpret_cast<VertexID *>(in_offset_base_pointer_) +
-      metadata_.num_vertices));
+      (metadata_.num_vertices + 1)));
   SetIncomingEdgesBuffer(reinterpret_cast<VertexID *>(
       reinterpret_cast<EdgeIndex *>(out_offset_base_pointer_) +
-      metadata_.num_vertices));
+      (metadata_.num_vertices + 1)));
   SetOutgoingEdgesBuffer(reinterpret_cast<VertexID *>(
       incoming_edges_base_pointer_ + metadata_.num_incoming_edges));
   SetEdgesGlobalIDBuffer(reinterpret_cast<VertexID *>(
