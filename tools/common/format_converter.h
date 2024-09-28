@@ -690,9 +690,6 @@ CSRTiledMatrix *Edgelist2CSRTiledMatrix(const Edges &edges, size_t tile_size,
        &csr_tiled_matrix](auto &w) {
         for (auto i = w; i < n_nz_tile; i += step) {
           auto *csr_base_ptr = csr_tiled_matrix->GetCSRBasePtrByIdx(i);
-          // ImmutableCSR csr(csr_tiled_matrix->GetCSRMetadataByIdx(i));
-          // csr.ParseBasePtr(csr_base_ptr);
-          // csr.PrintGraph();
           auto *tile_row_idx_ptr = csr_tiled_matrix->GetTileRowIdxPtr();
           auto *tile_col_idx_ptr = csr_tiled_matrix->GetTileColIdxPtr();
           tile_row_idx_ptr[i] =
@@ -704,10 +701,9 @@ CSRTiledMatrix *Edgelist2CSRTiledMatrix(const Edges &edges, size_t tile_size,
         }
       });
 
-  auto *tile_offset_row_ptr = csr_tiled_matrix->GetTileRowIdxPtr();
-  for (int i = 0; i < n_strips; i++) {
+  auto *tile_offset_row_ptr = csr_tiled_matrix->GetTileOffsetRowPtr();
+  for (int i = 0; i < n_strips; i++)
     tile_offset_row_ptr[i + 1] = tile_offset_row_ptr[i] + n_nz_tile_per_row[i];
-  }
 
   csr_tiled_matrix->Print();
   return csr_tiled_matrix;

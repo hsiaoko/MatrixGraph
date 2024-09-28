@@ -2,15 +2,13 @@
 
 #include <ctime>
 #include <cuda_runtime.h>
+#include <execution>
 #include <iostream>
 #include <mutex>
 #include <thread>
 #include <unordered_map>
 
-#ifdef TBB_FOUND
-#include <execution>
-#endif
-
+#include "core/common/host_algorithms.cuh"
 #include "core/data_structures/device_buffer.cuh"
 #include "core/data_structures/grid_bit_tiled_matrix.cuh"
 #include "core/data_structures/host_buffer.cuh"
@@ -58,15 +56,6 @@ __global__ void add(int n, float *x, float *y) {
   int stride = blockDim.x * gridDim.x;
   for (int i = index; i < n; i += stride)
     y[i] = x[i] + y[i];
-}
-
-static uint32_t hash_function(uint64_t x) {
-  x ^= x >> 16;
-  x *= 0x85ebca6b;
-  x ^= x >> 13;
-  x *= 0xc2b2ae35;
-  x ^= x >> 16;
-  return x;
 }
 
 __host__ void PPRQuery::LoadData() {
@@ -150,7 +139,7 @@ __host__ void PPRQuery::InitResultMatrix() {
                 [this, M, N, K, step, &p_streams_vec, &mtx](auto w) {
                   for (VertexID i = w; i < N; i += step) {
                     for (VertexID j = 0; j < M; j++) {
-                      cudaSetDevice(hash_function(i * N + j) % 4);
+                      cudaSetDevice(common::hash_function(i * N + j) % 4);
                       cudaStreamCreate(&p_streams_vec[i * N + j]);
                     }
                   }
@@ -179,7 +168,7 @@ __host__ void PPRQuery::InitResultMatrix() {
               if (block_b->GetMetadata().n_nz_tile == 0)
                 continue;
 
-              cudaSetDevice(hash_function(i * N + j) % 4);
+              cudaSetDevice(common::hash_function(i * N + j) % 4);
               cudaStream_t &p_stream = p_streams_vec[i * N + j];
 
               {
@@ -245,12 +234,11 @@ __host__ void PPRQuery::InitResultMatrix() {
                  &device_owned_buffers_matrix_c, n_strips](auto w) {
                   for (VertexID i = w; i < M; i += step) {
                     for (VertexID j = 0; j < N; j++) {
-
                       if (device_owned_buffers_matrix_c[i * N + j].GetPtr() ==
                           nullptr) {
                         continue;
                       }
-                      cudaSetDevice(hash_function(i * N + j) % 4);
+                      cudaSetDevice(common::hash_function(i * N + j) % 4);
                       cudaStream_t &p_stream = p_streams_vec[i * N + j];
                       device_owned_buffers_matrix_c_count[i * N + j].Init(
                           sizeof(uint64_t), p_stream);
@@ -275,7 +263,7 @@ __host__ void PPRQuery::InitResultMatrix() {
             if (device_owned_buffers_matrix_c[i * N + j].GetPtr() == nullptr) {
               continue;
             }
-            cudaSetDevice(hash_function(i * N + j) % 4);
+            cudaSetDevice(common::hash_function(i * N + j) % 4);
             cudaStream_t &p_stream = p_streams_vec[i * N + j];
             buffers_matrix_c_count[i * N + j].size = sizeof(uint64_t);
             cudaHostAlloc(&buffers_matrix_c_count[i * N + j].data,
@@ -317,7 +305,7 @@ __host__ void PPRQuery::InitResultMatrix() {
             VertexID n_nz_tile = *buffers_matrix_c_count[i * N + j].GetPtr();
             if (n_nz_tile == 0)
               continue;
-            cudaSetDevice(hash_function(i * N + j) % 4);
+            cudaSetDevice(common::hash_function(i * N + j) % 4);
             cudaStream_t &p_stream = p_streams_vec[i * N + j];
 
             auto *bit_tiled_matrix_ptr =
@@ -355,7 +343,7 @@ __host__ void PPRQuery::InitResultMatrix() {
             if (n_nz_tile == 0)
               continue;
 
-            cudaSetDevice(hash_function(i * N + j) % 4);
+            cudaSetDevice(common::hash_function(i * N + j) % 4);
             cudaStream_t &p_stream = p_streams_vec[i * N + j];
             auto *bit_tiled_matrix_ptr =
                 C_->GetBitTileMatrixPtrByIdx(i * N + j);
@@ -417,7 +405,7 @@ __host__ void PPRQuery::InitResultMatrix() {
             if (n_nz_tile == 0)
               continue;
 
-            cudaSetDevice(hash_function(i * N + j) % 4);
+            cudaSetDevice(common::hash_function(i * N + j) % 4);
             cudaStream_t &p_stream = p_streams_vec[i * N + j];
 
             cudaMemcpyAsync(tile_count_row[i * N + j].GetPtr(),
@@ -504,7 +492,7 @@ __host__ void PPRQuery::FillTilesUnifiedMemory() {
                 [this, M, N, K, step, &p_streams_vec, &mtx](auto w) {
                   for (VertexID i = w; i < N; i += step) {
                     for (VertexID j = 0; j < M; j++) {
-                      cudaSetDevice(hash_function(i * N + j) % 4);
+                      cudaSetDevice(common::hash_function(i * N + j) % 4);
                       cudaStreamCreate(&p_streams_vec[i * N + j]);
                     }
                   }
@@ -743,10 +731,10 @@ __host__ void PPRQuery::FillTilesUnifiedMemory() {
               if (block_c->GetMetadata().n_nz_tile == 0)
                 continue;
 
-              WriteAdd(&work_load[hash_function(i * N + j) % 4], 1);
+              WriteAdd(&work_load[common::hash_function(i * N + j) % 4], 1);
               {
                 std::lock_guard<std::mutex> lock(mtx);
-                cudaSetDevice(hash_function(i * N + j) % 4);
+                cudaSetDevice(common::hash_function(i * N + j) % 4);
                 cudaStream_t &p_stream = p_streams_vec[i * N + j];
                 MatrixOperationsKernelWrapper::FillTiles(
                     p_stream, tile_size, n_strips,
@@ -842,7 +830,7 @@ __host__ void PPRQuery::FillTiles() {
                 [this, M, N, K, step, &p_streams_vec, &mtx](auto w) {
                   for (VertexID i = w; i < N; i += step) {
                     for (VertexID j = 0; j < M; j++) {
-                      cudaSetDevice(hash_function(i * N + j) % 4);
+                      cudaSetDevice(common::hash_function(i * N + j) % 4);
                       cudaStreamCreate(&p_streams_vec[i * N + j]);
                     }
                   }
@@ -935,7 +923,7 @@ __host__ void PPRQuery::Count(const GridBitTiledMatrix &G) {
                 [this, M, N, K, step, &p_streams_vec, &mtx](auto w) {
                   for (VertexID i = w; i < N; i += step) {
                     for (VertexID j = 0; j < M; j++) {
-                      cudaSetDevice(hash_function(i * N + j) % 4);
+                      cudaSetDevice(common::hash_function(i * N + j) % 4);
                       cudaStreamCreate(&p_streams_vec[i * N + j]);
                     }
                   }
@@ -978,7 +966,7 @@ __host__ void PPRQuery::Count(const GridBitTiledMatrix &G) {
               // block->Print();
 
               cudaStream_t &p_stream = p_streams_vec[i * N + j];
-              cudaSetDevice(hash_function(i * N + j) % 4);
+              cudaSetDevice(common::hash_function(i * N + j) % 4);
               MatrixOperationsKernelWrapper::Count(
                   p_stream, tile_size, n_strips, block->GetMetadata().n_nz_tile,
                   unified_data[i * N + j], &unified_count[i * N + j]);

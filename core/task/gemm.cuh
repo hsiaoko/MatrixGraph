@@ -35,7 +35,11 @@ public:
 private:
   __host__ void LoadData();
 
+  __host__ void SizePred();
+
   __host__ void InitResultMatrix();
+
+  __host__ void InitC();
 
   __host__ void InitResultMatrixUnifiedMemory();
 

@@ -36,11 +36,9 @@ void GridCSRTiledMatrixIO::Read(const std::string &input_path,
     std::string block_dir = input_path + "block" + std::to_string(gid) + "/";
 
     auto *csr_tiled_matrix_ptr =
-        (*grid_tiled_matrix)->GetBitTileMatrixPtrByIdx(gid);
+        (*grid_tiled_matrix)->GetTiledMatrixPtrByIdx(gid);
 
     csr_tiled_matrix_io.Read(block_dir, csr_tiled_matrix_ptr);
-
-    csr_tiled_matrix_ptr->Print();
   }
 }
 
@@ -52,8 +50,8 @@ void GridCSRTiledMatrixIO::Write(const std::string &output_path,
   CSRTiledMatrixIO csr_tiled_matrix_io;
   for (size_t _ = 0; _ < pow(meta.n_chunks, 2); _++) {
     std::string block_dir = output_path + "block" + std::to_string(_) + "/";
-    // BitTiledMatrixIO::Write(block_dir,
-    //                         *grid_tiled_matrix.GetBitTileMatrixPtrByIdx(_));
+    CSRTiledMatrixIO::Write(block_dir,
+                            *grid_tiled_matrix.GetTiledMatrixPtrByIdx(_));
   }
 
   std::ofstream out_meta_file(output_path + "meta.yaml");

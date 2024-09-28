@@ -55,6 +55,14 @@ public:
 
   TiledMatrixMetadata GetMetadata() const { return metadata_; }
 
+  std::vector<SubGraphMetadata> GetCSRMetadata() const {
+    return metadata_vec_;
+  };
+
+  void SetCSRMetadata(std::vector<SubGraphMetadata> &metadata) {
+    metadata_vec_ = metadata;
+  };
+
   SubGraphMetadata GetCSRMetadataByIdx(VertexID i) const {
     return metadata_vec_[i];
   }

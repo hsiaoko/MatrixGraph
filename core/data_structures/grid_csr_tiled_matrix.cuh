@@ -26,7 +26,7 @@ public:
 
   GridGraphMetadata get_metadata() const { return metadata_; }
 
-  CSRTiledMatrix *GetBitTileMatrixPtrByIdx(GraphID idx) const {
+  CSRTiledMatrix *GetTiledMatrixPtrByIdx(GraphID idx) const {
     return tiled_matrix_vec_[idx];
   }
 

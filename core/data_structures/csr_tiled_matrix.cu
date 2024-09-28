@@ -19,6 +19,61 @@ namespace core {
 namespace data_structures {
 
 using ImmutableCSR = sics::matrixgraph::core::data_structures::ImmutableCSR;
+using EdgeIndex = sics::matrixgraph::core::common::EdgeIndex;
+
+void CSRTiledMatrix::Init(const TiledMatrixMetadata &metadata,
+                          GPUBitmap *nz_tile_bm) {
+
+  metadata_.n_strips = metadata.n_strips;
+  metadata_.n_nz_tile = metadata.n_nz_tile;
+  metadata_.tile_size = metadata.tile_size;
+
+  if (tile_row_idx_ != nullptr)
+    delete[] tile_row_idx_;
+  if (tile_col_idx_ != nullptr)
+    delete[] tile_col_idx_;
+  if (tile_offset_row_ != nullptr)
+    delete[] tile_offset_row_;
+  if (nz_tile_bm_ != nullptr)
+    delete nz_tile_bm_;
+  if (csr_offset_ != nullptr)
+    delete[] csr_offset_;
+
+  tile_row_idx_ = new VertexID[metadata_.n_nz_tile]();
+  tile_col_idx_ = new VertexID[metadata_.n_nz_tile]();
+  tile_offset_row_ = new VertexID[metadata_.n_strips + 1]();
+  csr_offset_ = new uint64_t[metadata_.n_nz_tile + 1]();
+
+  metadata_vec_.resize(metadata_.n_nz_tile);
+  nz_tile_bm_ = nz_tile_bm;
+
+  auto default_n_edges = 65536;
+  auto default_n_vertices = 128;
+  auto tile_buffer_size = sizeof(VertexID) * (default_n_vertices + 1) +
+                          sizeof(VertexID) * (default_n_vertices + 1) +
+                          sizeof(VertexID) * (default_n_vertices) +
+                          sizeof(VertexID) * (default_n_vertices) +
+                          sizeof(VertexID) * (default_n_vertices) +
+                          sizeof(VertexID) * (default_n_vertices) +
+                          sizeof(EdgeIndex) * (default_n_edges)*2;
+
+  CUDA_CHECK(cudaHostAlloc((void **)&data_,
+                           tile_buffer_size * metadata_.n_nz_tile,
+                           cudaHostAllocDefault));
+
+  if (nz_tile_bm == nullptr) {
+    uint64_t *bm_data;
+    size_t bm_size = pow(metadata_.n_strips, 2);
+    CUDA_CHECK(cudaHostAlloc((void **)&bm_data,
+                             sizeof(uint64_t) * (WORD_OFFSET(bm_size) + 1),
+                             cudaHostAllocDefault));
+    nz_tile_bm_ = new GPUBitmap(bm_size, bm_data);
+  } else {
+    nz_tile_bm_ = nz_tile_bm;
+  }
+}
+
+void CSRTiledMatrix::Init(VertexID tile_size, VertexID n_strips, Bitmap *bm) {}
 
 void CSRTiledMatrix::Print() const {
   if (metadata_.n_nz_tile == 0)
@@ -55,46 +110,6 @@ void CSRTiledMatrix::Print() const {
   }
   std::cout << std::endl;
 }
-
-void CSRTiledMatrix::Init(const TiledMatrixMetadata &metadata,
-                          GPUBitmap *nz_tile_bm) {
-
-  metadata_.n_strips = metadata.n_strips;
-  metadata_.n_nz_tile = metadata.n_nz_tile;
-  metadata_.tile_size = metadata.tile_size;
-
-  if (tile_row_idx_ != nullptr)
-    delete[] tile_row_idx_;
-  if (tile_col_idx_ != nullptr)
-    delete[] tile_col_idx_;
-  if (tile_offset_row_ != nullptr)
-    delete[] tile_offset_row_;
-  if (nz_tile_bm_ != nullptr)
-    delete nz_tile_bm_;
-  if (csr_offset_ != nullptr)
-    delete[] csr_offset_;
-
-  tile_row_idx_ = new VertexID[metadata_.n_nz_tile]();
-  tile_col_idx_ = new VertexID[metadata_.n_nz_tile]();
-  tile_offset_row_ = new VertexID[metadata_.n_strips + 1]();
-  csr_offset_ = new uint64_t[metadata_.n_nz_tile + 1]();
-
-  metadata_vec_.resize(metadata_.n_nz_tile);
-  nz_tile_bm_ = nz_tile_bm;
-
-  if (nz_tile_bm == nullptr) {
-    uint64_t *bm_data;
-    size_t bm_size = pow(metadata_.n_strips, 2);
-    CUDA_CHECK(cudaHostAlloc((void **)&bm_data,
-                             sizeof(uint64_t) * (WORD_OFFSET(bm_size) + 1),
-                             cudaHostAllocDefault));
-    nz_tile_bm_ = new GPUBitmap(bm_size, bm_data);
-  } else {
-    nz_tile_bm_ = nz_tile_bm;
-  }
-}
-
-void CSRTiledMatrix::Init(VertexID tile_size, VertexID n_strips, Bitmap *bm) {}
 
 uint8_t *CSRTiledMatrix::GetCSRBasePtrByIdx(uint32_t idx) const {
   assert(idx < metadata_.n_nz_tile);

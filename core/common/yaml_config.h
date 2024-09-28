@@ -1,6 +1,7 @@
 #ifndef SICS_GRAPH_SYSTEMS_TOOLS_COMMON_YAML_CONFIG_H_
 #define SICS_GRAPH_SYSTEMS_TOOLS_COMMON_YAML_CONFIG_H_
 
+#include <iostream>
 #include <yaml-cpp/yaml.h>
 
 #include "core/data_structures/metadata.h"
@@ -55,9 +56,9 @@ struct convert<sics::matrixgraph::core::data_structures::SubGraphMetadata> {
   static bool decode(const Node &node,
                      sics::matrixgraph::core::data_structures::SubGraphMetadata
                          &subgraph_metadata) {
-    if (node.size() != 6) {
+    if (node.size() != 6)
       return false;
-    }
+
     subgraph_metadata.gid = node["gid"].as<GraphID>();
     subgraph_metadata.num_vertices = node["num_vertices"].as<EdgeIndex>();
     subgraph_metadata.num_incoming_edges =

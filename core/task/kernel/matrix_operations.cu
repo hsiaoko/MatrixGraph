@@ -59,9 +59,12 @@ struct ParametersFillTiles {
   unsigned *tile_col_idx_a;
   unsigned *tile_col_idx_b;
   unsigned *tile_col_idx_c;
-  unsigned long long *data_a;
-  unsigned long long *data_b;
-  unsigned long long *data_c;
+  uint8_t *data_a;
+  uint8_t *data_b;
+  uint8_t *data_c;
+  uint64_t *csr_offset_a = nullptr;
+  uint64_t *csr_offset_b = nullptr;
+  uint64_t *csr_offset_c = nullptr;
 };
 
 struct ParametersCount {
@@ -259,7 +262,8 @@ static __global__ void fill_tiles_kernel(ParametersFillTiles params) {
     unsigned int x = params.tile_row_idx_c[i];
     unsigned int y = params.tile_col_idx_c[i];
 
-    unsigned long long *matrix_c = params.data_c + params.tile_unit * i;
+    unsigned long long *matrix_c =
+        ((unsigned long long *)params.data_c) + params.tile_unit * i;
 
     unsigned int nz_tile_line_x =
         params.tile_offset_row_a[x + 1] - params.tile_offset_row_a[x];
@@ -284,14 +288,58 @@ static __global__ void fill_tiles_kernel(ParametersFillTiles params) {
         // idx_intersection_r[r])-th tile.
 
         unsigned long long *matrix_a =
-            params.data_a +
+            ((unsigned long long *)params.data_a) +
             params.tile_unit * (params.tile_offset_row_a[x] + nz_idx_x);
         unsigned long long *matrix_b =
-            params.data_b +
+            ((unsigned long long *)params.data_b) +
             params.tile_unit * (params.tile_offset_row_b[y] + nz_idx_y);
 
         single_thread_matrix_bit_and(params.tile_size, matrix_a, matrix_b,
                                      matrix_c);
+
+        nz_idx_x++;
+        nz_idx_y++;
+      }
+    }
+  }
+}
+
+static __global__ void fill_csr_tiles_kernel(ParametersFillTiles params) {
+  unsigned int tid = blockIdx.x * blockDim.x + threadIdx.x;
+  unsigned int step = blockDim.x * gridDim.x;
+
+  printf("%d\n", tid);
+  for (unsigned int i = tid; i < params.n_nz_tile_c; i += step) {
+    unsigned int x = params.tile_row_idx_c[i];
+    unsigned int y = params.tile_col_idx_c[i];
+
+    unsigned long long *matrix_c =
+        ((unsigned long long *)params.data_c) + params.tile_unit * i;
+
+    unsigned int nz_tile_line_x =
+        params.tile_offset_row_a[x + 1] - params.tile_offset_row_a[x];
+
+    unsigned int nz_tile_line_y =
+        params.tile_offset_row_b[y + 1] - params.tile_offset_row_b[y];
+
+    unsigned nz_idx_x = 0;
+    unsigned nz_idx_y = 0;
+    while (nz_idx_x < nz_tile_line_x && nz_idx_y < nz_tile_line_y) {
+      if (*(params.tile_col_idx_a + params.tile_offset_row_a[x] + nz_idx_x) <
+          *(params.tile_col_idx_b + params.tile_offset_row_a[y] + nz_idx_y)) {
+        nz_idx_x++;
+      } else if (*(params.tile_col_idx_a + params.tile_offset_row_a[x] +
+                   nz_idx_x) > *(params.tile_col_idx_b +
+                                 params.tile_offset_row_a[y] + nz_idx_y)) {
+        nz_idx_y++;
+      } else {
+
+        size_t csr_offset_a =
+            params.csr_offset_a[params.tile_offset_row_a[x] + nz_idx_x];
+        size_t csr_offset_b =
+            params.csr_offset_b[params.tile_offset_row_b[y] + nz_idx_y];
+
+        printf("offset: %ld, offset: %ld\n", csr_offset_a, csr_offset_b);
 
         nz_idx_x++;
         nz_idx_y++;
@@ -403,6 +451,62 @@ void MatrixOperationsKernelWrapper::FillTiles(
   auto tile_buffer_size =
       sizeof(uint64_t) * max(1u, WORD_OFFSET(tile_size * tile_size));
 
+  ParametersFillTiles params{.tile_size = tile_size,
+                             .n_strips = n_strips,
+                             .n_nz_tile_a = n_nz_tile_a,
+                             .n_nz_tile_b = n_nz_tile_b,
+                             .n_nz_tile_c = n_nz_tile_c,
+                             .tile_unit = tile_unit,
+                             .tile_buffer_size = tile_buffer_size,
+                             .layout_matrix_c =
+                                 (unsigned long long *)layout_matrix_c.GetPtr(),
+                             .tile_offset_row_a = tile_offset_row_a.GetPtr(),
+                             .tile_offset_row_b = tile_offset_row_b.GetPtr(),
+                             .tile_offset_row_c = tile_offset_row_c.GetPtr(),
+                             .tile_row_idx_a = tile_row_idx_a.GetPtr(),
+                             .tile_row_idx_b = tile_row_idx_b.GetPtr(),
+                             .tile_row_idx_c = tile_row_idx_c.GetPtr(),
+                             .tile_col_idx_a = tile_col_idx_a.GetPtr(),
+                             .tile_col_idx_b = tile_col_idx_b.GetPtr(),
+                             .tile_col_idx_c = tile_col_idx_c.GetPtr(),
+                             .data_a = (uint8_t *)data_a.GetPtr(),
+                             .data_b = (uint8_t *)data_b.GetPtr(),
+                             .data_c = (uint8_t *)(data_c->GetPtr())};
+
+  fill_tiles_kernel<<<dimBlock, dimGrid, 0, stream>>>(params);
+  cudaError_t err = cudaGetLastError();
+  if (err != cudaSuccess) {
+    CUDA_CHECK(err);
+  }
+}
+
+void MatrixOperationsKernelWrapper::FillCSRTiles(
+    const cudaStream_t &stream, size_t tile_size, size_t n_strips,
+    size_t n_nz_tile_a, size_t n_nz_tile_b, size_t n_nz_tile_c,
+    const data_structures::UnifiedOwnedBuffer<uint64_t> &layout_matrix_c,
+    const data_structures::UnifiedOwnedBuffer<uint32_t> &tile_offset_row_a,
+    const data_structures::UnifiedOwnedBuffer<uint32_t> &tile_offset_row_b,
+    const data_structures::UnifiedOwnedBuffer<uint32_t> &tile_offset_row_c,
+    const data_structures::UnifiedOwnedBuffer<uint32_t> &tile_row_idx_a,
+    const data_structures::UnifiedOwnedBuffer<uint32_t> &tile_row_idx_b,
+    const data_structures::UnifiedOwnedBuffer<uint32_t> &tile_row_idx_c,
+    const data_structures::UnifiedOwnedBuffer<uint32_t> &tile_col_idx_a,
+    const data_structures::UnifiedOwnedBuffer<uint32_t> &tile_col_idx_b,
+    const data_structures::UnifiedOwnedBuffer<uint32_t> &tile_col_idx_c,
+    const data_structures::UnifiedOwnedBuffer<uint64_t> &csr_offset_a,
+    const data_structures::UnifiedOwnedBuffer<uint64_t> &csr_offset_b,
+    const data_structures::UnifiedOwnedBuffer<uint64_t> &csr_offset_c,
+    const data_structures::UnifiedOwnedBuffer<uint8_t> &data_a,
+    const data_structures::UnifiedOwnedBuffer<uint8_t> &data_b,
+    data_structures::UnifiedOwnedBuffer<uint8_t> *data_c) {
+
+  dim3 dimBlock(1);
+  dim3 dimGrid(1);
+
+  auto tile_unit = max(1u, (WORD_OFFSET(tile_size * tile_size)));
+  auto tile_buffer_size =
+      sizeof(uint64_t) * max(1u, WORD_OFFSET(tile_size * tile_size));
+
   ParametersFillTiles params{
       .tile_size = tile_size,
       .n_strips = n_strips,
@@ -421,11 +525,15 @@ void MatrixOperationsKernelWrapper::FillTiles(
       .tile_col_idx_a = tile_col_idx_a.GetPtr(),
       .tile_col_idx_b = tile_col_idx_b.GetPtr(),
       .tile_col_idx_c = tile_col_idx_c.GetPtr(),
-      .data_a = (unsigned long long *)data_a.GetPtr(),
-      .data_b = (unsigned long long *)data_b.GetPtr(),
-      .data_c = (unsigned long long *)(data_c->GetPtr())};
+      .data_a = data_a.GetPtr(),
+      .data_b = data_b.GetPtr(),
+      .data_c = data_c->GetPtr(),
+      .csr_offset_a = csr_offset_a.GetPtr(),
+      .csr_offset_b = csr_offset_b.GetPtr(),
+      .csr_offset_c = csr_offset_c.GetPtr(),
+  };
 
-  fill_tiles_kernel<<<dimBlock, dimGrid, 0, stream>>>(params);
+  fill_csr_tiles_kernel<<<dimBlock, dimGrid, 0, stream>>>(params);
   cudaError_t err = cudaGetLastError();
   if (err != cudaSuccess) {
     CUDA_CHECK(err);

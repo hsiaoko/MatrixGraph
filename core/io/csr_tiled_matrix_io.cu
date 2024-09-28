@@ -4,6 +4,8 @@
 #include <vector>
 
 #include "core/common/yaml_config.h"
+#include "core/data_structures/csr_tiled_matrix.cuh"
+#include "core/data_structures/immutable_csr.cuh"
 #include "core/data_structures/metadata.h"
 #include "core/io/csr_tiled_matrix_io.cuh"
 #include "core/util/atomic.h"
@@ -23,14 +25,12 @@ using SubGraphMetadata =
     sics::matrixgraph::core::data_structures::SubGraphMetadata;
 using Bitmap = sics::matrixgraph::core::util::Bitmap;
 using CSRTiledMatrix = sics::matrixgraph::core::data_structures::CSRTiledMatrix;
+using ImmutableCSR = sics::matrixgraph::core::data_structures::ImmutableCSR;
 using sics::matrixgraph::core::util::atomic::WriteAdd;
 using sics::matrixgraph::core::util::atomic::WriteMax;
 
 void CSRTiledMatrixIO::Write(const std::string &output_path,
                              const CSRTiledMatrix &csr_tiled_matrix) {
-
-  csr_tiled_matrix.Print();
-
   // Create dir of grid of gid.
   if (!std::filesystem::exists(output_path))
     std::filesystem::create_directory(output_path);
@@ -44,10 +44,14 @@ void CSRTiledMatrixIO::Write(const std::string &output_path,
 
   std::ofstream out_meta_file(output_path + "meta.yaml");
   YAML::Node out_node;
+  std::cout << "123e2131D###3###: "
+            << "!" << csr_tiled_matrix.GetDataBufferSize() << std::endl;
 
   out_node["CSRTiledMatrixMetadata"]["n_strips"] = metadata.n_strips;
   out_node["CSRTiledMatrixMetadata"]["n_nz_tile"] = metadata.n_nz_tile;
   out_node["CSRTiledMatrixMetadata"]["tile_size"] = metadata.tile_size;
+  out_node["CSRTiledMatrixMetadata"]["subgraphs"] =
+      csr_tiled_matrix.GetCSRMetadata();
 
   out_meta_file << out_node << std::endl;
 
@@ -60,6 +64,7 @@ void CSRTiledMatrixIO::Write(const std::string &output_path,
     std::ofstream csr_offset(output_path + "meta_buf/csr_offset.bin");
     std::ofstream out_data(output_path + "meta_buf/data.bin");
 
+    std::cout << output_path << std::endl;
     out_row_idx_file.write(
         reinterpret_cast<char *>(csr_tiled_matrix.GetTileRowIdxPtr()),
         sizeof(VertexID) * metadata.n_nz_tile);
@@ -82,6 +87,26 @@ void CSRTiledMatrixIO::Write(const std::string &output_path,
 
     out_data.write(reinterpret_cast<char *>(csr_tiled_matrix.GetDataPtr()),
                    csr_tiled_matrix.GetDataBufferSize());
+
+    std::cout << "csr_tiled_matrix_buffer_size"
+              << csr_tiled_matrix.GetDataBufferSize() << std::endl;
+
+    for (int i = 0; i < csr_tiled_matrix.GetDataBufferSize() / sizeof(VertexID);
+         i++) {
+      std::cout << i << ": " << ((VertexID *)csr_tiled_matrix.GetDataPtr())[i]
+                << std::endl;
+    }
+    for (int i = 0; i < csr_tiled_matrix.GetMetadata().n_nz_tile; i++) {
+      std::cout << "csr_offset: " << csr_tiled_matrix.GetCSROffsetPtr()[i]
+                << std::endl;
+    }
+
+    for (int i = 0; i < csr_tiled_matrix.GetMetadata().n_nz_tile; i++) {
+      auto data = csr_tiled_matrix.GetCSRBasePtrByIdx(i);
+      ImmutableCSR csr(csr_tiled_matrix.GetCSRMetadataByIdx(i));
+      csr.ParseBasePtr(data);
+      csr.PrintGraph();
+    }
 
     out_row_idx_file.close();
     out_col_idx_file.close();
@@ -109,10 +134,13 @@ void CSRTiledMatrixIO::Read(const std::string &input_path,
     csr_tiled_matrix = nullptr;
     return;
   }
-  std::cout << metadata.n_strips << " " << metadata.n_nz_tile << " "
-            << metadata.tile_size << std::endl;
 
   csr_tiled_matrix->Init(metadata);
+
+  auto csr_metadata = in_node["CSRTiledMatrixMetadata"]["subgraphs"]
+                          .as<std::vector<SubGraphMetadata>>();
+
+  csr_tiled_matrix->SetCSRMetadata(csr_metadata);
 
   auto *nz_tile_bm = new util::Bitmap(pow(metadata.n_strips, 2));
 
@@ -123,6 +151,7 @@ void CSRTiledMatrixIO::Read(const std::string &input_path,
   std::ifstream in_nz_tile_bm(input_path + "meta_buf/nz_tile_bm.bin");
   std::ifstream in_data(input_path + "meta_buf/data.bin");
   std::ifstream csr_offset(input_path + "meta_buf/csr_offset.bin");
+  std::cout << input_path << std::endl;
 
   in_row_idx_file.read(
       reinterpret_cast<char *>(csr_tiled_matrix->GetTileRowIdxPtr()),
@@ -140,11 +169,11 @@ void CSRTiledMatrixIO::Read(const std::string &input_path,
       reinterpret_cast<char *>(csr_tiled_matrix->GetNzTileBitmapPtr()->data()),
       csr_tiled_matrix->GetNzTileBitmapPtr()->GetBufferSize());
 
-  in_data.read(reinterpret_cast<char *>(csr_tiled_matrix->GetDataPtr()),
-               csr_tiled_matrix->GetDataBufferSize());
-
   csr_offset.read(reinterpret_cast<char *>(csr_tiled_matrix->GetCSROffsetPtr()),
                   sizeof(uint64_t) * (metadata.n_nz_tile + 1));
+
+  in_data.read(reinterpret_cast<char *>(csr_tiled_matrix->GetDataPtr()),
+               csr_tiled_matrix->GetDataBufferSize());
 
   in_row_idx_file.close();
   in_col_idx_file.close();

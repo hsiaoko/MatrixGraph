@@ -61,6 +61,26 @@ public:
       const data_structures::UnifiedOwnedBuffer<uint64_t> &data_b,
       data_structures::UnifiedOwnedBuffer<uint64_t> *data_c);
 
+  static void FillCSRTiles(
+      const cudaStream_t &stream, size_t tile_size, size_t n_strips,
+      size_t n_nz_tile_a, size_t n_nz_tile_b, size_t n_nz_tile_c,
+      const data_structures::UnifiedOwnedBuffer<uint64_t> &layout_matrix_c,
+      const data_structures::UnifiedOwnedBuffer<uint32_t> &tile_offset_row_a,
+      const data_structures::UnifiedOwnedBuffer<uint32_t> &tile_offset_row_b,
+      const data_structures::UnifiedOwnedBuffer<uint32_t> &tile_offset_row_c,
+      const data_structures::UnifiedOwnedBuffer<uint32_t> &tile_row_idx_a,
+      const data_structures::UnifiedOwnedBuffer<uint32_t> &tile_row_idx_b,
+      const data_structures::UnifiedOwnedBuffer<uint32_t> &tile_row_idx_c,
+      const data_structures::UnifiedOwnedBuffer<uint32_t> &tile_col_idx_a,
+      const data_structures::UnifiedOwnedBuffer<uint32_t> &tile_col_idx_b,
+      const data_structures::UnifiedOwnedBuffer<uint32_t> &tile_col_idx_c,
+      const data_structures::UnifiedOwnedBuffer<uint64_t> &csr_offset_a,
+      const data_structures::UnifiedOwnedBuffer<uint64_t> &csr_offset_b,
+      const data_structures::UnifiedOwnedBuffer<uint64_t> &csr_offset_c,
+      const data_structures::UnifiedOwnedBuffer<uint8_t> &data_a,
+      const data_structures::UnifiedOwnedBuffer<uint8_t> &data_b,
+      data_structures::UnifiedOwnedBuffer<uint8_t> *data_c);
+
   static void Count(const cudaStream_t &stream, size_t tile_size,
                     size_t n_strips, size_t n_nz_tile,
                     const data_structures::UnifiedOwnedBuffer<uint64_t> &data,
