@@ -44,8 +44,6 @@ void CSRTiledMatrixIO::Write(const std::string &output_path,
 
   std::ofstream out_meta_file(output_path + "meta.yaml");
   YAML::Node out_node;
-  std::cout << "123e2131D###3###: "
-            << "!" << csr_tiled_matrix.GetDataBufferSize() << std::endl;
 
   out_node["CSRTiledMatrixMetadata"]["n_strips"] = metadata.n_strips;
   out_node["CSRTiledMatrixMetadata"]["n_nz_tile"] = metadata.n_nz_tile;
@@ -88,25 +86,12 @@ void CSRTiledMatrixIO::Write(const std::string &output_path,
     out_data.write(reinterpret_cast<char *>(csr_tiled_matrix.GetDataPtr()),
                    csr_tiled_matrix.GetDataBufferSize());
 
-    std::cout << "csr_tiled_matrix_buffer_size"
-              << csr_tiled_matrix.GetDataBufferSize() << std::endl;
-
-    for (int i = 0; i < csr_tiled_matrix.GetDataBufferSize() / sizeof(VertexID);
-         i++) {
-      std::cout << i << ": " << ((VertexID *)csr_tiled_matrix.GetDataPtr())[i]
-                << std::endl;
-    }
-    for (int i = 0; i < csr_tiled_matrix.GetMetadata().n_nz_tile; i++) {
-      std::cout << "csr_offset: " << csr_tiled_matrix.GetCSROffsetPtr()[i]
-                << std::endl;
-    }
-
-    for (int i = 0; i < csr_tiled_matrix.GetMetadata().n_nz_tile; i++) {
-      auto data = csr_tiled_matrix.GetCSRBasePtrByIdx(i);
-      ImmutableCSR csr(csr_tiled_matrix.GetCSRMetadataByIdx(i));
-      csr.ParseBasePtr(data);
-      csr.PrintGraph();
-    }
+    // for (int i = 0; i < csr_tiled_matrix.GetMetadata().n_nz_tile; i++) {
+    //   auto data = csr_tiled_matrix.GetCSRBasePtrByIdx(i);
+    //   ImmutableCSR csr(csr_tiled_matrix.GetCSRMetadataByIdx(i));
+    //   csr.ParseBasePtr(data);
+    //   csr.PrintGraph();
+    // }
 
     out_row_idx_file.close();
     out_col_idx_file.close();
@@ -151,7 +136,6 @@ void CSRTiledMatrixIO::Read(const std::string &input_path,
   std::ifstream in_nz_tile_bm(input_path + "meta_buf/nz_tile_bm.bin");
   std::ifstream in_data(input_path + "meta_buf/data.bin");
   std::ifstream csr_offset(input_path + "meta_buf/csr_offset.bin");
-  std::cout << input_path << std::endl;
 
   in_row_idx_file.read(
       reinterpret_cast<char *>(csr_tiled_matrix->GetTileRowIdxPtr()),

@@ -15,14 +15,13 @@ using sics::matrixgraph::core::data_structures::ImmutableCSR;
 static void ConvertEdgelistCSV2EdgelistBin(const std::string &input_path,
                                            const std::string &output_path,
                                            const std::string &sep,
-                                           bool read_head = false) {
+                                           bool compressed = false) {
   std::cout << "ConvertEdgelistCSV2EdgelistBin" << std::endl;
   if (!std::filesystem::exists(output_path))
     std::filesystem::create_directory(output_path);
 
   sics::matrixgraph::core::data_structures::Edges edgelist;
-  edgelist.ReadFromCSV(input_path, sep);
-  edgelist.ShowGraph();
+  edgelist.ReadFromCSV(input_path, sep, compressed);
   edgelist.WriteToBinary(output_path);
 }
 

@@ -304,12 +304,12 @@ void ImmutableCSR::SortByDegree() {
                   for (VertexID i = w; i < n_vertices; i += step) {
                     auto local_vid = vids_and_degrees[i].vid;
                     new_id_by_old_id[local_vid] = i;
-                    new_buffer_globalid[i] = i;
+                    new_buffer_globalid[i] = GetGlobalIDByLocalID(local_vid);
                     new_buffer_indegree[i] = GetInDegreeByLocalID(local_vid);
                     new_buffer_outdegree[i] = GetOutDegreeByLocalID(local_vid);
 
-                    WriteMax(&metadata_.max_vid, i);
-                    WriteMin(&metadata_.min_vid, i);
+                    WriteMax(&metadata_.max_vid, new_buffer_globalid[i]);
+                    WriteMin(&metadata_.min_vid, new_buffer_globalid[i]);
 
                     auto in_edge_ptr = GetIncomingEdgesBasePointer();
                     auto out_edge_ptr = GetOutgoingEdgesBasePointer();

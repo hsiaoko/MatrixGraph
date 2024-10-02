@@ -40,6 +40,7 @@ DEFINE_string(i, "", "input path.");
 DEFINE_string(o, "", "output path.");
 DEFINE_string(convert_mode, "", "Conversion mode");
 DEFINE_string(sep, "", "separator to split a line of csv file.");
+DEFINE_bool(compressed, false, "compressed vid");
 DEFINE_uint32(tile_size, 64, "the size of single tile");
 
 enum ConvertMode {
@@ -120,7 +121,7 @@ int main(int argc, char **argv) {
     break;
   case kEdgelistCSV2EdgelistBin:
     sics::matrixgraph::tools::converter::ConvertEdgelistCSV2EdgelistBin(
-        FLAGS_i, FLAGS_o, FLAGS_sep);
+        FLAGS_i, FLAGS_o, FLAGS_sep, FLAGS_compressed);
     break;
   case kCSRBin2EdgelistBin:
     sics::matrixgraph::tools::converter::ConvertImmutableCSR2EdgelistBin(

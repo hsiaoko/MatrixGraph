@@ -60,10 +60,12 @@ static void ConvertEdgelistBin2CSRBin(const std::string &input_path,
 
   sics::matrixgraph::core::data_structures::Edges edgelist(edgelist_metadata,
                                                            buffer_edges);
+  edgelist.ShowGraph();
 
   auto p_immutable_csr =
       sics::matrixgraph::tools::format_converter::Edgelist2ImmutableCSR(
           edgelist);
+  p_immutable_csr->PrintGraph(3);
   p_immutable_csr->SortByDegree();
   p_immutable_csr->PrintGraph(3);
   p_immutable_csr->Write(output_path);
@@ -120,7 +122,6 @@ static void ConvertEdgelistBin2CGGraphCSR(const std::string &input_path,
       sics::matrixgraph::tools::format_converter::Edgelist2ImmutableCSR(
           edgelist);
 
-  p_immutable_csr->PrintGraph(0);
   auto *offset = p_immutable_csr->GetOutOffsetBasePointer();
   auto *out_edges = p_immutable_csr->GetOutgoingEdgesBasePointer();
   VertexID *e_label = new VertexID[p_immutable_csr->get_num_outgoing_edges()]();

@@ -59,7 +59,6 @@ static void ConvertGridGraph2CSRTiledMatrix(const std::string &input_path,
     auto *csr_tile_matrix =
         Edgelist2CSRTiledMatrix(edges_blocks[gid], tile_size, block_scope);
 
-    std::cout << "Write block " << gid << " to " << block_dir << std::endl;
     CSRTiledMatrixIO::Write(block_dir, *csr_tile_matrix);
   }
 

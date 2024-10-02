@@ -60,8 +60,14 @@ __host__ void GEMM::LoadData() {
   GridCSRTiledMatrixIO grid_csr_tiled_matrix_io;
 
   grid_csr_tiled_matrix_io.Read(input_path_, &A_);
+
   grid_csr_tiled_matrix_io.Read(input_path_transposed_, &B_);
+  std::cout << "######################## A #######################"
+            << std::endl;
   A_->Print();
+
+  std::cout << "######################## B #######################"
+            << std::endl;
   B_->Print();
   C_ = new GridCSRTiledMatrix(A_->get_metadata());
 }
@@ -504,6 +510,14 @@ __host__ void GEMM::FillTilesUnifiedMemory() {
   data_b.resize(N * K);
   data_c.resize(M * N);
 
+  std::vector<UnifiedOwnedBufferUint32> unified_csr_n_vertices_a;
+  std::vector<UnifiedOwnedBufferUint32> unified_csr_n_vertices_b;
+  std::vector<UnifiedOwnedBufferUint32> unified_csr_n_vertices_c;
+
+  std::vector<UnifiedOwnedBufferUint32> unified_csr_n_edges_a;
+  std::vector<UnifiedOwnedBufferUint32> unified_csr_n_edges_b;
+  std::vector<UnifiedOwnedBufferUint32> unified_csr_n_edges_c;
+
   std::vector<UnifiedOwnedBufferUint64> unified_layout_matrix_c;
   std::vector<UnifiedOwnedBufferUint32> unified_tile_offset_row_a;
   std::vector<UnifiedOwnedBufferUint32> unified_tile_offset_row_b;
@@ -520,6 +534,14 @@ __host__ void GEMM::FillTilesUnifiedMemory() {
   std::vector<UnifiedOwnedBufferUint8> unified_data_a;
   std::vector<UnifiedOwnedBufferUint8> unified_data_b;
   std::vector<UnifiedOwnedBufferUint8> unified_data_c;
+
+  unified_csr_n_vertices_a.resize(M * K);
+  unified_csr_n_vertices_b.resize(N * K);
+  unified_csr_n_vertices_c.resize(M * N);
+
+  unified_csr_n_edges_a.resize(M * K);
+  unified_csr_n_edges_b.resize(N * K);
+  unified_csr_n_edges_c.resize(M * N);
 
   unified_layout_matrix_c.resize(M * N);
   unified_tile_offset_row_a.resize(M * K);
@@ -604,8 +626,10 @@ __host__ void GEMM::FillTilesUnifiedMemory() {
       [this, M, N, K, step, &p_streams_vec, tile_size, tile_buffer_size, &mtx,
        &tile_offset_row_a, &tile_row_idx_a, &tile_col_idx_a, &csr_offset_a,
        &data_a, &unified_tile_offset_row_a, &unified_tile_row_idx_a,
-       &unified_tile_col_idx_a, &unified_csr_offset_a,
-       &unified_data_a](auto w) {
+       &unified_tile_col_idx_a, &unified_csr_offset_a, &unified_data_a,
+       &unified_csr_n_vertices_a, &unified_csr_n_vertices_b,
+       &unified_csr_n_vertices_c, &unified_csr_n_edges_a,
+       &unified_csr_n_edges_b, &unified_csr_n_edges_c](auto w) {
         for (VertexID i = w; i < M; i += step) {
           for (VertexID k = 0; k < K; k++) {
             auto block_a = A_->GetTiledMatrixPtrByIdx(i * K + k);
@@ -639,6 +663,14 @@ __host__ void GEMM::FillTilesUnifiedMemory() {
               unified_tile_col_idx_a[i * K + k].Init(tile_col_idx_a[i * K + k]);
               unified_csr_offset_a[i * K + k].Init(csr_offset_a[i * K + k]);
               unified_data_a[i * K + k].Init(data_a[i * K + k]);
+              auto subgraph_metadata = block_a->GetCSRMetadata();
+              unified_csr_n_vertices_a[i * K + k].Init(
+                  sizeof(uint32_t) * block_a->GetMetadata().n_nz_tile);
+              for (VertexID gid = 0; gid < block_a->GetMetadata().n_nz_tile;
+                   gid++) {
+                unified_csr_n_vertices_a[i * K + k].SetElement(
+                    subgraph_metadata[gid].num_vertices, gid);
+              }
             }
           }
         }
@@ -695,6 +727,7 @@ __host__ void GEMM::FillTilesUnifiedMemory() {
   work_load.resize(4);
   std::cout << "[FillTiles] Filling tiles ..." << std::endl;
   auto start_time_1 = std::chrono::system_clock::now();
+
   std::for_each(
       // std::execution::par,
       worker.begin(), worker.end(),
@@ -733,8 +766,7 @@ __host__ void GEMM::FillTilesUnifiedMemory() {
               block_b->Print();
               std::cout << "- C -" << std::endl;
 
-              block_c->Print();
-
+              std::cout << "------- out csr -------" << std::endl;
               for (int _ = 0; _ < block_a->GetMetadata().n_nz_tile; _++) {
                 std::cout << unified_csr_offset_a[i * K + k].GetPtr()[_] << " ";
               }
@@ -750,7 +782,10 @@ __host__ void GEMM::FillTilesUnifiedMemory() {
               }
               std::cout << std::endl;
 
+              std::cout << "------- !out csr -------" << std::endl;
+
               WriteAdd(&work_load[common::hash_function(i * N + j) % 4], 1);
+
               {
                 std::lock_guard<std::mutex> lock(mtx);
                 cudaSetDevice(common::hash_function(i * N + j) % 4);

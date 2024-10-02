@@ -308,7 +308,7 @@ static __global__ void fill_csr_tiles_kernel(ParametersFillTiles params) {
   unsigned int tid = blockIdx.x * blockDim.x + threadIdx.x;
   unsigned int step = blockDim.x * gridDim.x;
 
-  printf("%d\n", tid);
+  printf("tid: %d\n", tid);
   for (unsigned int i = tid; i < params.n_nz_tile_c; i += step) {
     unsigned int x = params.tile_row_idx_c[i];
     unsigned int y = params.tile_col_idx_c[i];
@@ -333,13 +333,14 @@ static __global__ void fill_csr_tiles_kernel(ParametersFillTiles params) {
                                  params.tile_offset_row_a[y] + nz_idx_y)) {
         nz_idx_y++;
       } else {
-
         size_t csr_offset_a =
             params.csr_offset_a[params.tile_offset_row_a[x] + nz_idx_x];
         size_t csr_offset_b =
             params.csr_offset_b[params.tile_offset_row_b[y] + nz_idx_y];
 
         printf("offset: %ld, offset: %ld\n", csr_offset_a, csr_offset_b);
+        uint32_t *globalid_a = (uint32_t *)params.data_a;
+        uint32_t *globalid_b = (uint32_t *)params.data_b;
 
         nz_idx_x++;
         nz_idx_y++;

@@ -121,6 +121,7 @@ void Edges::ReadFromCSV(const std::string &filename, const std::string &sep,
   }
 
   if (compressed) {
+    std::cout << "[Edges] Reading CSV with compressed ..." << std::endl;
     // Compress vid and buffer graph.
     for (EdgeIndex i = 0; i < n_edges * 2; i++) {
       compressed_buffer_edges[i] = vid_map[buffer_edges[i]];
@@ -130,6 +131,7 @@ void Edges::ReadFromCSV(const std::string &filename, const std::string &sep,
       edges_ptr_[i].dst = compressed_buffer_edges[2 * i + 1];
     }
   } else {
+    std::cout << "[Edges] Reading CSV without compressed ..." << std::endl;
     for (EdgeIndex i = 0; i < n_edges; i++) {
       edges_ptr_[i].src = buffer_edges[2 * i];
       edges_ptr_[i].dst = buffer_edges[2 * i + 1];

@@ -85,6 +85,8 @@ public:
   // @Warning: The size of h_buf must be the same as the size of this->GetSize()
   T *GetPtr() const { return (ptr_); };
 
+  void SetElement(T val, size_t idx) { ptr_[idx] = val; };
+
   // @Brif: Get the size of the device buffer
   // @Returns:
   //   Size of the device buffer

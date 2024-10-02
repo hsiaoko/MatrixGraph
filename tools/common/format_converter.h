@@ -705,7 +705,6 @@ CSRTiledMatrix *Edgelist2CSRTiledMatrix(const Edges &edges, size_t tile_size,
   for (int i = 0; i < n_strips; i++)
     tile_offset_row_ptr[i + 1] = tile_offset_row_ptr[i] + n_nz_tile_per_row[i];
 
-  csr_tiled_matrix->Print();
   return csr_tiled_matrix;
 }
 
