@@ -8,6 +8,7 @@
 #include <numeric>
 #include <thread>
 
+#include "core/common/consts.h"
 #include "core/data_structures/immutable_csr.cuh"
 #include "core/util/bitmap.h"
 #include "core/util/bitmap_no_ownership.h"
@@ -47,8 +48,10 @@ void CSRTiledMatrix::Init(const TiledMatrixMetadata &metadata,
   metadata_vec_.resize(metadata_.n_nz_tile);
   nz_tile_bm_ = nz_tile_bm;
 
-  auto default_n_edges = 65536;
-  auto default_n_vertices = 128;
+  auto default_n_edges =
+      sics::matrixgraph::core::common::KDefalutNumEdgesPerTile;
+  auto default_n_vertices =
+      sics::matrixgraph::core::common::KDefalutNumVerticesPerTile;
   auto tile_buffer_size = sizeof(VertexID) * (default_n_vertices + 1) +
                           sizeof(VertexID) * (default_n_vertices + 1) +
                           sizeof(VertexID) * (default_n_vertices) +
@@ -106,13 +109,15 @@ void CSRTiledMatrix::Print() const {
     auto *csr_base_ptr = GetCSRBasePtrByIdx(_);
     ImmutableCSR csr(GetCSRMetadataByIdx(_));
     csr.ParseBasePtr(csr_base_ptr);
-    csr.PrintGraph();
+    csr.PrintGraph(3);
   }
   std::cout << std::endl;
 }
 
 uint8_t *CSRTiledMatrix::GetCSRBasePtrByIdx(uint32_t idx) const {
   assert(idx < metadata_.n_nz_tile);
+  std::cout << idx << "idx offset: " << csr_offset_[idx] << std::endl;
+
   return data_ + csr_offset_[idx];
 }
 

@@ -60,15 +60,13 @@ __host__ void GEMM::LoadData() {
   GridCSRTiledMatrixIO grid_csr_tiled_matrix_io;
 
   grid_csr_tiled_matrix_io.Read(input_path_, &A_);
-
   grid_csr_tiled_matrix_io.Read(input_path_transposed_, &B_);
-  std::cout << "######################## A #######################"
-            << std::endl;
-  A_->Print();
 
-  std::cout << "######################## B #######################"
-            << std::endl;
-  B_->Print();
+  // std::cout << "######################## A #######################"
+  //           << std::endl;
+
+  // std::cout << "######################## B #######################"
+  //           << std::endl;
   C_ = new GridCSRTiledMatrix(A_->get_metadata());
 }
 
@@ -514,9 +512,9 @@ __host__ void GEMM::FillTilesUnifiedMemory() {
   std::vector<UnifiedOwnedBufferUint32> unified_csr_n_vertices_b;
   std::vector<UnifiedOwnedBufferUint32> unified_csr_n_vertices_c;
 
-  std::vector<UnifiedOwnedBufferUint32> unified_csr_n_edges_a;
-  std::vector<UnifiedOwnedBufferUint32> unified_csr_n_edges_b;
-  std::vector<UnifiedOwnedBufferUint32> unified_csr_n_edges_c;
+  std::vector<UnifiedOwnedBufferUint64> unified_csr_n_edges_a;
+  std::vector<UnifiedOwnedBufferUint64> unified_csr_n_edges_b;
+  std::vector<UnifiedOwnedBufferUint64> unified_csr_n_edges_c;
 
   std::vector<UnifiedOwnedBufferUint64> unified_layout_matrix_c;
   std::vector<UnifiedOwnedBufferUint32> unified_tile_offset_row_a;
@@ -563,12 +561,13 @@ __host__ void GEMM::FillTilesUnifiedMemory() {
   std::cout << "[FillTiles] Initializing buffers for results ..." << std::endl;
   std::for_each(
       std::execution::par, worker.begin(), worker.end(),
-      [this, M, N, K, step, &p_streams_vec, tile_size, tile_buffer_size, &mtx,
-       &layout_matrix_c, &tile_offset_row_c, &tile_row_idx_c, &tile_col_idx_c,
-       &csr_offset_c, &data_c, &unified_layout_matrix_c,
-       &unified_tile_offset_row_c, &unified_tile_row_idx_c,
-       &unified_tile_col_idx_c, &unified_csr_offset_c,
-       &unified_data_c](auto w) {
+      [this, M, N, K, step, &p_streams_vec, tile_size, n_strips,
+       tile_buffer_size, &mtx, &layout_matrix_c, &tile_offset_row_c,
+       &tile_row_idx_c, &tile_col_idx_c, &csr_offset_c, &data_c,
+       &unified_layout_matrix_c, &unified_tile_offset_row_c,
+       &unified_tile_row_idx_c, &unified_tile_col_idx_c, &unified_csr_offset_c,
+       &unified_data_c, &unified_csr_n_vertices_c,
+       &unified_csr_n_edges_c](auto w) {
         for (VertexID i = w; i < M; i += step) {
           for (VertexID j = 0; j < N; j++) {
             auto block_c = C_->GetTiledMatrixPtrByIdx(i * N + j);
@@ -596,7 +595,7 @@ __host__ void GEMM::FillTilesUnifiedMemory() {
                 block_c->GetMetadata().n_nz_tile * sizeof(VertexID);
             csr_offset_c[i * N + j].data = block_c->GetCSROffsetPtr();
             csr_offset_c[i * N + j].size =
-                block_c->GetMetadata().n_nz_tile * sizeof(VertexID);
+                block_c->GetMetadata().n_nz_tile * sizeof(uint64_t);
 
             data_c[i * N + j].data = block_c->GetDataPtr();
             data_c[i * N + j].size = block_c->GetDataBufferSize();
@@ -613,6 +612,10 @@ __host__ void GEMM::FillTilesUnifiedMemory() {
               unified_tile_col_idx_c[i * N + j].Init(tile_col_idx_c[i * N + j]);
               unified_csr_offset_c[i * N + j].Init(csr_offset_c[i * N + j]);
               unified_data_c[i * N + j].Init(data_c[i * N + j]);
+              unified_csr_n_vertices_c[i * N + j].Init(sizeof(uint32_t) *
+                                                       n_strips * n_strips);
+              unified_csr_n_edges_c[i * N + j].Init(sizeof(uint64_t) *
+                                                    n_strips * n_strips);
             }
           }
         }
@@ -649,11 +652,10 @@ __host__ void GEMM::FillTilesUnifiedMemory() {
                 block_a->GetMetadata().n_nz_tile * sizeof(VertexID);
             csr_offset_a[i * K + k].data = block_a->GetCSROffsetPtr();
             csr_offset_a[i * K + k].size =
-                block_a->GetMetadata().n_nz_tile * sizeof(VertexID);
+                block_a->GetMetadata().n_nz_tile * sizeof(uint64_t);
 
             data_a[i * K + k].data = block_a->GetDataPtr();
-            data_a[i * K + k].size =
-                tile_buffer_size * block_a->GetMetadata().n_nz_tile;
+            data_a[i * K + k].size = block_a->GetDataBufferSize();
 
             {
               std::lock_guard<std::mutex> lock(mtx);
@@ -666,10 +668,14 @@ __host__ void GEMM::FillTilesUnifiedMemory() {
               auto subgraph_metadata = block_a->GetCSRMetadata();
               unified_csr_n_vertices_a[i * K + k].Init(
                   sizeof(uint32_t) * block_a->GetMetadata().n_nz_tile);
+              unified_csr_n_edges_a[i * K + k].Init(
+                  sizeof(uint64_t) * block_a->GetMetadata().n_nz_tile);
               for (VertexID gid = 0; gid < block_a->GetMetadata().n_nz_tile;
                    gid++) {
                 unified_csr_n_vertices_a[i * K + k].SetElement(
                     subgraph_metadata[gid].num_vertices, gid);
+                unified_csr_n_edges_a[i * K + k].SetElement(
+                    subgraph_metadata[gid].num_outgoing_edges, gid);
               }
             }
           }
@@ -681,8 +687,8 @@ __host__ void GEMM::FillTilesUnifiedMemory() {
       [this, M, N, K, step, &p_streams_vec, tile_size, tile_buffer_size, &mtx,
        &tile_offset_row_b, &tile_row_idx_b, &tile_col_idx_b, &csr_offset_b,
        &data_b, &unified_tile_offset_row_b, &unified_tile_row_idx_b,
-       &unified_tile_col_idx_b, &unified_csr_offset_b,
-       &unified_data_b](auto w) {
+       &unified_tile_col_idx_b, &unified_csr_offset_b, &unified_data_b,
+       &unified_csr_n_vertices_b, &unified_csr_n_edges_b](auto w) {
         for (VertexID i = w; i < N; i += step) {
           for (VertexID k = 0; k < K; k++) {
             auto block_b = B_->GetTiledMatrixPtrByIdx(i * K + k);
@@ -702,11 +708,10 @@ __host__ void GEMM::FillTilesUnifiedMemory() {
                 block_b->GetMetadata().n_nz_tile * sizeof(VertexID);
             csr_offset_b[i * K + k].data = block_b->GetCSROffsetPtr();
             csr_offset_b[i * K + k].size =
-                block_b->GetMetadata().n_nz_tile * sizeof(VertexID);
+                block_b->GetMetadata().n_nz_tile * sizeof(uint64_t);
 
             data_b[i * K + k].data = block_b->GetDataPtr();
-            data_b[i * K + k].size =
-                tile_buffer_size * block_b->GetMetadata().n_nz_tile;
+            data_b[i * K + k].size = block_b->GetDataBufferSize();
 
             {
               std::lock_guard<std::mutex> lock(mtx);
@@ -714,8 +719,21 @@ __host__ void GEMM::FillTilesUnifiedMemory() {
                   tile_offset_row_b[i * K + k]);
               unified_tile_row_idx_b[i * K + k].Init(tile_row_idx_b[i * K + k]);
               unified_tile_col_idx_b[i * K + k].Init(tile_col_idx_b[i * K + k]);
-              unified_data_b[i * K + k].Init(data_b[i * K + k]);
               unified_csr_offset_b[i * K + k].Init(csr_offset_b[i * K + k]);
+              unified_data_b[i * K + k].Init(data_b[i * K + k]);
+
+              auto subgraph_metadata = block_b->GetCSRMetadata();
+              unified_csr_n_vertices_b[i * K + k].Init(
+                  sizeof(uint32_t) * block_b->GetMetadata().n_nz_tile);
+              unified_csr_n_edges_b[i * K + k].Init(
+                  sizeof(uint64_t) * block_b->GetMetadata().n_nz_tile);
+              for (VertexID gid = 0; gid < block_b->GetMetadata().n_nz_tile;
+                   gid++) {
+                unified_csr_n_vertices_b[i * K + k].SetElement(
+                    subgraph_metadata[gid].num_vertices, gid);
+                unified_csr_n_edges_b[i * K + k].SetElement(
+                    subgraph_metadata[gid].num_outgoing_edges, gid);
+              }
             }
           }
         }
@@ -732,9 +750,12 @@ __host__ void GEMM::FillTilesUnifiedMemory() {
       // std::execution::par,
       worker.begin(), worker.end(),
       [this, M, N, K, step, &p_streams_vec, tile_size, tile_buffer_size,
-       n_strips, &mtx, &unified_layout_matrix_c, &unified_tile_offset_row_a,
-       &unified_tile_row_idx_a, &unified_tile_col_idx_a, &unified_csr_offset_a,
-       &unified_data_a, &unified_tile_offset_row_b, &unified_tile_row_idx_b,
+       n_strips, &mtx, &unified_csr_n_vertices_a, &unified_csr_n_vertices_b,
+       &unified_csr_n_vertices_c, &unified_csr_n_edges_a,
+       &unified_csr_n_edges_c, &unified_csr_n_edges_b, &unified_layout_matrix_c,
+       &unified_tile_offset_row_a, &unified_tile_row_idx_a,
+       &unified_tile_col_idx_a, &unified_csr_offset_a, &unified_data_a,
+       &unified_tile_offset_row_b, &unified_tile_row_idx_b,
        &unified_tile_col_idx_b, &unified_csr_offset_b, &unified_data_b,
        &unified_tile_offset_row_c, &unified_tile_row_idx_c,
        &unified_tile_col_idx_c, &unified_csr_offset_c, &unified_data_c,
@@ -766,24 +787,6 @@ __host__ void GEMM::FillTilesUnifiedMemory() {
               block_b->Print();
               std::cout << "- C -" << std::endl;
 
-              std::cout << "------- out csr -------" << std::endl;
-              for (int _ = 0; _ < block_a->GetMetadata().n_nz_tile; _++) {
-                std::cout << unified_csr_offset_a[i * K + k].GetPtr()[_] << " ";
-              }
-              std::cout << std::endl;
-
-              for (int _ = 0; _ < block_b->GetMetadata().n_nz_tile; _++) {
-                std::cout << unified_csr_offset_b[j * K + k].GetPtr()[_] << " ";
-              }
-              std::cout << std::endl;
-
-              for (int _ = 0; _ < block_c->GetMetadata().n_nz_tile; _++) {
-                std::cout << unified_csr_offset_c[i * N + k].GetPtr()[_] << " ";
-              }
-              std::cout << std::endl;
-
-              std::cout << "------- !out csr -------" << std::endl;
-
               WriteAdd(&work_load[common::hash_function(i * N + j) % 4], 1);
 
               {
@@ -795,6 +798,12 @@ __host__ void GEMM::FillTilesUnifiedMemory() {
                     block_a->GetMetadata().n_nz_tile,
                     block_b->GetMetadata().n_nz_tile,
                     block_c->GetMetadata().n_nz_tile,
+                    unified_csr_n_vertices_a[i * K + k],
+                    unified_csr_n_vertices_b[j * K + k],
+                    unified_csr_n_vertices_c[i * N + j],
+                    unified_csr_n_edges_a[i * K + k],
+                    unified_csr_n_edges_b[j * K + k],
+                    unified_csr_n_edges_c[i * N + j],
                     unified_layout_matrix_c[i * N + j],
                     unified_tile_offset_row_a[i * K + k],
                     unified_tile_offset_row_b[j * K + k],
@@ -810,8 +819,6 @@ __host__ void GEMM::FillTilesUnifiedMemory() {
                     unified_csr_offset_c[i * N + k], unified_data_a[i * K + k],
                     unified_data_b[j * K + k], &unified_data_c[i * N + j]);
               }
-              while (1)
-                ;
             }
           }
         }

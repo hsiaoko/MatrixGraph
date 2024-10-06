@@ -64,6 +64,12 @@ public:
   static void FillCSRTiles(
       const cudaStream_t &stream, size_t tile_size, size_t n_strips,
       size_t n_nz_tile_a, size_t n_nz_tile_b, size_t n_nz_tile_c,
+      const data_structures::UnifiedOwnedBuffer<uint32_t> &csr_n_vertices_a,
+      const data_structures::UnifiedOwnedBuffer<uint32_t> &csr_n_vertices_b,
+      const data_structures::UnifiedOwnedBuffer<uint32_t> &tcsr_n_vertices_c,
+      const data_structures::UnifiedOwnedBuffer<uint64_t> &csr_n_edges_a,
+      const data_structures::UnifiedOwnedBuffer<uint64_t> &csr_n_edges_b,
+      const data_structures::UnifiedOwnedBuffer<uint64_t> &csr_n_edges_c,
       const data_structures::UnifiedOwnedBuffer<uint64_t> &layout_matrix_c,
       const data_structures::UnifiedOwnedBuffer<uint32_t> &tile_offset_row_a,
       const data_structures::UnifiedOwnedBuffer<uint32_t> &tile_offset_row_b,

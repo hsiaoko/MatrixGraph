@@ -3,6 +3,7 @@
 #include <cuda_runtime.h>
 #include <iostream>
 
+#include "core/common/types.h"
 #include "core/util/cuda_check.cuh"
 
 namespace sics {
@@ -10,6 +11,9 @@ namespace matrixgraph {
 namespace core {
 namespace task {
 namespace kernel {
+
+using sics::matrixgraph::core::common::EdgeIndex;
+using sics::matrixgraph::core::common::VertexID;
 
 #define WORD_OFFSET(i) (i >> 6)
 #define BIT_OFFSET(i) (i & 0x3f)
@@ -62,6 +66,12 @@ struct ParametersFillTiles {
   uint8_t *data_a;
   uint8_t *data_b;
   uint8_t *data_c;
+  uint32_t *csr_n_vertices_a = nullptr;
+  uint32_t *csr_n_vertices_b = nullptr;
+  uint32_t *csr_n_vertices_c = nullptr;
+  uint64_t *csr_n_edges_a = nullptr;
+  uint64_t *csr_n_edges_b = nullptr;
+  uint64_t *csr_n_edges_c = nullptr;
   uint64_t *csr_offset_a = nullptr;
   uint64_t *csr_offset_b = nullptr;
   uint64_t *csr_offset_c = nullptr;
@@ -313,9 +323,6 @@ static __global__ void fill_csr_tiles_kernel(ParametersFillTiles params) {
     unsigned int x = params.tile_row_idx_c[i];
     unsigned int y = params.tile_col_idx_c[i];
 
-    unsigned long long *matrix_c =
-        ((unsigned long long *)params.data_c) + params.tile_unit * i;
-
     unsigned int nz_tile_line_x =
         params.tile_offset_row_a[x + 1] - params.tile_offset_row_a[x];
 
@@ -333,14 +340,47 @@ static __global__ void fill_csr_tiles_kernel(ParametersFillTiles params) {
                                  params.tile_offset_row_a[y] + nz_idx_y)) {
         nz_idx_y++;
       } else {
+        uint32_t tile_id_a = params.tile_offset_row_a[x] + nz_idx_x;
+        uint32_t tile_id_b = params.tile_offset_row_b[y] + nz_idx_y;
+
         size_t csr_offset_a =
             params.csr_offset_a[params.tile_offset_row_a[x] + nz_idx_x];
         size_t csr_offset_b =
             params.csr_offset_b[params.tile_offset_row_b[y] + nz_idx_y];
 
-        printf("offset: %ld, offset: %ld\n", csr_offset_a, csr_offset_b);
-        uint32_t *globalid_a = (uint32_t *)params.data_a;
-        uint32_t *globalid_b = (uint32_t *)params.data_b;
+        VertexID *globalid_a = (VertexID *)(params.data_a + csr_offset_a);
+        VertexID *globalid_b = (VertexID *)(params.data_b + csr_offset_b);
+        VertexID *in_degree_a = globalid_a + params.csr_n_vertices_a[tile_id_a];
+        VertexID *in_degree_b = globalid_b + params.csr_n_vertices_b[tile_id_b];
+        VertexID *out_degree_a =
+            in_degree_a + params.csr_n_vertices_a[tile_id_a];
+        VertexID *out_degree_b =
+            in_degree_b + params.csr_n_vertices_b[tile_id_b];
+        EdgeIndex *in_offset_a =
+            (EdgeIndex *)(out_degree_a + params.csr_n_vertices_a[tile_id_a]);
+        EdgeIndex *in_offset_b =
+            (EdgeIndex *)(out_degree_b + params.csr_n_vertices_b[tile_id_b]);
+        EdgeIndex *out_offset_a =
+            (EdgeIndex *)(in_offset_a + params.csr_n_vertices_a[tile_id_a] + 1);
+        EdgeIndex *out_offset_b =
+            (EdgeIndex *)(in_offset_b + params.csr_n_vertices_b[tile_id_b] + 1);
+        EdgeIndex *in_edges_a =
+            (EdgeIndex *)(out_offset_a + params.csr_n_vertices_a[tile_id_a] +
+                          1);
+        VertexID *in_edges_b =
+            (EdgeIndex *)(out_offset_b + params.csr_n_vertices_b[tile_id_b] +
+                          1);
+        VertexID *out_edges_a = in_edges_a + 0;
+        VertexID *out_edges_b = in_edges_b + 0;
+        VertexID *edges_globalid_by_localid_base_pointer_a =
+            out_edges_a + params.csr_n_edges_a[tile_id_a];
+        VertexID *edges_globalid_by_localid_base_pointer_b =
+            out_edges_b + params.csr_n_edges_b[tile_id_b];
+
+        {
+          // After all buffers are prepared. Your now can process tile_a and
+          // tile_b.
+        }
 
         nz_idx_x++;
         nz_idx_y++;
@@ -484,6 +524,12 @@ void MatrixOperationsKernelWrapper::FillTiles(
 void MatrixOperationsKernelWrapper::FillCSRTiles(
     const cudaStream_t &stream, size_t tile_size, size_t n_strips,
     size_t n_nz_tile_a, size_t n_nz_tile_b, size_t n_nz_tile_c,
+    const data_structures::UnifiedOwnedBuffer<uint32_t> &csr_n_vertices_a,
+    const data_structures::UnifiedOwnedBuffer<uint32_t> &csr_n_vertices_b,
+    const data_structures::UnifiedOwnedBuffer<uint32_t> &csr_n_vertices_c,
+    const data_structures::UnifiedOwnedBuffer<uint64_t> &csr_n_edges_a,
+    const data_structures::UnifiedOwnedBuffer<uint64_t> &csr_n_edges_b,
+    const data_structures::UnifiedOwnedBuffer<uint64_t> &csr_n_edges_c,
     const data_structures::UnifiedOwnedBuffer<uint64_t> &layout_matrix_c,
     const data_structures::UnifiedOwnedBuffer<uint32_t> &tile_offset_row_a,
     const data_structures::UnifiedOwnedBuffer<uint32_t> &tile_offset_row_b,
@@ -529,6 +575,12 @@ void MatrixOperationsKernelWrapper::FillCSRTiles(
       .data_a = data_a.GetPtr(),
       .data_b = data_b.GetPtr(),
       .data_c = data_c->GetPtr(),
+      .csr_n_vertices_a = csr_n_vertices_a.GetPtr(),
+      .csr_n_vertices_b = csr_n_vertices_b.GetPtr(),
+      .csr_n_vertices_c = csr_n_vertices_c.GetPtr(),
+      .csr_n_edges_a = csr_n_edges_a.GetPtr(),
+      .csr_n_edges_b = csr_n_edges_b.GetPtr(),
+      .csr_n_edges_c = csr_n_edges_c.GetPtr(),
       .csr_offset_a = csr_offset_a.GetPtr(),
       .csr_offset_b = csr_offset_b.GetPtr(),
       .csr_offset_c = csr_offset_c.GetPtr(),

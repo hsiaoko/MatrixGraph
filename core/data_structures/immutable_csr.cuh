@@ -63,27 +63,20 @@ public:
 
   void SortByDistance(VertexID sim_granularity);
 
-  void ReOrder(VertexID tile_size);
-
-  GraphID get_gid() const { return metadata_.gid; }
-  VertexID get_num_vertices() const { return metadata_.num_vertices; }
-  EdgeIndex get_num_incoming_edges() const {
-    return metadata_.num_incoming_edges;
-  }
-  EdgeIndex get_num_outgoing_edges() const {
-    return metadata_.num_outgoing_edges;
-  }
-  VertexID get_max_vid() const { return metadata_.max_vid; }
-  VertexID get_min_vid() const { return metadata_.min_vid; }
-
   void SetGraphBuffer(uint8_t *buffer) { graph_base_pointer_.reset(buffer); }
+
+  void SetVertexLabelBuffer(VertexLabel *buffer) {
+    vertex_label_base_pointer_.reset(buffer);
+  }
 
   void SetGlobalIDBuffer(VertexID *buffer) {
     globalid_by_localid_base_pointer_ = buffer;
   }
+
   void SetEdgesGlobalIDBuffer(VertexID *buffer) {
     edges_globalid_by_localid_base_pointer_ = buffer;
   }
+
   void SetInDegreeBuffer(VertexID *buffer) { indegree_base_pointer_ = buffer; }
   void SetOutDegreeBuffer(VertexID *buffer) {
     outdegree_base_pointer_ = buffer;
@@ -101,57 +94,6 @@ public:
     outgoing_edges_base_pointer_ = buffer;
   }
 
-  void SetVertexLabelBuffer(VertexLabel *buffer) {
-    vertex_label_base_pointer_.reset(buffer);
-  }
-
-  uint8_t *GetGraphBuffer() { return graph_base_pointer_.get(); }
-  VertexID *GetGloablIDBasePointer() const {
-    return globalid_by_localid_base_pointer_;
-  }
-  VertexID *GetEdgesGloablIDBasePointer() const {
-    return edges_globalid_by_localid_base_pointer_;
-  }
-  VertexID *GetInDegreeBasePointer() const { return indegree_base_pointer_; }
-  VertexID *GetOutDegreeBasePointer() const { return outdegree_base_pointer_; }
-  EdgeIndex *GetInOffsetBasePointer() const { return in_offset_base_pointer_; }
-  EdgeIndex *GetOutOffsetBasePointer() const {
-    return out_offset_base_pointer_;
-  }
-  VertexID *GetIncomingEdgesBasePointer() const {
-    return incoming_edges_base_pointer_;
-  }
-  VertexID *GetOutgoingEdgesBasePointer() const {
-    return outgoing_edges_base_pointer_;
-  }
-
-  VertexID GetGlobalIDByLocalID(VertexID i) const {
-    return globalid_by_localid_base_pointer_[i];
-  }
-  VertexID GetEdgeGlobalIDByLocalID(VertexID i) const {
-    return edges_globalid_by_localid_base_pointer_[i];
-  }
-  VertexID GetInOffsetByLocalID(VertexID i) const {
-    return in_offset_base_pointer_[i];
-  }
-  VertexID GetOutOffsetByLocalID(VertexID i) const {
-    return out_offset_base_pointer_[i];
-  }
-  VertexID *GetIncomingEdgesByLocalID(VertexID i) const {
-    return incoming_edges_base_pointer_ + in_offset_base_pointer_[i];
-  }
-  VertexID *GetOutgoingEdgesByLocalID(VertexID i) const {
-    return outgoing_edges_base_pointer_ + out_offset_base_pointer_[i];
-  }
-  VertexID GetInDegreeByLocalID(VertexID i) const {
-    return indegree_base_pointer_[i];
-  }
-  VertexID GetOutDegreeByLocalID(VertexID i) const {
-    return outdegree_base_pointer_[i];
-  }
-
-  ImmutableCSRVertex GetVertexByLocalID(VertexID i) const;
-
   void SetNumVertices(VertexID num_vertices) {
     metadata_.num_vertices = num_vertices;
   }
@@ -168,6 +110,81 @@ public:
   void SetMinVid(VertexID min_vid) { metadata_.min_vid = min_vid; }
   void SetGid(VertexID gid) { metadata_.gid = gid; }
 
+  void ReOrder(VertexID tile_size);
+
+  GraphID get_gid() const { return metadata_.gid; }
+  VertexID get_num_vertices() const { return metadata_.num_vertices; }
+  EdgeIndex get_num_incoming_edges() const {
+    return metadata_.num_incoming_edges;
+  }
+  EdgeIndex get_num_outgoing_edges() const {
+    return metadata_.num_outgoing_edges;
+  }
+  VertexID get_max_vid() const { return metadata_.max_vid; }
+  VertexID get_min_vid() const { return metadata_.min_vid; }
+
+  uint8_t *GetGraphBuffer() { return graph_base_pointer_.get(); }
+
+  VertexID *GetGloablIDBasePointer() const {
+    return globalid_by_localid_base_pointer_;
+  }
+
+  VertexID *GetEdgesGloablIDBasePointer() const {
+    return edges_globalid_by_localid_base_pointer_;
+  }
+
+  VertexID *GetInDegreeBasePointer() const { return indegree_base_pointer_; }
+
+  VertexID *GetOutDegreeBasePointer() const { return outdegree_base_pointer_; }
+
+  EdgeIndex *GetInOffsetBasePointer() const { return in_offset_base_pointer_; }
+
+  EdgeIndex *GetOutOffsetBasePointer() const {
+    return out_offset_base_pointer_;
+  }
+
+  VertexID *GetIncomingEdgesBasePointer() const {
+    return incoming_edges_base_pointer_;
+  }
+
+  VertexID *GetOutgoingEdgesBasePointer() const {
+    return outgoing_edges_base_pointer_;
+  }
+
+  VertexID GetGlobalIDByLocalID(VertexID i) const {
+    return globalid_by_localid_base_pointer_[i];
+  }
+
+  VertexID GetEdgeGlobalIDByLocalID(VertexID i) const {
+    return edges_globalid_by_localid_base_pointer_[i];
+  }
+
+  VertexID GetInOffsetByLocalID(VertexID i) const {
+    return in_offset_base_pointer_[i];
+  }
+
+  VertexID GetOutOffsetByLocalID(VertexID i) const {
+    return out_offset_base_pointer_[i];
+  }
+
+  VertexID *GetIncomingEdgesByLocalID(VertexID i) const {
+    return incoming_edges_base_pointer_ + in_offset_base_pointer_[i];
+  }
+
+  VertexID *GetOutgoingEdgesByLocalID(VertexID i) const {
+    return outgoing_edges_base_pointer_ + out_offset_base_pointer_[i];
+  }
+
+  VertexID GetInDegreeByLocalID(VertexID i) const {
+    return indegree_base_pointer_[i];
+  }
+
+  VertexID GetOutDegreeByLocalID(VertexID i) const {
+    return outdegree_base_pointer_[i];
+  }
+
+  ImmutableCSRVertex GetVertexByLocalID(VertexID i) const;
+
 protected:
   // Metadata to build the CSR.
   SubGraphMetadata metadata_;
@@ -177,6 +194,7 @@ protected:
 
   VertexID *globalid_by_localid_base_pointer_ = nullptr;
   VertexID *edges_globalid_by_localid_base_pointer_ = nullptr;
+  VertexID *edges_globalid_2_localid_base_pointer_ = nullptr;
   VertexID *incoming_edges_base_pointer_ = nullptr;
   VertexID *outgoing_edges_base_pointer_ = nullptr;
   VertexID *indegree_base_pointer_ = nullptr;
