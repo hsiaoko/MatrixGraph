@@ -24,7 +24,7 @@
 #include "core/util/atomic.h"
 #include "core/util/bitmap.h"
 #include "core/util/cuda_check.cuh"
-#include "tools/common/format_converter.h"
+#include "core/util/format_converter.cuh"
 #include "tools/graph_converter/converter/to_bit_tiled_matrix.cuh"
 #include "tools/graph_converter/converter/to_csr_tiled_matrix.cuh"
 #include "tools/graph_converter/converter/to_edgelist.cuh"

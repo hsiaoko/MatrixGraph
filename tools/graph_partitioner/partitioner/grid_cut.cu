@@ -14,8 +14,8 @@
 #include "core/util/atomic.h"
 #include "core/util/bitmap.h"
 
+#include "core/util/format_converter.cuh"
 #include "tools/common/edgelist_subgraphs_io.cuh"
-#include "tools/common/format_converter.h"
 
 namespace sics {
 namespace matrixgraph {

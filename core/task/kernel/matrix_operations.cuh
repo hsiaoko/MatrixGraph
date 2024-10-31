@@ -3,6 +3,7 @@
 
 #include "core/data_structures/device_buffer.cuh"
 #include "core/data_structures/unified_buffer.cuh"
+#include "core/common/types.h"
 
 namespace sics {
 namespace matrixgraph {
@@ -11,6 +12,8 @@ namespace task {
 namespace kernel {
 
 class MatrixOperationsKernelWrapper {
+  using EdgeIndex = sics::matrixgraph::core::common::EdgeIndex;
+
 public:
   // deleting copy constructor
   MatrixOperationsKernelWrapper(const MatrixOperationsKernelWrapper &obj) =
@@ -86,6 +89,26 @@ public:
       const data_structures::UnifiedOwnedBuffer<uint8_t> &data_a,
       const data_structures::UnifiedOwnedBuffer<uint8_t> &data_b,
       data_structures::UnifiedOwnedBuffer<uint8_t> *data_c);
+
+  static void
+  Walk(const cudaStream_t &stream, size_t tile_size, size_t n_strips,
+       size_t n_nz_tile_a, size_t n_nz_tile_b,
+       const data_structures::UnifiedOwnedBuffer<uint32_t> &csr_n_vertices_a,
+       const data_structures::UnifiedOwnedBuffer<uint32_t> &csr_n_vertices_b,
+       const data_structures::UnifiedOwnedBuffer<uint64_t> &csr_n_edges_a,
+       const data_structures::UnifiedOwnedBuffer<uint64_t> &csr_n_edges_b,
+       const data_structures::UnifiedOwnedBuffer<uint32_t> &tile_offset_row_a,
+       const data_structures::UnifiedOwnedBuffer<uint32_t> &tile_offset_row_b,
+       const data_structures::UnifiedOwnedBuffer<uint32_t> &tile_row_idx_a,
+       const data_structures::UnifiedOwnedBuffer<uint32_t> &tile_row_idx_b,
+       const data_structures::UnifiedOwnedBuffer<uint32_t> &tile_col_idx_a,
+       const data_structures::UnifiedOwnedBuffer<uint32_t> &tile_col_idx_b,
+       const data_structures::UnifiedOwnedBuffer<uint64_t> &csr_offset_a,
+       const data_structures::UnifiedOwnedBuffer<uint64_t> &csr_offset_b,
+       const data_structures::UnifiedOwnedBuffer<uint8_t> &data_a,
+       const data_structures::UnifiedOwnedBuffer<uint8_t> &data_b,
+       data_structures::UnifiedOwnedBuffer<uint32_t> *edgelist_c,
+       data_structures::UnifiedOwnedBuffer<EdgeIndex> *output_offset);
 
   static void Count(const cudaStream_t &stream, size_t tile_size,
                     size_t n_strips, size_t n_nz_tile,

@@ -116,8 +116,6 @@ void CSRTiledMatrix::Print() const {
 
 uint8_t *CSRTiledMatrix::GetCSRBasePtrByIdx(uint32_t idx) const {
   assert(idx < metadata_.n_nz_tile);
-  std::cout << idx << "idx offset: " << csr_offset_[idx] << std::endl;
-
   return data_ + csr_offset_[idx];
 }
 

@@ -1,5 +1,5 @@
-#ifndef MATRIXGRAPH_CORE_COMMON_FORMAT_CONVERTER_H_
-#define MATRIXGRAPH_CORE_COMMON_FORMAT_CONVERTER_H_
+#ifndef MATRIXGRAPH_CORE_UTIL_FORMAT_CONVERTER_H_
+#define MATRIXGRAPH_CORE_UTIL_FORMAT_CONVERTER_H_
 
 #include <chrono>
 #include <cinttypes>
@@ -19,11 +19,11 @@
 #include "core/util/bitmap.h"
 #include "core/util/cuda_check.cuh"
 #include "core/util/gpu_bitmap.cuh"
-#include "tools/common/types.h"
 
 namespace sics {
 namespace matrixgraph {
-namespace tools {
+namespace core {
+namespace util {
 namespace format_converter {
 
 using sics::matrixgraph::core::common::EdgeIndex;
@@ -48,7 +48,7 @@ using TiledMatrixMetadata =
 using SubGraphMetadata =
     sics::matrixgraph::core::data_structures::SubGraphMetadata;
 
-Edges *ImmutableCSR2Edgelist(const ImmutableCSR &immutable_csr) {
+static Edges *ImmutableCSR2Edgelist(const ImmutableCSR &immutable_csr) {
   auto parallelism = std::thread::hardware_concurrency();
   std::vector<size_t> worker(parallelism);
   std::iota(worker.begin(), worker.end(), 0);
@@ -90,9 +90,7 @@ Edges *ImmutableCSR2Edgelist(const ImmutableCSR &immutable_csr) {
   return new Edges(edgelist_metadata, edge_ptr);
 }
 
-ImmutableCSR *Edgelist2ImmutableCSR(const Edges &edgelist) {
-  std::cout << "Edgelist2ImmutableCSR" << std::endl;
-
+static ImmutableCSR *Edgelist2ImmutableCSR(const Edges &edgelist) {
   auto parallelism = std::thread::hardware_concurrency();
   std::vector<size_t> worker(parallelism);
   std::iota(worker.begin(), worker.end(), 0);
@@ -196,6 +194,14 @@ ImmutableCSR *Edgelist2ImmutableCSR(const Edges &edgelist) {
     vid++;
   }
 
+  VertexID max_degree = 0, mean_degree = 0, mean_in_degree = 0,
+           min_degree = MAX_VERTEX_ID;
+  for (VertexID i = 0; i < edgelist.get_metadata().num_vertices; i++) {
+    WriteMax(&max_degree, buffer_outdegree[i]);
+    WriteMin(&min_degree, buffer_outdegree[i]);
+    WriteAdd(&mean_degree, buffer_outdegree[i]);
+    WriteAdd(&mean_in_degree, buffer_indegree[i]);
+  }
   auto *buffer_in_offset =
       new EdgeIndex[edgelist.get_metadata().num_vertices + 1]();
   auto *buffer_out_offset =
@@ -253,11 +259,20 @@ ImmutableCSR *Edgelist2ImmutableCSR(const Edges &edgelist) {
   immutable_csr->SetMaxVid(edgelist.get_metadata().max_vid);
   immutable_csr->SetMinVid(min_vid);
 
+  std::cout << "[Edgelist2ImmutableCSR] done ! - max degree:" << max_degree
+            << " mean degree: "
+            << (float)mean_degree / (float)edgelist.get_metadata().num_vertices
+            << " mean in degree: "
+            << (float)mean_in_degree /
+                   (float)edgelist.get_metadata().num_vertices
+            << " min degree: " << min_degree << "   "
+            << edgelist.get_metadata().num_vertices << std::endl;
   return immutable_csr;
 }
 
-BitTiledMatrix *Edgelist2BitTiledMatrix(const Edges &edges, size_t tile_size,
-                                        size_t block_scope) {
+static BitTiledMatrix *Edgelist2BitTiledMatrix(const Edges &edges,
+                                               size_t tile_size,
+                                               size_t block_scope) {
 
   auto parallelism = std::thread::hardware_concurrency();
   std::vector<size_t> worker(parallelism);
@@ -385,8 +400,9 @@ BitTiledMatrix *Edgelist2BitTiledMatrix(const Edges &edges, size_t tile_size,
   return bit_tiled_matrix;
 }
 
-CSRTiledMatrix *Edgelist2CSRTiledMatrix(const Edges &edges, size_t tile_size,
-                                        size_t block_scope) {
+static CSRTiledMatrix *
+Edgelist2CSRTiledMatrix(const Edges &edges, size_t tile_size,
+                        size_t block_scope, CSRTiledMatrix *output = nullptr) {
   auto parallelism = std::thread::hardware_concurrency();
   std::vector<size_t> worker(parallelism);
   std::iota(worker.begin(), worker.end(), 0);
@@ -395,8 +411,13 @@ CSRTiledMatrix *Edgelist2CSRTiledMatrix(const Edges &edges, size_t tile_size,
   VertexID n_strips = ceil((float)block_scope / (float)tile_size);
   VertexID n_csr = n_strips * n_strips;
 
-  CSRTiledMatrix *csr_tiled_matrix;
-  csr_tiled_matrix = new CSRTiledMatrix();
+  CSRTiledMatrix *csr_tiled_matrix = nullptr;
+
+  if (output == nullptr) {
+    csr_tiled_matrix = new CSRTiledMatrix();
+  } else {
+    csr_tiled_matrix = output;
+  }
 
   if (edges.get_metadata().num_edges == 0) {
     TiledMatrixMetadata tile_meta_data = {
@@ -457,7 +478,7 @@ CSRTiledMatrix *Edgelist2CSRTiledMatrix(const Edges &edges, size_t tile_size,
   std::for_each(
       std::execution::par, worker.begin(), worker.end(),
       [step, n_strips, tile_size, n_csr, &buffer_csr_vertices_vec,
-       &graph_visited, &num_out_edges_by_vid_vec, &count_out_edges_vec,
+       &graph_visited, &num_out_edges_by_vid_vec, &count_out_edges_vec, &edges,
        &visited_vec](auto &w) {
         for (auto tile_id = w; tile_id < n_csr; tile_id += step) {
 
@@ -467,9 +488,8 @@ CSRTiledMatrix *Edgelist2CSRTiledMatrix(const Edges &edges, size_t tile_size,
           for (auto i = 0; i < tile_size; i++) {
             if (!visited_vec[tile_id].GetBit(i))
               continue;
-
-            buffer_csr_vertices_vec[tile_id][i].vid =
-                (tile_id / n_strips) * tile_size + i;
+            // buffer_csr_vertices_vec[tile_id][i].vid =
+            //     (tile_id / n_strips) * tile_size + i;
 
             buffer_csr_vertices_vec[tile_id][i].outdegree =
                 num_out_edges_by_vid_vec[tile_id][i];
@@ -480,6 +500,25 @@ CSRTiledMatrix *Edgelist2CSRTiledMatrix(const Edges &edges, size_t tile_size,
             WriteAdd(&count_out_edges_vec[tile_id],
                      (EdgeIndex)buffer_csr_vertices_vec[tile_id][i].outdegree);
           }
+        }
+      });
+
+  // Step 2. compute global id for src.
+  std::for_each(
+      std::execution::par, worker.begin(), worker.end(),
+      [&edges, step, block_scope, tile_size, n_strips, &buffer_csr_vertices_vec,
+       &num_out_edges_by_vid_vec, &visited_vec, &graph_visited](auto &w) {
+        for (EdgeIndex eid = w; eid < edges.get_metadata().num_edges;
+             eid += step) {
+          auto e = edges.get_edge_by_index(eid);
+          auto *localid_to_globalid = edges.get_localid_to_globalid_ptr();
+          auto tile_x = (localid_to_globalid[e.src] % block_scope) / tile_size;
+          auto tile_y = (localid_to_globalid[e.dst] % block_scope) / tile_size;
+
+          auto x_within_tile =
+              (localid_to_globalid[e.src] % block_scope) % tile_size;
+          buffer_csr_vertices_vec[tile_x * n_strips + tile_y][x_within_tile]
+              .vid = localid_to_globalid[e.src];
         }
       });
 
@@ -519,7 +558,6 @@ CSRTiledMatrix *Edgelist2CSRTiledMatrix(const Edges &edges, size_t tile_size,
   auto *csr_offset_ptr = csr_tiled_matrix->GetCSROffsetPtr();
 
   for (VertexID i = 0; i < n_nz_tile; i++) {
-
     auto metadata = csr_tiled_matrix->GetCSRMetadataByIdx(i);
 
     size_t size_globalid_buf = sizeof(VertexID) * metadata.num_vertices;
@@ -709,7 +747,8 @@ CSRTiledMatrix *Edgelist2CSRTiledMatrix(const Edges &edges, size_t tile_size,
 }
 
 } // namespace format_converter
-} // namespace tools
+} // namespace util
+} // namespace core
 } // namespace matrixgraph
 } // namespace sics
 

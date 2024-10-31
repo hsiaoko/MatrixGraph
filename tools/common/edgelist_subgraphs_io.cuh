@@ -3,10 +3,10 @@
 
 #include <string>
 
+#include "core/common/types.h"
 #include "core/data_structures/edgelist.h"
 #include "core/data_structures/immutable_csr.cuh"
 #include "core/data_structures/metadata.h"
-#include "tools/common/types.h"
 
 namespace sics {
 namespace matrixgraph {
@@ -19,7 +19,7 @@ private:
   using EdgeIndex = sics::matrixgraph::core::common::EdgeIndex;
   using Edges = sics::matrixgraph::core::data_structures::Edges;
   using GraphMetadata = sics::matrixgraph::core::data_structures::GraphMetadata;
-  using StoreStrategy = sics::matrixgraph::tools::common::StoreStrategy;
+  using StoreStrategy = sics::matrixgraph::core::common::StoreStrategy;
 
 public:
   EdgelistSubGraphsIO() = default;

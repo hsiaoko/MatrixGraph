@@ -4,12 +4,12 @@
 
 #include <gflags/gflags.h>
 
-#include "tools/common/types.h"
+#include "core/common/types.h"
 #include "tools/graph_partitioner/partitioner/grid_cut.cuh"
 
 using GridCutPartitioner =
     sics::matrixgraph::tools::partitioner::GridCutPartitioner;
-using StoreStrategy = sics::matrixgraph::tools::common::StoreStrategy;
+using StoreStrategy = sics::matrixgraph::core::common::StoreStrategy;
 
 // using enum sics::matrixgraph::tools::common::StoreStrategy;
 //     using kIncomingOnly = sics::matrixgraph::tools::common::kIncomingOnly;

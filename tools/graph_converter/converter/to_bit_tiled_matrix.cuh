@@ -9,8 +9,8 @@
 #include "core/data_structures/immutable_csr.cuh"
 #include "core/data_structures/metadata.h"
 #include "core/io/bit_tiled_matrix_io.cuh"
+#include "core/util/format_converter.cuh"
 #include "tools/common/edgelist_subgraphs_io.cuh"
-#include "tools/common/format_converter.h"
 
 namespace sics {
 namespace matrixgraph {
@@ -29,7 +29,7 @@ using BitTiledMatrixIO = sics::matrixgraph::core::io::BitTiledMatrixIO;
 using EdgelistSubGraphsIO =
     sics::matrixgraph::tools::common::EdgelistSubGraphsIO;
 using BitTiledMatrix = sics::matrixgraph::core::data_structures::BitTiledMatrix;
-using sics::matrixgraph::tools::format_converter::Edgelist2BitTiledMatrix;
+using sics::matrixgraph::core::util::format_converter::Edgelist2BitTiledMatrix;
 
 static void ConvertGridGraph2BitTiledMatrix(const std::string &input_path,
                                             const std::string &output_path,

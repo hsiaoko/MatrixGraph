@@ -29,11 +29,17 @@ typedef uint32_t VertexDegree;
 typedef uint32_t VertexCount;
 typedef uint32_t EdgeIndex;
 
-
 #define MAX_VERTEX_ID std::numeric_limits<VertexID>::max()
 #define DEFAULT_TILE_NUM 1024
 
 #define CHECK MAX_VERTEX_ID
+
+enum StoreStrategy {
+  kUnconstrained, // default
+  kIncomingOnly,
+  kOutgoingOnly,
+  kUndefinedStrategy
+};
 
 } // namespace common
 } // namespace core

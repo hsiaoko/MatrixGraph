@@ -27,7 +27,7 @@ static void ConvertEdgelistCSV2ImmutableCSR(const std::string &input_path,
   sics::matrixgraph::core::data_structures::Edges edgelist;
   edgelist.ReadFromCSV(input_path, sep);
   auto p_immutable_csr =
-      sics::matrixgraph::tools::format_converter::Edgelist2ImmutableCSR(
+      sics::matrixgraph::core::util::format_converter::Edgelist2ImmutableCSR(
           edgelist);
 
   p_immutable_csr->Write(output_path);
@@ -63,9 +63,8 @@ static void ConvertEdgelistBin2CSRBin(const std::string &input_path,
   edgelist.ShowGraph();
 
   auto p_immutable_csr =
-      sics::matrixgraph::tools::format_converter::Edgelist2ImmutableCSR(
+      sics::matrixgraph::core::util::format_converter::Edgelist2ImmutableCSR(
           edgelist);
-  p_immutable_csr->PrintGraph(3);
   p_immutable_csr->SortByDegree();
   p_immutable_csr->PrintGraph(3);
   p_immutable_csr->Write(output_path);
@@ -81,7 +80,7 @@ static void ConvertEdgelistCSV2CGGraphCSR(const std::string &input_path,
   sics::matrixgraph::core::data_structures::Edges edgelist;
   edgelist.ReadFromCSV(input_path, sep);
   auto p_immutable_csr =
-      sics::matrixgraph::tools::format_converter::Edgelist2ImmutableCSR(
+      sics::matrixgraph::core::util::format_converter::Edgelist2ImmutableCSR(
           edgelist);
 
   auto *offset = p_immutable_csr->GetOutOffsetBasePointer();
@@ -119,7 +118,7 @@ static void ConvertEdgelistBin2CGGraphCSR(const std::string &input_path,
   edgelist.ShowGraph(3);
 
   auto p_immutable_csr =
-      sics::matrixgraph::tools::format_converter::Edgelist2ImmutableCSR(
+      sics::matrixgraph::core::util::format_converter::Edgelist2ImmutableCSR(
           edgelist);
 
   auto *offset = p_immutable_csr->GetOutOffsetBasePointer();

@@ -4,6 +4,7 @@
 #include <string>
 
 #include "core/common/types.h"
+#include "core/data_structures/edgelist.h"
 #include "core/data_structures/grid_csr_tiled_matrix.cuh"
 #include "core/task/task_base.cuh"
 
@@ -15,10 +16,14 @@ namespace task {
 class GEMM : public TaskBase {
 private:
   using VertexID = sics::matrixgraph::core::common::VertexID;
+  using GraphID = sics::matrixgraph::core::common::GraphID;
   using TileIndex = sics::matrixgraph::core::common::TileIndex;
   using VertexLabel = sics::matrixgraph::core::common::VertexLabel;
   using GridCSRTiledMatrix =
       sics::matrixgraph::core::data_structures::GridCSRTiledMatrix;
+  using Edges = sics::matrixgraph::core::data_structures::Edges;
+  using GridGraphMetadata =
+      sics::matrixgraph::core::data_structures::GridGraphMetadata;
 
 public:
   GEMM(const std::string &input_path, const std::string &input_path_transposed,
@@ -43,7 +48,16 @@ private:
 
   __host__ void InitResultMatrixUnifiedMemory();
 
-  __host__ void FillTilesUnifiedMemory();
+  __host__ Edges *Walks(const GridCSRTiledMatrix &A,
+                        const GridCSRTiledMatrix &B, VertexID tile_size,
+                        VertexID n_strips);
+
+  __host__ std::vector<Edges> *GridPartitioning(const Edges &edges_blocks,
+                                                GraphID n_partitions);
+
+  __host__ GridCSRTiledMatrix *ConvertGridEdgelist2GridTiledMatrix(
+      const std::vector<Edges> &edges_blocks,
+      const GridGraphMetadata &grid_graph_metadata, VertexID tile_size);
 
   __host__ void FillTiles();
 

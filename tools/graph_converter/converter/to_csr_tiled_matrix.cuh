@@ -10,8 +10,8 @@
 #include "core/data_structures/immutable_csr.cuh"
 #include "core/data_structures/metadata.h"
 #include "core/io/csr_tiled_matrix_io.cuh"
+#include "core/util/format_converter.cuh"
 #include "tools/common/edgelist_subgraphs_io.cuh"
-#include "tools/common/format_converter.h"
 
 namespace sics {
 namespace matrixgraph {
@@ -30,8 +30,8 @@ using CSRTiledMatrixIO = sics::matrixgraph::core::io::CSRTiledMatrixIO;
 using EdgelistSubGraphsIO =
     sics::matrixgraph::tools::common::EdgelistSubGraphsIO;
 using CSRTiledMatrix = sics::matrixgraph::core::data_structures::CSRTiledMatrix;
-using sics::matrixgraph::tools::format_converter::Edgelist2BitTiledMatrix;
-using sics::matrixgraph::tools::format_converter::Edgelist2CSRTiledMatrix;
+using sics::matrixgraph::core::util::format_converter::Edgelist2BitTiledMatrix;
+using sics::matrixgraph::core::util::format_converter::Edgelist2CSRTiledMatrix;
 
 static void ConvertGridGraph2CSRTiledMatrix(const std::string &input_path,
                                             const std::string &output_path,

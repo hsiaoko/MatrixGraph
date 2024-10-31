@@ -6,7 +6,7 @@
 
 #include "core/data_structures/bit_tiled_matrix.cuh"
 #include "core/data_structures/metadata.h"
-#include "tools/common/types.h"
+#include "core/common/types.h"
 
 namespace sics {
 namespace matrixgraph {
@@ -22,7 +22,7 @@ private:
       sics::matrixgraph::core::data_structures::BitTiledMatrix;
   using TiledMatrixMetadata =
       sics::matrixgraph::core::data_structures::TiledMatrixMetadata;
-  using StoreStrategy = sics::matrixgraph::tools::common::StoreStrategy;
+  using StoreStrategy = sics::matrixgraph::core::common::StoreStrategy;
 
 public:
   BitTiledMatrixIO() = default;

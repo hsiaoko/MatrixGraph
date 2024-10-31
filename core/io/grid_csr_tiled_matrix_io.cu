@@ -4,9 +4,9 @@
 #include <fstream>
 #include <yaml-cpp/yaml.h>
 
+#include "core/common/types.h"
 #include "core/data_structures/metadata.h"
 #include "core/io/csr_tiled_matrix_io.cuh"
-#include "tools/common/types.h"
 
 namespace sics {
 namespace matrixgraph {

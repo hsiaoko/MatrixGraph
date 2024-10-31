@@ -3,6 +3,7 @@
 #include <cuda_runtime.h>
 #include <iostream>
 
+#include "core/common/consts.h"
 #include "core/common/types.h"
 #include "core/util/cuda_check.cuh"
 
@@ -13,6 +14,8 @@ namespace task {
 namespace kernel {
 
 using sics::matrixgraph::core::common::EdgeIndex;
+using sics::matrixgraph::core::common::GraphID;
+using sics::matrixgraph::core::common::kMaxVertexID;
 using sics::matrixgraph::core::common::VertexID;
 
 #define WORD_OFFSET(i) (i >> 6)
@@ -75,6 +78,31 @@ struct ParametersFillTiles {
   uint64_t *csr_offset_a = nullptr;
   uint64_t *csr_offset_b = nullptr;
   uint64_t *csr_offset_c = nullptr;
+};
+
+struct ParametersWalk {
+  unsigned long tile_size;
+  unsigned long n_strips;
+  unsigned long n_nz_tile_a;
+  unsigned long n_nz_tile_b;
+  unsigned long tile_unit;
+  unsigned long tile_buffer_size;
+  unsigned *tile_offset_row_a;
+  unsigned *tile_offset_row_b;
+  unsigned *tile_row_idx_a;
+  unsigned *tile_row_idx_b;
+  unsigned *tile_col_idx_a;
+  unsigned *tile_col_idx_b;
+  uint8_t *data_a;
+  uint8_t *data_b;
+  uint32_t *csr_n_vertices_a = nullptr;
+  uint32_t *csr_n_vertices_b = nullptr;
+  uint64_t *csr_n_edges_a = nullptr;
+  uint64_t *csr_n_edges_b = nullptr;
+  uint64_t *csr_offset_a = nullptr;
+  uint64_t *csr_offset_b = nullptr;
+  uint32_t *edgelist_c = nullptr;
+  uint32_t *output_offset = nullptr;
 };
 
 struct ParametersCount {
@@ -318,7 +346,7 @@ static __global__ void fill_csr_tiles_kernel(ParametersFillTiles params) {
   unsigned int tid = blockIdx.x * blockDim.x + threadIdx.x;
   unsigned int step = blockDim.x * gridDim.x;
 
-  printf("tid: %d\n", tid);
+  // printf("tid: %d\n", tid);
   for (unsigned int i = tid; i < params.n_nz_tile_c; i += step) {
     unsigned int x = params.tile_row_idx_c[i];
     unsigned int y = params.tile_col_idx_c[i];
@@ -331,6 +359,7 @@ static __global__ void fill_csr_tiles_kernel(ParametersFillTiles params) {
 
     unsigned nz_idx_x = 0;
     unsigned nz_idx_y = 0;
+    // printf("C (%d, %d)\n", nz_idx_x, nz_idx_y);
     while (nz_idx_x < nz_tile_line_x && nz_idx_y < nz_tile_line_y) {
       if (*(params.tile_col_idx_a + params.tile_offset_row_a[x] + nz_idx_x) <
           *(params.tile_col_idx_b + params.tile_offset_row_a[y] + nz_idx_y)) {
@@ -343,6 +372,8 @@ static __global__ void fill_csr_tiles_kernel(ParametersFillTiles params) {
         uint32_t tile_id_a = params.tile_offset_row_a[x] + nz_idx_x;
         uint32_t tile_id_b = params.tile_offset_row_b[y] + nz_idx_y;
 
+        // printf("a(%d, %d) X b(%d, %d)\n", x, nz_idx_x, y, nz_idx_y);
+        // printf(" offset \t a: %d, b: %d\n", tile_id_a, tile_id_b);
         size_t csr_offset_a =
             params.csr_offset_a[params.tile_offset_row_a[x] + nz_idx_x];
         size_t csr_offset_b =
@@ -372,14 +403,66 @@ static __global__ void fill_csr_tiles_kernel(ParametersFillTiles params) {
                           1);
         VertexID *out_edges_a = in_edges_a + 0;
         VertexID *out_edges_b = in_edges_b + 0;
-        VertexID *edges_globalid_by_localid_base_pointer_a =
+        VertexID *edges_globalid_by_localid_a =
             out_edges_a + params.csr_n_edges_a[tile_id_a];
-        VertexID *edges_globalid_by_localid_base_pointer_b =
+        VertexID *edges_globalid_by_localid_b =
             out_edges_b + params.csr_n_edges_b[tile_id_b];
 
         {
           // After all buffers are prepared. Your now can process tile_a and
           // tile_b.
+
+          // Step 1. traversal edges of tile_a
+          for (VertexID v_idx_a = 0;
+               v_idx_a < params.csr_n_vertices_a[tile_id_a]; v_idx_a++) {
+
+            // printf("vid %d\n", globalid_a[v_idx_a]);
+            EdgeIndex offset_base_a = out_offset_a[v_idx_a];
+            // printf("\t edges: ");
+            for (VertexID nbr_a = 0; nbr_a < out_degree_a[v_idx_a]; nbr_a++) {
+              VertexID global_vid_b =
+                  edges_globalid_by_localid_a[out_edges_a[offset_base_a +
+                                                          nbr_a]];
+              VertexID local_vid_b =
+                  edges_globalid_by_localid_a[out_edges_a[offset_base_a +
+                                                          nbr_a]] %
+                  params.tile_size;
+
+              VertexID v_idx_b = kMaxVertexID;
+              // search vertex global_vid_b.
+
+              // printf("nbr: %d(%d - %d) ", out_edges_a[offset_base_a + nbr_a],
+              //        edges_globalid_by_localid_a[out_edges_a[offset_base_a +
+              //                                                nbr_a]],
+              //        local_vid_b);
+
+              for (VertexID _ = 0; _ < params.csr_n_vertices_b[tile_id_b];
+                   _++) {
+                // printf("check %d\n", globalid_b[v_idx_b]);
+                if (globalid_b[_] == global_vid_b) {
+                  v_idx_b = _;
+                  break;
+                }
+              }
+
+              if (v_idx_b == kMaxVertexID)
+                continue;
+              // printf("found: %d\n", v_idx_b);
+
+              // Generate Output a 2-hop edge from src of A to dst of B.
+              EdgeIndex offset_base_b = out_offset_b[v_idx_b];
+              for (VertexID nbr_b = 0; nbr_b < out_degree_b[v_idx_b]; nbr_b++) {
+                // VertexID global_vid_c =
+                //     edges_globalid_by_localid_b[out_edges_b[offset_base_b +
+                //                                             nbr_b]];
+                // printf("new edges: %d -> %d\n", globalid_a[v_idx_a],
+                //        global_vid_c);
+              }
+            }
+            // printf("\n");
+          }
+
+          VertexID local_vid_b;
         }
 
         nz_idx_x++;
@@ -398,6 +481,91 @@ static __global__ void count_kernel(ParametersCount params) {
     local_count += count_per_uint64_t(params.data[i]);
   }
   atomicAdd(params.count, local_count);
+}
+
+static __global__ void walk_kernel(ParametersWalk params) {
+  unsigned int tid = blockIdx.x * blockDim.x + threadIdx.x;
+  unsigned int step = blockDim.x * gridDim.x;
+  params.n_nz_tile_a;
+  for (unsigned long nz_idx_a = 0; nz_idx_a < params.n_nz_tile_a + 1;
+       nz_idx_a++) {
+    auto csr_offset_a = params.csr_offset_a[nz_idx_a];
+
+    VertexID col_idx_a = params.tile_col_idx_a[nz_idx_a];
+    VertexID row_idx_a = params.tile_row_idx_a[nz_idx_a];
+
+    VertexID *globalid_a = (VertexID *)(params.data_a + csr_offset_a);
+    VertexID *in_degree_a = globalid_a + params.csr_n_vertices_a[nz_idx_a];
+    VertexID *out_degree_a = in_degree_a + params.csr_n_vertices_a[nz_idx_a];
+    EdgeIndex *in_offset_a =
+        (EdgeIndex *)(out_degree_a + params.csr_n_vertices_a[nz_idx_a]);
+    EdgeIndex *out_offset_a =
+        (EdgeIndex *)(in_offset_a + params.csr_n_vertices_a[nz_idx_a] + 1);
+    EdgeIndex *in_edges_a =
+        (EdgeIndex *)(out_offset_a + params.csr_n_vertices_a[nz_idx_a] + 1);
+    VertexID *out_edges_a = in_edges_a + 0;
+    VertexID *edges_globalid_by_localid_a =
+        out_edges_a + params.csr_n_edges_a[nz_idx_a];
+
+    for (VertexID v_idx_a = tid; v_idx_a < params.csr_n_vertices_a[nz_idx_a];
+         v_idx_a += step) {
+      VertexID global_src = globalid_a[v_idx_a];
+
+      EdgeIndex *out_offset_base = out_offset_a + v_idx_a;
+      for (VertexID nbr_idx_a = 0; nbr_idx_a < out_degree_a[v_idx_a];
+           nbr_idx_a++) {
+        VertexID dst = out_edges_a[out_offset_base[nbr_idx_a]];
+        VertexID global_dst = edges_globalid_by_localid_a[dst];
+        if (global_dst == global_src)
+          continue;
+
+        // Walks to next hop nbr.
+        GraphID n_tile_b = params.tile_offset_row_b[col_idx_a + 1] -
+                           params.tile_offset_row_b[col_idx_a];
+        for (GraphID tile_id_b = 0; tile_id_b < n_tile_b; tile_id_b++) {
+
+          GraphID nz_idx_b = params.tile_offset_row_b[col_idx_a] + tile_id_b;
+          auto csr_offset_b = params.csr_offset_b[nz_idx_b];
+          VertexID *globalid_b = (VertexID *)(params.data_b + csr_offset_b);
+          VertexID *in_degree_b =
+              globalid_b + params.csr_n_vertices_b[nz_idx_b];
+          VertexID *out_degree_b =
+              in_degree_b + params.csr_n_vertices_b[nz_idx_b];
+          EdgeIndex *in_offset_b =
+              (EdgeIndex *)(out_degree_b + params.csr_n_vertices_b[nz_idx_b]);
+          EdgeIndex *out_offset_b =
+              (EdgeIndex *)(in_offset_b + params.csr_n_vertices_b[nz_idx_b] +
+                            1);
+          EdgeIndex *in_edges_b =
+              (EdgeIndex *)(out_offset_b + params.csr_n_vertices_b[nz_idx_b] +
+                            1);
+          VertexID *out_edges_b = in_edges_b + 0;
+          VertexID *edges_globalid_by_localid_b =
+              out_edges_b + params.csr_n_edges_b[nz_idx_b];
+          for (VertexID v_idx_b = 0;
+               v_idx_b < params.csr_n_vertices_b[nz_idx_b]; v_idx_b++) {
+            if (global_dst == globalid_b[v_idx_b]) {
+              EdgeIndex *out_offset_base = out_offset_b + v_idx_b;
+
+              for (VertexID nbr_idx_b = 0; nbr_idx_b < out_degree_b[v_idx_b];
+                   nbr_idx_b++) {
+                VertexID walk_to_dst = edges_globalid_by_localid_b
+                    [out_edges_b[out_offset_base[nbr_idx_b]]];
+                if (globalid_b[v_idx_b] == walk_to_dst)
+                  continue;
+
+                // Write <global_dst, walk_to_dst> to output buffer
+                EdgeIndex local_offset = atomicAdd(params.output_offset, 1);
+                *(params.edgelist_c + 2 * local_offset) = global_src;
+                *(params.edgelist_c + 2 * local_offset + 1) = walk_to_dst;
+                break;
+              }
+            }
+          }
+        }
+      }
+    }
+  }
 }
 
 void MatrixOperationsKernelWrapper::MatrixBitAnd(
@@ -587,6 +755,63 @@ void MatrixOperationsKernelWrapper::FillCSRTiles(
   };
 
   fill_csr_tiles_kernel<<<dimBlock, dimGrid, 0, stream>>>(params);
+  cudaError_t err = cudaGetLastError();
+  if (err != cudaSuccess) {
+    CUDA_CHECK(err);
+  }
+}
+
+void MatrixOperationsKernelWrapper::Walk(
+    const cudaStream_t &stream, size_t tile_size, size_t n_strips,
+    size_t n_nz_tile_a, size_t n_nz_tile_b,
+    const data_structures::UnifiedOwnedBuffer<uint32_t> &csr_n_vertices_a,
+    const data_structures::UnifiedOwnedBuffer<uint32_t> &csr_n_vertices_b,
+    const data_structures::UnifiedOwnedBuffer<uint64_t> &csr_n_edges_a,
+    const data_structures::UnifiedOwnedBuffer<uint64_t> &csr_n_edges_b,
+    const data_structures::UnifiedOwnedBuffer<uint32_t> &tile_offset_row_a,
+    const data_structures::UnifiedOwnedBuffer<uint32_t> &tile_offset_row_b,
+    const data_structures::UnifiedOwnedBuffer<uint32_t> &tile_row_idx_a,
+    const data_structures::UnifiedOwnedBuffer<uint32_t> &tile_row_idx_b,
+    const data_structures::UnifiedOwnedBuffer<uint32_t> &tile_col_idx_a,
+    const data_structures::UnifiedOwnedBuffer<uint32_t> &tile_col_idx_b,
+    const data_structures::UnifiedOwnedBuffer<uint64_t> &csr_offset_a,
+    const data_structures::UnifiedOwnedBuffer<uint64_t> &csr_offset_b,
+    const data_structures::UnifiedOwnedBuffer<uint8_t> &data_a,
+    const data_structures::UnifiedOwnedBuffer<uint8_t> &data_b,
+    data_structures::UnifiedOwnedBuffer<uint32_t> *edgelist_c,
+    data_structures::UnifiedOwnedBuffer<EdgeIndex> *output_offset) {
+
+  dim3 dimBlock(1);
+  dim3 dimGrid(1);
+
+  auto tile_unit = max(1u, (WORD_OFFSET(tile_size * tile_size)));
+  auto tile_buffer_size =
+      sizeof(uint64_t) * max(1u, WORD_OFFSET(tile_size * tile_size));
+
+  ParametersWalk params{.tile_size = tile_size,
+                        .n_strips = n_strips,
+                        .n_nz_tile_a = n_nz_tile_a,
+                        .n_nz_tile_b = n_nz_tile_b,
+                        .tile_unit = tile_unit,
+                        .tile_buffer_size = tile_buffer_size,
+                        .tile_offset_row_a = tile_offset_row_a.GetPtr(),
+                        .tile_offset_row_b = tile_offset_row_b.GetPtr(),
+                        .tile_row_idx_a = tile_row_idx_a.GetPtr(),
+                        .tile_row_idx_b = tile_row_idx_b.GetPtr(),
+                        .tile_col_idx_a = tile_col_idx_a.GetPtr(),
+                        .tile_col_idx_b = tile_col_idx_b.GetPtr(),
+                        .data_a = data_a.GetPtr(),
+                        .data_b = data_b.GetPtr(),
+                        .csr_n_vertices_a = csr_n_vertices_a.GetPtr(),
+                        .csr_n_vertices_b = csr_n_vertices_b.GetPtr(),
+                        .csr_n_edges_a = csr_n_edges_a.GetPtr(),
+                        .csr_n_edges_b = csr_n_edges_b.GetPtr(),
+                        .csr_offset_a = csr_offset_a.GetPtr(),
+                        .csr_offset_b = csr_offset_b.GetPtr(),
+                        .edgelist_c = edgelist_c->GetPtr(),
+                        .output_offset = output_offset->GetPtr()};
+
+  walk_kernel<<<dimBlock, dimGrid, 0, stream>>>(params);
   cudaError_t err = cudaGetLastError();
   if (err != cudaSuccess) {
     CUDA_CHECK(err);

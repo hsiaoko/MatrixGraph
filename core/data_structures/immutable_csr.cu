@@ -67,7 +67,6 @@ void ImmutableCSR::PrintGraph(VertexID display_num) const {
       for (VertexID i = 0; i < u.outdegree; i++) {
         if (edges_globalid_by_localid_base_pointer_ != nullptr) {
           ss << edges_globalid_by_localid_base_pointer_[u.outgoing_edges[i]]
-             << "(" << u.outgoing_edges[i] << ")"
              << ",";
         } else {
           ss << u.outgoing_edges[i] << ",";

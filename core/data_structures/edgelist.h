@@ -136,6 +136,10 @@ public:
     edges_ptr_ = new Edge[edgelist_metadata.num_edges]();
   }
 
+  Edges(EdgeIndex n_edges, VertexID *edges_buf);
+
+  void Init(EdgeIndex n_edges, VertexID *edges_buf);
+
   Edges(const Edges &edges);
 
   ~Edges() { delete[] edges_ptr_; }

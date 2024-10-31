@@ -18,6 +18,9 @@ namespace data_structures {
 
 using VertexID = sics::matrixgraph::core::common::VertexID;
 using EdgeIndex = sics::matrixgraph::core::common::EdgeIndex;
+using sics::matrixgraph::core::util::atomic::WriteAdd;
+using sics::matrixgraph::core::util::atomic::WriteMax;
+using sics::matrixgraph::core::util::atomic::WriteMin;
 using std::filesystem::create_directory;
 using std::filesystem::exists;
 
@@ -26,6 +29,54 @@ Edges::Edges(const Edges &edges) {
   edges_ptr_ = new Edge[edgelist_metadata_.num_edges]();
   memcpy(edges_ptr_, edges.get_base_ptr(),
          sizeof(Edge) * edgelist_metadata_.num_edges);
+}
+
+Edges::Edges(EdgeIndex n_edges, VertexID *edges_buf) {
+  Init(n_edges, edges_buf);
+}
+
+void Edges::Init(EdgeIndex n_edges, VertexID *edges_buf) {
+  auto parallelism = std::thread::hardware_concurrency();
+  std::vector<size_t> worker(parallelism);
+  std::mutex mtx;
+  std::iota(worker.begin(), worker.end(), 0);
+  auto step = worker.size();
+
+  Bitmap bm(n_edges);
+  edges_ptr_ = new Edge[n_edges]();
+  VertexID max_vid = 0;
+  VertexID min_vid = MAX_VERTEX_ID;
+
+  // Get Min Max vertex ID.
+  std::for_each(std::execution::par, worker.begin(), worker.end(),
+                [this, n_edges, step, &edges_buf, &min_vid, &max_vid](auto w) {
+                  for (EdgeIndex _ = w; _ < n_edges; _ += step) {
+                    edges_ptr_[_].src = edges_buf[_ * 2];
+                    edges_ptr_[_].dst = edges_buf[_ * 2 + 1];
+                    WriteMin(&min_vid, edges_ptr_[_].src);
+                    WriteMin(&min_vid, edges_ptr_[_].dst);
+                    WriteMax(&max_vid, edges_ptr_[_].src);
+                    WriteMax(&max_vid, edges_ptr_[_].dst);
+                  }
+                });
+
+  Bitmap visited(max_vid);
+
+  // Get number of vertices.
+  std::for_each(std::execution::par, worker.begin(), worker.end(),
+                [this, &visited, step, n_edges](auto w) {
+                  for (EdgeIndex _ = w; _ < n_edges; _ += step) {
+                    visited.SetBit(edges_ptr_[_].src);
+                    visited.SetBit(edges_ptr_[_].dst);
+                  }
+                });
+
+  edgelist_metadata_.num_edges = n_edges;
+  edgelist_metadata_.max_vid = max_vid;
+  edgelist_metadata_.min_vid = min_vid;
+  edgelist_metadata_.num_vertices = visited.Count();
+
+  ReassignVertexIDs();
 }
 
 void Edges::WriteToBinary(const std::string &output_path) {

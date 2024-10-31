@@ -1,7 +1,7 @@
 #ifndef SICS_GRAPH_SYSTEMS_TOOLS_PARTITIONER_H_
 #define SICS_GRAPH_SYSTEMS_TOOLS_PARTITIONER_H_
 
-#include "tools/common/types.h"
+#include "core/common/types.h"
 
 #include <string>
 
@@ -14,7 +14,7 @@ namespace partitioner {
 // graph into several subgraphs.
 class PartitionerBase {
 private:
-  using StoreStrategy = sics::matrixgraph::tools::common::StoreStrategy;
+  using StoreStrategy = sics::matrixgraph::core::common::StoreStrategy;
 
 public:
   PartitionerBase(const std::string &input_path, const std::string &output_path,

@@ -156,11 +156,11 @@ void CSRTiledMatrixIO::Read(const std::string &input_path,
   csr_offset.read(reinterpret_cast<char *>(csr_tiled_matrix->GetCSROffsetPtr()),
                   sizeof(uint64_t) * (metadata.n_nz_tile + 1));
 
-  auto X = csr_tiled_matrix->GetCSROffsetPtr();
-  for (int i = 0; i < metadata.n_nz_tile + 1; i++) {
-    std::cout << X[i] << ", ";
-  }
-  std::cout << std::endl;
+  // auto X = csr_tiled_matrix->GetCSROffsetPtr();
+  // for (int i = 0; i < metadata.n_nz_tile + 1; i++) {
+  //   std::cout << X[i] << ", ";
+  // }
+  // std::cout << std::endl;
 
   in_data.read(reinterpret_cast<char *>(csr_tiled_matrix->GetDataPtr()),
                csr_tiled_matrix->GetDataBufferSize());

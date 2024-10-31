@@ -3,7 +3,7 @@
 
 #include "core/data_structures/edgelist.h"
 #include "core/data_structures/immutable_csr.cuh"
-#include "tools/common/format_converter.h"
+#include "core/util/format_converter.cuh"
 
 namespace sics {
 namespace matrixgraph {
@@ -41,7 +41,8 @@ static void ConvertImmutableCSR2EdgelistBin(const std::string &input_path,
                                         .min_vid = 0};
 
   auto *edges_ptr =
-      sics::matrixgraph::tools::format_converter::ImmutableCSR2Edgelist(csr);
+      sics::matrixgraph::core::util::format_converter::ImmutableCSR2Edgelist(
+          csr);
 
   edges_ptr->ShowGraph(3);
 
