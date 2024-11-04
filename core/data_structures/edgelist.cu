@@ -29,13 +29,19 @@ Edges::Edges(const Edges &edges) {
   edges_ptr_ = new Edge[edgelist_metadata_.num_edges]();
   memcpy(edges_ptr_, edges.get_base_ptr(),
          sizeof(Edge) * edgelist_metadata_.num_edges);
+  if (edges.get_localid_to_globalid_ptr() != nullptr) {
+    memcpy(localid_to_globalid_, edges.get_localid_to_globalid_ptr(),
+           sizeof(Edge) * edgelist_metadata_.num_vertices);
+  }
 }
 
-Edges::Edges(EdgeIndex n_edges, VertexID *edges_buf) {
-  Init(n_edges, edges_buf);
+Edges::Edges(EdgeIndex n_edges, VertexID *edges_buf,
+             VertexID *localid2globalid) {
+  Init(n_edges, edges_buf, localid2globalid);
 }
 
-void Edges::Init(EdgeIndex n_edges, VertexID *edges_buf) {
+void Edges::Init(EdgeIndex n_edges, VertexID *edges_buf,
+                 VertexID *localid2globalid) {
   auto parallelism = std::thread::hardware_concurrency();
   std::vector<size_t> worker(parallelism);
   std::mutex mtx;
@@ -72,11 +78,14 @@ void Edges::Init(EdgeIndex n_edges, VertexID *edges_buf) {
                 });
 
   edgelist_metadata_.num_edges = n_edges;
+  edgelist_metadata_.num_vertices = visited.Count();
   edgelist_metadata_.max_vid = max_vid;
   edgelist_metadata_.min_vid = min_vid;
-  edgelist_metadata_.num_vertices = visited.Count();
-
-  ReassignVertexIDs();
+  if (localid2globalid == nullptr) {
+    GenerateLocalID2GlobalID();
+  } else {
+    localid_to_globalid_ = localid2globalid;
+  }
 }
 
 void Edges::WriteToBinary(const std::string &output_path) {
@@ -84,10 +93,15 @@ void Edges::WriteToBinary(const std::string &output_path) {
     std::filesystem::create_directory(output_path);
 
   std::ofstream out_data_file(output_path + "edgelist.bin");
+  std::ofstream out_localid2globalid_file(output_path + "localid2globalid.bin");
   std::ofstream out_meta_file(output_path + "meta.yaml");
 
   out_data_file.write(reinterpret_cast<char *>(edges_ptr_),
                       sizeof(Edge) * edgelist_metadata_.num_edges);
+
+  out_localid2globalid_file.write(
+      reinterpret_cast<char *>(localid_to_globalid_),
+      sizeof(VertexID) * edgelist_metadata_.num_vertices);
 
   YAML::Node node;
   node["EdgelistBin"]["num_vertices"] = edgelist_metadata_.num_vertices;
@@ -97,6 +111,7 @@ void Edges::WriteToBinary(const std::string &output_path) {
   out_meta_file << node << std::endl;
 
   out_data_file.close();
+  out_localid2globalid_file.close();
   out_meta_file.close();
 }
 
@@ -113,17 +128,30 @@ void Edges::ReadFromBin(const std::string &input_path) {
 
   std::ifstream in_file(input_path + "edgelist.bin");
   if (!in_file) {
-
     std::cout << "Open file failed: " + input_path + "edgelist.bin"
               << std::endl;
     exit(EXIT_FAILURE);
   }
   in_file.read(reinterpret_cast<char *>(edges_ptr_),
                sizeof(Edge) * edgelist_metadata_.num_edges);
+
+  std::ifstream in_localid2globalid_file(input_path + "localid2globalid.bin");
+  if (!in_localid2globalid_file) {
+    std::cout << "Open file failed: " + input_path + "localid2globalid.bin"
+              << std::endl;
+    exit(EXIT_FAILURE);
+  }
+  in_file.read(reinterpret_cast<char *>(localid_to_globalid_),
+               sizeof(VertexID) * edgelist_metadata_.num_vertices);
 }
 
 void Edges::ReadFromCSV(const std::string &filename, const std::string &sep,
                         bool compressed) {
+  auto parallelism = std::thread::hardware_concurrency();
+  std::vector<size_t> worker(parallelism);
+  std::iota(worker.begin(), worker.end(), 0);
+  auto step = worker.size();
+
   std::ifstream in_file(filename);
 
   in_file.seekg(0, std::ios::end);
@@ -171,22 +199,9 @@ void Edges::ReadFromCSV(const std::string &filename, const std::string &sep,
     }
   }
 
-  if (compressed) {
-    std::cout << "[Edges] Reading CSV with compressed ..." << std::endl;
-    // Compress vid and buffer graph.
-    for (EdgeIndex i = 0; i < n_edges * 2; i++) {
-      compressed_buffer_edges[i] = vid_map[buffer_edges[i]];
-    }
-    for (EdgeIndex i = 0; i < n_edges; i++) {
-      edges_ptr_[i].src = compressed_buffer_edges[2 * i];
-      edges_ptr_[i].dst = compressed_buffer_edges[2 * i + 1];
-    }
-  } else {
-    std::cout << "[Edges] Reading CSV without compressed ..." << std::endl;
-    for (EdgeIndex i = 0; i < n_edges; i++) {
-      edges_ptr_[i].src = buffer_edges[2 * i];
-      edges_ptr_[i].dst = buffer_edges[2 * i + 1];
-    }
+  for (EdgeIndex i = 0; i < n_edges; i++) {
+    edges_ptr_[i].src = buffer_edges[2 * i];
+    edges_ptr_[i].dst = buffer_edges[2 * i + 1];
   }
 
   delete[] buffer_edges;
@@ -197,12 +212,36 @@ void Edges::ReadFromCSV(const std::string &filename, const std::string &sep,
   edgelist_metadata_.num_edges = n_edges;
   edgelist_metadata_.num_vertices = bitmap.Count();
   edgelist_metadata_.max_vid = max_vid;
+  if (compressed) {
+    std::cout << "[Edges] Reading CSV with compressed ..." << std::endl;
+    GenerateLocalID2GlobalID();
+  } else {
+    std::cout << "[Edges] Reading CSV without compressed ..." << std::endl;
+    if (localid_to_globalid_ != nullptr)
+      delete[] localid_to_globalid_;
+    localid_to_globalid_ = new VertexID[edgelist_metadata_.num_vertices]();
+    std::for_each(std::execution::par, worker.begin(), worker.end(),
+                  [this, step](auto w) {
+                    for (auto i = w; i < get_metadata().num_vertices;
+                         i += step) {
+                      std::cout << "->" << localid_to_globalid_[i] << " " << i
+                                << std::endl;
+                      localid_to_globalid_[i] = i;
+                      std::cout << "->" << localid_to_globalid_[i] << " " << i
+                                << std::endl;
+                    }
+                  });
+  }
 }
 
-void Edges::ReassignVertexIDs() {
-  if (localid_to_globalid_ != nullptr)
-    delete[] localid_to_globalid_;
-  localid_to_globalid_ = new VertexID[edgelist_metadata_.num_vertices]();
+void Edges::GenerateLocalID2GlobalID() {
+  auto parallelism = std::thread::hardware_concurrency();
+  std::vector<size_t> worker(parallelism);
+  std::iota(worker.begin(), worker.end(), 0);
+  auto step = worker.size();
+
+  VertexID *new_localid_to_globalid =
+      new VertexID[edgelist_metadata_.num_vertices]();
 
   VertexID *vid_map = new VertexID[edgelist_metadata_.max_vid + 1]();
 
@@ -212,6 +251,10 @@ void Edges::ReassignVertexIDs() {
 
   for (EdgeIndex index = 0; index < edgelist_metadata_.num_edges; index++) {
     auto e = get_edge_by_index(index);
+    if (localid_to_globalid_ != nullptr) {
+      e.src = localid_to_globalid_[e.src];
+      e.dst = localid_to_globalid_[e.dst];
+    }
 
     if (!bitmap.GetBit(e.src)) {
       bitmap.SetBit(e.src);
@@ -223,25 +266,46 @@ void Edges::ReassignVertexIDs() {
     }
   }
 
+  std::for_each(std::execution::par, worker.begin(), worker.end(),
+                [this, step, &vid_map, &new_localid_to_globalid](auto w) {
+                  for (auto i = w; i < get_metadata().num_edges; i += step) {
+                    auto e = get_edge_by_index(i);
+                    if (localid_to_globalid_ != nullptr) {
+                      e.src = localid_to_globalid_[e.src];
+                      e.dst = localid_to_globalid_[e.dst];
+                    }
+                    new_localid_to_globalid[vid_map[e.src]] = e.src;
+                    new_localid_to_globalid[vid_map[e.dst]] = e.dst;
+                    edges_ptr_[i].src = vid_map[e.src];
+                    edges_ptr_[i].dst = vid_map[e.dst];
+                  }
+                });
+  delete[] vid_map;
+  delete[] localid_to_globalid_;
+  localid_to_globalid_ = new_localid_to_globalid;
+}
+
+void Edges::Compacted() {
   auto parallelism = std::thread::hardware_concurrency();
   std::vector<size_t> worker(parallelism);
   std::iota(worker.begin(), worker.end(), 0);
   auto step = worker.size();
 
+  if (localid_to_globalid_ == nullptr) {
+    localid_to_globalid_ = new VertexID[get_metadata().num_vertices]();
+  } else {
+    memset(localid_to_globalid_, 0,
+           sizeof(VertexID) * get_metadata().num_vertices);
+  }
+
   std::for_each(std::execution::par, worker.begin(), worker.end(),
-                [this, step, &vid_map](auto w) {
+                [this, step](auto w) {
                   for (auto i = w; i < get_metadata().num_edges; i += step) {
-                    localid_to_globalid_[vid_map[edges_ptr_[i].src]] =
-                        edges_ptr_[i].src;
-                    localid_to_globalid_[vid_map[edges_ptr_[i].dst]] =
-                        edges_ptr_[i].dst;
-                    edges_ptr_[i].src = vid_map[edges_ptr_[i].src];
-                    edges_ptr_[i].dst = vid_map[edges_ptr_[i].dst];
+                    auto e = get_edge_by_index(i);
+                    localid_to_globalid_[e.src] = e.src;
+                    localid_to_globalid_[e.dst] = e.dst;
                   }
                 });
-  edgelist_metadata_.max_vid = compressed_vid - 1;
-  edgelist_metadata_.min_vid = 0;
-  delete[] vid_map;
 }
 
 void Edges::Transpose() {

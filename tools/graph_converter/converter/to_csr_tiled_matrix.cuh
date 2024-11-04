@@ -68,6 +68,7 @@ static void ConvertGridGraph2CSRTiledMatrix(const std::string &input_path,
   out_node["GridGraphMetadata"]["n_vertices"] = meta.num_vertices;
   out_node["GridGraphMetadata"]["n_edges"] = meta.num_edges;
   out_node["GridGraphMetadata"]["n_chunks"] = n_chunks;
+  out_node["GridGraphMetadata"]["max_vid"] = graph_metadata.max_vid;
 
   out_meta_file << out_node << std::endl;
   out_meta_file.close();

@@ -86,8 +86,8 @@ static Edges *ImmutableCSR2Edgelist(const ImmutableCSR &immutable_csr) {
                     }
                   }
                 });
-
-  return new Edges(edgelist_metadata, edge_ptr);
+  auto *edges = new Edges(edgelist_metadata, edge_ptr);
+  return edges;
 }
 
 static ImmutableCSR *Edgelist2ImmutableCSR(const Edges &edgelist) {
@@ -456,8 +456,8 @@ Edgelist2CSRTiledMatrix(const Edges &edges, size_t tile_size,
         for (EdgeIndex eid = w; eid < edges.get_metadata().num_edges;
              eid += step) {
           auto e = edges.get_edge_by_index(eid);
-
           auto *localid_to_globalid = edges.get_localid_to_globalid_ptr();
+
           auto tile_x = (localid_to_globalid[e.src] % block_scope) / tile_size;
           auto tile_y = (localid_to_globalid[e.dst] % block_scope) / tile_size;
 
@@ -512,6 +512,7 @@ Edgelist2CSRTiledMatrix(const Edges &edges, size_t tile_size,
              eid += step) {
           auto e = edges.get_edge_by_index(eid);
           auto *localid_to_globalid = edges.get_localid_to_globalid_ptr();
+
           auto tile_x = (localid_to_globalid[e.src] % block_scope) / tile_size;
           auto tile_y = (localid_to_globalid[e.dst] % block_scope) / tile_size;
 
@@ -629,7 +630,7 @@ Edgelist2CSRTiledMatrix(const Edges &edges, size_t tile_size,
           auto y_within_tile =
               (localid_to_globalid[e.dst] % block_scope) % tile_size;
 
-          EdgeIndex offset_out = 0, offset_in = 0;
+          EdgeIndex offset_out = 0;
           auto gid = gid_map[tile_x * n_strips + tile_y];
           offset_out = __sync_fetch_and_add(
               offset_out_edges_vec[gid].get() + x_within_tile, 1);

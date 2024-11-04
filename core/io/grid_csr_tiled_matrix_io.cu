@@ -25,7 +25,8 @@ void GridCSRTiledMatrixIO::Read(const std::string &input_path,
   GridGraphMetadata grid_tiled_matrix_metadata = {
       .n_chunks = node["GridGraphMetadata"]["n_chunks"].as<GraphID>(),
       .n_vertices = node["GridGraphMetadata"]["n_vertices"].as<VertexID>(),
-      .n_edges = node["GridGraphMetadata"]["n_edges"].as<EdgeIndex>()};
+      .n_edges = node["GridGraphMetadata"]["n_edges"].as<EdgeIndex>(),
+      .max_vid = node["GridGraphMetadata"]["max_vid"].as<VertexID>()};
 
   *grid_tiled_matrix = new GridCSRTiledMatrix(grid_tiled_matrix_metadata);
 
@@ -44,6 +45,8 @@ void GridCSRTiledMatrixIO::Read(const std::string &input_path,
 
 void GridCSRTiledMatrixIO::Write(const std::string &output_path,
                                  const GridCSRTiledMatrix &grid_tiled_matrix) {
+  if (!std::filesystem::exists(output_path))
+    std::filesystem::create_directory(output_path);
 
   auto meta = grid_tiled_matrix.get_metadata();
 
@@ -59,6 +62,7 @@ void GridCSRTiledMatrixIO::Write(const std::string &output_path,
   out_node["GridGraphMetadata"]["n_vertices"] = meta.n_vertices;
   out_node["GridGraphMetadata"]["n_edges"] = meta.n_edges;
   out_node["GridGraphMetadata"]["n_chunks"] = meta.n_chunks;
+  out_node["GridGraphMetadata"]["max_vid"] = meta.max_vid;
 
   out_meta_file << out_node << std::endl;
   out_meta_file.close();

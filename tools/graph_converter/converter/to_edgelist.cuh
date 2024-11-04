@@ -26,7 +26,8 @@ static void ConvertEdgelistCSV2EdgelistBin(const std::string &input_path,
 }
 
 static void ConvertImmutableCSR2EdgelistBin(const std::string &input_path,
-                                            const std::string &output_path) {
+                                            const std::string &output_path,
+                                            bool compressed = false) {
 
   ImmutableCSR csr;
   csr.Read(input_path);
@@ -44,6 +45,11 @@ static void ConvertImmutableCSR2EdgelistBin(const std::string &input_path,
       sics::matrixgraph::core::util::format_converter::ImmutableCSR2Edgelist(
           csr);
 
+  edges_ptr->GenerateLocalID2GlobalID();
+  edges_ptr->ShowGraph(3);
+  if (compressed) {
+    edges_ptr->Compacted();
+  }
   edges_ptr->ShowGraph(3);
 
   edges_ptr->WriteToBinary(output_path);

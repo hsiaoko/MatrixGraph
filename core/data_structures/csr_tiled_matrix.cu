@@ -78,7 +78,7 @@ void CSRTiledMatrix::Init(const TiledMatrixMetadata &metadata,
 
 void CSRTiledMatrix::Init(VertexID tile_size, VertexID n_strips, Bitmap *bm) {}
 
-void CSRTiledMatrix::Print() const {
+void CSRTiledMatrix::Print(VertexID max_n_nz_tile) const {
   if (metadata_.n_nz_tile == 0)
     return;
   std::cout << "[CSRTiledMatrix Print], n_nz_tile: " << metadata_.n_nz_tile
@@ -106,6 +106,8 @@ void CSRTiledMatrix::Print() const {
   std::cout << std::endl;
 
   for (VertexID _ = 0; _ < metadata_.n_nz_tile; _++) {
+    if (_ > max_n_nz_tile)
+      break;
     auto *csr_base_ptr = GetCSRBasePtrByIdx(_);
     ImmutableCSR csr(GetCSRMetadataByIdx(_));
     csr.ParseBasePtr(csr_base_ptr);

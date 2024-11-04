@@ -15,6 +15,7 @@ namespace kernel {
 
 using sics::matrixgraph::core::common::EdgeIndex;
 using sics::matrixgraph::core::common::GraphID;
+using sics::matrixgraph::core::common::KDefalutNumEdgesPerTile;
 using sics::matrixgraph::core::common::kMaxVertexID;
 using sics::matrixgraph::core::common::VertexID;
 
@@ -487,6 +488,8 @@ static __global__ void walk_kernel(ParametersWalk params) {
   unsigned int tid = blockIdx.x * blockDim.x + threadIdx.x;
   unsigned int step = blockDim.x * gridDim.x;
   params.n_nz_tile_a;
+
+  EdgeIndex local_offset = 0;
   for (unsigned long nz_idx_a = 0; nz_idx_a < params.n_nz_tile_a + 1;
        nz_idx_a++) {
     auto csr_offset_a = params.csr_offset_a[nz_idx_a];
@@ -544,6 +547,7 @@ static __global__ void walk_kernel(ParametersWalk params) {
               out_edges_b + params.csr_n_edges_b[nz_idx_b];
           for (VertexID v_idx_b = 0;
                v_idx_b < params.csr_n_vertices_b[nz_idx_b]; v_idx_b++) {
+            // printf("v: %d , degree: %d", v_idx_b, out_degree_b[v_idx_b]);
             if (global_dst == globalid_b[v_idx_b]) {
               EdgeIndex *out_offset_base = out_offset_b + v_idx_b;
 
@@ -555,17 +559,26 @@ static __global__ void walk_kernel(ParametersWalk params) {
                   continue;
 
                 // Write <global_dst, walk_to_dst> to output buffer
-                EdgeIndex local_offset = atomicAdd(params.output_offset, 1);
-                *(params.edgelist_c + 2 * local_offset) = global_src;
-                *(params.edgelist_c + 2 * local_offset + 1) = walk_to_dst;
-                break;
+                // EdgeIndex local_offset = atomicAdd(params.output_offset, 1);
+                // EdgeIndex local_offset = atomicAdd(&out_offset_for_vid_a, 1);
+                local_offset++;
+
+                // if (local_offset > KDefalutNumEdgesPerTile)
+                //   continue;
+                //       *(params.edgelist_c + 2 * local_offset) = global_src;
+                //       *(params.edgelist_c + 2 * local_offset + 1) =
+                //       walk_to_dst; break;
               }
             }
           }
         }
       }
     }
+    // atomicAdd(&local_offset, 1);
   }
+  printf("local_offset: %d\n", local_offset);
+  //*params.output_offset = *params.output_offset + local_offset;
+  // EdgeIndex global_offset = atomicAdd(params.output_offset, local_offset);
 }
 
 void MatrixOperationsKernelWrapper::MatrixBitAnd(
@@ -715,8 +728,8 @@ void MatrixOperationsKernelWrapper::FillCSRTiles(
     const data_structures::UnifiedOwnedBuffer<uint8_t> &data_b,
     data_structures::UnifiedOwnedBuffer<uint8_t> *data_c) {
 
-  dim3 dimBlock(1);
-  dim3 dimGrid(1);
+  dim3 dimBlock(128);
+  dim3 dimGrid(128);
 
   auto tile_unit = max(1u, (WORD_OFFSET(tile_size * tile_size)));
   auto tile_buffer_size =
@@ -781,8 +794,8 @@ void MatrixOperationsKernelWrapper::Walk(
     data_structures::UnifiedOwnedBuffer<uint32_t> *edgelist_c,
     data_structures::UnifiedOwnedBuffer<EdgeIndex> *output_offset) {
 
-  dim3 dimBlock(1);
-  dim3 dimGrid(1);
+  dim3 dimBlock(64);
+  dim3 dimGrid(64);
 
   auto tile_unit = max(1u, (WORD_OFFSET(tile_size * tile_size)));
   auto tile_buffer_size =

@@ -49,7 +49,7 @@ public:
 
   void InitBitTileVec();
 
-  void Print() const;
+  void Print(VertexID max_n_nz_tile = 2) const;
 
   void SetBit(VertexID row, VertexID col);
 

@@ -77,13 +77,13 @@ __host__ void GEMM::LoadData() {
   grid_csr_tiled_matrix_io.Read(input_path_, &A_);
   grid_csr_tiled_matrix_io.Read(input_path_transposed_, &B_);
 
-  // std::cout << "######################## A #######################"
+  std::cout << "######################## A #######################"
+            << std::endl;
+  A_->Print();
+  // std::cout << "######################## B #######################"
   //           << std::endl;
-  // A_->Print();
-  //  std::cout << "######################## B #######################"
-  //            << std::endl;
-  //  B_->Print();
-  //  C_ = new GridCSRTiledMatrix(A_->get_metadata());
+  // B_->Print();
+  // C_ = new GridCSRTiledMatrix(A_->get_metadata());
 }
 
 __host__ void GEMM::InitC() {
@@ -723,12 +723,15 @@ __host__ Edges *GEMM::Walks(const GridCSRTiledMatrix &A,
               std::cout << "A: (" << i << ", " << k << ")"
                         << " X "
                         << "B: (" << k << ", " << j << ")"
-                        << "C: (" << i << ", " << j << ")" << std::endl;
+                        << "C: (" << i << ", " << j << ")"
+                        << "nz A: " << block_a->GetMetadata().n_nz_tile
+                        << ", nz B: " << block_b->GetMetadata().n_nz_tile
+                        << std::endl;
 
-              std::cout << "- A - " << std::endl;
-              block_a->Print();
-              std::cout << "- B - " << std::endl;
-              block_b->Print();
+              // std::cout << "- A - " << std::endl;
+              // block_a->Print();
+              // std::cout << "- B - " << std::endl;
+              // block_b->Print();
 
               cudaSetDevice(common::hash_function(i * N + j) % 4);
 
@@ -781,6 +784,11 @@ __host__ Edges *GEMM::Walks(const GridCSRTiledMatrix &A,
         }
       });
 
+  for (auto _ = 0; _ < unified_output_offset.size(); _++) {
+    std::cout << "offset: " << *(unified_output_offset[_].GetPtr())
+              << std::endl;
+  }
+
   VertexID *output_edges_buf = new VertexID[output_n_edges * 2]();
   EdgeIndex output_offset = 0;
   for (auto _ = 0; _ < unified_edgelist_c.size(); _++) {
@@ -798,14 +806,12 @@ __host__ Edges *GEMM::Walks(const GridCSRTiledMatrix &A,
 
 __host__ std::vector<Edges> *GEMM::GridPartitioning(const Edges &edges,
                                                     GraphID n_partitions) {
-  std::cout << "[GridEdgelist2GridCSRTiledMatrix] Start -  " << n_partitions
-            << " ..." << std::endl;
+  // std::cout << "[GridCut] Start ..." << std::endl;
+
   auto parallelism = std::thread::hardware_concurrency();
   std::vector<size_t> worker(parallelism);
   std::iota(worker.begin(), worker.end(), 0);
   auto step = worker.size();
-
-  edges.ShowGraph();
 
   // Precompute the size of each edge bucket.
   VertexID scope_per_chunk =
@@ -822,16 +828,20 @@ __host__ std::vector<Edges> *GEMM::GridPartitioning(const Edges &edges,
     min_vid_for_each_block[_] = std::numeric_limits<uint32_t>::max();
   }
 
-  std::cout << "[GridCut] Computing key parameters under chunk scope of "
-            << scope_per_chunk << " ...\n"
-            << std::endl;
+  // std::cout << "[GridCut] Computing key parameters under chunk scope of "
+  //           << scope_per_chunk << " ...\n"
+  //           << std::endl;
   std::for_each(
       std::execution::par, worker.begin(), worker.end(),
       [this, step, &edges, scope_per_chunk, n_partitions,
        &n_edges_for_each_block, &max_vid_for_each_block,
        &min_vid_for_each_block, &vertices_bm_for_each_block](auto w) {
         for (auto eid = w; eid < edges.get_metadata().num_edges; eid += step) {
+          auto *localid_to_globalid = edges.get_localid_to_globalid_ptr();
           auto edge = edges.get_edge_by_index(eid);
+          edge.src = localid_to_globalid[edge.src];
+          edge.dst = localid_to_globalid[edge.dst];
+
           auto x = edge.src / scope_per_chunk;
           auto y = edge.dst / scope_per_chunk;
           WriteAdd(&n_edges_for_each_block[x * n_partitions + y], (EdgeIndex)1);
@@ -851,7 +861,7 @@ __host__ std::vector<Edges> *GEMM::GridPartitioning(const Edges &edges,
         }
       });
 
-  std::cout << "[GridCut] Allocating space for each block...\n" << std::endl;
+  // std::cout << "[GridCut] Allocating space for each block...\n" << std::endl;
   Edge **edge_blocks_buf = new Edge *[n_partitions * n_partitions]();
   for (GraphID _ = 0; _ < n_partitions * n_partitions; _++) {
     edge_blocks_buf[_] = new Edge[n_edges_for_each_block[_]]();
@@ -860,13 +870,16 @@ __host__ std::vector<Edges> *GEMM::GridPartitioning(const Edges &edges,
   auto *offset_for_each_block =
       new std::atomic<EdgeIndex>[n_partitions * n_partitions]();
 
-  std::cout << "[GridCut] Dropping edges into blocks...\n" << std::endl;
+  // std::cout << "[GridCut] Dropping edges into blocks...\n" << std::endl;
   std::for_each(
       std::execution::par, worker.begin(), worker.end(),
       [this, step, &edges, scope_per_chunk, n_partitions, &edge_blocks_buf,
        &n_edges_for_each_block, &offset_for_each_block](auto w) {
         for (auto eid = w; eid < edges.get_metadata().num_edges; eid += step) {
+          auto *localid_to_globalid = edges.get_localid_to_globalid_ptr();
           auto edge = edges.get_edge_by_index(eid);
+          edge.src = localid_to_globalid[edge.src];
+          edge.dst = localid_to_globalid[edge.dst];
           auto x = edge.src / scope_per_chunk;
           auto y = edge.dst / scope_per_chunk;
           auto block_id = x * n_partitions + y;
@@ -878,7 +891,7 @@ __host__ std::vector<Edges> *GEMM::GridPartitioning(const Edges &edges,
   std::vector<Edges> *edges_blocks = new std::vector<Edges>;
   edges_blocks->reserve(n_partitions * n_partitions);
 
-  std::cout << "[GridCut] Constructing Edgelist of blocks...\n" << std::endl;
+  // std::cout << "[GridCut] Constructing Edgelist of blocks...\n" << std::endl;
   for (auto _ = 0; _ < n_partitions * n_partitions; _++) {
     EdgelistMetadata meta{.num_vertices = vertices_bm_for_each_block[_].Count(),
                           .num_edges = n_edges_for_each_block[_],
@@ -890,15 +903,10 @@ __host__ std::vector<Edges> *GEMM::GridPartitioning(const Edges &edges,
   for (auto _ = 0; _ < n_partitions * n_partitions; _++) {
     if (edges_blocks->at(_).get_metadata().num_vertices == 0)
       continue;
-    std::cout << "[GridCut] Reassigning vertex ids for block: "
-              << " x: " << _ / n_partitions << " y: " << _ % n_partitions
-              << " ...\n"
-              << std::endl;
-    edges_blocks->at(_).ReassignVertexIDs();
-    edges_blocks->at(_).ShowGraph(3);
+    edges_blocks->at(_).GenerateLocalID2GlobalID();
   }
 
-  std::cout << "[GridEdgelist2GridCSRTiledMatrix] End!" << std::endl;
+  // std::cout << "[GridCut] End!" << std::endl;
   return edges_blocks;
 }
 
@@ -909,17 +917,15 @@ __host__ GridCSRTiledMatrix *GEMM::ConvertGridEdgelist2GridTiledMatrix(
   GridCSRTiledMatrix *grid_tiled_matrix =
       new GridCSRTiledMatrix(grid_graph_metadata);
 
-  size_t block_scope =
-      grid_graph_metadata.n_vertices / grid_graph_metadata.n_chunks;
+  size_t block_scope = ceil((float)grid_graph_metadata.max_vid /
+                            (float)grid_graph_metadata.n_chunks);
 
   for (GraphID gid = 0; gid < edges_blocks.size(); gid++) {
     auto *csr_tiled_matrix_ptr = grid_tiled_matrix->GetTiledMatrixPtrByIdx(gid);
     csr_tiled_matrix_ptr = Edgelist2CSRTiledMatrix(
         edges_blocks[gid], tile_size, block_scope, csr_tiled_matrix_ptr);
-    std::cout << csr_tiled_matrix_ptr << std::endl;
   }
 
-  grid_tiled_matrix->Print();
   return grid_tiled_matrix;
 }
 
@@ -934,7 +940,6 @@ __host__ void GEMM::Run() {
   auto block_a = A_->GetTiledMatrixPtrByIdx(0);
   VertexID tile_size = block_a->GetMetadata().tile_size;
   VertexID n_strips = block_a->GetMetadata().n_strips;
-  // VertexID block_scope = n_strips * tile_size;
   VertexID M = A_->get_metadata().n_chunks;
   VertexID K = A_->get_metadata().n_chunks;
   VertexID N = B_->get_metadata().n_chunks;
@@ -960,26 +965,23 @@ __host__ void GEMM::Run() {
                    (double)CLOCKS_PER_SEC
             << std::endl;
 
-  // GraphID n_chunks = M;
-  // size_t block_scope = edges->get_metadata().num_vertices / n_chunks;
-  //
-  // std::cout << n_chunks << " " << block_scope << std::endl;
-  //
-  // for (GraphID gid = 0; gid < edges_blocks->size(); ++gid) {
-  //   auto *csr_tile_matrix =
-  //       Edgelist2CSRTiledMatrix(edges_blocks[gid], tile_size, block_scope);
-  // }
-
   GridGraphMetadata grid_graph_metadata = {
       .n_chunks = M,
       .n_vertices = edges->get_metadata().num_vertices,
-      .n_edges = edges->get_metadata().num_edges};
+      .n_edges = edges->get_metadata().num_edges,
+      .max_vid = A_->get_metadata().max_vid};
 
-  ConvertGridEdgelist2GridTiledMatrix(*edges_blocks, grid_graph_metadata,
-                                      tile_size);
+  C_ = ConvertGridEdgelist2GridTiledMatrix(*edges_blocks, grid_graph_metadata,
+                                           tile_size);
+  C_->Print();
 
   auto start_time_3 = std::chrono::system_clock::now();
-  std::cout << "[GEMM] Run Step3 Count() elapsed:"
+
+  GridCSRTiledMatrixIO graph_csr_tiled_matrix_io;
+
+  graph_csr_tiled_matrix_io.Write(output_path_, *C_);
+
+  std::cout << "[GEMM] Run Step3 ConvertGridEdgelist2GridTiledMatrix() elapsed:"
             << std::chrono::duration_cast<std::chrono::microseconds>(
                    start_time_3 - start_time_2)
                        .count() /

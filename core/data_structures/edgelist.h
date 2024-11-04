@@ -131,14 +131,21 @@ public:
   Edges(const EdgelistMetadata &edgelist_metadata, Edge *edges_ptr)
       : edgelist_metadata_(edgelist_metadata), edges_ptr_(edges_ptr) {}
 
+  Edges(const EdgelistMetadata &edgelist_metadata, Edge *edges_ptr,
+        VertexID *localid_to_globalid)
+      : edgelist_metadata_(edgelist_metadata), edges_ptr_(edges_ptr),
+        localid_to_globalid_(localid_to_globalid) {}
+
   Edges(const EdgelistMetadata &edgelist_metadata)
       : edgelist_metadata_(edgelist_metadata) {
     edges_ptr_ = new Edge[edgelist_metadata.num_edges]();
   }
 
-  Edges(EdgeIndex n_edges, VertexID *edges_buf);
+  Edges(EdgeIndex n_edges, VertexID *edges_buf,
+        VertexID *localid2globalid = nullptr);
 
-  void Init(EdgeIndex n_edges, VertexID *edges_buf);
+  void Init(EdgeIndex n_edges, VertexID *edges_buf,
+            VertexID *localid2globalid = nullptr);
 
   Edges(const Edges &edges);
 
@@ -158,9 +165,12 @@ public:
   // Read From Bin
   void ReadFromBin(const std::string &filename);
 
-  void ReassignVertexIDs();
+  void GenerateLocalID2GlobalID();
+
+  void Compacted();
 
   void Transpose();
+
   // Sort edges by source.
   void SortBySrc();
 

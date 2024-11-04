@@ -20,8 +20,8 @@ GridCSRTiledMatrix::GridCSRTiledMatrix(const GridGraphMetadata &metadata) {
                 tiled_matrix_vec_.end(), []() { return new CSRTiledMatrix(); });
 }
 
-void GridCSRTiledMatrix::Print() const {
-  std::cout << "[GridCSRTiledMatrix Print] " << metadata_.n_chunks << "x"
+void GridCSRTiledMatrix::Print(VertexID max_n_blocks) const {
+  std::cout << "[GridCSRTiledMatrix Print] ... " << metadata_.n_chunks << "x"
             << metadata_.n_chunks << std::endl;
   for (GraphID x = 0; x < metadata_.n_chunks; x++) {
     for (GraphID y = 0; y < metadata_.n_chunks; y++) {
@@ -30,6 +30,8 @@ void GridCSRTiledMatrix::Print() const {
               .n_nz_tile == 0) {
         continue;
       }
+      if (x > max_n_blocks || y > max_n_blocks)
+        return;
       std::cout << "Block (" << x << "," << y << ")" << std::endl;
       tiled_matrix_vec_[x * metadata_.n_chunks + y]->Print();
     }

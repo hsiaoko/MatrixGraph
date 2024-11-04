@@ -30,7 +30,7 @@ public:
     return tiled_matrix_vec_[idx];
   }
 
-  void Print() const;
+  void Print(VertexID max_n_blocks = 2) const;
 
 private:
   GridGraphMetadata metadata_;

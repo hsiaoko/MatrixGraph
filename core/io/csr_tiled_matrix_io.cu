@@ -39,8 +39,8 @@ void CSRTiledMatrixIO::Write(const std::string &output_path,
 
   auto metadata = csr_tiled_matrix.GetMetadata();
 
-  std::cout << "[Write BitTiledMatrix] root_dir: " << output_path
-            << " n_nz_tile: " << metadata.n_nz_tile << std::endl;
+  std::cout << "[Write BitTiledMatrix] Write to " << output_path
+            << " n_nz_tile: " << metadata.n_nz_tile << " ... ";
 
   std::ofstream out_meta_file(output_path + "meta.yaml");
   YAML::Node out_node;
@@ -62,7 +62,6 @@ void CSRTiledMatrixIO::Write(const std::string &output_path,
     std::ofstream csr_offset(output_path + "meta_buf/csr_offset.bin");
     std::ofstream out_data(output_path + "meta_buf/data.bin");
 
-    std::cout << output_path << std::endl;
     out_row_idx_file.write(
         reinterpret_cast<char *>(csr_tiled_matrix.GetTileRowIdxPtr()),
         sizeof(VertexID) * metadata.n_nz_tile);
@@ -99,7 +98,7 @@ void CSRTiledMatrixIO::Write(const std::string &output_path,
     out_nz_tile_bm.close();
     out_meta_file.close();
   }
-  std::cout << "[Write BitTiledMatrix] Done!" << std::endl;
+  std::cout << " Done!" << std::endl;
 }
 
 void CSRTiledMatrixIO::Read(const std::string &input_path,

@@ -19,6 +19,7 @@ public:
   GraphID n_chunks;
   VertexID n_vertices;
   EdgeIndex n_edges;
+  VertexID max_vid;
 };
 
 struct TiledMatrixMetadata {

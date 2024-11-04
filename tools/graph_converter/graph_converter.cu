@@ -125,7 +125,7 @@ int main(int argc, char **argv) {
     break;
   case kCSRBin2EdgelistBin:
     sics::matrixgraph::tools::converter::ConvertImmutableCSR2EdgelistBin(
-        FLAGS_i, FLAGS_o);
+        FLAGS_i, FLAGS_o, FLAGS_compressed);
     break;
   case kGridEdgelistBin2BitTiledMatrix:
     sics::matrixgraph::tools::converter::ConvertGridGraph2BitTiledMatrix(
