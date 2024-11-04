@@ -40,5 +40,5 @@ $./bin/tools/graph_partitioner_exec -i [path of edgelist in binary format] -o [o
 // Step 5. Convert partitions of graph to csr tiled matrix.
 $./bin/tools/graph_converter_exec -i  [path of partitions] -o [output path] -convert_mode gridedgelistbin2csrtiledmatrix -tile_size 2
 // Step 6. Walks.
-$./bin/gemm_exec -i /data/zhuxiaoke/workspace/MatrixGraph/csr_tiled_matrix/test_4x4_2/ -it /data/zhuxiaoke/workspace/MatrixGraph/csr_tiled_matrix/test_4x4_2/ -o /data/zhuxiaoke/workspace/MatrixGraph/csr_tiled_matrix/test_4x4_2-2-hop/
+$./bin/gemm_exec -i [path of csr tiled matrix] -it [path of csr tiled matrix] -o [output path] 
 ```
