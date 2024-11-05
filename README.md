@@ -1,44 +1,51 @@
-### Build
-
-First, clone the project and install dependencies on your environment.
-
-```shell
-# Clone the project (SSH).
-# Make sure you have your public key has been uploaded to GitHub!
+# Build
+Clone the repository and install dependencies in your environment:
+shell
+Copy code
+## Clone the project using SSH. Ensure your public key is uploaded to GitHub.
 git clone git@github.com:SICS-Fundamental-Research-Center/MatrixGraph.git
-# Install dependencies.
-$SRC_DIR=`MatrixGraph` # top-level MatrixGraph source dir
-$cd $SRC_DIR
-$./dependencies.sh
-```
 
-Build the project.
+## Install dependencies.
+SRC_DIR="MatrixGraph"  # Top-level MatrixGraph source directory
+cd $SRC_DIR
+./dependencies.sh
+Build the project:
+shell
+Copy code
+BUILD_DIR=<path-to-your-build-dir>
+mkdir -p $BUILD_DIR
+cd $BUILD_DIR
+cmake ..
+make
+
+# Running MatrixGraph Applications
+## Preparation: Partition & Convert Graph
+
+Graphs are stored in a binary CSR format. You can convert an edge-list in CSV format to CSR using the graph_convert_exec tool provided in tools.
+
+Follow these steps:
+
+### Convert edge-list CSV to binary format:
 ```shell
-$BUILD_DIR=<path-to-your-build-dir>
-$mkdir -p $BUILD_DIR
-$cd $BUILD_DIR
-$cmake ..
-$make
+./bin/tools/graph_converter_exec -i [path-to-edgelist.csv] -sep [separator] -o [output-path] -convert_mode edgelistcsv2edgelistbin
 ```
-### Running MiniGraph Applications
-
-
-#### Preparation: Partition & convert graph.
-We store graphs in a binary CSR format. Edge-list in CSV format 
-can be converted to our CSR format with graph_convert tool provided in tools.
-You can use graph_convert_exec as follows:
+### Convert binary edge-list to CSR binary format:
 ```shell
-$./bin/graph_partition_exec -t csr_bin -p -n  [the number of fragments] -i [graph in csv format] -sep [seperator, e.g. ","] -o [workspace]  -cores [degree of parallelism] -tobin -partitioner ["vertexcut" or "edgecut"]
-// Step 1. Convert edgelist csv to edgelist bin format.
-$./bin/tools/graph_converter_exec -i [path of edgelist in csv format] -sep [separator e.g. ","] -o [output path] -convert_mode edgelistcsv2edgelistbin
-// Step 2. Convert edgelist bin to csr bin.
-$./bin/tools/graph_converter_exec -i [path of edgelist in binary format] -o [output path] -convert_mode edgelistbin2csrbin
-// Step 3. Sort vertices by outdegree, and then compressed ID of vertices, convert csr back to edgelist bin.
-$./bin/tools/graph_converter_exec -i [path of csr in binary format] -o [output path] -convert_mode csrbin2edgelistbin -compressed
-// Step 4. GridCut partitioning
-$./bin/tools/graph_partitioner_exec -i [path of edgelist in binary format] -o [output path] -partitioner gridcut -n_partitions 1
-// Step 5. Convert partitions of graph to csr tiled matrix.
-$./bin/tools/graph_converter_exec -i  [path of partitions] -o [output path] -convert_mode gridedgelistbin2csrtiledmatrix -tile_size 2
-// Step 6. Walks.
-$./bin/gemm_exec -i [path of csr tiled matrix] -it [path of csr tiled matrix] -o [output path] 
+./bin/tools/graph_converter_exec -i [path-to-edgelist-bin] -o [output-path] -convert_mode edgelistbin2csrbin
+```
+### Sort vertices by outdegree and compressed ID, then convert CSR back to binary edge-list:
+```shell
+./bin/tools/graph_converter_exec -i [path-to-csr-bin] -o [output-path] -convert_mode csrbin2edgelistbin -compressed
+```
+### Partition the graph using GridCut:
+```shell
+./bin/tools/graph_partitioner_exec -i [path-to-edgelist-bin] -o [output-path] -partitioner gridcut -n_partitions [number-of-partitions]
+```
+### Convert graph partitions to CSR tiled matrix:
+```shell
+./bin/tools/graph_converter_exec -i [path-to-partitions] -o [output-path] -convert_mode gridedgelistbin2csrtiledmatrix -tile_size [tile size]
+```
+### Run graph walks:
+```shell
+./bin/gemm_exec -i [path-to-csr-tiled-matrix] -it [path-to-csr-tiled-matrix] -o [output-path]
 ```
