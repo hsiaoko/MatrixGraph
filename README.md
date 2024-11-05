@@ -1,22 +1,26 @@
 # Build
-Clone the repository and install dependencies in your environment:
-shell
-Copy code
-## Clone the project using SSH. Ensure your public key is uploaded to GitHub.
+
+## Clone the repository and install dependencies in your environment:
+```shell
+# Clone the project using SSH. Ensure your public key is uploaded to GitHub.
 git clone git@github.com:SICS-Fundamental-Research-Center/MatrixGraph.git
+```
 
 ## Install dependencies.
+```shell
 SRC_DIR="MatrixGraph"  # Top-level MatrixGraph source directory
 cd $SRC_DIR
 ./dependencies.sh
-Build the project:
-shell
-Copy code
+```
+
+## Build the project:
+```shell
 BUILD_DIR=<path-to-your-build-dir>
 mkdir -p $BUILD_DIR
 cd $BUILD_DIR
 cmake ..
 make
+```
 
 # Running MatrixGraph Applications
 ## Preparation: Partition & Convert Graph
