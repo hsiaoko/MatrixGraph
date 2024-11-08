@@ -51,7 +51,6 @@ void ImmutableCSR::PrintGraph(VertexID display_num) const {
     if (i > display_num)
       break;
     auto u = GetVertexByLocalID(i);
-
     std::stringstream ss;
 
     ss << "  ===vid: " << u.vid << ", indegree: " << u.indegree

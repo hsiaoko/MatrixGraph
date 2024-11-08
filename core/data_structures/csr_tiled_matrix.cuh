@@ -83,6 +83,10 @@ public:
 
   uint8_t *GetDataPtr() const { return data_; }
 
+  void InitDataPtr(size_t size) {
+    cudaHostAlloc((void **)&data_, size, cudaHostAllocDefault);
+  }
+
   uint64_t GetDataBufferSize() const;
 
   void InitMetadataVec(VertexID n_csr) { metadata_vec_.resize(n_csr); }

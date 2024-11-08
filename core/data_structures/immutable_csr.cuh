@@ -78,18 +78,23 @@ public:
   }
 
   void SetInDegreeBuffer(VertexID *buffer) { indegree_base_pointer_ = buffer; }
+
   void SetOutDegreeBuffer(VertexID *buffer) {
     outdegree_base_pointer_ = buffer;
   }
+
   void SetInOffsetBuffer(EdgeIndex *buffer) {
     in_offset_base_pointer_ = buffer;
   }
+
   void SetOutOffsetBuffer(EdgeIndex *buffer) {
     out_offset_base_pointer_ = buffer;
   }
+
   void SetIncomingEdgesBuffer(VertexID *buffer) {
     incoming_edges_base_pointer_ = buffer;
   }
+
   void SetOutgoingEdgesBuffer(VertexID *buffer) {
     outgoing_edges_base_pointer_ = buffer;
   }
@@ -107,20 +112,27 @@ public:
   }
 
   void SetMaxVid(VertexID max_vid) { metadata_.max_vid = max_vid; }
+
   void SetMinVid(VertexID min_vid) { metadata_.min_vid = min_vid; }
+
   void SetGid(VertexID gid) { metadata_.gid = gid; }
 
   void ReOrder(VertexID tile_size);
 
   GraphID get_gid() const { return metadata_.gid; }
+
   VertexID get_num_vertices() const { return metadata_.num_vertices; }
+
   EdgeIndex get_num_incoming_edges() const {
     return metadata_.num_incoming_edges;
   }
+
   EdgeIndex get_num_outgoing_edges() const {
     return metadata_.num_outgoing_edges;
   }
+
   VertexID get_max_vid() const { return metadata_.max_vid; }
+
   VertexID get_min_vid() const { return metadata_.min_vid; }
 
   uint8_t *GetGraphBuffer() { return graph_base_pointer_.get(); }

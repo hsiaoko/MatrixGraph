@@ -224,11 +224,7 @@ void Edges::ReadFromCSV(const std::string &filename, const std::string &sep,
                   [this, step](auto w) {
                     for (auto i = w; i < get_metadata().num_vertices;
                          i += step) {
-                      std::cout << "->" << localid_to_globalid_[i] << " " << i
-                                << std::endl;
                       localid_to_globalid_[i] = i;
-                      std::cout << "->" << localid_to_globalid_[i] << " " << i
-                                << std::endl;
                     }
                   });
   }

@@ -39,7 +39,7 @@ void CSRTiledMatrixIO::Write(const std::string &output_path,
 
   auto metadata = csr_tiled_matrix.GetMetadata();
 
-  std::cout << "[Write BitTiledMatrix] Write to " << output_path
+  std::cout << "[Write CSRTiledMatrix] Write to " << output_path
             << " n_nz_tile: " << metadata.n_nz_tile << " ... ";
 
   std::ofstream out_meta_file(output_path + "meta.yaml");
@@ -91,6 +91,7 @@ void CSRTiledMatrixIO::Write(const std::string &output_path,
     //   csr.ParseBasePtr(data);
     //   csr.PrintGraph();
     // }
+    auto data_buf = (VertexID *)csr_tiled_matrix.GetDataPtr();
 
     out_row_idx_file.close();
     out_col_idx_file.close();
@@ -155,12 +156,12 @@ void CSRTiledMatrixIO::Read(const std::string &input_path,
   csr_offset.read(reinterpret_cast<char *>(csr_tiled_matrix->GetCSROffsetPtr()),
                   sizeof(uint64_t) * (metadata.n_nz_tile + 1));
 
-  // auto X = csr_tiled_matrix->GetCSROffsetPtr();
-  // for (int i = 0; i < metadata.n_nz_tile + 1; i++) {
-  //   std::cout << X[i] << ", ";
-  // }
-  // std::cout << std::endl;
+  in_data.seekg(0, std::ios::end);
+  size_t file_size = in_data.tellg();
+  in_data.seekg(0, std::ios::beg);
 
+  csr_tiled_matrix->InitDataPtr(file_size);
+  auto *data = csr_tiled_matrix->GetDataPtr();
   in_data.read(reinterpret_cast<char *>(csr_tiled_matrix->GetDataPtr()),
                csr_tiled_matrix->GetDataBufferSize());
 

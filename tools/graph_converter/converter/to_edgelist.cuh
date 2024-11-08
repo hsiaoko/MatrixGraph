@@ -46,11 +46,9 @@ static void ConvertImmutableCSR2EdgelistBin(const std::string &input_path,
           csr);
 
   edges_ptr->GenerateLocalID2GlobalID();
-  edges_ptr->ShowGraph(3);
   if (compressed) {
     edges_ptr->Compacted();
   }
-  edges_ptr->ShowGraph(3);
 
   edges_ptr->WriteToBinary(output_path);
   std::cout << "[ConvertImmutableCSR2EdgelistBin] Done!" << std::endl;

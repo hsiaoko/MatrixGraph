@@ -49,12 +49,11 @@ static void ConvertGridGraph2CSRTiledMatrix(const std::string &input_path,
 
   GraphID n_chunks = sqrt(graph_metadata.num_subgraphs);
 
-  size_t block_scope = graph_metadata.num_vertices / n_chunks;
+  size_t block_scope =
+      ceil((float)(graph_metadata.max_vid + 1) / (float)n_chunks);
 
   for (GraphID gid = 0; gid < graph_metadata.num_subgraphs; ++gid) {
     std::string block_dir = output_path + "block" + std::to_string(gid) + "/";
-
-    edges_blocks[gid].ShowGraph();
 
     auto *csr_tile_matrix =
         Edgelist2CSRTiledMatrix(edges_blocks[gid], tile_size, block_scope);

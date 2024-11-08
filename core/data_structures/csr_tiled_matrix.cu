@@ -52,17 +52,6 @@ void CSRTiledMatrix::Init(const TiledMatrixMetadata &metadata,
       sics::matrixgraph::core::common::KDefalutNumEdgesPerTile;
   auto default_n_vertices =
       sics::matrixgraph::core::common::KDefalutNumVerticesPerTile;
-  auto tile_buffer_size = sizeof(VertexID) * (default_n_vertices + 1) +
-                          sizeof(VertexID) * (default_n_vertices + 1) +
-                          sizeof(VertexID) * (default_n_vertices) +
-                          sizeof(VertexID) * (default_n_vertices) +
-                          sizeof(VertexID) * (default_n_vertices) +
-                          sizeof(VertexID) * (default_n_vertices) +
-                          sizeof(EdgeIndex) * (default_n_edges)*2;
-
-  CUDA_CHECK(cudaHostAlloc((void **)&data_,
-                           tile_buffer_size * metadata_.n_nz_tile,
-                           cudaHostAllocDefault));
 
   if (nz_tile_bm == nullptr) {
     uint64_t *bm_data;
@@ -111,7 +100,7 @@ void CSRTiledMatrix::Print(VertexID max_n_nz_tile) const {
     auto *csr_base_ptr = GetCSRBasePtrByIdx(_);
     ImmutableCSR csr(GetCSRMetadataByIdx(_));
     csr.ParseBasePtr(csr_base_ptr);
-    csr.PrintGraph(3);
+    csr.PrintGraph(max_n_nz_tile);
   }
   std::cout << std::endl;
 }

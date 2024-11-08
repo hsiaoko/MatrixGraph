@@ -515,6 +515,7 @@ static __global__ void walk_kernel(ParametersWalk params) {
       VertexID global_src = globalid_a[v_idx_a];
 
       EdgeIndex *out_offset_base = out_offset_a + v_idx_a;
+
       for (VertexID nbr_idx_a = 0; nbr_idx_a < out_degree_a[v_idx_a];
            nbr_idx_a++) {
         VertexID dst = out_edges_a[out_offset_base[nbr_idx_a]];
@@ -547,7 +548,6 @@ static __global__ void walk_kernel(ParametersWalk params) {
               out_edges_b + params.csr_n_edges_b[nz_idx_b];
           for (VertexID v_idx_b = 0;
                v_idx_b < params.csr_n_vertices_b[nz_idx_b]; v_idx_b++) {
-            // printf("v: %d , degree: %d", v_idx_b, out_degree_b[v_idx_b]);
             if (global_dst == globalid_b[v_idx_b]) {
               EdgeIndex *out_offset_base = out_offset_b + v_idx_b;
 
@@ -559,15 +559,15 @@ static __global__ void walk_kernel(ParametersWalk params) {
                   continue;
 
                 // Write <global_dst, walk_to_dst> to output buffer
-                // EdgeIndex local_offset = atomicAdd(params.output_offset, 1);
+                EdgeIndex local_offset = atomicAdd(params.output_offset, 1);
                 // EdgeIndex local_offset = atomicAdd(&out_offset_for_vid_a, 1);
-                local_offset++;
+                // local_offset++;
 
-                // if (local_offset > KDefalutNumEdgesPerTile)
-                //   continue;
-                //       *(params.edgelist_c + 2 * local_offset) = global_src;
-                //       *(params.edgelist_c + 2 * local_offset + 1) =
-                //       walk_to_dst; break;
+                if (local_offset > KDefalutNumEdgesPerTile)
+                  continue;
+                *(params.edgelist_c + 2 * local_offset) = global_src;
+                *(params.edgelist_c + 2 * local_offset + 1) = walk_to_dst;
+                break;
               }
             }
           }
@@ -576,9 +576,9 @@ static __global__ void walk_kernel(ParametersWalk params) {
     }
     // atomicAdd(&local_offset, 1);
   }
-  printf("local_offset: %d\n", local_offset);
+  // printf("local_offset: %d\n", local_offset);
   //*params.output_offset = *params.output_offset + local_offset;
-  // EdgeIndex global_offset = atomicAdd(params.output_offset, local_offset);
+  //  EdgeIndex global_offset = atomicAdd(params.output_offset, local_offset);
 }
 
 void MatrixOperationsKernelWrapper::MatrixBitAnd(

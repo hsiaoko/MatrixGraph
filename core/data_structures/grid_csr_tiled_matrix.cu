@@ -33,7 +33,7 @@ void GridCSRTiledMatrix::Print(VertexID max_n_blocks) const {
       if (x > max_n_blocks || y > max_n_blocks)
         return;
       std::cout << "Block (" << x << "," << y << ")" << std::endl;
-      tiled_matrix_vec_[x * metadata_.n_chunks + y]->Print();
+      tiled_matrix_vec_[x * metadata_.n_chunks + y]->Print(max_n_blocks);
     }
   }
 }

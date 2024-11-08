@@ -403,6 +403,7 @@ static BitTiledMatrix *Edgelist2BitTiledMatrix(const Edges &edges,
 static CSRTiledMatrix *
 Edgelist2CSRTiledMatrix(const Edges &edges, size_t tile_size,
                         size_t block_scope, CSRTiledMatrix *output = nullptr) {
+  // std::cout << "Edgelist2CSRTiledMatrix" << std::endl;
   auto parallelism = std::thread::hardware_concurrency();
   std::vector<size_t> worker(parallelism);
   std::iota(worker.begin(), worker.end(), 0);
@@ -450,21 +451,24 @@ Edgelist2CSRTiledMatrix(const Edges &edges, size_t tile_size,
 
   // Step 1. compute tile_id for each edge.
   std::for_each(
-      std::execution::par, worker.begin(), worker.end(),
+      // std::execution::par,
+      worker.begin(), worker.end(),
       [&edges, step, block_scope, tile_size, n_strips, &buffer_csr_vertices_vec,
        &num_out_edges_by_vid_vec, &visited_vec, &graph_visited](auto &w) {
         for (EdgeIndex eid = w; eid < edges.get_metadata().num_edges;
              eid += step) {
           auto e = edges.get_edge_by_index(eid);
           auto *localid_to_globalid = edges.get_localid_to_globalid_ptr();
+          if (localid_to_globalid != nullptr) {
+            e.src = localid_to_globalid[e.src];
+            e.dst = localid_to_globalid[e.dst];
+          }
 
-          auto tile_x = (localid_to_globalid[e.src] % block_scope) / tile_size;
-          auto tile_y = (localid_to_globalid[e.dst] % block_scope) / tile_size;
+          auto tile_x = (e.src % block_scope) / tile_size;
+          auto tile_y = (e.dst % block_scope) / tile_size;
 
-          auto x_within_tile =
-              (localid_to_globalid[e.src] % block_scope) % tile_size;
-          auto y_within_tile =
-              (localid_to_globalid[e.dst] % block_scope) % tile_size;
+          auto x_within_tile = (e.src % block_scope) % tile_size;
+          auto y_within_tile = (e.dst % block_scope) % tile_size;
 
           WriteAdd(&(num_out_edges_by_vid_vec[tile_x * n_strips + tile_y]
                                              [x_within_tile]),
@@ -505,21 +509,25 @@ Edgelist2CSRTiledMatrix(const Edges &edges, size_t tile_size,
 
   // Step 2. compute global id for src.
   std::for_each(
-      std::execution::par, worker.begin(), worker.end(),
+      // std::execution::par,
+      worker.begin(), worker.end(),
       [&edges, step, block_scope, tile_size, n_strips, &buffer_csr_vertices_vec,
        &num_out_edges_by_vid_vec, &visited_vec, &graph_visited](auto &w) {
         for (EdgeIndex eid = w; eid < edges.get_metadata().num_edges;
              eid += step) {
           auto e = edges.get_edge_by_index(eid);
           auto *localid_to_globalid = edges.get_localid_to_globalid_ptr();
+          if (localid_to_globalid != nullptr) {
+            e.src = localid_to_globalid[e.src];
+            e.dst = localid_to_globalid[e.dst];
+          }
 
-          auto tile_x = (localid_to_globalid[e.src] % block_scope) / tile_size;
-          auto tile_y = (localid_to_globalid[e.dst] % block_scope) / tile_size;
+          auto tile_x = (e.src % block_scope) / tile_size;
+          auto tile_y = (e.dst % block_scope) / tile_size;
 
-          auto x_within_tile =
-              (localid_to_globalid[e.src] % block_scope) % tile_size;
+          auto x_within_tile = (e.src % block_scope) % tile_size;
           buffer_csr_vertices_vec[tile_x * n_strips + tile_y][x_within_tile]
-              .vid = localid_to_globalid[e.src];
+              .vid = e.src;
         }
       });
 
@@ -600,11 +608,12 @@ Edgelist2CSRTiledMatrix(const Edges &edges, size_t tile_size,
        &y_vid_map_vec](auto &w) {
         for (auto i = w; i < n_nz_tile; i += step) {
           auto *csr_base_ptr = csr_tiled_matrix->GetCSRBasePtrByIdx(i);
+
           ImmutableCSR csr(csr_tiled_matrix->GetCSRMetadataByIdx(i));
           csr.ParseBasePtr(csr_base_ptr);
+          buffer_globalid_vec[i] = csr.GetGloablIDBasePointer();
           buffer_out_offset_vec[i] = csr.GetOutOffsetBasePointer();
           buffer_outdegree_vec[i] = csr.GetOutDegreeBasePointer();
-          buffer_globalid_vec[i] = csr.GetGloablIDBasePointer();
           buffer_out_edges_vec[i] = csr.GetOutgoingEdgesBasePointer();
           y_vid_map_vec[i] = csr.GetEdgesGloablIDBasePointer();
         }
@@ -618,17 +627,18 @@ Edgelist2CSRTiledMatrix(const Edges &edges, size_t tile_size,
        &gid_map](auto &w) {
         for (EdgeIndex eid = w; eid < edges.get_metadata().num_edges;
              eid += step) {
-
           auto e = edges.get_edge_by_index(eid);
-
           auto *localid_to_globalid = edges.get_localid_to_globalid_ptr();
-          auto tile_x = (localid_to_globalid[e.src] % block_scope) / tile_size;
-          auto tile_y = (localid_to_globalid[e.dst] % block_scope) / tile_size;
+          if (localid_to_globalid != nullptr) {
+            e.src = localid_to_globalid[e.src];
+            e.dst = localid_to_globalid[e.dst];
+          }
 
-          auto x_within_tile =
-              (localid_to_globalid[e.src] % block_scope) % tile_size;
-          auto y_within_tile =
-              (localid_to_globalid[e.dst] % block_scope) % tile_size;
+          auto tile_x = (e.src % block_scope) / tile_size;
+          auto tile_y = (e.dst % block_scope) / tile_size;
+
+          auto x_within_tile = (e.src % block_scope) % tile_size;
+          auto y_within_tile = (e.dst % block_scope) % tile_size;
 
           EdgeIndex offset_out = 0;
           auto gid = gid_map[tile_x * n_strips + tile_y];
@@ -638,7 +648,7 @@ Edgelist2CSRTiledMatrix(const Edges &edges, size_t tile_size,
           buffer_csr_vertices_vec[tile_x * n_strips + tile_y][x_within_tile]
               .outgoing_edges[offset_out] = y_within_tile;
 
-          y_vid_map_vec[gid][y_within_tile] = localid_to_globalid[e.dst];
+          y_vid_map_vec[gid][y_within_tile] = e.dst;
         }
       });
 

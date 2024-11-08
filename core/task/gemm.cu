@@ -77,13 +77,13 @@ __host__ void GEMM::LoadData() {
   grid_csr_tiled_matrix_io.Read(input_path_, &A_);
   grid_csr_tiled_matrix_io.Read(input_path_transposed_, &B_);
 
-  std::cout << "######################## A #######################"
-            << std::endl;
-  A_->Print();
-  // std::cout << "######################## B #######################"
+  // std::cout << "######################## A #######################"
   //           << std::endl;
-  // B_->Print();
-  // C_ = new GridCSRTiledMatrix(A_->get_metadata());
+  // A_->Print(2);
+  //   std::cout << "######################## B #######################"
+  //             << std::endl;
+  //   B_->Print();
+  //   C_ = new GridCSRTiledMatrix(A_->get_metadata());
 }
 
 __host__ void GEMM::InitC() {
@@ -578,7 +578,8 @@ __host__ Edges *GEMM::Walks(const GridCSRTiledMatrix &A,
   // Init input Buffer for A and B, respectively.
   std::cout << "[Walks] Initializing input buffers for A and B." << std::endl;
   std::for_each(
-      std::execution::par, worker.begin(), worker.end(),
+      // std::execution::par,
+      worker.begin(), worker.end(),
       [this, M, N, K, step, &A, &p_streams_vec, tile_size, tile_buffer_size,
        &mtx, &tile_offset_row_a, &tile_row_idx_a, &tile_col_idx_a,
        &csr_offset_a, &data_a, &unified_tile_offset_row_a,
@@ -617,6 +618,7 @@ __host__ Edges *GEMM::Walks(const GridCSRTiledMatrix &A,
               unified_tile_col_idx_a[i * K + k].Init(tile_col_idx_a[i * K + k]);
               unified_csr_offset_a[i * K + k].Init(csr_offset_a[i * K + k]);
               unified_data_a[i * K + k].Init(data_a[i * K + k]);
+
               auto subgraph_metadata = block_a->GetCSRMetadata();
               unified_csr_n_vertices_a[i * K + k].Init(
                   sizeof(uint32_t) * block_a->GetMetadata().n_nz_tile);
@@ -728,10 +730,10 @@ __host__ Edges *GEMM::Walks(const GridCSRTiledMatrix &A,
                         << ", nz B: " << block_b->GetMetadata().n_nz_tile
                         << std::endl;
 
-              // std::cout << "- A - " << std::endl;
-              // block_a->Print();
-              // std::cout << "- B - " << std::endl;
-              // block_b->Print();
+              std::cout << "&&&&&&&&&&&&&&&- A - " << std::endl;
+              block_a->Print(2);
+              std::cout << "&&&&&&&&&&&&&&&- B - " << std::endl;
+              block_b->Print(2);
 
               cudaSetDevice(common::hash_function(i * N + j) % 4);
 
@@ -785,7 +787,8 @@ __host__ Edges *GEMM::Walks(const GridCSRTiledMatrix &A,
       });
 
   for (auto _ = 0; _ < unified_output_offset.size(); _++) {
-    std::cout << "offset: " << *(unified_output_offset[_].GetPtr())
+    std::cout << _ << "/" << unified_output_offset.size()
+              << ",  offset: " << *(unified_output_offset[_].GetPtr())
               << std::endl;
   }
 
