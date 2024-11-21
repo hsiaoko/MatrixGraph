@@ -16,6 +16,7 @@ enum GPUTaskType {
   kGEMM, // Default task type
   kMatrixAnalysis,
   kPPRQuery,
+  kSubIso,
   // Other types.
 };
 

@@ -1,9 +1,9 @@
 #ifndef MATRIXGRAPH_CORE_TASK_KERNEL_MATRIX_OPERATIONS_CUH_
 #define MATRIXGRAPH_CORE_TASK_KERNEL_MATRIX_OPERATIONS_CUH_
 
+#include "core/common/types.h"
 #include "core/data_structures/device_buffer.cuh"
 #include "core/data_structures/unified_buffer.cuh"
-#include "core/common/types.h"
 
 namespace sics {
 namespace matrixgraph {
@@ -109,6 +109,8 @@ public:
        const data_structures::UnifiedOwnedBuffer<uint8_t> &data_b,
        data_structures::UnifiedOwnedBuffer<uint32_t> *edgelist_c,
        data_structures::UnifiedOwnedBuffer<EdgeIndex> *output_offset);
+
+  //static void Test();
 
   static void Count(const cudaStream_t &stream, size_t tile_size,
                     size_t n_strips, size_t n_nz_tile,

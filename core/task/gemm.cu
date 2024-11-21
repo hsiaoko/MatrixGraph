@@ -68,6 +68,10 @@ using EdgelistMetadata =
     sics::matrixgraph::core::data_structures::EdgelistMetadata;
 using GridGraphMetadata =
     sics::matrixgraph::core::data_structures::GridGraphMetadata;
+using sics::matrixgraph::core::common::kDefalutNumEdgesPerBlock;
+using sics::matrixgraph::core::common::kDefalutNumEdgesPerTile;
+using sics::matrixgraph::core::common::kMaxNumEdges;
+using sics::matrixgraph::core::common::kMaxNumEdgesPerBlock;
 
 // CUDA kernel to add elements of two arrays
 __host__ void GEMM::LoadData() {
@@ -79,11 +83,11 @@ __host__ void GEMM::LoadData() {
 
   // std::cout << "######################## A #######################"
   //           << std::endl;
-  // A_->Print(2);
-  //   std::cout << "######################## B #######################"
-  //             << std::endl;
-  //   B_->Print();
-  //   C_ = new GridCSRTiledMatrix(A_->get_metadata());
+  // A_->Print(999);
+  // std::cout << "######################## B #######################"
+  //           << std::endl;
+  // B_->Print(999);
+  //  C_ = new GridCSRTiledMatrix(A_->get_metadata());
 }
 
 __host__ void GEMM::InitC() {
@@ -565,15 +569,19 @@ __host__ Edges *GEMM::Walks(const GridCSRTiledMatrix &A,
             {
               std::lock_guard<std::mutex> lock(mtx);
 
-              unified_edgelist_c[i * N + j].Init(
-                  sizeof(VertexID) *
-                  sics::matrixgraph::core::common::KDefalutNumEdgesPerTile * 2);
+              unified_edgelist_c[i * N + j].Init(sizeof(VertexID) *
+                                                 kMaxNumEdgesPerBlock * 2);
 
               unified_output_offset[i * N + j].Init(sizeof(EdgeIndex));
             }
           }
         }
       });
+  UnifiedOwnedBufferUint32 global_output_edgelist;
+  global_output_edgelist.Init(sizeof(VertexID) * 2 * kMaxNumEdges);
+  std::cout << sizeof(VertexID) * 2 * kMaxNumEdges << std::endl;
+  UnifiedOwnedBufferUint32 global_output_offset;
+  global_output_offset.Init(sizeof(EdgeIndex));
 
   // Init input Buffer for A and B, respectively.
   std::cout << "[Walks] Initializing input buffers for A and B." << std::endl;
@@ -637,7 +645,8 @@ __host__ Edges *GEMM::Walks(const GridCSRTiledMatrix &A,
       });
 
   std::for_each(
-      std::execution::par, worker.begin(), worker.end(),
+      // std::execution::par,
+      worker.begin(), worker.end(),
       [this, M, N, K, &B, step, &p_streams_vec, tile_size, tile_buffer_size,
        &mtx, &tile_offset_row_b, &tile_row_idx_b, &tile_col_idx_b,
        &csr_offset_b, &data_b, &unified_tile_offset_row_b,
@@ -711,7 +720,8 @@ __host__ Edges *GEMM::Walks(const GridCSRTiledMatrix &A,
        &unified_tile_col_idx_a, &unified_csr_offset_a, &unified_data_a,
        &unified_tile_offset_row_b, &unified_tile_row_idx_b,
        &unified_tile_col_idx_b, &unified_csr_offset_b, &unified_data_b,
-       &unified_edgelist_c, &unified_output_offset, &work_load](auto w) {
+       &unified_edgelist_c, &unified_output_offset, &global_output_edgelist,
+       &global_output_offset, &work_load](auto w) {
         for (VertexID i = w; i < M; i += step) {
           for (VertexID j = 0; j < N; j++) {
             for (VertexID k = 0; k < K; k++) {
@@ -728,12 +738,8 @@ __host__ Edges *GEMM::Walks(const GridCSRTiledMatrix &A,
                         << "C: (" << i << ", " << j << ")"
                         << "nz A: " << block_a->GetMetadata().n_nz_tile
                         << ", nz B: " << block_b->GetMetadata().n_nz_tile
-                        << std::endl;
-
-              std::cout << "&&&&&&&&&&&&&&&- A - " << std::endl;
-              block_a->Print(2);
-              std::cout << "&&&&&&&&&&&&&&&- B - " << std::endl;
-              block_b->Print(2);
+                        << " to device: "
+                        << common::hash_function(i * N + j) % 4 << std::endl;
 
               cudaSetDevice(common::hash_function(i * N + j) % 4);
 
@@ -756,54 +762,61 @@ __host__ Edges *GEMM::Walks(const GridCSRTiledMatrix &A,
                     unified_tile_col_idx_b[k * K + j],
                     unified_csr_offset_a[i * K + k],
                     unified_csr_offset_b[k * K + j], unified_data_a[i * K + k],
-                    unified_data_b[k * K + j], &unified_edgelist_c[i * N + j],
-                    &unified_output_offset[i * N + j]);
-                cudaStreamSynchronize(p_stream);
+                    unified_data_b[k * K + j],
+                    //&unified_edgelist_c[i * N + j],
+                    //&unified_output_offset[i * N + j]
+                    &global_output_edgelist, &global_output_offset);
+                cudaDeviceSynchronize();
+                // std::cout << "offset: "
+                //           << *(unified_output_offset[i * N + j].GetPtr())
+                //           << std::endl;
               }
-
-              // for (auto _ = 0; _ < *(unified_output_offset[i * N +
-              // j].GetPtr());
-              //      _++) {
-              //   std::cout << unified_edgelist_c[i * N + j].GetPtr()[2 * _]
-              //             << "=>"
-              //             << unified_edgelist_c[i * N + j].GetPtr()[2 * _ +
-              //             1]
-              //             << std::endl;
-              // }
             }
           }
         }
       });
+
+  VertexID *output_edges_buf =
+      new VertexID[kDefalutNumEdgesPerTile * 2 * M * N]();
+  VertexID output_offset = 0;
+
+  cudaDeviceSynchronize();
+  std::cout << "Global Offset: " << *global_output_offset.GetPtr() << std::endl;
+  for (size_t _ = 0; _ < 10; _++) {
+    // for (size_t _ = 0; _ < *global_output_offset.GetPtr(); _++) {
+    std::cout << global_output_edgelist.GetPtr()[_ * 2] << "->"
+              << global_output_edgelist.GetPtr()[_ * 2 + 1] << std::endl;
+  }
+  // std::for_each(
+  //     worker.begin(), worker.end(),
+  //     [this, M, N, K, step, &p_streams_vec, &unified_edgelist_c,
+  //      &unified_output_offset, &output_offset, &output_edges_buf](auto w) {
+  //       for (VertexID i = w; i < M; i += step) {
+  //         for (VertexID j = 0; j < N; j++) {
+  //           cudaSetDevice(common::hash_function(i * N + j) % 4);
+  //           size_t offset = *unified_output_offset[i * N + j].GetPtr();
+  //           std::cout << i << "," << j << "- offset: " << offset <<
+  //           std::endl; cudaStream_t &p_stream = p_streams_vec[i * N + j];
+
+  //           // cudaMemcpyAsync(output_edges_buf + output_offset * 2,
+  //           //                 unified_edgelist_c[i * N + j].GetPtr(),
+  //           //                 sizeof(VertexID) * 2 * offset,
+  //           //                 cudaMemcpyDeviceToHost, p_stream);
+  //           output_offset += offset;
+  //         }
+  //       }
+  //     });
+
   cudaDeviceSynchronize();
 
-  EdgeIndex output_n_edges = 0;
+  std::cout << "n_edges of new graph: " << output_offset << "/"
+            << kDefalutNumEdgesPerTile * 2 * M * N << std::endl;
+  Edges *output_edges = new Edges(output_offset, output_edges_buf);
 
-  std::for_each(
-      std::execution::par, worker.begin(), worker.end(),
-      [this, M, N, K, step, &output_n_edges, &unified_output_offset](auto w) {
-        for (auto _ = w; _ < unified_output_offset.size(); _ += step) {
-          WriteAdd(&output_n_edges, *(unified_output_offset[_].GetPtr()));
-        }
-      });
-
-  for (auto _ = 0; _ < unified_output_offset.size(); _++) {
-    std::cout << _ << "/" << unified_output_offset.size()
-              << ",  offset: " << *(unified_output_offset[_].GetPtr())
-              << std::endl;
-  }
-
-  VertexID *output_edges_buf = new VertexID[output_n_edges * 2]();
-  EdgeIndex output_offset = 0;
-  for (auto _ = 0; _ < unified_edgelist_c.size(); _++) {
-    cudaMemcpy(output_edges_buf + output_offset, unified_edgelist_c[_].GetPtr(),
-               sizeof(VertexID) * 2 * *(unified_output_offset[_].GetPtr()),
-               cudaMemcpyHostToHost);
-    output_offset += *(unified_output_offset[_].GetPtr()) * 2;
-  }
-
-  Edges *output_edges = new Edges(output_n_edges, output_edges_buf);
-
+  delete[] output_edges_buf;
   std::cout << "[Walks] End!" << std::endl;
+  output_edges->ShowGraph(100);
+
   return output_edges;
 }
 
@@ -909,7 +922,7 @@ __host__ std::vector<Edges> *GEMM::GridPartitioning(const Edges &edges,
     edges_blocks->at(_).GenerateLocalID2GlobalID();
   }
 
-  // std::cout << "[GridCut] End!" << std::endl;
+  std::cout << "[GridCut] End!" << std::endl;
   return edges_blocks;
 }
 
@@ -976,7 +989,6 @@ __host__ void GEMM::Run() {
 
   C_ = ConvertGridEdgelist2GridTiledMatrix(*edges_blocks, grid_graph_metadata,
                                            tile_size);
-  C_->Print();
 
   auto start_time_3 = std::chrono::system_clock::now();
 

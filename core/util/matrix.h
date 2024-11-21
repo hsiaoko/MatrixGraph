@@ -196,5 +196,4 @@ void TestcuBLASGemm(cublasHandle_t handle, int m, int n, int k, T *A, T *B, S *C
 } // namespace core
 } // namespace matrixgraph
 } // namespace sics
-
 #endif // GRAPH_COMPUTING_MATRIXGRAPH_CORE_UTIL_MATRIX_H_

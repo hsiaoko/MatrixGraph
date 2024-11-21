@@ -49,9 +49,9 @@ void CSRTiledMatrix::Init(const TiledMatrixMetadata &metadata,
   nz_tile_bm_ = nz_tile_bm;
 
   auto default_n_edges =
-      sics::matrixgraph::core::common::KDefalutNumEdgesPerTile;
+      sics::matrixgraph::core::common::kDefalutNumEdgesPerTile;
   auto default_n_vertices =
-      sics::matrixgraph::core::common::KDefalutNumVerticesPerTile;
+      sics::matrixgraph::core::common::kDefalutNumVerticesPerTile;
 
   if (nz_tile_bm == nullptr) {
     uint64_t *bm_data;

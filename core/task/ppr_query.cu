@@ -696,6 +696,7 @@ __host__ void PPRQuery::FillTilesUnifiedMemory() {
       });
 
   cudaDeviceSynchronize();
+
   // Submit Kernel to fill edges into tiles.
   std::vector<int> work_load;
   work_load.resize(4);
@@ -758,6 +759,7 @@ __host__ void PPRQuery::FillTilesUnifiedMemory() {
           }
         }
       });
+
   auto start_time_2 = std::chrono::system_clock::now();
 
   for (int i = 0; i < 4; i++) {

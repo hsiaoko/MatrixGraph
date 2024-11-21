@@ -5,6 +5,7 @@
 
 #include "core/common/consts.h"
 #include "core/common/types.h"
+#include "core/task/kernel/data_structures/kernel_bitmap.cuh"
 #include "core/util/cuda_check.cuh"
 
 namespace sics {
@@ -15,9 +16,12 @@ namespace kernel {
 
 using sics::matrixgraph::core::common::EdgeIndex;
 using sics::matrixgraph::core::common::GraphID;
-using sics::matrixgraph::core::common::KDefalutNumEdgesPerTile;
+using sics::matrixgraph::core::common::kDefalutNumEdgesPerBlock;
+using sics::matrixgraph::core::common::kDefalutOutputBufferSize;
+using sics::matrixgraph::core::common::kMaxNumEdges;
 using sics::matrixgraph::core::common::kMaxVertexID;
 using sics::matrixgraph::core::common::VertexID;
+using sics::matrixgraph::core::task::kernel::KernelBitmap;
 
 #define WORD_OFFSET(i) (i >> 6)
 #define BIT_OFFSET(i) (i & 0x3f)
@@ -82,12 +86,12 @@ struct ParametersFillTiles {
 };
 
 struct ParametersWalk {
-  unsigned long tile_size;
-  unsigned long n_strips;
-  unsigned long n_nz_tile_a;
-  unsigned long n_nz_tile_b;
-  unsigned long tile_unit;
-  unsigned long tile_buffer_size;
+  const unsigned long tile_size;
+  const unsigned long n_strips;
+  const unsigned long n_nz_tile_a;
+  const unsigned long n_nz_tile_b;
+  const unsigned long tile_unit;
+  const unsigned long tile_buffer_size;
   unsigned *tile_offset_row_a;
   unsigned *tile_offset_row_b;
   unsigned *tile_row_idx_a;
@@ -184,6 +188,29 @@ count_per_uint64_t(unsigned long long x) {
   x = (x & (0x0000ffff0000ffff)) + ((x >> 16) & (0x0000ffff0000ffff));
   x = (x & (0x00000000ffffffff)) + ((x >> 32) & (0x00000000ffffffff));
   return x;
+}
+
+__device__ static inline VertexID binary_search(VertexID *data, VertexID size,
+                                                VertexID target) {
+  if (size == 0)
+    return kMaxVertexID;
+  VertexID low = 0, high = size - 1;
+
+  while (low <= high) {
+    VertexID mid = low + (high - low) / 2;
+    if (mid >= size)
+      return kMaxVertexID;
+    if (data[mid] == target) {
+      return (VertexID)mid;
+    }
+
+    if (target > data[mid]) {
+      low = mid + 1;
+    } else {
+      high = mid - 1;
+    }
+  }
+  return kMaxVertexID;
 }
 
 __device__ static inline bool single_thread_matrix_bit_and(
@@ -437,14 +464,14 @@ static __global__ void fill_csr_tiles_kernel(ParametersFillTiles params) {
               //                                                nbr_a]],
               //        local_vid_b);
 
-              for (VertexID _ = 0; _ < params.csr_n_vertices_b[tile_id_b];
-                   _++) {
-                // printf("check %d\n", globalid_b[v_idx_b]);
-                if (globalid_b[_] == global_vid_b) {
-                  v_idx_b = _;
-                  break;
-                }
-              }
+              // for (VertexID _ = 0; _ < params.csr_n_vertices_b[tile_id_b];
+              //      _++) {
+              //   // printf("check %d\n", globalid_b[v_idx_b]);
+              //   if (globalid_b[_] == global_vid_b) {
+              //     v_idx_b = _;
+              //     break;
+              //   }
+              // }
 
               if (v_idx_b == kMaxVertexID)
                 continue;
@@ -484,12 +511,13 @@ static __global__ void count_kernel(ParametersCount params) {
   atomicAdd(params.count, local_count);
 }
 
-static __global__ void walk_kernel(ParametersWalk params) {
+static __global__ void walk_kernel(const ParametersWalk params) {
   unsigned int tid = blockIdx.x * blockDim.x + threadIdx.x;
   unsigned int step = blockDim.x * gridDim.x;
-  params.n_nz_tile_a;
 
-  EdgeIndex local_offset = 0;
+  // KernelBitmap kbm(params.tile_size);
+  KernelBitmap kbm(1024);
+
   for (unsigned long nz_idx_a = 0; nz_idx_a < params.n_nz_tile_a + 1;
        nz_idx_a++) {
     auto csr_offset_a = params.csr_offset_a[nz_idx_a];
@@ -514,12 +542,19 @@ static __global__ void walk_kernel(ParametersWalk params) {
          v_idx_a += step) {
       VertexID global_src = globalid_a[v_idx_a];
 
-      EdgeIndex *out_offset_base = out_offset_a + v_idx_a;
+      EdgeIndex local_offset = 0;
+      EdgeIndex max_local_offset = kDefalutOutputBufferSize;
+      //    VertexID *local_buf = new VertexID[max_local_offset * 2]();
+      VertexID local_buf[kDefalutOutputBufferSize * 2];
+
+      kbm.Clear();
+      EdgeIndex *out_offset_base = out_offset_a;
 
       for (VertexID nbr_idx_a = 0; nbr_idx_a < out_degree_a[v_idx_a];
            nbr_idx_a++) {
-        VertexID dst = out_edges_a[out_offset_base[nbr_idx_a]];
+        VertexID dst = out_edges_a[out_offset_base[v_idx_a] + nbr_idx_a];
         VertexID global_dst = edges_globalid_by_localid_a[dst];
+
         if (global_dst == global_src)
           continue;
 
@@ -527,7 +562,6 @@ static __global__ void walk_kernel(ParametersWalk params) {
         GraphID n_tile_b = params.tile_offset_row_b[col_idx_a + 1] -
                            params.tile_offset_row_b[col_idx_a];
         for (GraphID tile_id_b = 0; tile_id_b < n_tile_b; tile_id_b++) {
-
           GraphID nz_idx_b = params.tile_offset_row_b[col_idx_a] + tile_id_b;
           auto csr_offset_b = params.csr_offset_b[nz_idx_b];
           VertexID *globalid_b = (VertexID *)(params.data_b + csr_offset_b);
@@ -546,39 +580,60 @@ static __global__ void walk_kernel(ParametersWalk params) {
           VertexID *out_edges_b = in_edges_b + 0;
           VertexID *edges_globalid_by_localid_b =
               out_edges_b + params.csr_n_edges_b[nz_idx_b];
-          for (VertexID v_idx_b = 0;
-               v_idx_b < params.csr_n_vertices_b[nz_idx_b]; v_idx_b++) {
-            if (global_dst == globalid_b[v_idx_b]) {
-              EdgeIndex *out_offset_base = out_offset_b + v_idx_b;
 
-              for (VertexID nbr_idx_b = 0; nbr_idx_b < out_degree_b[v_idx_b];
-                   nbr_idx_b++) {
-                VertexID walk_to_dst = edges_globalid_by_localid_b
-                    [out_edges_b[out_offset_base[nbr_idx_b]]];
-                if (globalid_b[v_idx_b] == walk_to_dst)
-                  continue;
+          auto v_idx_b = binary_search(
+              globalid_b, params.csr_n_vertices_b[nz_idx_b], global_dst);
 
-                // Write <global_dst, walk_to_dst> to output buffer
-                EdgeIndex local_offset = atomicAdd(params.output_offset, 1);
-                // EdgeIndex local_offset = atomicAdd(&out_offset_for_vid_a, 1);
-                // local_offset++;
+          if (v_idx_b == kMaxVertexID)
+            continue;
 
-                if (local_offset > KDefalutNumEdgesPerTile)
-                  continue;
-                *(params.edgelist_c + 2 * local_offset) = global_src;
-                *(params.edgelist_c + 2 * local_offset + 1) = walk_to_dst;
-                break;
-              }
+          EdgeIndex *out_offset_base = out_offset_b;
+
+          for (VertexID nbr_idx_b = 0; nbr_idx_b < out_degree_b[v_idx_b];
+               nbr_idx_b++) {
+
+            VertexID local_walk_to_dst =
+                out_edges_b[out_offset_base[v_idx_b] + nbr_idx_b];
+            VertexID walk_to_dst = edges_globalid_by_localid_b
+                [out_edges_b[out_offset_base[v_idx_b] + nbr_idx_b]];
+
+            if (globalid_b[v_idx_b] == walk_to_dst)
+              continue;
+            if (global_src == walk_to_dst)
+              continue;
+
+            if (kbm.GetBit(local_walk_to_dst)) {
+              continue;
+            } else {
+              kbm.SetBit(local_walk_to_dst);
+            }
+
+            // if (*params.output_offset > kMaxNumEdges) {
+            //   return;
+            // }
+
+            if (local_offset > kDefalutOutputBufferSize) {
+              EdgeIndex global_offset =
+                  atomicAdd(params.output_offset, local_offset);
+              // memcpy(params.edgelist_c + 2 * global_offset, local_buf,
+              //        sizeof(VertexID) * 2 * local_offset);
+              local_offset = 0;
+              local_buf[2 * local_offset] = global_src;
+              local_buf[2 * local_offset + 1] = walk_to_dst;
+              local_offset++;
+            } else {
+              local_buf[2 * local_offset] = global_src;
+              local_buf[2 * local_offset + 1] = walk_to_dst;
+              local_offset++;
             }
           }
         }
       }
+      EdgeIndex global_offset = atomicAdd(params.output_offset, local_offset);
+      // memcpy(params.edgelist_c + 2 * global_offset, local_buf,
+      //        sizeof(VertexID) * 2 * local_offset);
     }
-    // atomicAdd(&local_offset, 1);
   }
-  // printf("local_offset: %d\n", local_offset);
-  //*params.output_offset = *params.output_offset + local_offset;
-  //  EdgeIndex global_offset = atomicAdd(params.output_offset, local_offset);
 }
 
 void MatrixOperationsKernelWrapper::MatrixBitAnd(
@@ -794,8 +849,8 @@ void MatrixOperationsKernelWrapper::Walk(
     data_structures::UnifiedOwnedBuffer<uint32_t> *edgelist_c,
     data_structures::UnifiedOwnedBuffer<EdgeIndex> *output_offset) {
 
-  dim3 dimBlock(64);
-  dim3 dimGrid(64);
+  dim3 dimBlock(32);
+  dim3 dimGrid(32);
 
   auto tile_unit = max(1u, (WORD_OFFSET(tile_size * tile_size)));
   auto tile_buffer_size =
@@ -824,7 +879,7 @@ void MatrixOperationsKernelWrapper::Walk(
                         .edgelist_c = edgelist_c->GetPtr(),
                         .output_offset = output_offset->GetPtr()};
 
-  walk_kernel<<<dimBlock, dimGrid, 0, stream>>>(params);
+  walk_kernel<<<dimBlock, dimGrid, 0>>>(params);
   cudaError_t err = cudaGetLastError();
   if (err != cudaSuccess) {
     CUDA_CHECK(err);

@@ -17,10 +17,16 @@ using GridGraphMetadata =
 using CSRTiledMatrixIO = sics::matrixgraph::core::io::CSRTiledMatrixIO;
 using EdgeIndex = sics::matrixgraph::core::common::EdgeIndex;
 using GraphID = sics::matrixgraph::core::common::GraphID;
+using VertexLabel = sics::matrixgraph::core::common::VertexLabel;
 
 void GridCSRTiledMatrixIO::Read(const std::string &input_path,
                                 GridCSRTiledMatrix **grid_tiled_matrix) {
   YAML::Node node = YAML::LoadFile(input_path + "meta.yaml");
+
+  std::ifstream label_file(input_path + "label.bin", std::ios::binary);
+  if (!label_file)
+    throw std::runtime_error("Error reading file: " + input_path + "label/" +
+                             "0.bin");
 
   GridGraphMetadata grid_tiled_matrix_metadata = {
       .n_chunks = node["GridGraphMetadata"]["n_chunks"].as<GraphID>(),
@@ -41,6 +47,17 @@ void GridCSRTiledMatrixIO::Read(const std::string &input_path,
 
     csr_tiled_matrix_io.Read(block_dir, csr_tiled_matrix_ptr);
   }
+
+  // Read VLabel.
+  label_file.seekg(0, std::ios::end);
+  auto file_size = label_file.tellg();
+  label_file.seekg(0, std::ios::beg);
+
+  (*grid_tiled_matrix)
+      ->SetVLabelBasePointer(
+          new VertexLabel[grid_tiled_matrix_metadata.n_vertices]());
+  auto *buffer_vlabel = (*grid_tiled_matrix)->GetVLabelBasePointer();
+  label_file.read(reinterpret_cast<char *>(buffer_vlabel), file_size);
 }
 
 void GridCSRTiledMatrixIO::Write(const std::string &output_path,
@@ -57,6 +74,14 @@ void GridCSRTiledMatrixIO::Write(const std::string &output_path,
                             *grid_tiled_matrix.GetTiledMatrixPtrByIdx(_));
   }
 
+  // Write VLabel.
+  VertexLabel *buffer_vlabel = grid_tiled_matrix.GetVLabelBasePointer();
+  std::ofstream out_label_file(output_path + "label.bin", std::ios::binary);
+  out_label_file.write(reinterpret_cast<char *>(buffer_vlabel),
+                       sizeof(VertexLabel) * meta.n_vertices);
+  delete[] buffer_vlabel;
+
+  // Write metadata.
   std::ofstream out_meta_file(output_path + "meta.yaml");
   YAML::Node out_node;
   out_node["GridGraphMetadata"]["n_vertices"] = meta.n_vertices;

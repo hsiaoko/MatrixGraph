@@ -3,15 +3,13 @@
 #include <ctime>
 
 #include "core/task/gemm.cuh"
+#include "core/task/subiso.cuh"
 
 namespace sics {
 namespace matrixgraph {
 namespace core {
 
 MatrixGraph::MatrixGraph(SchedulerType scheduler_type) {
-
-  PrintDeviceInfo();
-
   CUDA_CHECK(cudaGetDeviceCount(&n_device_));
 
   switch (scheduler_type) {
@@ -34,8 +32,12 @@ void MatrixGraph::Run(GPUTaskType task_type, TaskBase *task_ptr) {
     task->Run();
     break;
   }
-  case task::kMatrixAnalysis:
+  case task::kSubIso: {
+    std::cout << "SubIso Query" << std::endl;
+    auto task = reinterpret_cast<task::SubIso *>(task_ptr);
+    task->Run();
     break;
+  }
   case task::kPPRQuery: {
     std::cout << "[PPR Query]" << std::endl;
     auto task = reinterpret_cast<task::PPRQuery *>(task_ptr);

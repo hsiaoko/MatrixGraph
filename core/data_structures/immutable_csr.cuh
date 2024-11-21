@@ -135,7 +135,7 @@ public:
 
   VertexID get_min_vid() const { return metadata_.min_vid; }
 
-  uint8_t *GetGraphBuffer() { return graph_base_pointer_.get(); }
+  uint8_t *GetGraphBuffer() const { return graph_base_pointer_.get(); }
 
   VertexID *GetGloablIDBasePointer() const {
     return globalid_by_localid_base_pointer_;
@@ -161,6 +161,10 @@ public:
 
   VertexID *GetOutgoingEdgesBasePointer() const {
     return outgoing_edges_base_pointer_;
+  }
+
+  VertexLabel *GetVLabelBasePointer() const {
+    return vertex_label_base_pointer_.get();
   }
 
   VertexID GetGlobalIDByLocalID(VertexID i) const {
@@ -206,7 +210,6 @@ protected:
 
   VertexID *globalid_by_localid_base_pointer_ = nullptr;
   VertexID *edges_globalid_by_localid_base_pointer_ = nullptr;
-  VertexID *edges_globalid_2_localid_base_pointer_ = nullptr;
   VertexID *incoming_edges_base_pointer_ = nullptr;
   VertexID *outgoing_edges_base_pointer_ = nullptr;
   VertexID *indegree_base_pointer_ = nullptr;

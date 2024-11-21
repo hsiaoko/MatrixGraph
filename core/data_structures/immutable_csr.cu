@@ -127,15 +127,21 @@ void ImmutableCSR::Write(const std::string &root_path, GraphID gid) {
                       sizeof(EdgeIndex) * (get_num_vertices() + 1));
   out_data_file.write(reinterpret_cast<char *>(GetOutOffsetBasePointer()),
                       sizeof(EdgeIndex) * (get_num_vertices() + 1));
+
+  auto *out_offset_base_pointer = GetOutOffsetBasePointer();
+
   out_data_file.write(reinterpret_cast<char *>(GetIncomingEdgesBasePointer()),
-                      sizeof(VertexID) * get_num_outgoing_edges());
+                      sizeof(VertexID) * get_num_incoming_edges());
   out_data_file.write(reinterpret_cast<char *>(GetOutgoingEdgesBasePointer()),
                       sizeof(VertexID) * get_num_outgoing_edges());
+  out_data_file.write(reinterpret_cast<char *>(GetEdgesGloablIDBasePointer()),
+                      sizeof(VertexID) * get_max_vid());
 
   // Write label data with all 0.
   std::ofstream out_label_file(root_path + "label/" + std::to_string(gid) +
                                ".bin");
-  auto buffer_label = new VertexLabel[get_num_vertices()]();
+  auto buffer_label = GetVLabelBasePointer();
+
   out_label_file.write(reinterpret_cast<char *>(buffer_label),
                        sizeof(VertexLabel) * get_num_vertices());
   delete[] buffer_label;
@@ -187,6 +193,14 @@ void ImmutableCSR::Read(const std::string &root_path) {
   std::ifstream data_file(root_path + "graphs/" + "0.bin", std::ios::binary);
   std::ifstream label_file(root_path + "label/" + "0.bin", std::ios::binary);
 
+  if (!data_file)
+    throw std::runtime_error("Error reading file: " + root_path + "graphs/" +
+                             "0.bin");
+
+  if (!label_file)
+    throw std::runtime_error("Error reading file: " + root_path + "label/" +
+                             "0.bin");
+
   data_file.seekg(0, std::ios::end);
   size_t file_size = data_file.tellg();
   data_file.seekg(0, std::ios::beg);
@@ -196,10 +210,6 @@ void ImmutableCSR::Read(const std::string &root_path) {
   // Read the file data.
   data_file.read(reinterpret_cast<char *>(graph_base_pointer_.get()),
                  file_size);
-
-  if (!data_file)
-    throw std::runtime_error("Error reading file: " + root_path + "graphs/" +
-                             "0.bin");
 
   SetGlobalIDBuffer(reinterpret_cast<VertexID *>(graph_base_pointer_.get()));
   SetInDegreeBuffer(
@@ -211,8 +221,9 @@ void ImmutableCSR::Read(const std::string &root_path) {
       reinterpret_cast<VertexID *>(outdegree_base_pointer_) +
       metadata_.num_vertices));
   SetOutOffsetBuffer(reinterpret_cast<EdgeIndex *>(
-      reinterpret_cast<VertexID *>(in_offset_base_pointer_) +
+      reinterpret_cast<EdgeIndex *>(in_offset_base_pointer_) +
       (metadata_.num_vertices + 1)));
+
   SetIncomingEdgesBuffer(reinterpret_cast<VertexID *>(
       reinterpret_cast<EdgeIndex *>(out_offset_base_pointer_) +
       (metadata_.num_vertices + 1)));
@@ -274,13 +285,13 @@ void ImmutableCSR::SortByDegree() {
   auto new_buffer_globalid = new VertexID[get_num_vertices()]();
   auto new_buffer_indegree = new VertexID[get_num_vertices()]();
   auto new_buffer_outdegree = new VertexID[get_num_vertices()]();
-  auto new_buffer_in_offset = new EdgeIndex[get_num_vertices()]();
-  auto new_buffer_out_offset = new EdgeIndex[get_num_vertices()]();
+  auto new_buffer_in_offset = new EdgeIndex[get_num_vertices() + 1]();
+  auto new_buffer_out_offset = new EdgeIndex[get_num_vertices() + 1]();
   auto new_buffer_in_edges = new VertexID[get_num_incoming_edges()]();
   auto new_buffer_out_edges = new VertexID[get_num_outgoing_edges()]();
 
   std::cout << "[SortByDegree] Computing offset" << std::endl;
-  for (VertexID i = 0; i < n_vertices - 1; i++) {
+  for (VertexID i = 0; i < n_vertices; i++) {
     auto local_vid = vids_and_degrees[i].vid;
     new_buffer_out_offset[i + 1] =
         new_buffer_out_offset[i] + GetOutDegreeByLocalID(local_vid);
@@ -544,8 +555,8 @@ void ImmutableCSR::SortByDistance(VertexID sim_granularity) {
   auto new_buffer_globalid = new VertexID[get_num_vertices()]();
   auto new_buffer_indegree = new VertexID[get_num_vertices()]();
   auto new_buffer_outdegree = new VertexID[get_num_vertices()]();
-  auto new_buffer_in_offset = new EdgeIndex[get_num_vertices()]();
-  auto new_buffer_out_offset = new EdgeIndex[get_num_vertices()]();
+  auto new_buffer_in_offset = new EdgeIndex[get_num_vertices() + 1]();
+  auto new_buffer_out_offset = new EdgeIndex[get_num_vertices() + 1]();
   auto new_buffer_in_edges = new VertexID[get_num_incoming_edges()]();
   auto new_buffer_out_edges = new VertexID[get_num_outgoing_edges()]();
 
@@ -561,7 +572,7 @@ void ImmutableCSR::SortByDistance(VertexID sim_granularity) {
         }
       });
 
-  for (VertexID i = 0; i < n_vertices - 1; i++) {
+  for (VertexID i = 0; i < n_vertices; i++) {
     auto local_vid = vids_and_degrees[i].vid;
     new_buffer_out_offset[i + 1] =
         new_buffer_out_offset[i] + GetOutDegreeByLocalID(local_vid);

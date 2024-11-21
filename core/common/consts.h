@@ -11,8 +11,13 @@ static const uint32_t kDefaultTileSize = 64;
 static const uint32_t kMaxVertexID = std::numeric_limits<uint32_t>::max();
 static const uint32_t kDefaultTileNum = 1024;
 static const uint32_t kMaxNChunks = 256;
-static const uint64_t KDefalutNumEdgesPerTile = 65536;
-static const uint32_t KDefalutNumVerticesPerTile = 128;
+static const uint64_t kDefalutNumEdgesPerBlock = 65536;
+static const uint64_t kMaxNumEdgesPerBlock = 2108783;
+static const uint64_t kMaxNumEdges = 1073741824 / 2;
+static const uint64_t kDefalutNumEdgesPerTile = 65536;
+static const uint64_t kDefalutOutputBufferSize = 256;
+static const uint32_t kDefalutNumVerticesPerTile = 128;
+static const uint64_t kMaxNumCandidates = 65536;
 
 } // namespace common
 } // namespace core
