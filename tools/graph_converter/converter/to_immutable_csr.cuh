@@ -26,6 +26,7 @@ static void ConvertEdgelistCSV2ImmutableCSR(const std::string &input_path,
 
   sics::matrixgraph::core::data_structures::Edges edgelist;
   edgelist.ReadFromCSV(input_path, sep);
+  edgelist.ShowGraph(100);
   auto p_immutable_csr =
       sics::matrixgraph::core::util::format_converter::Edgelist2ImmutableCSR(
           edgelist);
@@ -60,13 +61,12 @@ static void ConvertEdgelistBin2CSRBin(const std::string &input_path,
 
   sics::matrixgraph::core::data_structures::Edges edgelist(edgelist_metadata,
                                                            buffer_edges);
-  edgelist.ShowGraph();
-
+  edgelist.ShowGraph(10);
   auto p_immutable_csr =
       sics::matrixgraph::core::util::format_converter::Edgelist2ImmutableCSR(
           edgelist);
   p_immutable_csr->SortByDegree();
-  p_immutable_csr->PrintGraph(3);
+  p_immutable_csr->PrintGraph(10);
   p_immutable_csr->Write(output_path);
   delete p_immutable_csr;
 }

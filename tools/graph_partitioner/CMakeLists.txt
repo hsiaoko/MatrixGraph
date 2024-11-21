@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.12)
-project(graph_systems_tools CXX CUDA)
+project(matrixgraph_tools CXX CUDA)
 
 # Directories
 set(EXECUTABLE_OUTPUT_PATH ${PROJECT_ROOT_DIR}/bin/tools/)
@@ -23,5 +23,6 @@ foreach (appfile ${appfiles})
             yaml-cpp
             gflags
             TBB::tbb
+            ${CMAKE_CUDA_COMPILER_LIBRARY_ROOT}/lib64/libcudadevrt.a
             )
 endforeach ()

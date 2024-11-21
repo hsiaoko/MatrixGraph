@@ -1,6 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-#project(matrixgraph LANGUAGES CXX)
-project(matrixgraph_apps LANGUAGES CXX CUDA)
+project(matrixgraph_apps CUDA)
 
 #######################
 # Libraries
@@ -10,6 +9,9 @@ include_directories(
 )
 
 link_directories(${PROJECT_ROOT_DIR}/core/lib)
+
+#get_property(_variableNames DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR} PROPERTY VARIABLES)
+#message( STATUS "_variableNames=${_variableNames}" )
 
 #######################
 # Artifacts
@@ -26,6 +28,8 @@ foreach (appfile ${appfiles})
             yaml-cpp
             gflags
             stdc++fs
+            TBB::tbb
             matrixgraph_core
+            ${CMAKE_CUDA_COMPILER_LIBRARY_ROOT}/lib64/libcudadevrt.a
     )
 endforeach ()

@@ -1,8 +1,9 @@
-#ifndef MATRIXGRAPH_TOOLS_GRAPH_CONVERTER_CONVERTER_GRID_EDGELIST_2_CSR_TILED_MATRIX_CUH_
-#define MATRIXGRAPH_TOOLS_GRAPH_CONVERTER_CONVERTER_GRID_EDGELIST_2_CSR_TILED_MATRIX_CUH_
+#ifndef MATRIXGRAPH_TOOLS_GRAPH_CONVERTER_CONVERTER_GRID_EDGELIST_2_GIRD_CSR_TILED_MATRIX_CUH_
+#define MATRIXGRAPH_TOOLS_GRAPH_CONVERTER_CONVERTER_GRID_EDGELIST_2_GIRD_CSR_TILED_MATRIX_CUH_
 
 #include <cmath>
 
+#include "core/common/types.h"
 #include "core/common/yaml_config.h"
 #include "core/data_structures/bit_tiled_matrix.cuh"
 #include "core/data_structures/csr_tiled_matrix.cuh"
@@ -20,6 +21,7 @@ namespace converter {
 
 using GraphID = sics::matrixgraph::core::common::GraphID;
 using VertexID = sics::matrixgraph::core::common::VertexID;
+using VertexLabel = sics::matrixgraph::core::common::VertexLabel;
 using EdgeIndex = sics::matrixgraph::core::common::EdgeIndex;
 using GraphMetadata = sics::matrixgraph::core::data_structures::GraphMetadata;
 using EdgelistMetadata =
@@ -60,6 +62,13 @@ static void ConvertGridGraph2CSRTiledMatrix(const std::string &input_path,
 
     CSRTiledMatrixIO::Write(block_dir, *csr_tile_matrix);
   }
+
+  // Write VLabel of GridCSRTiledMatrix.
+  VertexLabel *buffer_vlabel = new VertexLabel[meta.num_vertices]();
+  std::ofstream out_label_file(output_path + "label.bin", std::ios::binary);
+  out_label_file.write(reinterpret_cast<char *>(buffer_vlabel),
+                       sizeof(VertexLabel) * meta.num_vertices);
+  delete[] buffer_vlabel;
 
   // Write Meta.yaml
   std::ofstream out_meta_file(output_path + "meta.yaml");

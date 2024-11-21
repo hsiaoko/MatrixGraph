@@ -24,5 +24,6 @@ foreach (appfile ${appfiles})
             TBB::tbb
             stdc++fs
             matrixgraph_core
+            ${CMAKE_CUDA_COMPILER_LIBRARY_ROOT}/lib64/libcudadevrt.a
             )
 endforeach ()

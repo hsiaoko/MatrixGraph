@@ -26,8 +26,8 @@
 #include "core/util/cuda_check.cuh"
 #include "core/util/format_converter.cuh"
 #include "tools/graph_converter/converter/to_bit_tiled_matrix.cuh"
-#include "tools/graph_converter/converter/to_csr_tiled_matrix.cuh"
 #include "tools/graph_converter/converter/to_edgelist.cuh"
+#include "tools/graph_converter/converter/to_grid_csr_tiled_matrix.cuh"
 #include "tools/graph_converter/converter/to_immutable_csr.cuh"
 
 using sics::matrixgraph::core::common::EdgeIndex;
