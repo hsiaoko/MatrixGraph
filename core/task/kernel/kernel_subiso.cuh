@@ -30,12 +30,17 @@ public:
   static SubIsoKernelWrapper *GetInstance();
 
   static void
-  SubIso(const cudaStream_t &stream, size_t tile_size, size_t n_strips,
-         size_t n_nz_tile_g,
+  SubIso(const cudaStream_t &stream,
+         VertexID n_vertices_p,
+         EdgeIndex n_edges_p,
+
          const data_structures::UnifiedOwnedBuffer<uint8_t> &data_p,
          const data_structures::UnifiedOwnedBuffer<VertexLabel> &v_label_p,
-         const data_structures::UnifiedOwnedBuffer<VertexID> &csr_n_vertices_g,
-         const data_structures::UnifiedOwnedBuffer<VertexID> &csr_n_edges_g,
+         size_t tile_size, size_t n_strips, size_t n_nz_tile_g,
+         const data_structures::UnifiedOwnedBuffer<VertexID>
+             &n_vertices_for_each_csr_g,
+         const data_structures::UnifiedOwnedBuffer<EdgeIndex>
+             &n_edges_for_each_csr_g,
          const data_structures::UnifiedOwnedBuffer<VertexID> &tile_offset_row_g,
          const data_structures::UnifiedOwnedBuffer<VertexID> &tile_row_idx_g,
          const data_structures::UnifiedOwnedBuffer<VertexID> &tile_col_idx_g,

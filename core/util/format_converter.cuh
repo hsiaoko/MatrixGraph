@@ -176,16 +176,18 @@ static ImmutableCSR *Edgelist2ImmutableCSR(const Edges &edgelist) {
           buffer_csr_vertices[e.dst].incoming_edges[offset_in] = e.src;
         }
       });
-  delete[] offset_in_edges;
-  delete[] offset_out_edges;
+  // delete[] offset_in_edges;
+  // delete[] offset_out_edges;
 
   // Construct CSR graph.
-  VertexID *buffer_globalid = nullptr;
-  if (edgelist.get_localid_to_globalid_ptr() == nullptr) {
-    buffer_globalid = new VertexID[edgelist.get_metadata().num_vertices]();
-  } else {
-    buffer_globalid = edgelist.get_localid_to_globalid_ptr();
+  VertexID *buffer_globalid =
+      new VertexID[edgelist.get_metadata().num_vertices]();
+
+  if (edgelist.get_localid_to_globalid_ptr() != nullptr) {
+    memcpy(buffer_globalid, edgelist.get_localid_to_globalid_ptr(),
+           sizeof(VertexID) * edgelist.get_metadata().num_vertices);
   }
+
   auto buffer_indegree = new VertexID[edgelist.get_metadata().num_vertices]();
   auto buffer_outdegree = new VertexID[edgelist.get_metadata().num_vertices]();
 
@@ -260,9 +262,7 @@ static ImmutableCSR *Edgelist2ImmutableCSR(const Edges &edgelist) {
   immutable_csr->SetOutOffsetBuffer(buffer_out_offset);
   immutable_csr->SetIncomingEdgesBuffer(buffer_in_edges);
   immutable_csr->SetOutgoingEdgesBuffer(buffer_out_edges);
-  immutable_csr->SetVertexLabelBuffer(
-      new VertexLabel[edgelist.get_metadata().num_vertices]());
-
+  immutable_csr->SetVertexLabelBuffer(edgelist.get_metadata().num_vertices);
   immutable_csr->SetNumVertices(edgelist.get_metadata().num_vertices);
   immutable_csr->SetNumIncomingEdges(count_in_edges);
   immutable_csr->SetNumOutgoingEdges(count_out_edges);

@@ -49,6 +49,8 @@ public:
 
   ImmutableCSR() = default;
 
+  ~ImmutableCSR();
+
   void PrintGraph(VertexID display_num = 0) const;
 
   void PrintGraphAbs(VertexID display_num = 0) const;
@@ -65,8 +67,8 @@ public:
 
   void SetGraphBuffer(uint8_t *buffer) { graph_base_pointer_.reset(buffer); }
 
-  void SetVertexLabelBuffer(VertexLabel *buffer) {
-    vertex_label_base_pointer_.reset(buffer);
+  void SetVertexLabelBuffer(size_t n_vertices) {
+    vertex_label_base_pointer_ = std::make_unique<VertexID[]>(n_vertices);
   }
 
   void SetGlobalIDBuffer(VertexID *buffer) {
@@ -206,7 +208,7 @@ protected:
   SubGraphMetadata metadata_;
 
   // Serialized data in CSR format.
-  std::unique_ptr<uint8_t[]> graph_base_pointer_;
+  std::unique_ptr<uint8_t[]> graph_base_pointer_ = nullptr;
 
   VertexID *globalid_by_localid_base_pointer_ = nullptr;
   VertexID *edges_globalid_by_localid_base_pointer_ = nullptr;
@@ -217,7 +219,7 @@ protected:
   EdgeIndex *in_offset_base_pointer_ = nullptr;
   EdgeIndex *out_offset_base_pointer_ = nullptr;
 
-  std::unique_ptr<VertexLabel[]> vertex_label_base_pointer_;
+  std::unique_ptr<VertexLabel[]> vertex_label_base_pointer_ = nullptr;
 };
 
 } // namespace data_structures

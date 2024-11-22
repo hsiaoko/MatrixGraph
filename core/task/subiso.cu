@@ -311,8 +311,9 @@ __host__ void SubIso::Matching(const ImmutableCSR &p,
               std::lock_guard<std::mutex> lock(mtx);
               cudaStream_t &p_stream = p_streams_vec[i * N + j];
               SubIsoKernelWrapper::SubIso(
-                  p_stream, tile_size, n_strips, block->GetMetadata().n_nz_tile,
-                  unified_data_p, unified_v_label_p,
+                  p_stream, p.get_num_vertices(), p.get_num_outgoing_edges(),
+                  unified_data_p, unified_v_label_p, tile_size, n_strips,
+                  block->GetMetadata().n_nz_tile,
                   unified_csr_n_vertices_g[i * N + j],
                   unified_csr_n_edges_g[i * N + j],
                   unified_tile_offset_row_g[i * j + j],

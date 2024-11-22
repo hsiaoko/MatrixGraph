@@ -34,7 +34,7 @@ file(GLOB CORE_SOURCES
 file(GLOB CORE_HEADERS
         "*.h"
         "*.cuh"
-        "components/*.h"
+        "components/*.h"
         "components/*.cuh"
         "io/*.cuh"
         "components/scheduler/*.h"
