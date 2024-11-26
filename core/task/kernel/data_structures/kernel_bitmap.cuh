@@ -18,21 +18,27 @@ class KernelBitmap {
 public:
   __device__ KernelBitmap(size_t size) { Init(size); }
 
-  __device__ KernelBitmap(size_t size, uint64_t *init_value) {
-    size_ = size;
-    data_ = init_value;
+  __device__ KernelBitmap(const KernelBitmap &other) {
+    if (this != &other)
+      free(data_);
+
+    Init(other.GetSize());
+    memcpy(data_, other.GetPtr(),
+           (KERNEL_WORD_OFFSET(size_) + 1) * sizeof(uint64_t));
   }
 
-  __device__ ~KernelBitmap() {
-    //   cudaFree(data_);
-    delete[] data_;
-    data_ = nullptr;
-  }
+  //__device__ ~KernelBitmap() {
+  //  free(data_);
+  //  data_ = nullptr;
+  //}
 
   __device__ void Init(size_t size) {
-    cudaFree(data_);
+    if (data_ != nullptr) {
+      free(data_);
+    }
     size_ = size;
-    data_ = new uint64_t[KERNEL_WORD_OFFSET(size) + 1]();
+    data_ =
+        (uint64_t *)malloc(sizeof(uint64_t) * (KERNEL_WORD_OFFSET(size) + 1));
   }
 
   __device__ void Clear() {
@@ -90,6 +96,12 @@ public:
   __device__ size_t GetSize() const { return size_; }
 
   __device__ uint64_t *GetPtr() const { return data_; }
+
+  __device__ bool IsBitmapFull() {
+    for (size_t i = 0; i <= KERNEL_WORD_OFFSET(size_); i++) {
+      // if()
+    }
+  }
 
 private:
   size_t size_ = 0;

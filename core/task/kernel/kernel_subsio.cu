@@ -19,6 +19,11 @@ using VertexID = sics::matrixgraph::core::common::VertexID;
 using VertexID = sics::matrixgraph::core::common::VertexID;
 using sics::matrixgraph::core::task::kernel::KernelBitmap;
 
+struct LocalMatches {
+  VertexID *data;
+  VertexID *offset;
+};
+
 struct ParametersSubIso {
   VertexID depth_p;
   VertexID *exec_path;
@@ -64,17 +69,20 @@ static __device__ void get_first_matches_kernel(const ParametersSubIso &params,
 
 static __device__ bool label_filter_kernel() { return true; }
 
-static __device__ void
-dfs_kernel(const ParametersSubIso &params, uint32_t level, VertexID v_idx,
-           KernelBitmap &visited, VertexID *local_candidate_buf,
-           VertexID *local_candidate_offset, bool &match) {
+static __device__ void dfs_kernel(const ParametersSubIso &params,
+                                  uint32_t level, VertexID v_idx,
+                                  KernelBitmap &global_visited,
+                                  KernelBitmap local_visited, bool &match,
+                                  LocalMatches &local_matches) {
+
   if (level > params.depth_p)
     return;
 
-  VertexID exec_plan_idx = visited.Count();
+  VertexID exec_plan_idx = local_visited.Count();
   VertexID u = params.exec_path[exec_plan_idx];
-
   VertexLabel u_label = params.v_label_p[u];
+
+  VertexID global_exec_plan_idx = global_visited.Count();
 
   VertexID *globalid_g = (VertexID *)(params.data_g);
   VertexID *in_degree_g = globalid_g + params.n_vertices_g;
@@ -86,37 +94,35 @@ dfs_kernel(const ParametersSubIso &params, uint32_t level, VertexID v_idx,
   VertexID *out_edges_g = in_edges_g + params.n_edges_g;
   VertexID *edges_globalid_by_localid_g = out_edges_g + params.n_edges_g;
 
-  printf("\t exec_plan_idx: %d, u %d, level %d, v %d, v_label %d\n",
-         exec_plan_idx, u, level, globalid_g[v_idx],
-         params.v_label_g[globalid_g[v_idx]]);
   // Plast filter function gere.
-  if (params.v_label_g[globalid_g[v_idx]] != u_label)
+  // printf("dfs to %d, u %d, u label %d, global_exe_idx %d\n",
+  // globalid_g[v_idx],
+  //       u, u_label, global_exec_plan_idx);
+  // printf("evel %d\n",level);
+  VertexLabel v_label = params.v_label_g[globalid_g[v_idx]];
+
+  if (v_label != u_label)
     return;
 
-  visited.SetBit(u);
+  global_visited.SetBit(u);
+  local_matches.offset[exec_plan_idx]++;
 
-  //local_candidate_offset[exec_plan_idx]++;
-
-  if (exec_plan_idx == params.n_vertices_p - 1) {
-    visited.ClearBit(u);
-
+  if (global_exec_plan_idx == params.n_vertices_p - 1) {
     printf("#match end at %d\n", globalid_g[v_idx]);
     match = true;
     return;
   }
-
-  printf("dfs to %d, level %d, u %d, u label %d\n", globalid_g[v_idx], level, u,
-         u_label);
 
   EdgeIndex offset_base = out_offset_g[v_idx];
   for (VertexID nbr_idx = 0; nbr_idx < out_degree_g[v_idx]; nbr_idx++) {
     VertexID candidate_v_idx = *(out_edges_g + offset_base + nbr_idx);
     VertexID candidate_global_v_id = globalid_g[candidate_v_idx];
     VertexLabel candidate_v_label = params.v_label_g[candidate_global_v_id];
-    printf(" \t pre %d candidate %d, level %d\n", globalid_g[v_idx],
-           candidate_global_v_id, level);
-    dfs_kernel(params, level + 1, candidate_v_idx, visited, local_candidate_buf,
-               local_candidate_offset, match);
+    printf(" \t pre %d candidate %d, level %d, v_idx: %d, %d/%d\n",
+           globalid_g[v_idx], candidate_global_v_id, level, v_idx, nbr_idx,
+           out_degree_g[v_idx]);
+    dfs_kernel(params, level + 1, candidate_v_idx, global_visited,
+               global_visited, match, local_matches);
   }
 }
 
@@ -126,10 +132,9 @@ static __device__ void extend_kernel(const ParametersSubIso &params,
   unsigned int tid = blockIdx.x * blockDim.x + threadIdx.x;
   unsigned int step = blockDim.x * gridDim.x;
 
+  VertexID u_idx = 0;
+
   KernelBitmap visited(params.n_vertices_p);
-  VertexID *local_candidate_buf =
-      new VertexID[params.n_edges_p * 2 * kMaxNumCandidatesPerThread]();
-  VertexID *local_candidate_offset = new VertexID[params.n_edges_p]();
 
   VertexID *globalid_g = (VertexID *)(params.data_g);
   VertexID *in_degree_g = globalid_g + params.n_vertices_g;
@@ -141,28 +146,38 @@ static __device__ void extend_kernel(const ParametersSubIso &params,
   VertexID *out_edges_g = in_edges_g + params.n_edges_g;
   VertexID *edges_globalid_by_localid_g = out_edges_g + params.n_edges_g;
 
+  LocalMatches local_matches;
+  local_matches.data = (VertexID *)malloc(sizeof(VertexID) * params.n_edges_p *
+                                          2 * kMaxNumCandidatesPerThread);
+
+  local_matches.offset =
+      (VertexID *)malloc(sizeof(VertexID) * params.n_vertices_p);
+
+  printf("EXTEND: %d\n", local_matches.offset);
   for (VertexID candidate_idx = tid; candidate_idx < params.m_offset[level];
        candidate_idx += step) {
-    memset(local_candidate_buf, 0,
-           params.n_edges_p * 2 * kMaxNumCandidatesPerThread);
-    memset(local_candidate_offset, 0, params.n_edges_p);
+    visited.Clear();
+    memset(local_matches.data, 0,
+           params.n_edges_p * 2 * kMaxNumCandidatesPerThread *
+               sizeof(VertexID));
+    memset(local_matches.offset, 0, params.n_vertices_p * sizeof(VertexID));
 
     VertexID v_idx = params.m_ptr[level][candidate_idx];
     VertexID global_vid = globalid_g[v_idx];
 
     bool match = false;
-    dfs_kernel(params, level, v_idx, visited, local_candidate_buf,
-               local_candidate_offset, match);
+    dfs_kernel(params, level, v_idx, visited, visited, match, local_matches);
 
+    printf("#done!\n");
     // Write result to the global buffer.
     if (match) {
-      for (auto _ = 0; _ < params.n_edges_p; _++) {
-        printf("eid _ %d, offset %d\n", _, local_candidate_offset[_]);
+      for (auto _ = 0; _ < params.n_vertices_p; _++) {
+        printf("eid _ %d, offset %d\n", _, local_matches.offset[_]);
       }
     }
   }
-  delete[] local_candidate_buf;
-  delete[] local_candidate_offset;
+  free(local_matches.data);
+  free(local_matches.offset);
 }
 
 static __global__ void subiso_kernel(ParametersSubIso params) {
@@ -204,8 +219,8 @@ void SubIsoKernelWrapper::SubIso(
     const data_structures::UnifiedOwnedBuffer<VertexID *> &m_ptr,
     const data_structures::UnifiedOwnedBuffer<EdgeIndex> &m_offset) {
 
-  dim3 dimBlock(1);
-  dim3 dimGrid(1);
+  dim3 dimBlock(32);
+  dim3 dimGrid(32);
 
   ParametersSubIso params{.depth_p = depth_p,
                           .exec_path = exec_path.GetPtr(),
@@ -220,9 +235,6 @@ void SubIsoKernelWrapper::SubIso(
                           .m_ptr = m_ptr.GetPtr(),
                           .m_offset = m_offset.GetPtr()};
 
-  for (auto _ = 0; _ < 6; _++) {
-    std::cout << ((VertexID *)(params.exec_path))[_] << std::endl;
-  }
   subiso_kernel<<<dimGrid, dimBlock, 0, stream>>>(params);
   cudaError_t err = cudaGetLastError();
   if (err != cudaSuccess) {
