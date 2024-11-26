@@ -518,8 +518,7 @@ static __global__ void walk_kernel(const ParametersWalk params) {
   // KernelBitmap kbm(params.tile_size);
   KernelBitmap kbm(1024);
 
-  for (unsigned long nz_idx_a = 0; nz_idx_a < params.n_nz_tile_a + 1;
-       nz_idx_a++) {
+  for (unsigned long nz_idx_a = 0; nz_idx_a < params.n_nz_tile_a; nz_idx_a++) {
     auto csr_offset_a = params.csr_offset_a[nz_idx_a];
 
     VertexID col_idx_a = params.tile_col_idx_a[nz_idx_a];

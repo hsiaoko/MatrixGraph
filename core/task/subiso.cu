@@ -71,6 +71,7 @@ using BitmapNoOwnerShip = sics::matrixgraph::core::util::BitmapNoOwnerShip;
 using sics::matrixgraph::core::util::atomic::WriteAdd;
 using TiledMatrixMetadata =
     sics::matrixgraph::core::data_structures::TiledMatrixMetadata;
+using ImmutableCSR = sics::matrixgraph::core::data_structures::ImmutableCSR;
 using Edges = sics::matrixgraph::core::data_structures::Edges;
 using sics::matrixgraph::core::util::atomic::WriteAdd;
 using sics::matrixgraph::core::util::atomic::WriteMax;
@@ -87,17 +88,17 @@ using sics::matrixgraph::core::common::kDefalutNumEdgesPerTile;
 using sics::matrixgraph::core::common::kMaxNumCandidates;
 using sics::matrixgraph::core::common::kMaxNumEdges;
 using sics::matrixgraph::core::common::kMaxNumEdgesPerBlock;
+using ExecutionPlan = sics::matrixgraph::core::task::SubIso::ExecutionPlan;
 
 // CUDA kernel to add elements of two arrays
 __host__ void SubIso::LoadData() {
   std::cout << "[SubIso] LoadData()" << std::endl;
-  GridCSRTiledMatrixIO grid_csr_tiled_matrix_io;
 
   p_.Read(pattern_path_);
-  grid_csr_tiled_matrix_io.Read(data_graph_path_, &g_);
-
   p_.PrintGraph(100);
-  g_->Print(999);
+
+  g_.Read(data_graph_path_);
+  g_.PrintGraph(999);
 }
 
 __host__ void SubIso::InitLabel() {
@@ -110,7 +111,7 @@ __host__ void SubIso::InitLabel() {
   p_vlabel[4] = 4;
   p_vlabel[5] = 3;
 
-  auto *g_vlabel = g_->GetVLabelBasePointer();
+  auto *g_vlabel = g_.GetVLabelBasePointer();
 
   g_vlabel[0] = 0;
   g_vlabel[1] = 1;
@@ -123,10 +124,47 @@ __host__ void SubIso::InitLabel() {
   g_vlabel[8] = 0;
 }
 
-__host__ void SubIso::AllocMappingBuf() {}
+static void DFSTraverse(VertexID vid, Bitmap &visited, const ImmutableCSR &g,
+                        std::vector<VertexID> &output, VertexID depth,
+                        VertexID &max_depth) {
 
-__host__ void SubIso::Matching(const ImmutableCSR &p,
-                               const GridCSRTiledMatrix &g) {
+  auto u = g.GetVertexByLocalID(vid);
+
+  auto globalid = g.GetGlobalIDByLocalID(vid);
+  output.emplace_back(globalid);
+
+  visited.SetBit(vid);
+
+  max_depth = std::max(depth, max_depth);
+
+  for (VertexID _ = 0; _ < u.outdegree; _++) {
+    if (!visited.GetBit(u.outgoing_edges[_])) {
+      DFSTraverse(u.outgoing_edges[_], visited, g, output, depth + 1,
+                  max_depth);
+    }
+  }
+}
+
+__host__ void SubIso::GenerateDFSExecutionPlan(const ImmutableCSR &p,
+                                               const ImmutableCSR &g,
+                                               ExecutionPlan *exec_plan) {
+
+  Bitmap visited(p.get_max_vid());
+  auto global_vid = p.GetGlobalIDByLocalID(0);
+  std::vector<VertexID> output;
+  output.reserve(p.get_max_vid());
+
+  VertexID depth = 0;
+  DFSTraverse(0, visited, p, output, 0, depth);
+
+  exec_plan->sequential_exec_path.Init(sizeof(VertexID) * p.get_num_vertices());
+  cudaMemcpy(exec_plan->sequential_exec_path.GetPtr(), output.data(),
+             sizeof(VertexID) * p.get_num_vertices(), cudaMemcpyHostToHost);
+  exec_plan->n_vertices = p.get_num_vertices();
+  exec_plan->depth = depth;
+}
+
+__host__ void SubIso::Matching(const ImmutableCSR &p, const ImmutableCSR &g) {
   auto parallelism = std::thread::hardware_concurrency();
   std::vector<size_t> worker(parallelism);
   std::mutex mtx;
@@ -134,33 +172,9 @@ __host__ void SubIso::Matching(const ImmutableCSR &p,
   std::iota(worker.begin(), worker.end(), 0);
   auto step = worker.size();
 
-  auto block = g.GetTiledMatrixPtrByIdx(0);
-  VertexID tile_size = block->GetMetadata().tile_size;
-  VertexID n_strips = block->GetMetadata().n_strips;
-
-  auto tile_buffer_size =
-      sizeof(uint64_t) * std::max(1u, WORD_OFFSET(tile_size * tile_size));
-
-  // Init Streams.
-  VertexID M = g.get_metadata().n_chunks;
-  VertexID N = g.get_metadata().n_chunks;
-
-  std::vector<cudaStream_t> p_streams_vec;
-  p_streams_vec.resize(M * N);
-  std::for_each(std::execution::par, worker.begin(), worker.end(),
-                [this, M, N, step, &p_streams_vec, &mtx](auto w) {
-                  for (VertexID i = w; i < N; i += step) {
-                    for (VertexID j = 0; j < M; j++) {
-                      cudaSetDevice(common::hash_function(i * N + j) % 4);
-                      cudaStreamCreate(&p_streams_vec[i * N + j]);
-                    }
-                  }
-                });
-
   // Init pattern.
   BufferUint8 data_p;
   BufferVertexLabel v_label_p;
-
   UnifiedOwnedBufferUint8 unified_data_p;
   UnifiedOwnedBufferVertexLabel unified_v_label_p;
 
@@ -168,7 +182,8 @@ __host__ void SubIso::Matching(const ImmutableCSR &p,
   data_p.size = sizeof(VertexID) * (p.get_num_vertices() * 3) +
                 sizeof(VertexID) * p.get_num_incoming_edges() +
                 sizeof(VertexID) * p.get_num_outgoing_edges() +
-                sizeof(EdgeIndex) * (p.get_num_vertices() * 2 + 2);
+                sizeof(EdgeIndex) * p.get_num_vertices() * 2 +
+                sizeof(VertexID) * (p.get_max_vid() + 1);
 
   unified_data_p.Init(data_p);
 
@@ -177,156 +192,74 @@ __host__ void SubIso::Matching(const ImmutableCSR &p,
 
   unified_v_label_p.Init(v_label_p);
 
-  // Init Data Graph.
-  std::vector<BufferVertexID> tile_offset_row_g;
-  std::vector<BufferVertexID> tile_row_idx_g;
-  std::vector<BufferVertexID> tile_col_idx_g;
-  std::vector<BufferUint64> csr_offset_g;
-  std::vector<BufferUint8> data_g;
-
-  tile_offset_row_g.resize(N * M);
-  tile_row_idx_g.resize(N * M);
-  tile_col_idx_g.resize(N * M);
-  csr_offset_g.resize(N * M);
-  data_g.resize(N * M);
-
-  std::vector<UnifiedOwnedBufferVertexID> unified_csr_n_vertices_g;
-  std::vector<UnifiedOwnedBufferVertexID> unified_csr_n_edges_g;
-  std::vector<UnifiedOwnedBufferVertexID> unified_tile_offset_row_g;
-  std::vector<UnifiedOwnedBufferVertexID> unified_tile_row_idx_g;
-  std::vector<UnifiedOwnedBufferVertexID> unified_tile_col_idx_g;
-  std::vector<UnifiedOwnedBufferUint64> unified_csr_offset_g;
-  std::vector<UnifiedOwnedBufferUint8> unified_data_g;
-
-  unified_csr_n_vertices_g.resize(N * M);
-  unified_csr_n_edges_g.resize(N * M);
-  unified_tile_offset_row_g.resize(N * M);
-  unified_tile_row_idx_g.resize(N * M);
-  unified_tile_col_idx_g.resize(N * M);
-  unified_csr_offset_g.resize(N * M);
-  unified_data_g.resize(N * M);
-
-  std::for_each(
-      // std::execution::par,
-      worker.begin(), worker.end(),
-      [this, M, N, step, &g, &p_streams_vec, tile_size, tile_buffer_size, &mtx,
-       &tile_offset_row_g, &tile_row_idx_g, &tile_col_idx_g, &csr_offset_g,
-       &data_g, &unified_tile_offset_row_g, &unified_tile_row_idx_g,
-       &unified_tile_col_idx_g, &unified_csr_offset_g, &unified_data_g,
-       &unified_csr_n_vertices_g, &unified_csr_n_edges_g](auto w) {
-        for (VertexID i = w; i < M; i += step) {
-          for (VertexID k = 0; k < N; k++) {
-            auto block = g.GetTiledMatrixPtrByIdx(i * N + k);
-            if (block->GetMetadata().n_nz_tile == 0)
-              continue;
-
-            tile_offset_row_g[i * N + k].data = block->GetTileOffsetRowPtr();
-            tile_offset_row_g[i * N + k].size =
-                sizeof(VertexID) * (block->GetMetadata().n_strips + 1);
-
-            tile_row_idx_g[i * N + k].data = block->GetTileRowIdxPtr();
-            tile_row_idx_g[i * N + k].size =
-                block->GetMetadata().n_nz_tile * sizeof(VertexID);
-
-            tile_col_idx_g[i * N + k].data = block->GetTileColIdxPtr();
-            tile_col_idx_g[i * N + k].size =
-                block->GetMetadata().n_nz_tile * sizeof(VertexID);
-            csr_offset_g[i * N + k].data = block->GetCSROffsetPtr();
-            csr_offset_g[i * N + k].size =
-                block->GetMetadata().n_nz_tile * sizeof(uint64_t);
-
-            data_g[i * N + k].data = block->GetDataPtr();
-            data_g[i * N + k].size = block->GetDataBufferSize();
-
-            {
-              std::lock_guard<std::mutex> lock(mtx);
-              unified_tile_offset_row_g[i * N + k].Init(
-                  tile_offset_row_g[i * N + k]);
-              unified_tile_row_idx_g[i * N + k].Init(tile_row_idx_g[i * N + k]);
-              unified_tile_col_idx_g[i * N + k].Init(tile_col_idx_g[i * N + k]);
-              unified_csr_offset_g[i * N + k].Init(csr_offset_g[i * N + k]);
-              unified_data_g[i * N + k].Init(data_g[i * N + k]);
-
-              auto subgraph_metadata = block->GetCSRMetadata();
-              unified_csr_n_vertices_g[i * N + k].Init(
-                  sizeof(uint32_t) * block->GetMetadata().n_nz_tile);
-              unified_csr_n_edges_g[i * N + k].Init(
-                  sizeof(uint64_t) * block->GetMetadata().n_nz_tile);
-              for (VertexID gid = 0; gid < block->GetMetadata().n_nz_tile;
-                   gid++) {
-                unified_csr_n_vertices_g[i * N + k].SetElement(
-                    subgraph_metadata[gid].num_vertices, gid);
-                unified_csr_n_edges_g[i * N + k].SetElement(
-                    subgraph_metadata[gid].num_outgoing_edges, gid);
-              }
-            }
-          }
-        }
-      });
-
+  // Init data_graph.
+  BufferUint8 data_g;
   BufferVertexLabel v_label_g;
+
+  UnifiedOwnedBufferUint8 unified_data_g;
   UnifiedOwnedBufferVertexLabel unified_v_label_g;
 
+  data_g.data = g.GetGraphBuffer();
+  data_g.size = sizeof(VertexID) * (g.get_num_vertices() * 3) +
+                sizeof(VertexID) * g.get_num_incoming_edges() +
+                sizeof(VertexID) * g.get_num_outgoing_edges() +
+                sizeof(EdgeIndex) * g.get_num_vertices() * 2 +
+                sizeof(VertexID) * (g.get_max_vid() + 1);
+  unified_data_g.Init(data_g);
+
   v_label_g.data = g.GetVLabelBasePointer();
-  v_label_g.size = sizeof(VertexLabel) * g.get_metadata().n_vertices;
+  v_label_g.size = sizeof(VertexLabel) * g.get_num_vertices();
+
   unified_v_label_g.Init(v_label_g);
 
   // Init output.
   std::vector<UnifiedOwnedBufferVertexID> unified_edgelist_m;
   unified_edgelist_m.resize(p.get_num_outgoing_edges());
-  std::vector<UnifiedOwnedBufferEdgeIndex> unified_output_offset_m;
-  unified_output_offset_m.resize(p.get_num_outgoing_edges());
-
   std::for_each(
       std::execution::par, worker.begin(), worker.end(),
-      [this, step, &p_streams_vec, &mtx, &unified_edgelist_m,
-       &unified_output_offset_m, &p](auto w) {
+      [this, step, &mtx, &unified_edgelist_m, &p](auto w) {
         for (VertexID _ = w; _ < p.get_num_outgoing_edges(); _ += step) {
           unified_edgelist_m[_].Init(sizeof(VertexID) * kMaxNumCandidates * 2);
-          unified_output_offset_m[_].Init(sizeof(EdgeIndex));
         }
       });
+
+  sics::matrixgraph::core::data_structures::UnifiedOwnedBuffer<VertexID *>
+      unified_m_ptr;
+  unified_m_ptr.Init(sizeof(VertexID *) * p.get_num_outgoing_edges() * 2);
+  for (auto _ = 0; _ < p.get_num_outgoing_edges(); _++) {
+    unified_m_ptr.GetPtr()[_] = unified_edgelist_m[_].GetPtr();
+  }
+
+  UnifiedOwnedBufferEdgeIndex unified_m_offset;
+  unified_m_offset.Init(sizeof(EdgeIndex) * p.get_num_outgoing_edges());
+
+  // Generate Execution Plan
+  ExecutionPlan exec_plan;
+  GenerateDFSExecutionPlan(p, g, &exec_plan);
 
   cudaDeviceSynchronize();
 
   // Start Matching ...
-  std::for_each(
-      // std::execution::par,
-      worker.begin(), worker.end(),
-      [this, M, N, step, &p, &g, &p_streams_vec, tile_size, tile_buffer_size,
-       n_strips, &mtx, &unified_data_p, &unified_v_label_p,
-       &unified_csr_n_vertices_g, &unified_csr_n_edges_g,
-       &unified_tile_offset_row_g, &unified_tile_row_idx_g,
-       &unified_tile_col_idx_g, &unified_csr_offset_g, &unified_data_g,
-       &unified_edgelist_m, &unified_output_offset_m](auto w) {
-        for (VertexID i = w; i < M; i += step) {
-          for (VertexID j = 0; j < N; j++) {
-            auto block = g.GetTiledMatrixPtrByIdx(i * N + j);
-            if (block == nullptr || block->GetMetadata().n_nz_tile == 0)
-              continue;
+  cudaStream_t stream;
+  cudaStreamCreate(&stream);
 
-            cudaSetDevice(common::hash_function(i * N + j) % 4);
-
-            {
-              std::lock_guard<std::mutex> lock(mtx);
-              cudaStream_t &p_stream = p_streams_vec[i * N + j];
-              SubIsoKernelWrapper::SubIso(
-                  p_stream, p.get_num_vertices(), p.get_num_outgoing_edges(),
-                  unified_data_p, unified_v_label_p, tile_size, n_strips,
-                  block->GetMetadata().n_nz_tile,
-                  unified_csr_n_vertices_g[i * N + j],
-                  unified_csr_n_edges_g[i * N + j],
-                  unified_tile_offset_row_g[i * j + j],
-                  unified_tile_row_idx_g[i * N + j],
-                  unified_tile_col_idx_g[i * N + j],
-                  unified_csr_offset_g[i * N + j], unified_data_g[i * N + j],
-                  unified_edgelist_m, unified_output_offset_m);
-            }
-          }
-        }
-      });
+  SubIsoKernelWrapper::SubIso(
+      stream, exec_plan.depth, exec_plan.sequential_exec_path,
+      p.get_num_vertices(), p.get_num_outgoing_edges(), unified_data_p,
+      unified_v_label_p, g.get_num_vertices(), g.get_num_outgoing_edges(),
+      unified_data_g, unified_v_label_g, unified_m_ptr, unified_m_offset);
 
   cudaDeviceSynchronize();
+
+  // Print Output.
+  for (auto _ = 0; _ < p.get_num_vertices(); _++) {
+    std::cout << " level " << _ << " get " << unified_m_offset.GetPtr()[_]
+              << " matches: " << std::endl;
+    for (auto __ = 0; __ < unified_m_offset.GetPtr()[_]; __++) {
+      std::cout << unified_m_ptr.GetPtr()[_][__] << " ";
+    }
+    std::cout << std::endl;
+  }
 }
 
 __host__ void SubIso::Run() {
@@ -338,7 +271,7 @@ __host__ void SubIso::Run() {
 
   auto start_time_2 = std::chrono::system_clock::now();
 
-  Matching(p_, *g_);
+  Matching(p_, g_);
 
   std::cout << "[SubIso] LoadData() elapsed: "
             << std::chrono::duration_cast<std::chrono::microseconds>(

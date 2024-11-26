@@ -17,6 +17,8 @@ class SubIsoKernelWrapper {
   using EdgeIndex = sics::matrixgraph::core::common::EdgeIndex;
   using VertexLabel = sics::matrixgraph::core::common::VertexLabel;
   using VertexID = sics::matrixgraph::core::common::VertexID;
+  using UnifiedOwnedBufferVertexID =
+      sics::matrixgraph::core::data_structures::UnifiedOwnedBuffer<VertexID>;
 
 public:
   // deleting copy constructor
@@ -31,24 +33,16 @@ public:
 
   static void
   SubIso(const cudaStream_t &stream,
-         VertexID n_vertices_p,
-         EdgeIndex n_edges_p,
-
+         VertexID depth_p,
+         const UnifiedOwnedBufferVertexID &exec_path,
+         VertexID n_vertices_p, EdgeIndex n_edges_p,
          const data_structures::UnifiedOwnedBuffer<uint8_t> &data_p,
          const data_structures::UnifiedOwnedBuffer<VertexLabel> &v_label_p,
-         size_t tile_size, size_t n_strips, size_t n_nz_tile_g,
-         const data_structures::UnifiedOwnedBuffer<VertexID>
-             &n_vertices_for_each_csr_g,
-         const data_structures::UnifiedOwnedBuffer<EdgeIndex>
-             &n_edges_for_each_csr_g,
-         const data_structures::UnifiedOwnedBuffer<VertexID> &tile_offset_row_g,
-         const data_structures::UnifiedOwnedBuffer<VertexID> &tile_row_idx_g,
-         const data_structures::UnifiedOwnedBuffer<VertexID> &tile_col_idx_g,
-         const data_structures::UnifiedOwnedBuffer<uint64_t> &csr_offset_g,
+         VertexID n_vertices_g, EdgeIndex n_edges_g,
          const data_structures::UnifiedOwnedBuffer<uint8_t> &data_g,
-         const std::vector<data_structures::UnifiedOwnedBuffer<VertexID>> &m,
-         const std::vector<data_structures::UnifiedOwnedBuffer<EdgeIndex>>
-             &m_offset);
+         const data_structures::UnifiedOwnedBuffer<VertexLabel> &v_label_g,
+         const data_structures::UnifiedOwnedBuffer<VertexID *> &m_ptr,
+         const data_structures::UnifiedOwnedBuffer<EdgeIndex> &m_offset);
 
 private:
   SubIsoKernelWrapper() = default;

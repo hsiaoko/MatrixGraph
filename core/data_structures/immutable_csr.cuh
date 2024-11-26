@@ -49,7 +49,7 @@ public:
 
   ImmutableCSR() = default;
 
-  ~ImmutableCSR();
+  ~ImmutableCSR() = default;
 
   void PrintGraph(VertexID display_num = 0) const;
 
@@ -212,6 +212,9 @@ protected:
 
   VertexID *globalid_by_localid_base_pointer_ = nullptr;
   VertexID *edges_globalid_by_localid_base_pointer_ = nullptr;
+
+  VertexID *local_vid_by_edges_globalid_base_pointer_ = nullptr;
+
   VertexID *incoming_edges_base_pointer_ = nullptr;
   VertexID *outgoing_edges_base_pointer_ = nullptr;
   VertexID *indegree_base_pointer_ = nullptr;

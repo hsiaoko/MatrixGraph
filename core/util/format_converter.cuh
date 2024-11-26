@@ -105,13 +105,15 @@ static ImmutableCSR *Edgelist2ImmutableCSR(const Edges &edgelist) {
   auto visited = Bitmap(aligned_max_vid);
   auto *num_in_edges_by_vid = new EdgeIndex[aligned_max_vid]();
   auto *num_out_edges_by_vid = new EdgeIndex[aligned_max_vid]();
-  VertexID min_vid = MAX_VERTEX_ID;
+
+  VertexID min_vid = edgelist.get_metadata().min_vid;
+  VertexID max_vid = edgelist.get_metadata().max_vid;
 
   std::vector<VertexID> parallel_scope_vertices(aligned_max_vid);
   std::iota(parallel_scope_vertices.begin(), parallel_scope_vertices.end(), 0);
 
   VertexID *buffer_edges_globalid_by_localid =
-      new VertexID[edgelist.get_metadata().max_vid]();
+      new VertexID[edgelist.get_metadata().max_vid + 1]();
 
   // Compute min_vid and obtain the num of incoming/outgoing edges for each
   // vertex.
@@ -121,39 +123,44 @@ static ImmutableCSR *Edgelist2ImmutableCSR(const Edges &edgelist) {
                  &buffer_edges_globalid_by_localid](auto &w) {
                   for (EdgeIndex i = w; i < edgelist.get_metadata().num_edges;
                        i += step) {
+                    auto edgelist_localid_2_globalid =
+                        edgelist.get_localid_to_globalid_ptr();
                     auto e = edgelist.get_edge_by_index(i);
+                    e.src = edgelist_localid_2_globalid[e.src];
+                    e.dst = edgelist_localid_2_globalid[e.dst];
                     visited.SetBit(e.src);
                     visited.SetBit(e.dst);
                     WriteAdd(num_in_edges_by_vid + e.dst, (EdgeIndex)1);
                     WriteAdd(num_out_edges_by_vid + e.src, (EdgeIndex)1);
                     WriteMin(&min_vid, e.src);
                     WriteMin(&min_vid, e.dst);
-                    buffer_edges_globalid_by_localid[e.src] = e.src;
-                    buffer_edges_globalid_by_localid[e.dst] = e.dst;
                   }
                 });
 
-  auto buffer_csr_vertices = new Vertex[aligned_max_vid]();
+  auto buffer_csr_vertices = new Vertex[max_vid + 1]();
   EdgeIndex count_in_edges = 0, count_out_edges = 0;
 
   // Malloc space for each vertex.
-  std::for_each(
-      std::execution::par, parallel_scope_vertices.begin(),
-      parallel_scope_vertices.end(),
-      [&visited, &buffer_csr_vertices, &count_in_edges, &count_out_edges,
-       &num_in_edges_by_vid, &num_out_edges_by_vid](auto j) {
-        if (!visited.GetBit(j))
-          return;
-        buffer_csr_vertices[j].vid = j;
-        buffer_csr_vertices[j].indegree = num_in_edges_by_vid[j];
-        buffer_csr_vertices[j].outdegree = num_out_edges_by_vid[j];
-        buffer_csr_vertices[j].incoming_edges =
-            new VertexID[num_in_edges_by_vid[j]]();
-        buffer_csr_vertices[j].outgoing_edges =
-            new VertexID[num_out_edges_by_vid[j]]();
-        WriteAdd(&count_in_edges, (EdgeIndex)buffer_csr_vertices[j].indegree);
-        WriteAdd(&count_out_edges, (EdgeIndex)buffer_csr_vertices[j].outdegree);
-      });
+  std::for_each(std::execution::par, worker.begin(), worker.end(),
+                [&visited, &buffer_csr_vertices, &count_in_edges,
+                 &count_out_edges, &num_in_edges_by_vid, &num_out_edges_by_vid,
+                 aligned_max_vid, max_vid, step](auto w) {
+                  for (auto j = w; j < max_vid + 1; j += step) {
+                    if (!visited.GetBit(j))
+                      return;
+                    buffer_csr_vertices[j].vid = j;
+                    buffer_csr_vertices[j].indegree = num_in_edges_by_vid[j];
+                    buffer_csr_vertices[j].outdegree = num_out_edges_by_vid[j];
+                    buffer_csr_vertices[j].incoming_edges =
+                        new VertexID[num_in_edges_by_vid[j]]();
+                    buffer_csr_vertices[j].outgoing_edges =
+                        new VertexID[num_out_edges_by_vid[j]]();
+                    WriteAdd(&count_in_edges,
+                             (EdgeIndex)buffer_csr_vertices[j].indegree);
+                    WriteAdd(&count_out_edges,
+                             (EdgeIndex)buffer_csr_vertices[j].outdegree);
+                  }
+                });
   delete[] num_in_edges_by_vid;
   delete[] num_out_edges_by_vid;
 
@@ -168,7 +175,13 @@ static ImmutableCSR *Edgelist2ImmutableCSR(const Edges &edgelist) {
        &offset_out_edges](auto &w) {
         for (EdgeIndex i = w; i < edgelist.get_metadata().num_edges;
              i += step) {
+
+          auto edgelist_localid_2_globalid =
+              edgelist.get_localid_to_globalid_ptr();
           auto e = edgelist.get_edge_by_index(i);
+          e.src = edgelist_localid_2_globalid[e.src];
+          e.dst = edgelist_localid_2_globalid[e.dst];
+
           EdgeIndex offset_out = 0, offset_in = 0;
           offset_out = __sync_fetch_and_add(offset_out_edges + e.src, 1);
           offset_in = __sync_fetch_and_add(offset_in_edges + e.dst, 1);
@@ -176,8 +189,9 @@ static ImmutableCSR *Edgelist2ImmutableCSR(const Edges &edgelist) {
           buffer_csr_vertices[e.dst].incoming_edges[offset_in] = e.src;
         }
       });
-  // delete[] offset_in_edges;
-  // delete[] offset_out_edges;
+
+  delete[] offset_in_edges;
+  delete[] offset_out_edges;
 
   // Construct CSR graph.
   VertexID *buffer_globalid =
@@ -203,14 +217,6 @@ static ImmutableCSR *Edgelist2ImmutableCSR(const Edges &edgelist) {
     vid++;
   }
 
-  VertexID max_degree = 0, mean_degree = 0, mean_in_degree = 0,
-           min_degree = MAX_VERTEX_ID;
-  for (VertexID i = 0; i < edgelist.get_metadata().num_vertices; i++) {
-    WriteMax(&max_degree, buffer_outdegree[i]);
-    WriteMin(&min_degree, buffer_outdegree[i]);
-    WriteAdd(&mean_degree, buffer_outdegree[i]);
-    WriteAdd(&mean_in_degree, buffer_indegree[i]);
-  }
   auto *buffer_in_offset =
       new EdgeIndex[edgelist.get_metadata().num_vertices + 1]();
   auto *buffer_out_offset =
@@ -254,6 +260,13 @@ static ImmutableCSR *Edgelist2ImmutableCSR(const Edges &edgelist) {
   delete[] buffer_csr_vertices;
   delete[] vid_map;
 
+  std::for_each(std::execution::par, worker.begin(), worker.end(),
+                [&buffer_edges_globalid_by_localid, step, max_vid](auto w) {
+                  for (auto j = w; j < max_vid + 1; j += step) {
+                    buffer_edges_globalid_by_localid[j] = j;
+                  }
+                });
+
   immutable_csr->SetEdgesGlobalIDBuffer(buffer_edges_globalid_by_localid);
   immutable_csr->SetGlobalIDBuffer(buffer_globalid);
   immutable_csr->SetInDegreeBuffer(buffer_indegree);
@@ -269,14 +282,7 @@ static ImmutableCSR *Edgelist2ImmutableCSR(const Edges &edgelist) {
   immutable_csr->SetMaxVid(edgelist.get_metadata().max_vid);
   immutable_csr->SetMinVid(min_vid);
 
-  std::cout << "[Edgelist2ImmutableCSR] done ! - max degree:" << max_degree
-            << " mean degree: "
-            << (float)mean_degree / (float)edgelist.get_metadata().num_vertices
-            << " mean in degree: "
-            << (float)mean_in_degree /
-                   (float)edgelist.get_metadata().num_vertices
-            << " min degree: " << min_degree << "   "
-            << edgelist.get_metadata().num_vertices << std::endl;
+  std::cout << "[Edgelist2ImmutableCSR] done !" << std::endl;
   return immutable_csr;
 }
 
@@ -419,7 +425,7 @@ Edgelist2CSRTiledMatrix(const Edges &edges, size_t tile_size,
   std::iota(worker.begin(), worker.end(), 0);
   auto step = worker.size();
 
-  if (tile_size < 64) {
+  if (tile_size < 128) {
     tile_size = ceil((float)block_scope / (float)tile_size);
   }
 
@@ -589,7 +595,7 @@ Edgelist2CSRTiledMatrix(const Edges &edges, size_t tile_size,
         sizeof(EdgeIndex) * (metadata.num_vertices + 1);
     size_t size_in_edges_buf = sizeof(VertexID) * metadata.num_incoming_edges;
     size_t size_out_edges_buf = sizeof(VertexID) * metadata.num_outgoing_edges;
-    size_t size_edges_globalid_buf = sizeof(VertexID) * metadata.max_vid;
+    size_t size_edges_globalid_buf = sizeof(VertexID) * (metadata.max_vid + 1);
     n_mem_size[i] = size_globalid_buf + size_edges_globalid_buf +
                     size_in_degree_buf + size_in_offset_buf +
                     size_out_degree_buf + size_out_offset_buf +

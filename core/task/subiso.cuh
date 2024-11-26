@@ -31,12 +31,25 @@ private:
       sics::matrixgraph::core::data_structures::UnifiedOwnedBuffer<uint32_t>;
   using UnifiedOwnedBufferUint64 =
       sics::matrixgraph::core::data_structures::UnifiedOwnedBuffer<uint64_t>;
+  using UnifiedOwnedBufferVertexID =
+      sics::matrixgraph::core::data_structures::UnifiedOwnedBuffer<VertexID>;
 
 public:
+  class ExecutionPlan {
+  public:
+    UnifiedOwnedBufferVertexID sequential_exec_path;
+    VertexID n_vertices = 0;
+    VertexID depth = 0;
+  };
+
   SubIso(const std::string &pattern_path, const std::string &data_graph_path,
          const std::string &output_path)
       : pattern_path_(pattern_path), data_graph_path_(data_graph_path),
         output_path_(output_path) {}
+
+  __host__ void GenerateDFSExecutionPlan(const ImmutableCSR &p,
+                                         const ImmutableCSR &g,
+                                         ExecutionPlan *execution_plan);
 
   __host__ void Run();
 
@@ -47,15 +60,16 @@ private:
 
   __host__ void AllocMappingBuf();
 
-  __host__ void Matching(const ImmutableCSR &p, const GridCSRTiledMatrix &g);
+  __host__ void Matching(const ImmutableCSR &p, const ImmutableCSR &g);
 
   ImmutableCSR p_;
-  GridCSRTiledMatrix *g_;
+  //  GridCSRTiledMatrix *g_;
 
-  VertexLabel *p_vlabel_;
-  VertexLabel *g_vlabel_;
+  ImmutableCSR g_;
 
   UnifiedOwnedBufferUint32 m_;
+
+  ExecutionPlan exe_plan;
 
   const std::string pattern_path_;
   const std::string data_graph_path_;

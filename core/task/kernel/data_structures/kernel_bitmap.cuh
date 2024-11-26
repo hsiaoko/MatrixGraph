@@ -23,15 +23,16 @@ public:
     data_ = init_value;
   }
 
-  //  __device__ ~KernelBitmap() {
-  //    cudaFree(data_);
-  //    data_ = nullptr;
-  //  }
+  __device__ ~KernelBitmap() {
+    //   cudaFree(data_);
+    delete[] data_;
+    data_ = nullptr;
+  }
 
   __device__ void Init(size_t size) {
     cudaFree(data_);
     size_ = size;
-    cudaMalloc(&data_, KERNEL_WORD_OFFSET(size) + 1);
+    data_ = new uint64_t[KERNEL_WORD_OFFSET(size) + 1]();
   }
 
   __device__ void Clear() {
@@ -62,6 +63,13 @@ public:
       return;
     atomicOr((unsigned long long int *)(data_ + KERNEL_WORD_OFFSET(i)),
              (unsigned long long int)(1ul << BIT_OFFSET(i)));
+  }
+
+  __device__ void ClearBit(const size_t i) {
+    if (i > size_)
+      return;
+    atomicAnd((unsigned long long int *)(data_ + KERNEL_WORD_OFFSET(i)),
+              ~(unsigned long long int)(1ul << BIT_OFFSET(i)));
   }
 
   __device__ size_t Count() const {

@@ -23,19 +23,6 @@ using sics::matrixgraph::core::util::atomic::WriteAdd;
 using sics::matrixgraph::core::util::atomic::WriteMax;
 using sics::matrixgraph::core::util::atomic::WriteMin;
 
-ImmutableCSR::~ImmutableCSR() {
-  if (graph_base_pointer_.get() == nullptr) {
-    delete[] globalid_by_localid_base_pointer_;
-    delete[] edges_globalid_by_localid_base_pointer_;
-    delete[] incoming_edges_base_pointer_;
-    delete[] outgoing_edges_base_pointer_;
-    delete[] indegree_base_pointer_;
-    delete[] outdegree_base_pointer_;
-    delete[] in_offset_base_pointer_;
-    delete[] out_offset_base_pointer_;
-  }
-}
-
 void ImmutableCSR::PrintGraphAbs(VertexID display_num) const {
   std::cout << "### GID: " << metadata_.gid
             << ",  num_vertices: " << metadata_.num_vertices
@@ -140,21 +127,17 @@ void ImmutableCSR::Write(const std::string &root_path, GraphID gid) {
                       sizeof(EdgeIndex) * (get_num_vertices() + 1));
   out_data_file.write(reinterpret_cast<char *>(GetOutOffsetBasePointer()),
                       sizeof(EdgeIndex) * (get_num_vertices() + 1));
-
-  auto *out_offset_base_pointer = GetOutOffsetBasePointer();
-
   out_data_file.write(reinterpret_cast<char *>(GetIncomingEdgesBasePointer()),
                       sizeof(VertexID) * get_num_incoming_edges());
   out_data_file.write(reinterpret_cast<char *>(GetOutgoingEdgesBasePointer()),
                       sizeof(VertexID) * get_num_outgoing_edges());
   out_data_file.write(reinterpret_cast<char *>(GetEdgesGloablIDBasePointer()),
-                      sizeof(VertexID) * get_max_vid());
+                      sizeof(VertexID) * (get_max_vid() + 1));
 
   // Write label data with all 0.
   std::ofstream out_label_file(root_path + "label/" + std::to_string(gid) +
                                ".bin");
   auto buffer_label = GetVLabelBasePointer();
-
   out_label_file.write(reinterpret_cast<char *>(buffer_label),
                        sizeof(VertexLabel) * get_num_vertices());
 
@@ -244,6 +227,8 @@ void ImmutableCSR::Read(const std::string &root_path) {
   SetEdgesGlobalIDBuffer(reinterpret_cast<VertexID *>(
       outgoing_edges_base_pointer_ + metadata_.num_outgoing_edges));
 
+  auto ptr = GetEdgesGloablIDBasePointer();
+
   label_file.seekg(0, std::ios::end);
   file_size = label_file.tellg();
   label_file.seekg(0, std::ios::beg);
@@ -252,6 +237,7 @@ void ImmutableCSR::Read(const std::string &root_path) {
   // Read the label.
   label_file.read(reinterpret_cast<char *>(GetVLabelBasePointer()), file_size);
   std::cout << "Read Successfully" << std::endl;
+
   data_file.close();
 }
 
