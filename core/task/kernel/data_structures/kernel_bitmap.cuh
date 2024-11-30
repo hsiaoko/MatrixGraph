@@ -27,10 +27,10 @@ public:
            (KERNEL_WORD_OFFSET(size_) + 1) * sizeof(uint64_t));
   }
 
-  //__device__ ~KernelBitmap() {
-  //  free(data_);
-  //  data_ = nullptr;
-  //}
+  __device__ ~KernelBitmap() {
+    free(data_);
+    data_ = nullptr;
+  }
 
   __device__ void Init(size_t size) {
     if (data_ != nullptr) {

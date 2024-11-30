@@ -32,17 +32,20 @@ public:
   static SubIsoKernelWrapper *GetInstance();
 
   static void
-  SubIso(const cudaStream_t &stream,
-         VertexID depth_p,
-         const UnifiedOwnedBufferVertexID &exec_path,
-         VertexID n_vertices_p, EdgeIndex n_edges_p,
+  SubIso(const cudaStream_t &stream, VertexID depth_p,
+         const UnifiedOwnedBufferVertexID &exec_path, VertexID n_vertices_p,
+         EdgeIndex n_edges_p,
          const data_structures::UnifiedOwnedBuffer<uint8_t> &data_p,
          const data_structures::UnifiedOwnedBuffer<VertexLabel> &v_label_p,
          VertexID n_vertices_g, EdgeIndex n_edges_g,
          const data_structures::UnifiedOwnedBuffer<uint8_t> &data_g,
          const data_structures::UnifiedOwnedBuffer<VertexLabel> &v_label_g,
-         const data_structures::UnifiedOwnedBuffer<VertexID *> &m_ptr,
-         const data_structures::UnifiedOwnedBuffer<EdgeIndex> &m_offset);
+         const data_structures::UnifiedOwnedBuffer<VertexID> &matches_count,
+         const data_structures::UnifiedOwnedBuffer<EdgeIndex> &weft_offset,
+         const data_structures::UnifiedOwnedBuffer<VertexID> &weft_size,
+         const data_structures::UnifiedOwnedBuffer<VertexID>
+             &v_candidate_offset_for_each_weft,
+         const data_structures::UnifiedOwnedBuffer<VertexID> &matches_data);
 
 private:
   SubIsoKernelWrapper() = default;
