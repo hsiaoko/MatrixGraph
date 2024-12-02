@@ -40,7 +40,7 @@ public:
          VertexID n_vertices_g, EdgeIndex n_edges_g,
          const data_structures::UnifiedOwnedBuffer<uint8_t> &data_g,
          const data_structures::UnifiedOwnedBuffer<VertexLabel> &v_label_g,
-         const data_structures::UnifiedOwnedBuffer<VertexID> &matches_count,
+         const data_structures::UnifiedOwnedBuffer<VertexID> &weft_count_,
          const data_structures::UnifiedOwnedBuffer<EdgeIndex> &weft_offset,
          const data_structures::UnifiedOwnedBuffer<VertexID> &weft_size,
          const data_structures::UnifiedOwnedBuffer<VertexID>

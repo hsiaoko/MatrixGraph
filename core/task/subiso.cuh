@@ -74,6 +74,9 @@ private:
   const std::string pattern_path_;
   const std::string data_graph_path_;
   const std::string output_path_;
+
+  VertexLabel *label_p_ = nullptr;
+  VertexLabel *label_g_ = nullptr;
 };
 
 } // namespace task

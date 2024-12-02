@@ -105,8 +105,7 @@ __host__ void SubIso::LoadData() {
 }
 
 __host__ void SubIso::InitLabel() {
-  auto *p_vlabel = p_.GetVLabelBasePointer();
-  std::cout << std::endl;
+  VertexLabel *p_vlabel = p_.GetVLabelBasePointer();
   p_vlabel[0] = 0;
   p_vlabel[1] = 1;
   p_vlabel[2] = 2;
@@ -114,7 +113,7 @@ __host__ void SubIso::InitLabel() {
   p_vlabel[4] = 4;
   p_vlabel[5] = 3;
 
-  auto *g_vlabel = g_.GetVLabelBasePointer();
+  VertexLabel *g_vlabel = g_.GetVLabelBasePointer();
 
   g_vlabel[0] = 0;
   g_vlabel[1] = 1;
@@ -239,6 +238,11 @@ __host__ void SubIso::Matching(const ImmutableCSR &p, const ImmutableCSR &g) {
 
   Matches matches(p.get_num_vertices(), g.get_num_vertices());
 
+  UnifiedOwnedBufferVertexID unified_m0_data;
+  UnifiedOwnedBufferVertexID unified_m0_offset;
+
+  unified_m0_data.Init(sizeof(VertexID) * g.get_num_vertices() / 65536);
+
   // Generate Execution Plan
   ExecutionPlan exec_plan;
   GenerateDFSExecutionPlan(p, g, &exec_plan);
@@ -252,12 +256,13 @@ __host__ void SubIso::Matching(const ImmutableCSR &p, const ImmutableCSR &g) {
       stream, exec_plan.depth, exec_plan.sequential_exec_path,
       p.get_num_vertices(), p.get_num_outgoing_edges(), unified_data_p,
       unified_v_label_p, g.get_num_vertices(), g.get_num_outgoing_edges(),
-      unified_data_g, unified_v_label_g, matches.matches_count_,
+      unified_data_g, unified_v_label_g, matches.weft_count_,
       matches.weft_offset_, matches.weft_size_,
       matches.v_candidate_offset_for_each_weft_, matches.matches_data_);
 
   cudaDeviceSynchronize();
 
+  matches.Print();
   // Print Output.
   for (auto _ = 0; _ < p.get_num_vertices(); _++) {
     std::cout << " level " << _ << " get " << unified_m_offset.GetPtr()[_]
