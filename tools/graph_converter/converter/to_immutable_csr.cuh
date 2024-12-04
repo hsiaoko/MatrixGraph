@@ -26,47 +26,28 @@ static void ConvertEdgelistCSV2ImmutableCSR(const std::string &input_path,
 
   sics::matrixgraph::core::data_structures::Edges edgelist;
   edgelist.ReadFromCSV(input_path, sep);
-  edgelist.ShowGraph(10);
+  edgelist.ShowGraph(100);
   auto p_immutable_csr =
       sics::matrixgraph::core::util::format_converter::Edgelist2ImmutableCSR(
           edgelist);
-  p_immutable_csr->PrintGraph(10);
+  p_immutable_csr->PrintGraph(100);
   p_immutable_csr->Write(output_path);
   delete p_immutable_csr;
 }
 
 static void ConvertEdgelistBin2CSRBin(const std::string &input_path,
                                       const std::string &output_path) {
-  YAML::Node node = YAML::LoadFile(input_path + "meta.yaml");
+  std::cout << "ConvertEdgelistBin2CSRBin" << std::endl;
 
-  sics::matrixgraph::core::data_structures::EdgelistMetadata edgelist_metadata =
-      {node["EdgelistBin"]["num_vertices"].as<VertexID>(),
-       node["EdgelistBin"]["num_edges"].as<EdgeIndex>(),
-       node["EdgelistBin"]["max_vid"].as<VertexID>()};
-
-  auto buffer_edges =
-      new sics::matrixgraph::core::data_structures::Edge[edgelist_metadata
-                                                             .num_edges]();
-
-  std::ifstream in_file(input_path + "edgelist.bin");
-  if (!in_file) {
-
-    std::cout << "Open file failed: " + input_path + "edgelist.bin"
-              << std::endl;
-    exit(EXIT_FAILURE);
-  }
-  in_file.read(reinterpret_cast<char *>(buffer_edges),
-               sizeof(sics::matrixgraph::core::data_structures::Edge) *
-                   edgelist_metadata.num_edges);
-
-  sics::matrixgraph::core::data_structures::Edges edgelist(edgelist_metadata,
-                                                           buffer_edges);
+  sics::matrixgraph::core::data_structures::Edges edgelist;
+  edgelist.ReadFromBin(input_path);
   edgelist.ShowGraph(10);
+
   auto p_immutable_csr =
       sics::matrixgraph::core::util::format_converter::Edgelist2ImmutableCSR(
           edgelist);
-  // p_immutable_csr->SortByDegree();
-  p_immutable_csr->PrintGraph(10);
+  //p_immutable_csr->SortByDegree();
+  p_immutable_csr->PrintGraph(3);
   p_immutable_csr->Write(output_path);
   delete p_immutable_csr;
 }

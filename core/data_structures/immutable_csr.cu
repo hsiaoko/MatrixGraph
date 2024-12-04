@@ -54,7 +54,8 @@ void ImmutableCSR::PrintGraph(VertexID display_num) const {
     std::stringstream ss;
 
     ss << "  ===vid: " << u.vid << ", indegree: " << u.indegree
-       << ", outdegree: " << u.outdegree << "===" << std::endl;
+       << ", outdegree: " << u.outdegree << ", label: " << u.vlabel
+       << "===" << std::endl;
     if (u.indegree != 0) {
       ss << "    Incoming edges: ";
       for (VertexID i = 0; i < u.indegree; i++)
@@ -244,6 +245,7 @@ void ImmutableCSR::Read(const std::string &root_path) {
 ImmutableCSRVertex ImmutableCSR::GetVertexByLocalID(VertexID i) const {
   ImmutableCSRVertex v;
   v.vid = globalid_by_localid_base_pointer_[i];
+  v.vlabel = vertex_label_base_pointer_.get()[i];
   if (get_num_incoming_edges() > 0) {
     v.indegree = GetInDegreeByLocalID(i);
     v.incoming_edges = incoming_edges_base_pointer_ + GetInOffsetByLocalID(i);

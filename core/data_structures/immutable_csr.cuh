@@ -19,6 +19,7 @@ namespace data_structures {
 struct ImmutableCSRVertex {
 private:
   using VertexID = sics::matrixgraph::core::common::VertexID;
+  using VertexLabel = sics::matrixgraph::core::common::VertexLabel;
 
 public:
   VertexID vid;
@@ -26,14 +27,15 @@ public:
   VertexID outdegree = 0;
   VertexID *incoming_edges;
   VertexID *outgoing_edges;
+  VertexLabel vlabel = 0;
 };
 
 class ImmutableCSR {
 private:
   using GraphID = sics::matrixgraph::core::common::GraphID;
   using VertexID = sics::matrixgraph::core::common::VertexID;
-  using VertexLabel = sics::matrixgraph::core::common::VertexLabel;
   using EdgeIndex = sics::matrixgraph::core::common::EdgeIndex;
+  using VertexLabel = sics::matrixgraph::core::common::VertexLabel;
 
   struct VidCountPair {
     bool operator<(const VidCountPair &other) const {

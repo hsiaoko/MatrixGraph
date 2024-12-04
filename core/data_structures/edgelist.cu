@@ -89,6 +89,7 @@ void Edges::Init(EdgeIndex n_edges, VertexID *edges_buf,
 }
 
 void Edges::WriteToBinary(const std::string &output_path) {
+  std::cout << "Write to binary" << std::endl;
   if (!std::filesystem::exists(output_path))
     std::filesystem::create_directory(output_path);
 
@@ -116,6 +117,7 @@ void Edges::WriteToBinary(const std::string &output_path) {
 }
 
 void Edges::ReadFromBin(const std::string &input_path) {
+  std::cout << "read from bin" << std::endl;
   YAML::Node node = YAML::LoadFile(input_path + "meta.yaml");
 
   edgelist_metadata_ = {node["EdgelistBin"]["num_vertices"].as<VertexID>(),
@@ -141,8 +143,11 @@ void Edges::ReadFromBin(const std::string &input_path) {
               << std::endl;
     exit(EXIT_FAILURE);
   }
-  in_file.read(reinterpret_cast<char *>(localid_to_globalid_),
-               sizeof(VertexID) * edgelist_metadata_.num_vertices);
+
+  localid_to_globalid_ = new VertexID[edgelist_metadata_.num_vertices]();
+  in_localid2globalid_file.read(reinterpret_cast<char *>(localid_to_globalid_),
+                                sizeof(VertexID) *
+                                    edgelist_metadata_.num_vertices);
 }
 
 void Edges::ReadFromCSV(const std::string &filename, const std::string &sep,
