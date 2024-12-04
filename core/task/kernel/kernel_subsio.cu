@@ -31,6 +31,7 @@ struct LocalMatches {
 struct ParametersSubIso {
   VertexID depth_p;
   VertexID *exec_path;
+  VertexID *inverted_index_of_exec_path;
   VertexID n_vertices_p;
   EdgeIndex n_edges_p;
   uint8_t *data_p;
@@ -47,6 +48,105 @@ struct ParametersSubIso {
 };
 // candidates in M should be all index instead of globalid.
 
+static __device__ bool label_filter(const ParametersSubIso &params,
+                                    VertexID exec_plan_idx, VertexID v_idx) {
+  VertexID *globalid_g = (VertexID *)(params.data_g);
+  VertexLabel v_label = params.v_label_g[globalid_g[v_idx]];
+
+  VertexID u = params.exec_path[exec_plan_idx];
+  VertexLabel u_label = params.v_label_p[u];
+
+  return u_label == v_label;
+}
+
+static __device__ bool filter(const ParametersSubIso &params,
+                              VertexID exec_plan_idx, VertexID v_idx) {
+  return label_filter(params, exec_plan_idx, v_idx);
+}
+
+static __device__ bool check(const ParametersSubIso &params,
+                             LocalMatches &local_matches) {
+
+  VertexID *globalid_p = (VertexID *)(params.data_p);
+  VertexID *in_degree_p = globalid_p + params.n_vertices_p;
+  VertexID *out_degree_p = in_degree_p + params.n_vertices_p;
+  EdgeIndex *in_offset_p = (EdgeIndex *)(out_degree_p + params.n_vertices_p);
+  EdgeIndex *out_offset_p =
+      (EdgeIndex *)(in_offset_p + params.n_vertices_p + 1);
+  EdgeIndex *in_edges_p = (EdgeIndex *)(out_offset_p + params.n_vertices_p + 1);
+  VertexID *out_edges_p = in_edges_p + params.n_edges_p;
+  VertexID *edges_globalid_by_localid_p = out_edges_p + params.n_edges_p;
+
+  VertexID *globalid_g = (VertexID *)(params.data_g);
+  VertexID *in_degree_g = globalid_g + params.n_vertices_g;
+  VertexID *out_degree_g = in_degree_g + params.n_vertices_g;
+  EdgeIndex *in_offset_g = (EdgeIndex *)(out_degree_g + params.n_vertices_g);
+  EdgeIndex *out_offset_g =
+      (EdgeIndex *)(in_offset_g + params.n_vertices_g + 1);
+  EdgeIndex *in_edges_g = (EdgeIndex *)(out_offset_g + params.n_vertices_g + 1);
+  VertexID *out_edges_g = in_edges_g + params.n_edges_g;
+  VertexID *edges_globalid_by_localid_g = out_edges_g + params.n_edges_g;
+
+  KernelBitmap visited(params.n_vertices_g);
+
+  for (VertexID u_idx = 0; u_idx < params.n_vertices_p; u_idx++) {
+    VertexID n_candidates = local_matches.size[u_idx];
+    printf("u: %d, n_candidate%d\n", globalid_p[u_idx], n_candidates);
+
+    EdgeIndex in_offset_base_u = in_offset_p[u_idx];
+
+    // Check for each candidate of U
+    for (VertexID _ = 0; _ < n_candidates; _++) {
+      VertexID v_idx =
+          local_matches
+              .data[u_idx * kMaxNumCandidatesPerThread * 2 + 2 * _ + 1];
+
+      printf("\tv %d\n", v_idx);
+
+      for (VertexID nbr_u_idx = 0; nbr_u_idx < in_degree_p[u_idx];
+           nbr_u_idx++) {
+        VertexID nbr_u = in_edges_p[in_offset_base_u + nbr_u_idx];
+
+        printf("\t \t nbr_u:%d, %d/%d, - %d\n", nbr_u, nbr_u_idx,
+               in_degree_p[u_idx], in_offset_base_u + nbr_u_idx);
+        VertexID n_candidates_nbr_u = local_matches.size[nbr_u];
+
+        visited.Clear();
+        for (VertexID candidate_idx_nbr_u = 0;
+             candidate_idx_nbr_u < n_candidates_nbr_u; candidate_idx_nbr_u++) {
+          VertexID candidate_nbr_u =
+              local_matches.data[nbr_u * kMaxNumCandidatesPerThread * 2 +
+                                 2 * candidate_idx_nbr_u + 1];
+          printf("\t \t \t candidate_nbr_u:%d\n", candidate_nbr_u);
+          visited.SetBit(candidate_nbr_u);
+        }
+
+        EdgeIndex in_offset_base_v = in_offset_g[v_idx];
+        VertexID match_count = 0;
+        for (VertexID nbr_v_idx = 0; nbr_v_idx < in_degree_g[v_idx];
+             nbr_v_idx++) {
+          VertexID nbr_v = in_edges_g[in_offset_base_v + nbr_v_idx];
+          printf("\t \t \t nbr_v %d\n", nbr_v);
+          if (visited.GetBit(nbr_v)) {
+            match_count++;
+            break;
+          }
+        }
+
+        // there is a mismatch between v'->v and u'->u.
+        if (match_count == 0) {
+          local_matches
+              .data[u_idx * kMaxNumCandidatesPerThread * 2 + 2 * _ + 1] =
+              kMaxVertexID;
+          local_matches.data[u_idx * kMaxNumCandidatesPerThread * 2 + 2 * _] =
+              kMaxVertexID;
+          printf("\t \t \t filtered out %d\n", v_idx);
+        }
+      }
+    }
+  }
+}
+
 static __device__ void dfs_kernel(const ParametersSubIso &params,
                                   uint32_t level, VertexID pre_v_idx,
                                   VertexID v_idx,
@@ -54,15 +154,14 @@ static __device__ void dfs_kernel(const ParametersSubIso &params,
                                   MiniKernelBitmap local_visited, bool &match,
                                   LocalMatches &local_matches) {
 
-  if (level > params.depth_p) {
+  if (level > params.depth_p)
     return;
-  }
+
   unsigned exec_plan_idx = local_visited.Count();
   unsigned global_exec_plan_idx = global_visited.Count();
 
-  if (global_exec_plan_idx == params.n_vertices_p) {
+  if (global_exec_plan_idx == params.n_vertices_p)
     return;
-  }
 
   VertexID u = params.exec_path[exec_plan_idx];
   VertexLabel u_label = params.v_label_p[exec_plan_idx];
@@ -83,7 +182,8 @@ static __device__ void dfs_kernel(const ParametersSubIso &params,
   // Paste filter function gere.
   printf("dfs to %d, u %d, u label %d, \n", globalid_g[v_idx], u, u_label);
   VertexLabel v_label = params.v_label_g[globalid_g[v_idx]];
-  if (v_label == u_label && v_label == global_u_label) {
+  if (filter(params, exec_plan_idx, v_idx) &&
+      filter(params, global_exec_plan_idx, v_idx)) {
     global_visited.SetBit(global_u);
 
     VertexID offset = local_matches.size[exec_plan_idx];
@@ -103,7 +203,7 @@ static __device__ void dfs_kernel(const ParametersSubIso &params,
 
     local_matches.size[exec_plan_idx]++;
     local_visited.SetBit(u);
-  } else if (v_label == u_label) {
+  } else if (filter(params, exec_plan_idx, v_idx)) {
     auto offset = local_matches.size[exec_plan_idx];
 
     local_matches
@@ -115,7 +215,7 @@ static __device__ void dfs_kernel(const ParametersSubIso &params,
     local_matches.size[exec_plan_idx]++;
     local_visited.SetBit(u);
 
-  } else if (v_label == global_u_label) {
+  } else if (filter(params, global_exec_plan_idx, v_idx)) {
     auto offset = local_matches.size[global_exec_plan_idx];
 
     local_matches.data[kMaxNumCandidatesPerThread * 2 * global_exec_plan_idx +
@@ -285,11 +385,14 @@ static __device__ void extend_kernel(const ParametersSubIso &params) {
     dfs_kernel(params, 0, kMaxVertexID, v_idx, visited, visited, match,
                local_matches);
 
-    printf("#done!\n");
+    printf("tid %d, #done!\n", tid);
 
     // Write result to the global buffer. Obtain space for each. The last
     // pattern vertex dosen't get a match.
     if (local_matches.size[params.n_vertices_p - 1] != 0) {
+
+      check(params, local_matches);
+
       VertexID total_n_candidate = 0;
 
       VertexID *local_offset =
@@ -382,6 +485,7 @@ static __host__ void host_extend_kernel(const ParametersSubIso &params) {
     // Write result to the global buffer. Obtain space for each. The last
     // pattern vertex dosen't get a match.
     if (local_matches.size[params.n_vertices_p - 1] != 0) {
+
       printf("global %d\n", (*params.weft_count));
       VertexID total_n_candidate = 0;
 
@@ -488,6 +592,8 @@ static __host__ void host_subiso_kernel(ParametersSubIso params) {
 void SubIsoKernelWrapper::SubIso(
     const cudaStream_t &stream, VertexID depth_p,
     const data_structures::UnifiedOwnedBuffer<VertexID> &exec_path,
+    const data_structures::UnifiedOwnedBuffer<VertexID>
+        &inverted_index_of_exec_path,
     VertexID n_vertices_p, EdgeIndex n_edges_p,
     const data_structures::UnifiedOwnedBuffer<uint8_t> &data_p,
     const data_structures::UnifiedOwnedBuffer<VertexLabel> &v_label_p,
@@ -501,12 +607,14 @@ void SubIsoKernelWrapper::SubIso(
         &v_candidate_offset_for_each_weft,
     const data_structures::UnifiedOwnedBuffer<VertexID> &matches_data) {
 
-  dim3 dimBlock(1);
+  dim3 dimBlock(32);
   dim3 dimGrid(1);
 
   LocalMatches m0;
   ParametersSubIso params{.depth_p = depth_p,
                           .exec_path = exec_path.GetPtr(),
+                          .inverted_index_of_exec_path =
+                              inverted_index_of_exec_path.GetPtr(),
                           .n_vertices_p = n_vertices_p,
                           .n_edges_p = n_edges_p,
                           .data_p = data_p.GetPtr(),

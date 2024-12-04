@@ -33,8 +33,10 @@ public:
 
   static void
   SubIso(const cudaStream_t &stream, VertexID depth_p,
-         const UnifiedOwnedBufferVertexID &exec_path, VertexID n_vertices_p,
-         EdgeIndex n_edges_p,
+         const UnifiedOwnedBufferVertexID &exec_path,
+         const data_structures::UnifiedOwnedBuffer<VertexID>
+             &inverted_index_of_exec_path,
+         VertexID n_vertices_p, EdgeIndex n_edges_p,
          const data_structures::UnifiedOwnedBuffer<uint8_t> &data_p,
          const data_structures::UnifiedOwnedBuffer<VertexLabel> &v_label_p,
          VertexID n_vertices_g, EdgeIndex n_edges_g,

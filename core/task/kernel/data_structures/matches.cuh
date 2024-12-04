@@ -12,7 +12,8 @@
 namespace sics {
 namespace matrixgraph {
 namespace core {
-namespace data_structures {
+namespace task {
+namespace kernel {
 
 using sics::matrixgraph::core::common::kMaxNumCandidates;
 
@@ -85,11 +86,11 @@ public:
              candidate_id++) {
           std::cout << *(matches_data_.GetPtr() +
                          weft_offset * 2 * n_vertices_ +
-                         v_candidate_offset * 2 + candidate_id)
+                         v_candidate_offset * 2 + 2 * candidate_id)
                     << "->"
                     << *(matches_data_.GetPtr() +
                          weft_offset * 2 * n_vertices_ +
-                         v_candidate_offset * 2 + candidate_id + 1)
+                         v_candidate_offset * 2 + 2 * candidate_id + 1)
                     << ",";
         }
         std::cout << std::endl;
@@ -109,9 +110,10 @@ public:
   VertexID max_n_weft_ = 0;
 };
 
-} // namespace data_structures
+} // namespace kernel
+} // namespace task
 } // namespace core
 } // namespace matrixgraph
 } // namespace sics
 
-#endif // INC_51_11_GRAPH_COMPUTING_MATRIXGRAPH_CORE_DATA_STRUCTURES_MATHES_CUH_
+#endif // MATRIXGRAPH_CORE_DATA_STRUCTURES_MATHES_CUH_

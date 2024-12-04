@@ -38,6 +38,7 @@ public:
   class ExecutionPlan {
   public:
     UnifiedOwnedBufferVertexID sequential_exec_path;
+    UnifiedOwnedBufferVertexID inverted_index_of_sequential_exec_path;
     VertexID n_vertices = 0;
     VertexID depth = 0;
   };

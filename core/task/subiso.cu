@@ -14,10 +14,10 @@
 #include "core/common/types.h"
 #include "core/data_structures/device_buffer.cuh"
 #include "core/data_structures/host_buffer.cuh"
-#include "core/data_structures/matches.cuh"
 #include "core/data_structures/metadata.h"
 #include "core/data_structures/unified_buffer.cuh"
 #include "core/io/grid_csr_tiled_matrix_io.cuh"
+#include "core/task/kernel/data_structures/matches.cuh"
 #include "core/task/kernel/kernel_subiso.cuh"
 #include "core/util/atomic.h"
 #include "core/util/bitmap.h"
@@ -91,9 +91,29 @@ using sics::matrixgraph::core::common::kMaxNumCandidates;
 using sics::matrixgraph::core::common::kMaxNumEdges;
 using sics::matrixgraph::core::common::kMaxNumEdgesPerBlock;
 using ExecutionPlan = sics::matrixgraph::core::task::SubIso::ExecutionPlan;
-using Matches = sics::matrixgraph::core::data_structures::Matches;
+using Matches = sics::matrixgraph::core::task::kernel::Matches;
 
-// CUDA kernel to add elements of two arrays
+static void DFSTraverse(VertexID vid, Bitmap &visited, const ImmutableCSR &g,
+                        std::vector<VertexID> &output, VertexID depth,
+                        VertexID &max_depth) {
+
+  auto u = g.GetVertexByLocalID(vid);
+
+  auto globalid = g.GetGlobalIDByLocalID(vid);
+  output.emplace_back(globalid);
+
+  visited.SetBit(vid);
+
+  max_depth = std::max(depth, max_depth);
+
+  for (VertexID _ = 0; _ < u.outdegree; _++) {
+    if (!visited.GetBit(u.outgoing_edges[_])) {
+      DFSTraverse(u.outgoing_edges[_], visited, g, output, depth + 1,
+                  max_depth);
+    }
+  }
+}
+
 __host__ void SubIso::LoadData() {
   std::cout << "[SubIso] LoadData()" << std::endl;
 
@@ -126,27 +146,6 @@ __host__ void SubIso::InitLabel() {
   g_vlabel[8] = 0;
 }
 
-static void DFSTraverse(VertexID vid, Bitmap &visited, const ImmutableCSR &g,
-                        std::vector<VertexID> &output, VertexID depth,
-                        VertexID &max_depth) {
-
-  auto u = g.GetVertexByLocalID(vid);
-
-  auto globalid = g.GetGlobalIDByLocalID(vid);
-  output.emplace_back(globalid);
-
-  visited.SetBit(vid);
-
-  max_depth = std::max(depth, max_depth);
-
-  for (VertexID _ = 0; _ < u.outdegree; _++) {
-    if (!visited.GetBit(u.outgoing_edges[_])) {
-      DFSTraverse(u.outgoing_edges[_], visited, g, output, depth + 1,
-                  max_depth);
-    }
-  }
-}
-
 __host__ void SubIso::GenerateDFSExecutionPlan(const ImmutableCSR &p,
                                                const ImmutableCSR &g,
                                                ExecutionPlan *exec_plan) {
@@ -159,10 +158,26 @@ __host__ void SubIso::GenerateDFSExecutionPlan(const ImmutableCSR &p,
   VertexID depth = 0;
   DFSTraverse(0, visited, p, output, 0, depth);
 
-  exec_plan->sequential_exec_path.Init(sizeof(VertexID) *
-                                       (p.get_num_vertices()));
+  exec_plan->sequential_exec_path.Init(sizeof(VertexID) * p.get_num_vertices());
   cudaMemcpy(exec_plan->sequential_exec_path.GetPtr(), output.data(),
              sizeof(VertexID) * p.get_num_vertices(), cudaMemcpyHostToHost);
+  exec_plan->inverted_index_of_sequential_exec_path.Init(sizeof(VertexID) *
+                                                         p.get_num_vertices());
+  for (VertexID _ = 0; _ < p.get_num_vertices(); _++) {
+    exec_plan->inverted_index_of_sequential_exec_path
+        .GetPtr()[exec_plan->sequential_exec_path.GetPtr()[_]] = _;
+  }
+
+  std::cout << "sow Inverted Index" << std::endl;
+  for (VertexID _ = 0; _ < p.get_num_vertices(); _++) {
+    std::cout << exec_plan->sequential_exec_path.GetPtr()[_] << " ";
+  };
+  std::cout << std::endl;
+  for (VertexID _ = 0; _ < p.get_num_vertices(); _++) {
+    std::cout << exec_plan->inverted_index_of_sequential_exec_path.GetPtr()[_]
+              << " ";
+  };
+  std::cout << std::endl;
   exec_plan->n_vertices = p.get_num_vertices();
   exec_plan->depth = depth;
 }
@@ -241,8 +256,6 @@ __host__ void SubIso::Matching(const ImmutableCSR &p, const ImmutableCSR &g) {
   UnifiedOwnedBufferVertexID unified_m0_data;
   UnifiedOwnedBufferVertexID unified_m0_offset;
 
-  unified_m0_data.Init(sizeof(VertexID) * g.get_num_vertices() / 65536);
-
   // Generate Execution Plan
   ExecutionPlan exec_plan;
   GenerateDFSExecutionPlan(p, g, &exec_plan);
@@ -254,11 +267,12 @@ __host__ void SubIso::Matching(const ImmutableCSR &p, const ImmutableCSR &g) {
 
   SubIsoKernelWrapper::SubIso(
       stream, exec_plan.depth, exec_plan.sequential_exec_path,
-      p.get_num_vertices(), p.get_num_outgoing_edges(), unified_data_p,
-      unified_v_label_p, g.get_num_vertices(), g.get_num_outgoing_edges(),
-      unified_data_g, unified_v_label_g, matches.weft_count_,
-      matches.weft_offset_, matches.weft_size_,
-      matches.v_candidate_offset_for_each_weft_, matches.matches_data_);
+      exec_plan.inverted_index_of_sequential_exec_path, p.get_num_vertices(),
+      p.get_num_outgoing_edges(), unified_data_p, unified_v_label_p,
+      g.get_num_vertices(), g.get_num_outgoing_edges(), unified_data_g,
+      unified_v_label_g, matches.weft_count_, matches.weft_offset_,
+      matches.weft_size_, matches.v_candidate_offset_for_each_weft_,
+      matches.matches_data_);
 
   cudaDeviceSynchronize();
 
