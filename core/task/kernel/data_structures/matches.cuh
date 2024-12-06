@@ -76,7 +76,7 @@ public:
 
       std::cout << "Weft offset: " << weft_offset << std::endl;
       std::cout << "U offset: ";
-      for (auto i = 0; i < n_vertices_; i++) {
+      for (auto i = 0; i < n_vertices_ + 1; i++) {
         std::cout << v_candidate_offset_for_each_weft_
                          .GetPtr()[weft_id * n_vertices_ + i]
                   << " ";
@@ -85,10 +85,12 @@ public:
       for (VertexID _ = 0; _ < n_vertices_; _++) {
         VertexID v_candidate_offset =
             v_candidate_offset_for_each_weft_
-                .GetPtr()[weft_id * (n_vertices_) + _];
+                .GetPtr()[weft_id * (n_vertices_ + 1) + _];
         VertexID v_candidate_size =
-            v_candidate_offset_for_each_weft_.GetPtr()[_ + 1] -
-            v_candidate_offset_for_each_weft_.GetPtr()[_];
+            v_candidate_offset_for_each_weft_
+                .GetPtr()[weft_id * (n_vertices_ + 1) + _ + 1] -
+            v_candidate_offset_for_each_weft_
+                .GetPtr()[weft_id * (n_vertices_ + 1) + _];
 
         std::cout << "\t u" << _ << " offset:" << v_candidate_offset
                   << " size: " << v_candidate_size << ": ";

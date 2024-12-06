@@ -46,8 +46,9 @@ static void ConvertEdgelistBin2CSRBin(const std::string &input_path,
   auto p_immutable_csr =
       sics::matrixgraph::core::util::format_converter::Edgelist2ImmutableCSR(
           edgelist);
-  //p_immutable_csr->SortByDegree();
-  p_immutable_csr->PrintGraph(3);
+  // p_immutable_csr->SortByDegree();
+  p_immutable_csr->GenerateVLabel(6);
+  p_immutable_csr->PrintGraph(100);
   p_immutable_csr->Write(output_path);
   delete p_immutable_csr;
 }
