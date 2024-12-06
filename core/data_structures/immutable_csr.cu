@@ -1,14 +1,12 @@
 #include "core/data_structures/immutable_csr.cuh"
 
 #include <algorithm>
+#include <execution>
 #include <fstream>
 #include <mutex>
+#include <random>
 #include <thread>
 #include <unordered_map>
-
-#ifdef TBB_FOUND
-#include <execution>
-#endif
 
 #include "core/common/consts.h"
 #include "core/util/atomic.h"
@@ -255,6 +253,27 @@ ImmutableCSRVertex ImmutableCSR::GetVertexByLocalID(VertexID i) const {
     v.outgoing_edges = outgoing_edges_base_pointer_ + GetOutOffsetByLocalID(i);
   }
   return v;
+}
+
+void ImmutableCSR::GenerateVLabel(VertexID range) {
+  auto parallelism = std::thread::hardware_concurrency();
+  std::vector<size_t> worker(parallelism);
+  std::mutex mtx;
+  std::iota(worker.begin(), worker.end(), 0);
+  auto step = worker.size();
+
+  std::random_device rd;
+  std::mt19937 gen(rd());
+
+  std::uniform_int_distribution<> dis(1, range);
+
+  std::for_each(std::execution::par, worker.begin(), worker.end(),
+                [this, step, &dis, &gen](auto w) {
+                  for (auto vid = w; vid < get_num_vertices(); vid += step) {
+                    auto vlabel_ptr = GetVLabelBasePointer();
+                    vlabel_ptr[vid] = dis(gen);
+                  }
+                });
 }
 
 void ImmutableCSR::SortByDegree() {

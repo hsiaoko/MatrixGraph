@@ -67,6 +67,8 @@ public:
 
   void SortByDistance(VertexID sim_granularity);
 
+  void GenerateVLabel(VertexID range = 5);
+
   void SetGraphBuffer(uint8_t *buffer) { graph_base_pointer_.reset(buffer); }
 
   void SetVertexLabelBuffer(size_t n_vertices) {

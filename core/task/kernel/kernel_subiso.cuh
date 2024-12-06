@@ -36,6 +36,7 @@ public:
          const UnifiedOwnedBufferVertexID &exec_path,
          const data_structures::UnifiedOwnedBuffer<VertexID>
              &inverted_index_of_exec_path,
+         const UnifiedOwnedBufferVertexID &exec_path_in_edges,
          VertexID n_vertices_p, EdgeIndex n_edges_p,
          const data_structures::UnifiedOwnedBuffer<uint8_t> &data_p,
          const data_structures::UnifiedOwnedBuffer<VertexLabel> &v_label_p,

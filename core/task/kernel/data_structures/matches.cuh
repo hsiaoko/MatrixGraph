@@ -73,14 +73,24 @@ public:
     for (VertexID weft_id = 0; weft_id < min_n_matches; weft_id++) {
       std::cout << "\tweft " << weft_id << std::endl;
       VertexID weft_offset = weft_offset_.GetPtr()[weft_id];
+
+      std::cout << "Weft offset: " << weft_offset << std::endl;
+      std::cout << "U offset: ";
+      for (auto i = 0; i < n_vertices_; i++) {
+        std::cout << v_candidate_offset_for_each_weft_
+                         .GetPtr()[weft_id * n_vertices_ + i]
+                  << " ";
+      }
+      std::cout << std::endl;
       for (VertexID _ = 0; _ < n_vertices_; _++) {
         VertexID v_candidate_offset =
-            v_candidate_offset_for_each_weft_.GetPtr()[_];
+            v_candidate_offset_for_each_weft_
+                .GetPtr()[weft_id * (n_vertices_) + _];
         VertexID v_candidate_size =
             v_candidate_offset_for_each_weft_.GetPtr()[_ + 1] -
             v_candidate_offset_for_each_weft_.GetPtr()[_];
 
-        std::cout << "u" << _ << " offset:" << v_candidate_offset
+        std::cout << "\t u" << _ << " offset:" << v_candidate_offset
                   << " size: " << v_candidate_size << ": ";
         for (VertexID candidate_id = 0; candidate_id < v_candidate_size;
              candidate_id++) {
