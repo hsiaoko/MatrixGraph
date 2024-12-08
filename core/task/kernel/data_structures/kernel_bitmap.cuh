@@ -103,6 +103,8 @@ private:
 
 class HostKernelBitmap {
 public:
+  HostKernelBitmap() = default;
+
   HostKernelBitmap(uint64_t size) { Init(size); }
 
   HostKernelBitmap(const HostKernelBitmap &other) {
