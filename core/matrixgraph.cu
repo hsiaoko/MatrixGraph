@@ -23,6 +23,7 @@ MatrixGraph::MatrixGraph(SchedulerType scheduler_type) {
 
 void MatrixGraph::Run(GPUTaskType task_type, TaskBase *task_ptr) {
 
+  PrintDeviceInfo();
   auto start_time = std::chrono::system_clock::now();
 
   auto prepare_end_time = std::chrono::system_clock::now();
@@ -76,6 +77,12 @@ void MatrixGraph::PrintDeviceInfo() const {
               << devProp.maxThreadsPerMultiProcessor << std::endl;
     std::cout << std::endl;
   }
+  size_t size;
+  cudaDeviceGetLimit(&size, cudaLimitMallocHeapSize);
+  std::cout << " " << size << std::endl;
+  CUDA_CHECK(cudaDeviceSetLimit(cudaLimitMallocHeapSize, size * 128));
+  cudaDeviceGetLimit(&size, cudaLimitMallocHeapSize);
+  std::cout << " " << size << std::endl;
 }
 
 } // namespace core

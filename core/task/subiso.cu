@@ -125,7 +125,7 @@ __host__ void SubIso::LoadData() {
   p_.PrintGraph(3);
 
   g_.Read(data_graph_path_);
-  g_.PrintGraph(130);
+  g_.PrintGraph(3);
 }
 
 __host__ void SubIso::InitLabel() {
@@ -195,6 +195,8 @@ __host__ void SubIso::Matching(const ImmutableCSR &p, const ImmutableCSR &g) {
 
   std::iota(worker.begin(), worker.end(), 0);
   auto step = worker.size();
+
+  cudaSetDevice(2);
 
   // Init pattern.
   BufferUint8 data_p;

@@ -15,6 +15,8 @@ namespace kernel {
 
 class KernelBitmap {
 public:
+  __device__ KernelBitmap() = default;
+
   __device__ KernelBitmap(uint64_t size) { Init(size); }
 
   __device__ KernelBitmap(const KernelBitmap &other) {
@@ -31,10 +33,17 @@ public:
     data_ = nullptr;
   }
 
-  __device__ void Init(uint64_t size) {
-    if (data_ != nullptr) {
+  __device__ void Init(uint64_t size, uint64_t *data) {
+    if (data_ != nullptr)
       free(data_);
-    }
+    data_ = data;
+    size_ = size;
+  }
+
+  __device__ void Init(uint64_t size) {
+    if (data_ != nullptr)
+      free(data_);
+
     size_ = size;
     data_ =
         (uint64_t *)malloc(sizeof(uint64_t) * (KERNEL_WORD_OFFSET(size) + 1));

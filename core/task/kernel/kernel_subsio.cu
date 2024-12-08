@@ -352,18 +352,18 @@ static __device__ void dfs_kernel(const ParametersSubIso &params,
 
   // printf("set %d\n", u);
 
-  if (extend_tag) {
-    EdgeIndex offset_base = out_offset_g[v_idx];
-    for (VertexID nbr_idx = 0; nbr_idx < out_degree_g[v_idx]; nbr_idx++) {
-      VertexID candidate_v_idx = *(out_edges_g + offset_base + nbr_idx);
-      VertexID candidate_global_v_id = globalid_g[candidate_v_idx];
-      VertexLabel candidate_v_label = params.v_label_g[candidate_global_v_id];
-      dfs_kernel(params, level_visited_ptr_array, level + 1, v_idx,
-                 candidate_v_idx, global_visited, local_visited, match,
-                 local_matches);
-      //printf("\t after check %d\n", candidate_v_idx);
-    }
+  // if (extend_tag) {
+  EdgeIndex offset_base = out_offset_g[v_idx];
+  for (VertexID nbr_idx = 0; nbr_idx < out_degree_g[v_idx]; nbr_idx++) {
+    VertexID candidate_v_idx = *(out_edges_g + offset_base + nbr_idx);
+    VertexID candidate_global_v_id = globalid_g[candidate_v_idx];
+    VertexLabel candidate_v_label = params.v_label_g[candidate_global_v_id];
+    dfs_kernel(params, level_visited_ptr_array, level + 1, v_idx,
+               candidate_v_idx, global_visited, local_visited, match,
+               local_matches);
+    // printf("\t after check %d\n", candidate_v_idx);
   }
+  //}
 }
 
 static __host__ void host_dfs_kernel(const ParametersSubIso &params,
@@ -517,7 +517,12 @@ static __device__ void extend_kernel(const ParametersSubIso &params) {
   KernelBitmap **level_visited_ptr_array =
       (KernelBitmap **)malloc(sizeof(KernelBitmap *) * params.n_vertices_p);
   for (VertexID _ = 0; _ < params.n_vertices_p; _++) {
-    level_visited_ptr_array[_] = new KernelBitmap(params.n_vertices_g);
+    // level_visited_ptr_array[_] = new KernelBitmap(params.n_vertices_g);
+    level_visited_ptr_array[_] = new KernelBitmap();
+    uint64_t size = params.n_vertices_g;
+    uint64_t *data =
+        (uint64_t *)malloc(sizeof(uint64_t) * KERNEL_WORD_OFFSET(size));
+    level_visited_ptr_array[_]->Init(size, data);
     level_visited_ptr_array[_]->Clear();
   }
 
@@ -598,7 +603,7 @@ static __device__ void extend_kernel(const ParametersSubIso &params) {
   free(local_matches.data);
   free(local_matches.size);
   for (VertexID _ = 0; _ < params.n_vertices_p; _++) {
-    delete level_visited_ptr_array[_];
+    free(level_visited_ptr_array[_]->GetPtr());
   }
   delete[] level_visited_ptr_array;
 }
@@ -730,7 +735,7 @@ void SubIsoKernelWrapper::SubIso(
     const data_structures::UnifiedOwnedBuffer<VertexID> &matches_data) {
 
   dim3 dimBlock(32);
-  dim3 dimGrid(1);
+  dim3 dimGrid(32);
 
   LocalMatches m0;
   ParametersSubIso params{.depth_p = depth_p,
@@ -752,6 +757,9 @@ void SubIsoKernelWrapper::SubIso(
                           .v_candidate_offset_for_each_weft =
                               v_candidate_offset_for_each_weft.GetPtr(),
                           .matches_data = matches_data.GetPtr()};
+
+  // The default heap size is 8M.
+  cudaDeviceSetLimit(cudaLimitMallocHeapSize, 8388608 * 256);
 
   subiso_kernel<<<dimGrid, dimBlock, 0, stream>>>(params);
   // host_subiso_kernel(params);
