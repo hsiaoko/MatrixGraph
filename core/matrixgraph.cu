@@ -64,6 +64,8 @@ void MatrixGraph::PrintDeviceInfo() const {
   cudaDeviceProp devProp;
   CUDA_CHECK(cudaGetDeviceCount(&dev));
   std::cout << "Device Info for " << dev << " devices." << std::endl;
+  size_t size;
+  cudaDeviceGetLimit(&size, cudaLimitMallocHeapSize);
   for (int i = 0; i < dev; i++) {
     cudaGetDeviceProperties(&devProp, i);
     std::cout << "Device " << i << ": " << devProp.name << std::endl;
@@ -75,14 +77,9 @@ void MatrixGraph::PrintDeviceInfo() const {
               << std::endl;
     std::cout << "maxThreadsPerMultiProcessor："
               << devProp.maxThreadsPerMultiProcessor << std::endl;
+    std::cout << "defaultCUDAHeapSize：" << size << std::endl;
     std::cout << std::endl;
   }
-  size_t size;
-  cudaDeviceGetLimit(&size, cudaLimitMallocHeapSize);
-  std::cout << " " << size << std::endl;
-  CUDA_CHECK(cudaDeviceSetLimit(cudaLimitMallocHeapSize, size * 128));
-  cudaDeviceGetLimit(&size, cudaLimitMallocHeapSize);
-  std::cout << " " << size << std::endl;
 }
 
 } // namespace core
