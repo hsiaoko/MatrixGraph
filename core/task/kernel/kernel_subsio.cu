@@ -18,6 +18,7 @@ using VertexLabel = sics::matrixgraph::core::common::VertexLabel;
 using sics::matrixgraph::core::common::kMaxNumCandidatesPerThread;
 using VertexID = sics::matrixgraph::core::common::VertexID;
 using VertexID = sics::matrixgraph::core::common::VertexID;
+using sics::matrixgraph::core::common::kMaxNumWeft;
 using sics::matrixgraph::core::common::kMaxVertexID;
 using sics::matrixgraph::core::task::kernel::HostKernelBitmap;
 using sics::matrixgraph::core::task::kernel::HostMiniKernelBitmap;
@@ -620,6 +621,7 @@ static __device__ void extend_kernel(const ParametersSubIso &params) {
   for (VertexID _ = 0; _ < params.n_vertices_p; _++) {
     level_visited_ptr_array[_] = new KernelBitmap();
     uint64_t size = params.n_vertices_g;
+    // uint64_t size = params.n_vertices_g / 2;
     uint64_t *data =
         (uint64_t *)malloc(sizeof(uint64_t) * KERNEL_WORD_OFFSET(size));
     level_visited_ptr_array[_]->Init(size, data);
@@ -655,49 +657,34 @@ static __device__ void extend_kernel(const ParametersSubIso &params) {
     // Write result to the global buffer. Obtain space for each. The last
     // pattern vertex dosen't get a match.
     if (local_matches.size[params.n_vertices_p - 1] != 0) {
-      // check(params, local_matches);
-      VertexID total_n_candidate = 0;
-
-      VertexID *local_offset =
-          (VertexID *)malloc(sizeof(VertexID) * (params.n_vertices_p + 1));
-
-      memset(local_offset, 0, sizeof(VertexID) * (params.n_vertices_p + 1));
+      if (*params.weft_count > kMaxNumWeft)
+        break;
+      VertexID weft_id = atomicAdd(params.weft_count, (VertexID)1);
 
       for (VertexID _ = 0; _ < params.n_vertices_p; _++) {
-        total_n_candidate += local_matches.size[_];
-        local_offset[_ + 1] = local_offset[_] + local_matches.size[_];
+        *(params.v_candidate_offset_for_each_weft +
+          weft_id * (params.n_vertices_p + 1) + _ + 1) =
+            *(params.v_candidate_offset_for_each_weft +
+              weft_id * (params.n_vertices_p + 1) + _) +
+            local_matches.size[_];
       }
 
-      // atomic operations
-      VertexID weft_id = atomicAdd(params.weft_count, (VertexID)1);
+      // Get unique id of the weft.
       VertexID weft_offset =
-          atomicAdd(params.weft_size + weft_id, total_n_candidate);
-
-      memcpy(params.v_candidate_offset_for_each_weft +
-                 weft_id * (params.n_vertices_p + 1),
-             local_offset, sizeof(VertexID) * (params.n_vertices_p + 1));
-
-      __syncthreads();
-      if (tid == 0) {
-        VertexID weft_count = *(params.weft_count);
-
-        for (VertexID _ = 0; _ < weft_count; _++) {
-          params.weft_offset[_ + 1] =
-              params.weft_offset[_] + params.weft_size[_];
-        }
-      }
-      __syncthreads();
+          weft_id * 2 * params.n_vertices_p * kMaxNumCandidatesPerThread;
 
       // Fill weft forest.
-      VertexID *base_ptr = params.matches_data + params.weft_offset[weft_id] *
-                                                     2 * params.n_vertices_p;
+      VertexID *base_ptr =
+          params.matches_data + weft_offset * 2 * params.n_vertices_p;
 
       for (VertexID _ = 0; _ < params.n_vertices_p; _++) {
-        memcpy(base_ptr + local_offset[_] * 2,
+
+        memcpy(base_ptr + *(params.v_candidate_offset_for_each_weft +
+                            weft_id * (params.n_vertices_p + 1) + _ + 1) *
+                              2,
                local_matches.data + kMaxNumCandidatesPerThread * 2 * _,
                local_matches.size[_] * sizeof(VertexID) * 2);
       }
-      free(local_offset);
     }
   }
   free(local_matches.data);
@@ -735,6 +722,8 @@ static __host__ void host_extend_kernel(const ParametersSubIso &params) {
       sizeof(VertexID) * params.n_vertices_p * 2 * kMaxNumCandidatesPerThread);
   local_matches.size =
       (VertexID *)malloc(sizeof(VertexID) * params.n_vertices_p);
+  VertexID *local_offset =
+      (VertexID *)malloc(sizeof(VertexID) * (params.n_vertices_p + 1));
 
   for (VertexID candidate_idx = tid; candidate_idx < params.n_vertices_g;
        candidate_idx += step) {
@@ -756,10 +745,9 @@ static __host__ void host_extend_kernel(const ParametersSubIso &params) {
     // pattern vertex dosen't get a match.
     if (local_matches.size[params.n_vertices_p - 1] != 0) {
       // check(params, local_matches);
-      VertexID total_n_candidate = 0;
+      VertexID weft_id = *params.weft_count;
 
-      VertexID *local_offset =
-          (VertexID *)malloc(sizeof(VertexID) * (params.n_vertices_p + 1));
+      VertexID total_n_candidate = 0;
 
       memset(local_offset, 0, sizeof(VertexID) * (params.n_vertices_p + 1));
 
@@ -769,7 +757,6 @@ static __host__ void host_extend_kernel(const ParametersSubIso &params) {
       }
 
       // atomic operations
-      VertexID weft_id = *params.weft_count;
       *params.weft_count = *params.weft_count + 1;
 
       *(params.weft_size + weft_id) += total_n_candidate;
@@ -796,9 +783,10 @@ static __host__ void host_extend_kernel(const ParametersSubIso &params) {
                local_matches.data + kMaxNumCandidatesPerThread * 2 * _,
                local_matches.size[_] * sizeof(VertexID) * 2);
       }
-      free(local_offset);
     }
   }
+
+  free(local_offset);
   free(local_matches.data);
   free(local_matches.size);
   for (VertexID _ = 0; _ < params.n_vertices_p; _++) {
@@ -871,7 +859,7 @@ void SubIsoKernelWrapper::SubIso(
   cudaDeviceSetLimit(cudaLimitMallocHeapSize, 8388608 * 256);
 
   subiso_kernel<<<dimGrid, dimBlock, 0, stream>>>(params);
-  check_kernel<<<dimGrid, dimBlock, 0, stream>>>(params);
+  // check_kernel<<<dimGrid, dimBlock, 0, stream>>>(params);
   // host_subiso_kernel(params);
 
   cudaError_t err = cudaGetLastError();

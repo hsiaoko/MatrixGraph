@@ -265,7 +265,7 @@ void ImmutableCSR::GenerateVLabel(VertexID range) {
   std::random_device rd;
   std::mt19937 gen(rd());
 
-  std::uniform_int_distribution<> dis(1, range);
+  std::uniform_int_distribution<> dis(0, range);
 
   std::for_each(std::execution::par, worker.begin(), worker.end(),
                 [this, step, &dis, &gen](auto w) {
