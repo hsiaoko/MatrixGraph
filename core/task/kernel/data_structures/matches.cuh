@@ -68,7 +68,7 @@ public:
     weft_count_.Init(sizeof(VertexID));
 
     matches_data_.Init(sizeof(VertexID) * 2 * n_vertices *
-                       kMaxNumCandidatesPerThread * kMaxNumCandidates);
+                       kMaxNumCandidatesPerThread * max_n_weft);
   }
 
   void Print(VertexID n_matches = 3) const {
@@ -77,43 +77,29 @@ public:
     std::cout << "[Matches] Print n_matches:" << *weft_count_.GetPtr()
               << std::endl;
     for (VertexID weft_id = 0; weft_id < min_n_matches; weft_id++) {
+      if (weft_id > max_n_weft_)
+        break;
       std::cout << "Weft " << weft_id << std::endl;
-      // VertexID weft_offset = weft_offset_.GetPtr()[weft_id];
       VertexID weft_offset =
           weft_id * 2 * n_vertices_ * kMaxNumCandidatesPerThread;
 
-      std::cout << "U offset: ";
-      for (auto i = 0; i < n_vertices_ + 1; i++) {
-        std::cout << v_candidate_offset_for_each_weft_
-                         .GetPtr()[weft_id * (n_vertices_ + 1) + i]
-                  << " ";
-      }
-      std::cout << std::endl;
-      for (VertexID _ = 0; _ < n_vertices_; _++) {
+      for (auto i = 0; i < n_vertices_; i++) {
         VertexID v_candidate_offset =
             v_candidate_offset_for_each_weft_
-                .GetPtr()[weft_id * (n_vertices_ + 1) + _];
+                .GetPtr()[weft_id * (n_vertices_ + 1) + i];
         VertexID v_candidate_size =
             v_candidate_offset_for_each_weft_
-                .GetPtr()[weft_id * (n_vertices_ + 1) + _ + 1] -
+                .GetPtr()[weft_id * (n_vertices_ + 1) + i + 1] -
             v_candidate_offset_for_each_weft_
-                .GetPtr()[weft_id * (n_vertices_ + 1) + _];
-
-        std::cout << "\t u" << _ << " offset:" << v_candidate_offset
+                .GetPtr()[weft_id * (n_vertices_ + 1) + i];
+        std::cout << "\t u" << i << " offset:" << v_candidate_offset
                   << " size: " << v_candidate_size << ": ";
         for (VertexID candidate_id = 0; candidate_id < v_candidate_size;
              candidate_id++) {
-          if (*(matches_data_.GetPtr() + weft_offset * 2 * n_vertices_ +
-                v_candidate_offset * 2 + 2 * candidate_id) == 0 &&
-              *(matches_data_.GetPtr() + weft_offset * 2 * n_vertices_ +
-                v_candidate_offset * 2 + 2 * candidate_id + 1) == 0)
-            continue;
-          std::cout << *(matches_data_.GetPtr() +
-                         weft_offset * 2 * n_vertices_ +
+          std::cout << *(matches_data_.GetPtr() + weft_offset +
                          v_candidate_offset * 2 + 2 * candidate_id)
                     << "->"
-                    << *(matches_data_.GetPtr() +
-                         weft_offset * 2 * n_vertices_ +
+                    << *(matches_data_.GetPtr() + weft_offset +
                          v_candidate_offset * 2 + 2 * candidate_id + 1)
                     << ",";
         }

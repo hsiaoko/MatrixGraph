@@ -1,3 +1,4 @@
+#include <chrono>
 #include <cuda_runtime.h>
 #include <iostream>
 
@@ -176,6 +177,7 @@ static __device__ bool check(const ParametersSubIso &params,
   for (VertexID u_idx = 0; u_idx < params.n_vertices_p; u_idx++) {
     VertexID n_candidates = local_matches.size[u_idx];
     EdgeIndex in_offset_base_u = in_offset_p[u_idx];
+    printf("u_idx %d\n", u_idx);
 
     // Check for each candidate of U
     for (VertexID _ = 0; _ < n_candidates; _++) {
@@ -216,6 +218,7 @@ static __device__ bool check(const ParametersSubIso &params,
 
         // There is a mismatch between v'->v and u'->u. we have to remove it.
         if (match_count == 0) {
+          printf("remove u_idx %d\n", u_idx);
           local_matches
               .data[u_idx * kMaxNumCandidatesPerThread * 2 + 2 * _ + 1] =
               kMaxVertexID;
@@ -251,7 +254,8 @@ static __device__ bool check(const ParametersSubIso &params, VertexID weft_id) {
 
   KernelBitmap visited(params.n_vertices_g);
 
-  VertexID weft_offset = params.weft_offset[weft_id];
+  VertexID weft_offset =
+      weft_id * 2 * params.n_vertices_p * kMaxNumCandidatesPerThread;
 
   for (VertexID u_idx = 0; u_idx < params.n_vertices_p; u_idx++) {
     VertexID candidate_offset =
@@ -272,8 +276,7 @@ static __device__ bool check(const ParametersSubIso &params, VertexID weft_id) {
     // Check for each candidate of U
     for (VertexID _ = 0; _ < n_candidates; _++) {
       VertexID v_idx =
-          params.matches_data[weft_offset * 2 * (params.n_vertices_p) +
-                              candidate_offset * 2 + 2 * _ + 1];
+          params.matches_data[weft_offset + candidate_offset * 2 + 2 * _ + 1];
 
       // Check for each in neighbor of candidate
       for (VertexID nbr_u_idx = 0; nbr_u_idx < in_degree_p[u_idx];
@@ -295,9 +298,8 @@ static __device__ bool check(const ParametersSubIso &params, VertexID weft_id) {
               params.v_candidate_offset_for_each_weft
                   [weft_id * (params.n_vertices_p + 1) + nbr_u];
           VertexID candidate_nbr_u =
-              params
-                  .matches_data[weft_offset * 2 * params.n_vertices_p +
-                                offset_nbr_u * 2 + 2 * candidate_idx_nbr_u + 1];
+              params.matches_data[weft_offset + offset_nbr_u * 2 +
+                                  2 * candidate_idx_nbr_u + 1];
 
           visited.SetBit(candidate_nbr_u);
         }
@@ -317,11 +319,11 @@ static __device__ bool check(const ParametersSubIso &params, VertexID weft_id) {
 
         // There is a mismatch between v'->v and u'->u. we have to remove it.
         if (match_count == 0) {
-          params.matches_data[weft_offset * 2 * params.n_vertices_p +
-                              candidate_offset * 2 + 2 * _ + 1] = kMaxVertexID;
+          params.matches_data[weft_offset + candidate_offset * 2 + 2 * _ + 1] =
+              kMaxVertexID;
 
-          params.matches_data[weft_offset * 2 * params.n_vertices_p +
-                              candidate_offset * 2 + 2 * _] = kMaxVertexID;
+          params.matches_data[weft_offset + candidate_offset * 2 + 2 * _] =
+              kMaxVertexID;
         }
       }
     }
@@ -343,6 +345,12 @@ static __device__ void dfs_kernel(const ParametersSubIso &params,
   unsigned global_exec_plan_idx = global_visited.Count();
 
   if (global_exec_plan_idx == params.n_vertices_p) {
+    return;
+  }
+  if (local_matches.size[exec_plan_idx] >= kMaxNumCandidatesPerThread) {
+    return;
+  }
+  if (local_matches.size[global_exec_plan_idx] >= kMaxNumCandidatesPerThread) {
     return;
   }
 
@@ -388,10 +396,7 @@ static __device__ void dfs_kernel(const ParametersSubIso &params,
   //  VertexLabel v_label = params.v_label_g[globalid_g[v_idx]];
 
   if (local_match_tag && global_match_tag) {
-
     VertexID offset = local_matches.size[exec_plan_idx];
-    if (offset > kMaxNumCandidatesPerThread)
-      return;
     if (pre_v_idx == kMaxVertexID) {
       local_matches
           .data[kMaxNumCandidatesPerThread * 2 * exec_plan_idx + 2 * offset] =
@@ -416,8 +421,6 @@ static __device__ void dfs_kernel(const ParametersSubIso &params,
     global_visited.SetBit(u);
   } else if (local_match_tag) {
     VertexID offset = local_matches.size[exec_plan_idx];
-    if (offset > kMaxNumCandidatesPerThread)
-      return;
 
     local_matches
         .data[kMaxNumCandidatesPerThread * 2 * exec_plan_idx + 2 * offset] =
@@ -434,8 +437,6 @@ static __device__ void dfs_kernel(const ParametersSubIso &params,
     // printf("\t 2 set %d->%d\n", pre_v_idx, globalid_g[v_idx]);
   } else if (global_match_tag) {
     VertexID offset = local_matches.size[global_exec_plan_idx];
-    if (offset > kMaxNumCandidatesPerThread)
-      return;
 
     local_matches.data[kMaxNumCandidatesPerThread * 2 * global_exec_plan_idx +
                        2 * offset] = globalid_g[pre_v_idx];
@@ -451,8 +452,6 @@ static __device__ void dfs_kernel(const ParametersSubIso &params,
   } else {
     return;
   }
-
-  // printf("set %d\n", u);
 
   if (extend_tag) {
     EdgeIndex offset_base = out_offset_g[v_idx];
@@ -657,7 +656,7 @@ static __device__ void extend_kernel(const ParametersSubIso &params) {
     // Write result to the global buffer. Obtain space for each. The last
     // pattern vertex dosen't get a match.
     if (local_matches.size[params.n_vertices_p - 1] != 0) {
-      if (*params.weft_count > kMaxNumWeft)
+      if (*params.weft_count >= kMaxNumWeft)
         break;
       VertexID weft_id = atomicAdd(params.weft_count, (VertexID)1);
 
@@ -674,14 +673,12 @@ static __device__ void extend_kernel(const ParametersSubIso &params) {
           weft_id * 2 * params.n_vertices_p * kMaxNumCandidatesPerThread;
 
       // Fill weft forest.
-      VertexID *base_ptr =
-          params.matches_data + weft_offset * 2 * params.n_vertices_p;
+      VertexID *base_ptr = params.matches_data + weft_offset;
 
       for (VertexID _ = 0; _ < params.n_vertices_p; _++) {
-
-        memcpy(base_ptr + *(params.v_candidate_offset_for_each_weft +
-                            weft_id * (params.n_vertices_p + 1) + _ + 1) *
-                              2,
+        VertexID v_offset = *(params.v_candidate_offset_for_each_weft +
+                              weft_id * (params.n_vertices_p + 1) + _);
+        memcpy(base_ptr + v_offset * 2,
                local_matches.data + kMaxNumCandidatesPerThread * 2 * _,
                local_matches.size[_] * sizeof(VertexID) * 2);
       }
@@ -831,8 +828,8 @@ void SubIsoKernelWrapper::SubIso(
         &v_candidate_offset_for_each_weft,
     const data_structures::UnifiedOwnedBuffer<VertexID> &matches_data) {
 
-  dim3 dimBlock(32);
-  dim3 dimGrid(32);
+  dim3 dimBlock(64);
+  dim3 dimGrid(64);
 
   LocalMatches m0;
   ParametersSubIso params{.depth_p = depth_p,
@@ -857,10 +854,32 @@ void SubIsoKernelWrapper::SubIso(
 
   // The default heap size is 8M.
   cudaDeviceSetLimit(cudaLimitMallocHeapSize, 8388608 * 256);
+  auto time1 = std::chrono::system_clock::now();
 
   subiso_kernel<<<dimGrid, dimBlock, 0, stream>>>(params);
-  // check_kernel<<<dimGrid, dimBlock, 0, stream>>>(params);
-  // host_subiso_kernel(params);
+
+  cudaStreamSynchronize(stream);
+  auto time2 = std::chrono::system_clock::now();
+
+  check_kernel<<<dimGrid, dimBlock, 0, stream>>>(params);
+  //     host_subiso_kernel(params);
+  cudaStreamSynchronize(stream);
+  auto time3 = std::chrono::system_clock::now();
+
+  std::cout
+      << "[SubIso]:"
+      << std::chrono::duration_cast<std::chrono::microseconds>(time3 - time1)
+                 .count() /
+             (double)CLOCKS_PER_SEC
+      << "\n\t Filter & extend:"
+      << std::chrono::duration_cast<std::chrono::microseconds>(time2 - time1)
+                 .count() /
+             (double)CLOCKS_PER_SEC
+      << "\n\t Check:"
+      << std::chrono::duration_cast<std::chrono::microseconds>(time3 - time2)
+                 .count() /
+             (double)CLOCKS_PER_SEC
+      << std::endl;
 
   cudaError_t err = cudaGetLastError();
   if (err != cudaSuccess) {

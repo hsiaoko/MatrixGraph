@@ -1,5 +1,6 @@
 #include "core/matrixgraph.cuh"
 
+#include <chrono>
 #include <ctime>
 
 #include "core/task/gemm.cuh"

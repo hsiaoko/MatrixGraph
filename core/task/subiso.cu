@@ -259,7 +259,7 @@ __host__ void SubIso::Matching(const ImmutableCSR &p, const ImmutableCSR &g) {
   UnifiedOwnedBufferEdgeIndex unified_m_offset;
   unified_m_offset.Init(sizeof(EdgeIndex) * p.get_num_vertices());
 
-  Matches matches(p.get_num_vertices(), p.get_num_vertices());
+  Matches matches(p.get_num_vertices(), g.get_num_vertices());
 
   UnifiedOwnedBufferVertexID unified_m0_data;
   UnifiedOwnedBufferVertexID unified_m0_offset;
@@ -285,7 +285,7 @@ __host__ void SubIso::Matching(const ImmutableCSR &p, const ImmutableCSR &g) {
 
   cudaDeviceSynchronize();
 
-  matches.Print();
+  matches.Print(3);
 }
 
 __host__ void SubIso::Run() {
