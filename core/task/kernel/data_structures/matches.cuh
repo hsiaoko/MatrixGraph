@@ -60,6 +60,7 @@ public:
   Matches(VertexID n_vertices, VertexID max_n_weft)
       : n_vertices_(n_vertices), max_n_weft_(max_n_weft) {
 
+    max_n_weft = max_n_weft*10;
     v_candidate_offset_for_each_weft_.Init(sizeof(VertexID) * (n_vertices + 1) *
                                            max_n_weft * 10);
 

@@ -130,6 +130,13 @@ public:
     data_ = nullptr;
   }
 
+  void Init(uint64_t size, uint64_t *data) {
+    if (data_ != nullptr)
+      free(data_);
+    data_ = data;
+    size_ = size;
+  }
+
   void Init(uint64_t size) {
     if (data_ != nullptr) {
       free(data_);

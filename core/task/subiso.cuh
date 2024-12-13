@@ -58,6 +58,8 @@ public:
 private:
   __host__ void LoadData();
 
+  __host__ void InitLabel(VertexLabel *label_p, VertexLabel *label_g);
+
   __host__ void InitLabel();
 
   __host__ void AllocMappingBuf();

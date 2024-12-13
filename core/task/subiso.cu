@@ -205,10 +205,13 @@ __host__ void SubIso::Matching(const ImmutableCSR &p, const ImmutableCSR &g) {
   UnifiedOwnedBufferVertexLabel unified_v_label_p;
 
   data_p.data = p.GetGraphBuffer();
-  data_p.size = sizeof(VertexID) * (p.get_num_vertices() * 3) +
+  data_p.size = sizeof(VertexID) * p.get_num_vertices() +
+                sizeof(VertexID) * p.get_num_vertices() +
+                sizeof(VertexID) * p.get_num_vertices() +
+                sizeof(EdgeIndex) * (p.get_num_vertices() + 1) +
+                sizeof(EdgeIndex) * (p.get_num_vertices() + 1) +
                 sizeof(VertexID) * p.get_num_incoming_edges() +
                 sizeof(VertexID) * p.get_num_outgoing_edges() +
-                sizeof(EdgeIndex) * p.get_num_vertices() * 2 +
                 sizeof(VertexID) * (p.get_max_vid() + 1);
 
   unified_data_p.Init(data_p);
@@ -226,11 +229,15 @@ __host__ void SubIso::Matching(const ImmutableCSR &p, const ImmutableCSR &g) {
   UnifiedOwnedBufferVertexLabel unified_v_label_g;
 
   data_g.data = g.GetGraphBuffer();
-  data_g.size = sizeof(VertexID) * (g.get_num_vertices() * 3) +
+  data_g.size = sizeof(VertexID) * g.get_num_vertices() +
+                sizeof(VertexID) * g.get_num_vertices() +
+                sizeof(VertexID) * g.get_num_vertices() +
+                sizeof(EdgeIndex) * (g.get_num_vertices() + 1) +
+                sizeof(EdgeIndex) * (g.get_num_vertices() + 1) +
                 sizeof(VertexID) * g.get_num_incoming_edges() +
                 sizeof(VertexID) * g.get_num_outgoing_edges() +
-                sizeof(EdgeIndex) * g.get_num_vertices() * 2 +
                 sizeof(VertexID) * (g.get_max_vid() + 1);
+
   unified_data_g.Init(data_g);
 
   v_label_g.data = g.GetVLabelBasePointer();

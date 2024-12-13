@@ -133,6 +133,35 @@ void ImmutableCSR::Write(const std::string &root_path, GraphID gid) {
   out_data_file.write(reinterpret_cast<char *>(GetEdgesGloablIDBasePointer()),
                       sizeof(VertexID) * (get_max_vid() + 1));
 
+  std::cout << "write size " <<
+
+      sizeof(VertexID) * get_num_vertices() +
+          sizeof(VertexID) * get_num_vertices() +
+          sizeof(VertexID) * get_num_vertices() +
+          sizeof(EdgeIndex) * (get_num_vertices() + 1) +
+          sizeof(EdgeIndex) * (get_num_vertices() + 1) +
+          sizeof(VertexID) * get_num_incoming_edges() +
+          sizeof(VertexID) * get_num_outgoing_edges() +
+          sizeof(VertexID) * (get_max_vid() + 1)
+
+            << std::endl;
+
+  std::cout << "global: " << sizeof(VertexID) * get_num_vertices() << std::endl;
+  std::cout << "in degree: " << sizeof(VertexID) * get_num_vertices()
+            << std::endl;
+  std::cout << "out degree: " << sizeof(VertexID) * get_num_vertices()
+            << std::endl;
+  std::cout << "in offset " << sizeof(EdgeIndex) * (get_num_vertices() + 1)
+            << std::endl;
+  std::cout << "out offset" << sizeof(EdgeIndex) * (get_num_vertices() + 1)
+            << std::endl;
+  std::cout << "in edges: " << sizeof(VertexID) * get_num_outgoing_edges()
+            << std::endl;
+  std::cout << "out edges: " << sizeof(VertexID) * get_num_outgoing_edges()
+            << std::endl;
+  std::cout << "edges vid: " << sizeof(VertexID) * (get_max_vid() + 1)
+            << std::endl;
+
   // Write label data with all 0.
   std::ofstream out_label_file(root_path + "label/" + std::to_string(gid) +
                                ".bin");
