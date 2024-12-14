@@ -53,18 +53,39 @@ struct ParametersSubIso {
 // candidates in M should be an index (localid) instead of globalid.
 
 static __noinline__ __device__ bool
-label_filter(const ParametersSubIso &params, VertexID u_idx, VertexID v_idx) {
+LabelFilter(const ParametersSubIso &params, VertexID u_idx, VertexID v_idx) {
 
   VertexID *globalid_g = (VertexID *)(params.data_g);
   VertexLabel v_label = params.v_label_g[globalid_g[v_idx]];
-
   VertexLabel u_label = params.v_label_p[u_idx];
 
   return u_label == v_label;
 }
 
 static __noinline__ __device__ bool
-neighbor_label_counter_filter(const ParametersSubIso &params, VertexID u_idx,
+LabelDegreeFilter(const ParametersSubIso &params, VertexID u_idx,
+                  VertexID v_idx) {
+
+  VertexID *globalid_p = (VertexID *)(params.data_p);
+  VertexID *in_degree_p = globalid_p + params.n_vertices_p;
+  VertexID *out_degree_p = in_degree_p + params.n_vertices_p;
+
+  VertexID *globalid_g = (VertexID *)(params.data_g);
+  VertexID *in_degree_g = globalid_g + params.n_vertices_g;
+  VertexID *out_degree_g = in_degree_g + params.n_vertices_g;
+
+  VertexLabel v_label = params.v_label_g[globalid_g[v_idx]];
+  VertexLabel u_label = params.v_label_p[u_idx];
+
+  if (u_label != v_label) {
+    return false;
+  } else {
+    return out_degree_g[v_idx] >= out_degree_p[u_idx];
+  }
+}
+
+static __noinline__ __device__ bool
+neighbor_label_counter_Filter(const ParametersSubIso &params, VertexID u_idx,
                               VertexID v_idx) {
   VertexID *globalid_p = (VertexID *)(params.data_p);
   VertexID *in_degree_p = globalid_p + params.n_vertices_p;
@@ -86,6 +107,12 @@ neighbor_label_counter_filter(const ParametersSubIso &params, VertexID u_idx,
   VertexID *out_edges_g = in_edges_g + params.n_edges_g;
   VertexID *edges_globalid_by_localid_g = out_edges_g + params.n_edges_g;
 
+  VertexLabel v_label = params.v_label_g[globalid_g[v_idx]];
+  VertexLabel u_label = params.v_label_p[u_idx];
+
+  if (u_label != v_label)
+    return false;
+
   MiniKernelBitmap u_label_visited(32);
   MiniKernelBitmap v_label_visited(32);
 
@@ -106,25 +133,18 @@ neighbor_label_counter_filter(const ParametersSubIso &params, VertexID u_idx,
   return v_label_visited.Count() >= u_label_visited.Count();
 }
 
-static __noinline__ __device__ bool filter(const ParametersSubIso &params,
+static __noinline__ __device__ bool Filter(const ParametersSubIso &params,
                                            VertexID u_idx, VertexID v_idx) {
 
-  if (label_filter(params, u_idx, v_idx)) {
-    if (neighbor_label_counter_filter(params, u_idx, v_idx)) {
-      return true;
-    } else {
-      return false;
-    }
-  } else {
-    return false;
-  }
+  // return LabelFilter(params, u_idx, v_idx);
+
+  // return neighbor_label_counter_Filter(params, u_idx, v_idx);
+
+  return LabelDegreeFilter(params, u_idx, v_idx);
 }
 
-static __host__ bool host_check(const ParametersSubIso &params,
-                                LocalMatches &local_matches) {}
-
-static __device__ bool check(const ParametersSubIso &params,
-                             LocalMatches &local_matches) {
+static __device__ bool Refine(const ParametersSubIso &params,
+                              LocalMatches &local_matches) {
 
   VertexID *globalid_p = (VertexID *)(params.data_p);
   VertexID *in_degree_p = globalid_p + params.n_vertices_p;
@@ -191,7 +211,6 @@ static __device__ bool check(const ParametersSubIso &params,
 
         // There is a mismatch between v'->v and u'->u. we have to remove it.
         if (match_count == 0) {
-          printf("remove u_idx %d\n", u_idx);
           local_matches
               .data[u_idx * kMaxNumCandidatesPerThread * 2 + 2 * _ + 1] =
               kMaxVertexID;
@@ -203,7 +222,7 @@ static __device__ bool check(const ParametersSubIso &params,
   }
 }
 
-static __device__ bool check(const ParametersSubIso &params, VertexID weft_id) {
+static __device__ bool Check(const ParametersSubIso &params, VertexID weft_id) {
 
   VertexID *globalid_p = (VertexID *)(params.data_p);
   VertexID *in_degree_p = globalid_p + params.n_vertices_p;
@@ -303,13 +322,12 @@ static __device__ bool check(const ParametersSubIso &params, VertexID weft_id) {
   }
 }
 
-static __device__ void dfs_kernel(const ParametersSubIso &params,
-                                  KernelBitmap **level_visited_ptr_array,
-                                  uint32_t level, VertexID pre_v_idx,
-                                  VertexID v_idx,
-                                  MiniKernelBitmap &global_visited,
-                                  MiniKernelBitmap local_visited, bool &match,
-                                  LocalMatches &local_matches) {
+static __noinline__ __device__ void
+DFSExtend(const ParametersSubIso &params,
+          KernelBitmap **level_visited_ptr_array, uint32_t level,
+          VertexID pre_v_idx, VertexID v_idx, MiniKernelBitmap &global_visited,
+          MiniKernelBitmap local_visited, bool &match,
+          LocalMatches &local_matches) {
 
   if (level > params.depth_p)
     return;
@@ -343,7 +361,7 @@ static __device__ void dfs_kernel(const ParametersSubIso &params,
   VertexID *out_edges_g = in_edges_g + params.n_edges_g;
   VertexID *edges_globalid_by_localid_g = out_edges_g + params.n_edges_g;
 
-  // Paste filter function gere.
+  // Paste Filter function gere.
   VertexLabel v_label = params.v_label_g[globalid_g[v_idx]];
 
   VertexID global_pre_u = params.exec_path_in_edges[2 * global_exec_plan_idx];
@@ -353,15 +371,15 @@ static __device__ void dfs_kernel(const ParametersSubIso &params,
   bool global_match_tag = false;
   bool extend_tag = false;
 
-  // If true, we need check both global u and local u. it false we only need to
-  // check local u.
+  // If true, we need Check both global u and local u. it false we only need to
+  // Check local u.
   if (local_pre_u == global_pre_u) {
-    local_match_tag = filter(params, params.exec_path[exec_plan_idx], v_idx);
+    local_match_tag = Filter(params, params.exec_path[exec_plan_idx], v_idx);
 
     global_match_tag =
-        filter(params, params.exec_path[global_exec_plan_idx], v_idx);
+        Filter(params, params.exec_path[global_exec_plan_idx], v_idx);
   } else {
-    local_match_tag = filter(params, params.exec_path[exec_plan_idx], v_idx);
+    local_match_tag = Filter(params, params.exec_path[exec_plan_idx], v_idx);
   }
 
   if (local_match_tag && global_match_tag) {
@@ -426,36 +444,26 @@ static __device__ void dfs_kernel(const ParametersSubIso &params,
       VertexID candidate_v_idx = *(out_edges_g + offset_base + nbr_idx);
       VertexID candidate_global_v_id = globalid_g[candidate_v_idx];
       VertexLabel candidate_v_label = params.v_label_g[candidate_global_v_id];
-      dfs_kernel(params, level_visited_ptr_array, level + 1, v_idx,
-                 candidate_v_idx, global_visited, local_visited, match,
-                 local_matches);
+      DFSExtend(params, level_visited_ptr_array, level + 1, v_idx,
+                candidate_v_idx, global_visited, local_visited, match,
+                local_matches);
     }
   }
 }
 
-static __host__ void host_dfs_kernel(const ParametersSubIso &params,
-                                     HostKernelBitmap **level_visited_ptr_array,
-                                     uint32_t level, VertexID pre_v_idx,
-                                     VertexID v_idx,
-                                     HostMiniKernelBitmap &global_visited,
-                                     HostMiniKernelBitmap local_visited,
-                                     bool &match, LocalMatches &local_matches) {
-
-}
-
-static __device__ void extend_kernel(const ParametersSubIso &params) {
+static __noinline__ __global__ void ExtendKernel(ParametersSubIso params) {
   unsigned int tid = blockIdx.x * blockDim.x + threadIdx.x;
   unsigned int step = blockDim.x * gridDim.x;
 
   KernelBitmap **level_visited_ptr_array =
       (KernelBitmap **)malloc(sizeof(KernelBitmap *) * params.n_vertices_p);
+
   for (VertexID _ = 0; _ < params.n_vertices_p; _++) {
     level_visited_ptr_array[_] = new KernelBitmap();
     uint64_t size = params.n_vertices_g;
     uint64_t *data =
         (uint64_t *)malloc(sizeof(uint64_t) * KERNEL_WORD_OFFSET(size));
     level_visited_ptr_array[_]->Init(size, data);
-    level_visited_ptr_array[_]->Clear();
   }
 
   MiniKernelBitmap visited(params.n_vertices_p);
@@ -463,9 +471,8 @@ static __device__ void extend_kernel(const ParametersSubIso &params) {
   VertexID *globalid_g = (VertexID *)(params.data_g);
 
   LocalMatches local_matches;
-  local_matches.data =
-      (VertexID *)malloc(sizeof(VertexID) * params.n_vertices_p * 2 *
-                         kMaxNumCandidatesPerThread * 10);
+  local_matches.data = (VertexID *)malloc(
+      sizeof(VertexID) * params.n_vertices_p * 2 * kMaxNumCandidatesPerThread);
   local_matches.size =
       (VertexID *)malloc(sizeof(VertexID) * params.n_vertices_p);
 
@@ -480,8 +487,8 @@ static __device__ void extend_kernel(const ParametersSubIso &params) {
     VertexID global_vid = globalid_g[v_idx];
 
     bool match = false;
-    dfs_kernel(params, level_visited_ptr_array, 0, kMaxVertexID, v_idx, visited,
-               visited, match, local_matches);
+    DFSExtend(params, level_visited_ptr_array, 0, kMaxVertexID, v_idx, visited,
+              visited, match, local_matches);
 
     // Write result to the global buffer. Obtain space for each. The last
     // pattern vertex dosen't get a match.
@@ -522,23 +529,13 @@ static __device__ void extend_kernel(const ParametersSubIso &params) {
   delete[] level_visited_ptr_array;
 }
 
-static __host__ void host_extend_kernel(const ParametersSubIso &params) {}
-
-static __global__ void subiso_kernel(ParametersSubIso params) {
-  extend_kernel(params);
-}
-
-static __global__ void check_kernel(ParametersSubIso params) {
+static __global__ void CheckKernel(ParametersSubIso params) {
   unsigned int tid = blockIdx.x * blockDim.x + threadIdx.x;
   unsigned int step = blockDim.x * gridDim.x;
   for (VertexID weft_idx = tid; weft_idx < params.n_vertices_g;
        weft_idx += step) {
-    check(params, weft_idx);
+    Check(params, weft_idx);
   }
-}
-
-static __host__ void host_subiso_kernel(ParametersSubIso params) {
-  host_extend_kernel(params);
 }
 
 void SubIsoKernelWrapper::SubIso(
@@ -560,8 +557,8 @@ void SubIsoKernelWrapper::SubIso(
         &v_candidate_offset_for_each_weft,
     const data_structures::UnifiedOwnedBuffer<VertexID> &matches_data) {
 
-  dim3 dimBlock(64);
-  dim3 dimGrid(64);
+  dim3 dimBlock(1);
+  dim3 dimGrid(1);
 
   LocalMatches m0;
   ParametersSubIso params{.depth_p = depth_p,
@@ -588,13 +585,13 @@ void SubIsoKernelWrapper::SubIso(
   cudaDeviceSetLimit(cudaLimitMallocHeapSize, 8388608 * 256);
   auto time1 = std::chrono::system_clock::now();
 
-  subiso_kernel<<<dimGrid, dimBlock, 0, stream>>>(params);
+  ExtendKernel<<<dimGrid, dimBlock, 0, stream>>>(params);
 
   cudaStreamSynchronize(stream);
   auto time2 = std::chrono::system_clock::now();
 
-  // check_kernel<<<dimGrid, dimBlock, 0, stream>>>(params);
-  //      host_subiso_kernel(params);
+  // Check_kernel<<<dimGrid, dimBlock, 0, stream>>>(params);
+  //        host_subiso_kernel(params);
   cudaStreamSynchronize(stream);
   auto time3 = std::chrono::system_clock::now();
 

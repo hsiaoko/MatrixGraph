@@ -19,8 +19,8 @@ static const uint64_t kDefalutOutputBufferSize = 256;
 static const uint32_t kDefalutNumVerticesPerTile = 64;
 static const uint64_t kMaxNumCandidates = 65536;
 
-static const uint64_t kMaxNumCandidatesPerThread = 8;
-static const uint64_t kMaxNumWeft = 65536;
+static const uint64_t kMaxNumCandidatesPerThread = 64;
+static const uint64_t kMaxNumWeft = 655360;
 
 } // namespace common
 } // namespace core

@@ -125,7 +125,7 @@ __host__ void SubIso::LoadData() {
   p_.PrintGraph(3);
 
   g_.Read(data_graph_path_);
-  g_.PrintGraph(400);
+  g_.PrintGraph(3);
 }
 
 __host__ void SubIso::InitLabel() {
