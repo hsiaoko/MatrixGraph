@@ -85,8 +85,8 @@ LabelDegreeFilter(const ParametersSubIso &params, VertexID u_idx,
 }
 
 static __noinline__ __device__ bool
-neighbor_label_counter_Filter(const ParametersSubIso &params, VertexID u_idx,
-                              VertexID v_idx) {
+NeighborLabelCounterFilter(const ParametersSubIso &params, VertexID u_idx,
+                           VertexID v_idx) {
   VertexID *globalid_p = (VertexID *)(params.data_p);
   VertexID *in_degree_p = globalid_p + params.n_vertices_p;
   VertexID *out_degree_p = in_degree_p + params.n_vertices_p;
@@ -138,14 +138,13 @@ static __noinline__ __device__ bool Filter(const ParametersSubIso &params,
 
   // return LabelFilter(params, u_idx, v_idx);
 
-  // return neighbor_label_counter_Filter(params, u_idx, v_idx);
+  // return NeighborLabelCounterFilter(params, u_idx, v_idx);
 
   return LabelDegreeFilter(params, u_idx, v_idx);
 }
 
-static __device__ bool Refine(const ParametersSubIso &params,
-                              LocalMatches &local_matches) {
-
+static __noinline__ __device__ bool SteadyRefine(const ParametersSubIso &params,
+                                                 LocalMatches &local_matches) {
   VertexID *globalid_p = (VertexID *)(params.data_p);
   VertexID *in_degree_p = globalid_p + params.n_vertices_p;
   VertexID *out_degree_p = in_degree_p + params.n_vertices_p;
@@ -221,6 +220,49 @@ static __device__ bool Refine(const ParametersSubIso &params,
     }
   }
 }
+static __noinline__ __device__ bool
+GraphQLRefine(const ParametersSubIso &params, LocalMatches &local_matches,
+              VertexID k = 3) {
+  VertexID *globalid_p = (VertexID *)(params.data_p);
+  VertexID *in_degree_p = globalid_p + params.n_vertices_p;
+  VertexID *out_degree_p = in_degree_p + params.n_vertices_p;
+  EdgeIndex *in_offset_p = (EdgeIndex *)(out_degree_p + params.n_vertices_p);
+  EdgeIndex *out_offset_p =
+      (EdgeIndex *)(in_offset_p + params.n_vertices_p + 1);
+  EdgeIndex *in_edges_p = (EdgeIndex *)(out_offset_p + params.n_vertices_p + 1);
+  VertexID *out_edges_p = in_edges_p + params.n_edges_p;
+  VertexID *edges_globalid_by_localid_p = out_edges_p + params.n_edges_p;
+
+  VertexID *globalid_g = (VertexID *)(params.data_g);
+  VertexID *in_degree_g = globalid_g + params.n_vertices_g;
+  VertexID *out_degree_g = in_degree_g + params.n_vertices_g;
+  EdgeIndex *in_offset_g = (EdgeIndex *)(out_degree_g + params.n_vertices_g);
+  EdgeIndex *out_offset_g =
+      (EdgeIndex *)(in_offset_g + params.n_vertices_g + 1);
+  EdgeIndex *in_edges_g = (EdgeIndex *)(out_offset_g + params.n_vertices_g + 1);
+  VertexID *out_edges_g = in_edges_g + params.n_edges_g;
+  VertexID *edges_globalid_by_localid_g = out_edges_g + params.n_edges_g;
+
+  for (VertexID u_idx = 0; u_idx < params.n_vertices_p; u_idx++) {
+
+    for (VertexID nbr_u_idx = 0; nbr_u_idx < out_degree_p[u_idx]; nbr_u_idx++) {
+
+    }
+
+    // for (VertexID _ = 0; _ < n_candidates; _++) {
+    //   VertexID v_idx =
+    //       local_matches
+    //           .data[u_idx * kMaxNumCandidatesPerThread * 2 + 2 * _ + 1];
+
+    // }
+  }
+}
+
+static __noinline__ __device__ bool Refine(const ParametersSubIso &params,
+                                           LocalMatches &local_matches) {
+
+  //SteadyRefine(params, local_matches);
+}
 
 static __device__ bool Check(const ParametersSubIso &params, VertexID weft_id) {
 
@@ -269,6 +311,8 @@ static __device__ bool Check(const ParametersSubIso &params, VertexID weft_id) {
     for (VertexID _ = 0; _ < n_candidates; _++) {
       VertexID v_idx =
           params.matches_data[weft_offset + candidate_offset * 2 + 2 * _ + 1];
+      if (v_idx == kMaxVertexID)
+        continue;
 
       // Check for each in neighbor of candidate
       for (VertexID nbr_u_idx = 0; nbr_u_idx < in_degree_p[u_idx];
@@ -303,6 +347,8 @@ static __device__ bool Check(const ParametersSubIso &params, VertexID weft_id) {
         for (VertexID nbr_v_idx = 0; nbr_v_idx < in_degree_g[v_idx];
              nbr_v_idx++) {
           VertexID nbr_v = in_edges_g[in_offset_base_v + nbr_v_idx];
+          if (nbr_v == kMaxVertexID)
+            continue;
           if (visited.GetBit(nbr_v)) {
             match_count++;
             break;
@@ -495,6 +541,8 @@ static __noinline__ __global__ void ExtendKernel(ParametersSubIso params) {
     if (local_matches.size[params.n_vertices_p - 1] != 0) {
       if (*params.weft_count >= kMaxNumWeft)
         break;
+
+      Refine(params, local_matches);
       VertexID weft_id = atomicAdd(params.weft_count, (VertexID)1);
 
       for (VertexID _ = 0; _ < params.n_vertices_p; _++) {
@@ -557,8 +605,8 @@ void SubIsoKernelWrapper::SubIso(
         &v_candidate_offset_for_each_weft,
     const data_structures::UnifiedOwnedBuffer<VertexID> &matches_data) {
 
-  dim3 dimBlock(1);
-  dim3 dimGrid(1);
+  dim3 dimBlock(32);
+  dim3 dimGrid(32);
 
   LocalMatches m0;
   ParametersSubIso params{.depth_p = depth_p,
@@ -590,8 +638,7 @@ void SubIsoKernelWrapper::SubIso(
   cudaStreamSynchronize(stream);
   auto time2 = std::chrono::system_clock::now();
 
-  // Check_kernel<<<dimGrid, dimBlock, 0, stream>>>(params);
-  //        host_subiso_kernel(params);
+  CheckKernel<<<dimGrid, dimBlock, 0, stream>>>(params);
   cudaStreamSynchronize(stream);
   auto time3 = std::chrono::system_clock::now();
 

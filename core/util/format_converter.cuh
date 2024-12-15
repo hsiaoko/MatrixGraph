@@ -102,12 +102,11 @@ static ImmutableCSR *Edgelist2ImmutableCSR(const Edges &edgelist) {
   auto edgelist_metadata = edgelist.get_metadata();
   auto aligned_max_vid =
       (((edgelist.get_metadata().max_vid + 1) >> 6) << 6) + 64;
-  auto visited = Bitmap(aligned_max_vid);
-  auto *num_in_edges_by_vid = new EdgeIndex[aligned_max_vid]();
-  auto *num_out_edges_by_vid = new EdgeIndex[aligned_max_vid]();
-
   VertexID min_vid = edgelist.get_metadata().min_vid;
   VertexID max_vid = edgelist.get_metadata().max_vid;
+  auto visited = Bitmap(max_vid + 1);
+  auto *num_in_edges_by_vid = new EdgeIndex[max_vid + 1]();
+  auto *num_out_edges_by_vid = new EdgeIndex[max_vid + 1]();
 
   std::vector<VertexID> parallel_scope_vertices(aligned_max_vid);
   std::iota(parallel_scope_vertices.begin(), parallel_scope_vertices.end(), 0);
@@ -128,6 +127,7 @@ static ImmutableCSR *Edgelist2ImmutableCSR(const Edges &edgelist) {
                     auto e = edgelist.get_edge_by_index(i);
                     e.src = edgelist_localid_2_globalid[e.src];
                     e.dst = edgelist_localid_2_globalid[e.dst];
+
                     visited.SetBit(e.src);
                     visited.SetBit(e.dst);
                     WriteAdd(num_in_edges_by_vid + e.dst, (EdgeIndex)1);
@@ -137,7 +137,8 @@ static ImmutableCSR *Edgelist2ImmutableCSR(const Edges &edgelist) {
                   }
                 });
 
-  auto buffer_csr_vertices = new Vertex[max_vid + 1]();
+  Vertex *buffer_csr_vertices = new Vertex[max_vid + 1]();
+
   EdgeIndex count_in_edges = 0, count_out_edges = 0;
 
   // Malloc space for each vertex.
@@ -146,8 +147,9 @@ static ImmutableCSR *Edgelist2ImmutableCSR(const Edges &edgelist) {
                  &count_out_edges, &num_in_edges_by_vid, &num_out_edges_by_vid,
                  aligned_max_vid, max_vid, step](auto w) {
                   for (auto j = w; j < max_vid + 1; j += step) {
-                    if (!visited.GetBit(j))
-                      return;
+                    if (!visited.GetBit(j)) {
+                      continue;
+                    }
                     buffer_csr_vertices[j].vid = j;
                     buffer_csr_vertices[j].indegree = num_in_edges_by_vid[j];
                     buffer_csr_vertices[j].outdegree = num_out_edges_by_vid[j];
@@ -164,8 +166,8 @@ static ImmutableCSR *Edgelist2ImmutableCSR(const Edges &edgelist) {
   delete[] num_in_edges_by_vid;
   delete[] num_out_edges_by_vid;
 
-  EdgeIndex *offset_in_edges = new EdgeIndex[aligned_max_vid]();
-  EdgeIndex *offset_out_edges = new EdgeIndex[aligned_max_vid]();
+  EdgeIndex *offset_in_edges = new EdgeIndex[max_vid + 1]();
+  EdgeIndex *offset_out_edges = new EdgeIndex[max_vid + 1]();
 
   // Fill edges in each vertex.
   std::for_each(

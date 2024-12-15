@@ -217,14 +217,10 @@ void Edges::ReadFromCSV(const std::string &filename, const std::string &sep,
   edgelist_metadata_.num_edges = n_edges;
   edgelist_metadata_.num_vertices = bitmap.Count();
   edgelist_metadata_.max_vid = max_vid;
+  GenerateLocalID2GlobalID();
+
   if (compressed) {
     std::cout << "[Edges] Reading CSV with compressed ..." << std::endl;
-    GenerateLocalID2GlobalID();
-  } else {
-    std::cout << "[Edges] Reading CSV without compressed ..." << std::endl;
-    if (localid_to_globalid_ != nullptr)
-      delete[] localid_to_globalid_;
-    localid_to_globalid_ = new VertexID[edgelist_metadata_.num_vertices]();
     std::for_each(std::execution::par, worker.begin(), worker.end(),
                   [this, step](auto w) {
                     for (auto i = w; i < get_metadata().num_vertices;
@@ -232,6 +228,9 @@ void Edges::ReadFromCSV(const std::string &filename, const std::string &sep,
                       localid_to_globalid_[i] = i;
                     }
                   });
+
+  } else {
+    std::cout << "[Edges] Reading CSV without compressed ..." << std::endl;
   }
 }
 

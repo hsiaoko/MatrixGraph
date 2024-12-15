@@ -27,6 +27,7 @@
 #include "core/util/format_converter.cuh"
 #include "tools/graph_converter/converter/to_bit_tiled_matrix.cuh"
 #include "tools/graph_converter/converter/to_edgelist.cuh"
+#include "tools/graph_converter/converter/to_egsm_graph.cuh"
 #include "tools/graph_converter/converter/to_grid_csr_tiled_matrix.cuh"
 #include "tools/graph_converter/converter/to_immutable_csr.cuh"
 
@@ -58,6 +59,7 @@ enum ConvertMode {
   kCSRBin2EdgelistBin,
   kEdgelistCSV2CGGraphCSR,
   kEdgelistBin2CGGraphCSR,
+  kCSRBin2EGSM,
   kUndefinedMode
 };
 
@@ -90,6 +92,8 @@ static inline ConvertMode ConvertMode2Enum(const std::string &s) {
     return kEdgelistCSV2CGGraphCSR;
   if (s == "edgelistbin2cggraphcsr")
     return kEdgelistBin2CGGraphCSR;
+  if (s == "csrbin2egsm")
+    return kCSRBin2EGSM;
   return kUndefinedMode;
 };
 
@@ -142,6 +146,10 @@ int main(int argc, char **argv) {
   case kEdgelistBin2CGGraphCSR:
     sics::matrixgraph::tools::converter::ConvertEdgelistBin2CGGraphCSR(FLAGS_i,
                                                                        FLAGS_o);
+    break;
+  case kCSRBin2EGSM:
+    sics::matrixgraph::tools::converter::ConvertCSRBin2EGSMGraph(FLAGS_i,
+                                                                 FLAGS_o);
     break;
   default:
     exit(EXIT_FAILURE);

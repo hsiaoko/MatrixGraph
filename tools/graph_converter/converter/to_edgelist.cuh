@@ -22,6 +22,7 @@ static void ConvertEdgelistCSV2EdgelistBin(const std::string &input_path,
 
   sics::matrixgraph::core::data_structures::Edges edgelist;
   edgelist.ReadFromCSV(input_path, sep, compressed);
+  edgelist.ShowGraph();
   edgelist.WriteToBinary(output_path);
 }
 

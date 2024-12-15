@@ -13,14 +13,14 @@ static const uint32_t kDefaultTileNum = 1024;
 static const uint32_t kMaxNChunks = 256;
 static const uint64_t kDefalutNumEdgesPerBlock = 65536;
 static const uint64_t kMaxNumEdgesPerBlock = 2108783;
-static const uint64_t kMaxNumEdges = 1073741824 / 2;
+static const uint64_t kMaxNumEdges = 1073741824;
 static const uint64_t kDefalutNumEdgesPerTile = 65536;
 static const uint64_t kDefalutOutputBufferSize = 256;
 static const uint32_t kDefalutNumVerticesPerTile = 64;
 static const uint64_t kMaxNumCandidates = 65536;
 
-static const uint64_t kMaxNumCandidatesPerThread = 64;
-static const uint64_t kMaxNumWeft = 655360;
+static const uint64_t kMaxNumCandidatesPerThread = 32;
+static const uint64_t kMaxNumWeft = 65536;
 
 } // namespace common
 } // namespace core
