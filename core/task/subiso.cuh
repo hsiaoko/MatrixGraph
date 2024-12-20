@@ -8,6 +8,7 @@
 #include "core/data_structures/grid_csr_tiled_matrix.cuh"
 #include "core/data_structures/immutable_csr.cuh"
 #include "core/data_structures/unified_buffer.cuh"
+#include "core/task/kernel/data_structures/exec_plan.cuh"
 #include "core/task/task_base.cuh"
 
 namespace sics {
@@ -33,25 +34,19 @@ private:
       sics::matrixgraph::core::data_structures::UnifiedOwnedBuffer<uint64_t>;
   using UnifiedOwnedBufferVertexID =
       sics::matrixgraph::core::data_structures::UnifiedOwnedBuffer<VertexID>;
+  using ExecutionPlan = sics::matrixgraph::core::task::kernel::ExecutionPlan;
 
 public:
-  class ExecutionPlan {
-  public:
-    UnifiedOwnedBufferVertexID sequential_exec_path;
-    UnifiedOwnedBufferVertexID sequential_exec_path_in_edges;
-    UnifiedOwnedBufferVertexID inverted_index_of_sequential_exec_path;
-    VertexID n_vertices = 0;
-    VertexID depth = 0;
-  };
-
   SubIso(const std::string &pattern_path, const std::string &data_graph_path,
+         const std::string &data_graph_edgelist_path,
          const std::string &output_path)
       : pattern_path_(pattern_path), data_graph_path_(data_graph_path),
+        data_graph_edgelist_path_(data_graph_edgelist_path),
         output_path_(output_path) {}
 
-  __host__ void GenerateDFSExecutionPlan(const ImmutableCSR &p,
-                                         const ImmutableCSR &g,
-                                         ExecutionPlan *execution_plan);
+  //__host__ void GenerateDFSExecutionPlan(const ImmutableCSR &p,
+  //                                       const ImmutableCSR &g,
+  //                                       ExecutionPlan *execution_plan);
 
   __host__ void Run();
 
@@ -64,19 +59,23 @@ private:
 
   __host__ void AllocMappingBuf();
 
-  __host__ void Matching(const ImmutableCSR &p, const ImmutableCSR &g);
+  __host__ void Matching(const ImmutableCSR &p, const ImmutableCSR &g,
+                         const Edges &e);
+
+  __host__ void WOJMatching(const ImmutableCSR &p, const ImmutableCSR &g,
+                            const Edges &e);
 
   ImmutableCSR p_;
-  //  GridCSRTiledMatrix *g_;
 
   ImmutableCSR g_;
 
-  UnifiedOwnedBufferUint32 m_;
+  Edges e_;
 
-  ExecutionPlan exe_plan;
+  UnifiedOwnedBufferUint32 m_;
 
   const std::string pattern_path_;
   const std::string data_graph_path_;
+  const std::string data_graph_edgelist_path_;
   const std::string output_path_;
 
   VertexLabel *label_p_ = nullptr;

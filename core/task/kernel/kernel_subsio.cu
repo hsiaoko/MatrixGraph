@@ -43,6 +43,7 @@ struct ParametersSubIso {
   VertexID n_vertices_g;
   EdgeIndex n_edges_g;
   uint8_t *data_g;
+  VertexID *edgelist_g;
   VertexLabel *v_label_g;
   VertexID *weft_count;
   EdgeIndex *weft_offset;
@@ -62,9 +63,11 @@ LabelFilter(const ParametersSubIso &params, VertexID u_idx, VertexID v_idx) {
   return u_label == v_label;
 }
 
-static __noinline__ __device__ bool
-LabelDegreeFilter(const ParametersSubIso &params, VertexID u_idx,
-                  VertexID v_idx) {
+static
+    //__noinline__
+    __forceinline__ __device__ bool
+    LabelDegreeFilter(const ParametersSubIso &params, VertexID u_idx,
+                      VertexID v_idx) {
 
   VertexID *globalid_p = (VertexID *)(params.data_p);
   VertexID *in_degree_p = globalid_p + params.n_vertices_p;
@@ -133,14 +136,14 @@ NeighborLabelCounterFilter(const ParametersSubIso &params, VertexID u_idx,
   return v_label_visited.Count() >= u_label_visited.Count();
 }
 
-static __noinline__ __device__ bool Filter(const ParametersSubIso &params,
-                                           VertexID u_idx, VertexID v_idx) {
+static __forceinline__ __device__ bool Filter(const ParametersSubIso &params,
+                                              VertexID u_idx, VertexID v_idx) {
 
-  // return LabelFilter(params, u_idx, v_idx);
+  return LabelFilter(params, u_idx, v_idx);
 
   // return NeighborLabelCounterFilter(params, u_idx, v_idx);
 
-  return LabelDegreeFilter(params, u_idx, v_idx);
+  // return LabelDegreeFilter(params, u_idx, v_idx);
 }
 
 static __noinline__ __device__ bool SteadyRefine(const ParametersSubIso &params,
@@ -220,6 +223,7 @@ static __noinline__ __device__ bool SteadyRefine(const ParametersSubIso &params,
     }
   }
 }
+
 static __noinline__ __device__ bool
 GraphQLRefine(const ParametersSubIso &params, LocalMatches &local_matches,
               VertexID k = 3) {
@@ -246,7 +250,6 @@ GraphQLRefine(const ParametersSubIso &params, LocalMatches &local_matches,
   for (VertexID u_idx = 0; u_idx < params.n_vertices_p; u_idx++) {
 
     for (VertexID nbr_u_idx = 0; nbr_u_idx < out_degree_p[u_idx]; nbr_u_idx++) {
-
     }
 
     // for (VertexID _ = 0; _ < n_candidates; _++) {
@@ -261,7 +264,7 @@ GraphQLRefine(const ParametersSubIso &params, LocalMatches &local_matches,
 static __noinline__ __device__ bool Refine(const ParametersSubIso &params,
                                            LocalMatches &local_matches) {
 
-  //SteadyRefine(params, local_matches);
+  // SteadyRefine(params, local_matches);
 }
 
 static __device__ bool Check(const ParametersSubIso &params, VertexID weft_id) {
@@ -507,6 +510,7 @@ static __noinline__ __global__ void ExtendKernel(ParametersSubIso params) {
   for (VertexID _ = 0; _ < params.n_vertices_p; _++) {
     level_visited_ptr_array[_] = new KernelBitmap();
     uint64_t size = params.n_vertices_g;
+    // uint64_t size = 1 << 10;
     uint64_t *data =
         (uint64_t *)malloc(sizeof(uint64_t) * KERNEL_WORD_OFFSET(size));
     level_visited_ptr_array[_]->Init(size, data);
@@ -542,7 +546,9 @@ static __noinline__ __global__ void ExtendKernel(ParametersSubIso params) {
       if (*params.weft_count >= kMaxNumWeft)
         break;
 
-      Refine(params, local_matches);
+      // Refined local matches.
+      //    Refine(params, local_matches);
+
       VertexID weft_id = atomicAdd(params.weft_count, (VertexID)1);
 
       for (VertexID _ = 0; _ < params.n_vertices_p; _++) {
@@ -586,6 +592,22 @@ static __global__ void CheckKernel(ParametersSubIso params) {
   }
 }
 
+static __noinline__ __global__ void WOJFilter(ParametersSubIso params) {}
+
+static __noinline__ __global__ void WOJExtendKernel(ParametersSubIso params) {
+  unsigned int tid = blockIdx.x * blockDim.x + threadIdx.x;
+  unsigned int step = blockDim.x * gridDim.x;
+
+  // for (VertexID u_idx = 0; u_idx < params.n_vertices_p; u_idx++) {
+  for (VertexID e_idx = tid; e_idx < params.n_edges_g; e_idx += step) {
+    printf("%d->%d\n", params.edgelist_g[2 * e_idx],
+           params.edgelist_g[2 * e_idx + 1]);
+    // Filter(params, 0, v_idx);
+  }
+
+  //}
+}
+
 void SubIsoKernelWrapper::SubIso(
     const cudaStream_t &stream, VertexID depth_p,
     const data_structures::UnifiedOwnedBuffer<VertexID> &exec_path,
@@ -597,6 +619,7 @@ void SubIsoKernelWrapper::SubIso(
     const data_structures::UnifiedOwnedBuffer<VertexLabel> &v_label_p,
     VertexID n_vertices_g, EdgeIndex n_edges_g,
     const data_structures::UnifiedOwnedBuffer<uint8_t> &data_g,
+    const data_structures::UnifiedOwnedBuffer<VertexID> &edgelist_g,
     const data_structures::UnifiedOwnedBuffer<VertexLabel> &v_label_g,
     const data_structures::UnifiedOwnedBuffer<VertexID> &weft_count,
     const data_structures::UnifiedOwnedBuffer<EdgeIndex> &weft_offset,
@@ -605,8 +628,8 @@ void SubIsoKernelWrapper::SubIso(
         &v_candidate_offset_for_each_weft,
     const data_structures::UnifiedOwnedBuffer<VertexID> &matches_data) {
 
-  dim3 dimBlock(32);
-  dim3 dimGrid(32);
+  dim3 dimBlock(64);
+  dim3 dimGrid(64);
 
   LocalMatches m0;
   ParametersSubIso params{.depth_p = depth_p,
@@ -621,6 +644,7 @@ void SubIsoKernelWrapper::SubIso(
                           .n_vertices_g = n_vertices_g,
                           .n_edges_g = n_edges_g,
                           .data_g = data_g.GetPtr(),
+                          .edgelist_g = edgelist_g.GetPtr(),
                           .v_label_g = v_label_g.GetPtr(),
                           .weft_count = weft_count.GetPtr(),
                           .weft_offset = weft_offset.GetPtr(),
@@ -629,16 +653,21 @@ void SubIsoKernelWrapper::SubIso(
                               v_candidate_offset_for_each_weft.GetPtr(),
                           .matches_data = matches_data.GetPtr()};
 
+  for (auto i = 0; i < 10; i++) {
+    std::cout << params.edgelist_g[2 * i] << "->"
+              << params.edgelist_g[2 * i + 1] << std::endl;
+  }
   // The default heap size is 8M.
-  cudaDeviceSetLimit(cudaLimitMallocHeapSize, 8388608 * 256);
+  // cudaDeviceSetLimit(cudaLimitMallocHeapSize, 8388608 * 256);
   auto time1 = std::chrono::system_clock::now();
 
-  ExtendKernel<<<dimGrid, dimBlock, 0, stream>>>(params);
+  // ExtendKernel<<<dimGrid, dimBlock, 0, stream>>>(params);
+  WOJExtendKernel<<<dimGrid, dimBlock, 0, stream>>>(params);
 
   cudaStreamSynchronize(stream);
   auto time2 = std::chrono::system_clock::now();
 
-  CheckKernel<<<dimGrid, dimBlock, 0, stream>>>(params);
+  // CheckKernel<<<dimGrid, dimBlock, 0, stream>>>(params);
   cudaStreamSynchronize(stream);
   auto time3 = std::chrono::system_clock::now();
 

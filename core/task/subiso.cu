@@ -17,8 +17,11 @@
 #include "core/data_structures/metadata.h"
 #include "core/data_structures/unified_buffer.cuh"
 #include "core/io/grid_csr_tiled_matrix_io.cuh"
+#include "core/task/kernel/data_structures/exec_plan.cuh"
+#include "core/task/kernel/data_structures/hash_buckets.cuh"
 #include "core/task/kernel/data_structures/matches.cuh"
 #include "core/task/kernel/kernel_subiso.cuh"
+#include "core/task/kernel/kernel_woj_subiso.cuh"
 #include "core/util/atomic.h"
 #include "core/util/bitmap.h"
 #include "core/util/bitmap_no_ownership.h"
@@ -67,6 +70,8 @@ using DeviceOwnedBufferUint64 =
     sics::matrixgraph::core::data_structures::DeviceOwnedBuffer<uint64_t>;
 using SubIsoKernelWrapper =
     sics::matrixgraph::core::task::kernel::SubIsoKernelWrapper;
+using WOJSubIsoKernelWrapper =
+    sics::matrixgraph::core::task::kernel::WOJSubIsoKernelWrapper;
 using Bitmap = sics::matrixgraph::core::util::Bitmap;
 using GPUBitmap = sics::matrixgraph::core::util::GPUBitmap;
 using BitmapNoOwnerShip = sics::matrixgraph::core::util::BitmapNoOwnerShip;
@@ -91,32 +96,9 @@ using sics::matrixgraph::core::common::kMaxNumCandidates;
 using sics::matrixgraph::core::common::kMaxNumEdges;
 using sics::matrixgraph::core::common::kMaxNumEdgesPerBlock;
 using sics::matrixgraph::core::common::kMaxVertexID;
-using ExecutionPlan = sics::matrixgraph::core::task::SubIso::ExecutionPlan;
 using Matches = sics::matrixgraph::core::task::kernel::Matches;
-
-static void DFSTraverse(VertexID vid, Bitmap &visited, const ImmutableCSR &g,
-                        std::vector<VertexID> &output,
-                        std::vector<VertexID> &output_in_edges, VertexID depth,
-                        VertexID &max_depth) {
-
-  auto u = g.GetVertexByLocalID(vid);
-
-  auto globalid = g.GetGlobalIDByLocalID(vid);
-  output.emplace_back(globalid);
-
-  visited.SetBit(vid);
-
-  max_depth = std::max(depth, max_depth);
-
-  for (VertexID _ = 0; _ < u.outdegree; _++) {
-    if (!visited.GetBit(u.outgoing_edges[_])) {
-      output_in_edges.emplace_back(globalid);
-      output_in_edges.emplace_back(u.outgoing_edges[_]);
-      DFSTraverse(u.outgoing_edges[_], visited, g, output, output_in_edges,
-                  depth + 1, max_depth);
-    }
-  }
-}
+using HashBuckets = sics::matrixgraph::core::task::kernel::HashBuckets;
+using sics::matrixgraph::core::common::kMaxNumWeft;
 
 __host__ void SubIso::LoadData() {
   std::cout << "[SubIso] LoadData()" << std::endl;
@@ -126,6 +108,9 @@ __host__ void SubIso::LoadData() {
 
   g_.Read(data_graph_path_);
   g_.PrintGraph(3);
+
+  e_.ReadFromBin(data_graph_edgelist_path_);
+  e_.ShowGraph(3);
 }
 
 __host__ void SubIso::InitLabel() {
@@ -151,44 +136,8 @@ __host__ void SubIso::InitLabel() {
   // g_vlabel[39] = 3;
 }
 
-__host__ void SubIso::GenerateDFSExecutionPlan(const ImmutableCSR &p,
-                                               const ImmutableCSR &g,
-                                               ExecutionPlan *exec_plan) {
-
-  Bitmap visited(p.get_max_vid());
-  auto global_vid = p.GetGlobalIDByLocalID(0);
-  std::vector<VertexID> output;
-  std::vector<VertexID> output_in_edges;
-  output.reserve(p.get_max_vid());
-  output_in_edges.reserve(p.get_max_vid());
-
-  VertexID depth = 0;
-  DFSTraverse(0, visited, p, output, output_in_edges, 0, depth);
-
-  exec_plan->sequential_exec_path_in_edges.Init(sizeof(VertexID) *
-                                                p.get_num_vertices() * 2);
-  exec_plan->sequential_exec_path.Init(sizeof(VertexID) * p.get_num_vertices());
-  cudaMemcpy(exec_plan->sequential_exec_path.GetPtr(), output.data(),
-             sizeof(VertexID) * p.get_num_vertices(), cudaMemcpyHostToHost);
-  exec_plan->inverted_index_of_sequential_exec_path.Init(sizeof(VertexID) *
-                                                         p.get_num_vertices());
-  for (VertexID _ = 0; _ < p.get_num_vertices(); _++) {
-    exec_plan->inverted_index_of_sequential_exec_path
-        .GetPtr()[exec_plan->sequential_exec_path.GetPtr()[_]] = _;
-  }
-  exec_plan->sequential_exec_path_in_edges.GetPtr()[0] = kMaxVertexID;
-  exec_plan->sequential_exec_path_in_edges.GetPtr()[1] =
-      exec_plan->sequential_exec_path.GetPtr()[0];
-
-  cudaMemcpy(exec_plan->sequential_exec_path_in_edges.GetPtr() + 2,
-             output_in_edges.data(), sizeof(VertexID) * output_in_edges.size(),
-             cudaMemcpyHostToHost);
-
-  exec_plan->n_vertices = p.get_num_vertices();
-  exec_plan->depth = depth;
-}
-
-__host__ void SubIso::Matching(const ImmutableCSR &p, const ImmutableCSR &g) {
+__host__ void SubIso::Matching(const ImmutableCSR &p, const ImmutableCSR &g,
+                               const Edges &e) {
   auto parallelism = std::thread::hardware_concurrency();
   std::vector<size_t> worker(parallelism);
   std::mutex mtx;
@@ -224,9 +173,11 @@ __host__ void SubIso::Matching(const ImmutableCSR &p, const ImmutableCSR &g) {
   // Init data_graph.
   BufferUint8 data_g;
   BufferVertexLabel v_label_g;
+  BufferVertexID data_edgelist_g;
 
   UnifiedOwnedBufferUint8 unified_data_g;
   UnifiedOwnedBufferVertexLabel unified_v_label_g;
+  UnifiedOwnedBufferVertexID unified_edgelist_g;
 
   data_g.data = g.GetGraphBuffer();
   data_g.size = sizeof(VertexID) * g.get_num_vertices() +
@@ -244,6 +195,11 @@ __host__ void SubIso::Matching(const ImmutableCSR &p, const ImmutableCSR &g) {
   v_label_g.size = sizeof(VertexLabel) * g.get_num_vertices();
 
   unified_v_label_g.Init(v_label_g);
+
+  data_edgelist_g.data = (VertexID *)e.get_base_ptr();
+  data_edgelist_g.size = sizeof(VertexID) * e.get_metadata().num_edges * 2;
+
+  unified_edgelist_g.Init(data_edgelist_g);
 
   // Init output.
   std::vector<UnifiedOwnedBufferVertexID> unified_edgelist_m;
@@ -268,12 +224,9 @@ __host__ void SubIso::Matching(const ImmutableCSR &p, const ImmutableCSR &g) {
 
   Matches matches(p.get_num_vertices(), g.get_num_vertices());
 
-  UnifiedOwnedBufferVertexID unified_m0_data;
-  UnifiedOwnedBufferVertexID unified_m0_offset;
-
   // Generate Execution Plan
   ExecutionPlan exec_plan;
-  GenerateDFSExecutionPlan(p, g, &exec_plan);
+  exec_plan.GenerateDFSExecutionPlan(p, g);
 
   // Start Matching ...
   cudaDeviceSynchronize();
@@ -281,18 +234,28 @@ __host__ void SubIso::Matching(const ImmutableCSR &p, const ImmutableCSR &g) {
   cudaStreamCreate(&stream);
 
   SubIsoKernelWrapper::SubIso(
-      stream, exec_plan.depth, exec_plan.sequential_exec_path,
-      exec_plan.inverted_index_of_sequential_exec_path,
-      exec_plan.sequential_exec_path_in_edges, p.get_num_vertices(),
+      stream, exec_plan.get_depth(), *exec_plan.get_sequential_exec_path_ptr(),
+      *exec_plan.get_inverted_index_of_sequential_exec_path_ptr(),
+      *exec_plan.get_sequential_exec_path_in_edges_ptr(), p.get_num_vertices(),
       p.get_num_outgoing_edges(), unified_data_p, unified_v_label_p,
       g.get_num_vertices(), g.get_num_outgoing_edges(), unified_data_g,
-      unified_v_label_g, matches.weft_count_, matches.weft_offset_,
-      matches.weft_size_, matches.v_candidate_offset_for_each_weft_,
-      matches.matches_data_);
+      unified_edgelist_g, unified_v_label_g, matches.weft_count_,
+      matches.weft_offset_, matches.weft_size_,
+      matches.v_candidate_offset_for_each_weft_, matches.matches_data_);
 
   cudaDeviceSynchronize();
 
   matches.Print(3);
+}
+
+__host__ void SubIso::WOJMatching(const ImmutableCSR &p, const ImmutableCSR &g,
+                                  const Edges &e) {
+
+  // Generate Execution Plan
+  ExecutionPlan exec_plan;
+  exec_plan.GenerateWOJExecutionPlan(p, g);
+
+  WOJSubIsoKernelWrapper::Filter(p, g, e, exec_plan);
 }
 
 __host__ void SubIso::Run() {
@@ -304,7 +267,7 @@ __host__ void SubIso::Run() {
 
   auto start_time_2 = std::chrono::system_clock::now();
 
-  Matching(p_, g_);
+  WOJMatching(p_, g_, e_);
 
   std::cout << "[SubIso] LoadData() elapsed: "
             << std::chrono::duration_cast<std::chrono::microseconds>(

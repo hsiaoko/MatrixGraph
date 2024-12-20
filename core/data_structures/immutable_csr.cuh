@@ -125,6 +125,8 @@ public:
 
   void ReOrder(VertexID tile_size);
 
+  SubGraphMetadata GetMetadata() const { return metadata_; }
+
   GraphID get_gid() const { return metadata_.gid; }
 
   VertexID get_num_vertices() const { return metadata_.num_vertices; }

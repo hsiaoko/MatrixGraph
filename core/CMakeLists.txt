@@ -28,6 +28,7 @@ file(GLOB CORE_SOURCES
         "util/*.cu"
         "task/*.cu"
         "task/kernel/*.cu"
+        "task/kernel/data_structures/*.cu"
         )
 
 
@@ -45,6 +46,7 @@ file(GLOB CORE_HEADERS
         "util/*.cuh"
         "task/*.cuh"
         "task/kernel/*.cuh"
+        "task/kernel/data_structures/*.cuh"
         )
 
 #######################
