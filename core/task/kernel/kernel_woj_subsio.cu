@@ -128,18 +128,23 @@ static __noinline__ __global__ void WOJExtendKernel(ParametersFilter params) {
   auto lane_id = threadIdx.x & (warp_size - 1);
   auto warp_id = threadIdx.x >> log_warp_size;
 
-  __shared__ VertexID local_matches_data[2048];
+  __shared__ VertexID local_matches_data[2044];
   __shared__ VertexID local_matches_offset;
+  if (threadIdx.x == 0)
+    local_matches_offset = 0;
+  __syncthreads();
 
   VertexID u_eid = params.u_eid;
   VertexID u_src = params.exec_path_in_edges[2 * u_eid];
   VertexID u_dst = params.exec_path_in_edges[2 * u_eid + 1];
+  VertexID offset = 0;
   for (VertexID e_idx = tid; e_idx < params.n_edges_g; e_idx += step) {
     VertexID v_src = params.edgelist_g[2 * e_idx];
     VertexID v_dst = params.edgelist_g[2 * e_idx + 1];
     bool src_tag = true;
     bool dst_tag = true;
 
+    // printf("%d->%d(%d=>%d)\n", v_src, v_dst, u_src, u_dst);
     if (u_src != -1) {
       src_tag = Filter(params, u_src, v_src);
     }
@@ -147,9 +152,16 @@ static __noinline__ __global__ void WOJExtendKernel(ParametersFilter params) {
       dst_tag = Filter(params, u_dst, v_dst);
     }
     if (src_tag && dst_tag) {
-      VertexID offset = atomicAdd(&local_matches_offset, 1);
+      offset = atomicAdd(&local_matches_offset, 1);
       local_matches_data[2 * offset] = v_src;
       local_matches_data[2 * offset + 1] = v_dst;
+      if (offset > 2000) {
+        VertexID write_offset =
+            atomicAdd(&params.hash_buckets.offset_[u_eid], offset + 1);
+        memcpy(params.hash_buckets.data_[u_eid] + 2 * write_offset,
+               local_matches_data, sizeof(VertexID) * 2 * (offset + 1));
+        atomicMin(&local_matches_offset, 0);
+      }
     }
   }
 
@@ -179,8 +191,7 @@ void WOJSubIsoKernelWrapper::Filter(const ImmutableCSR &p,
   std::for_each(std::execution::par, worker.begin(), worker.end(),
                 [step, &p_streams_vec, &mtx](auto w) {
                   for (VertexID i = w; i < p_streams_vec.size(); i += step) {
-                    //                 cudaSetDevice(common::hash_function(i) %
-                    //                 4);
+                    cudaSetDevice(common::hash_function(i) % 4);
                     cudaStreamCreate(&p_streams_vec[i]);
                   }
                 });
@@ -205,7 +216,8 @@ void WOJSubIsoKernelWrapper::Filter(const ImmutableCSR &p,
   buffer_exec_path.size = sizeof(VertexID) * p.get_num_vertices();
 
   buffer_exec_path_in_edges.data = exec_plan.get_exec_path_in_edges_ptr();
-  buffer_exec_path_in_edges.size = sizeof(VertexID) * p.get_num_vertices() * 2;
+  buffer_exec_path_in_edges.size =
+      sizeof(VertexID) * p.get_num_outgoing_edges() * 2;
 
   v_label_p.data = p.GetVLabelBasePointer();
   v_label_p.size = sizeof(VertexLabel) * p.get_num_vertices();
@@ -265,13 +277,13 @@ void WOJSubIsoKernelWrapper::Filter(const ImmutableCSR &p,
     hash_buckets_vec[_].Init(p.get_num_outgoing_edges(), kMaxNumWeft);
   }
 
-  dim3 dimBlock(1);
-  dim3 dimGrid(1);
+  dim3 dimBlock(1024);
+  dim3 dimGrid(1024);
 
   auto time1 = std::chrono::system_clock::now();
   for (VertexID _ = 0; _ < p.get_num_outgoing_edges(); _++) {
     VertexID device_id = common::hash_function(_) % 4;
-    //  cudaSetDevice(device_id);
+    cudaSetDevice(device_id);
     cudaStream_t &stream = p_streams_vec[_];
     ParametersFilter params{
         .u_eid = _,
@@ -287,14 +299,13 @@ void WOJSubIsoKernelWrapper::Filter(const ImmutableCSR &p,
         .v_label_g = v_label_g_vec[device_id].GetPtr(),
         .hash_buckets = hash_buckets_vec[0],
     };
-    // for (auto __ = 0; __ < p.get_num_outgoing_edges(); __++) {
-    //   std::cout << params.exec_path_in_edges[2 * __]
-    //             << params.exec_path_in_edges[2 * __ + 1] << std::endl;
-    // }
     WOJExtendKernel<<<dimGrid, dimBlock, 0, stream>>>(params);
   }
 
-  cudaDeviceSynchronize();
+  for (VertexID device_id = 0; device_id < 4; device_id++) {
+    cudaSetDevice(device_id);
+    cudaDeviceSynchronize();
+  }
 
   auto time2 = std::chrono::system_clock::now();
 
@@ -303,9 +314,10 @@ void WOJSubIsoKernelWrapper::Filter(const ImmutableCSR &p,
     CUDA_CHECK(err);
   }
 
-  for (auto j = 0; j < p.get_num_vertices(); j++) {
-    std::cout << ", offset: " << hash_buckets_vec[0].offset_[j] << std::endl;
-    for (VertexID eid = 0; eid < hash_buckets_vec[0].offset_[j]; eid++) {
+  for (auto j = 0; j < p.get_num_outgoing_edges(); j++) {
+    std::cout << " offset: " << hash_buckets_vec[0].offset_[j] << std::endl;
+    // for (VertexID eid = 0; eid < hash_buckets_vec[0].offset_[j]; eid++) {
+    for (VertexID eid = 0; eid < 3; eid++) {
       std::cout << hash_buckets_vec[0].data_[j][2 * eid] << " -> "
                 << hash_buckets_vec[0].data_[j][2 * eid + 1] << std::endl;
     }

@@ -20,7 +20,7 @@ static const uint32_t kDefalutNumVerticesPerTile = 64;
 static const uint64_t kMaxNumCandidates = 65536;
 
 static const uint64_t kMaxNumCandidatesPerThread = 32;
-static const uint64_t kMaxNumWeft = 128;
+static const uint64_t kMaxNumWeft = 655360;
 
 } // namespace common
 } // namespace core
