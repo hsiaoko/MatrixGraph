@@ -9,7 +9,7 @@
 #include "core/data_structures/immutable_csr.cuh"
 #include "core/data_structures/unified_buffer.cuh"
 #include "core/task/kernel/data_structures/exec_plan.cuh"
-#include "core/task/kernel/data_structures/hash_buckets.cuh"
+#include "core/task/kernel/data_structures/woj_matches.cuh"
 
 namespace sics {
 namespace matrixgraph {
@@ -38,23 +38,13 @@ public:
   // than once as an instance of Singleton class is already created.
   static WOJSubIsoKernelWrapper *GetInstance();
 
-  static void
-  Filter(const cudaStream_t &stream, VertexID u_idx, VertexID depth_p,
-         const UnifiedOwnedBufferVertexID &exec_path,
-         const data_structures::UnifiedOwnedBuffer<VertexID>
-             &inverted_index_of_exec_path,
-         const UnifiedOwnedBufferVertexID &exec_path_in_edges,
-         VertexID n_vertices_p, EdgeIndex n_edges_p,
-         const data_structures::UnifiedOwnedBuffer<uint8_t> &data_p,
-         const data_structures::UnifiedOwnedBuffer<VertexLabel> &v_label_p,
-         VertexID n_vertices_g, EdgeIndex n_edges_g,
-         const data_structures::UnifiedOwnedBuffer<uint8_t> &data_g,
-         const data_structures::UnifiedOwnedBuffer<VertexID> &edgelist_g,
-         const data_structures::UnifiedOwnedBuffer<VertexLabel> &v_label_g,
-         const HashBuckets &hash_buckets);
+  static std::vector<WOJMatches> Filter(const ExecutionPlan &exec_plan,
+                                        const ImmutableCSR &p,
+                                        const ImmutableCSR &g, const Edges &e);
 
-  static void Filter(const ImmutableCSR &p, const ImmutableCSR &g,
-                     const Edges &e, const ExecutionPlan &exec_plan);
+  static void Join(const ExecutionPlan &exec_plan,
+                   const std::vector<WOJMatches> &input_woj_matches,
+                   WOJMatches *output_woj_matches);
 
 private:
   WOJSubIsoKernelWrapper() = default;

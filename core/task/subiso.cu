@@ -18,8 +18,8 @@
 #include "core/data_structures/unified_buffer.cuh"
 #include "core/io/grid_csr_tiled_matrix_io.cuh"
 #include "core/task/kernel/data_structures/exec_plan.cuh"
-#include "core/task/kernel/data_structures/hash_buckets.cuh"
 #include "core/task/kernel/data_structures/matches.cuh"
+#include "core/task/kernel/data_structures/woj_matches.cuh"
 #include "core/task/kernel/kernel_subiso.cuh"
 #include "core/task/kernel/kernel_woj_subiso.cuh"
 #include "core/util/atomic.h"
@@ -97,7 +97,7 @@ using sics::matrixgraph::core::common::kMaxNumEdges;
 using sics::matrixgraph::core::common::kMaxNumEdgesPerBlock;
 using sics::matrixgraph::core::common::kMaxVertexID;
 using Matches = sics::matrixgraph::core::task::kernel::Matches;
-using HashBuckets = sics::matrixgraph::core::task::kernel::HashBuckets;
+using WOJMatches = sics::matrixgraph::core::task::kernel::WOJMatches;
 using sics::matrixgraph::core::common::kMaxNumWeft;
 
 __host__ void SubIso::LoadData() {
@@ -255,7 +255,9 @@ __host__ void SubIso::WOJMatching(const ImmutableCSR &p, const ImmutableCSR &g,
   ExecutionPlan exec_plan;
   exec_plan.GenerateWOJExecutionPlan(p, g);
 
-  WOJSubIsoKernelWrapper::Filter(p, g, e, exec_plan);
+  auto woj_matches = WOJSubIsoKernelWrapper::Filter(exec_plan, p, g, e);
+
+  WOJSubIsoKernelWrapper::Join(exec_plan, woj_matches, nullptr);
 }
 
 __host__ void SubIso::Run() {
