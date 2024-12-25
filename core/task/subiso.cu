@@ -252,12 +252,29 @@ __host__ void SubIso::WOJMatching(const ImmutableCSR &p, const ImmutableCSR &g,
                                   const Edges &e) {
 
   // Generate Execution Plan
-  ExecutionPlan exec_plan;
+  WOJExecutionPlan exec_plan;
   exec_plan.GenerateWOJExecutionPlan(p, g);
+  exec_plan.SetNDevices(1);
 
+  auto start_time_0 = std::chrono::system_clock::now();
   auto woj_matches = WOJSubIsoKernelWrapper::Filter(exec_plan, p, g, e);
+  auto start_time_1 = std::chrono::system_clock::now();
 
   WOJSubIsoKernelWrapper::Join(exec_plan, woj_matches, nullptr);
+  auto start_time_2 = std::chrono::system_clock::now();
+
+  std::cout << "[WOJMatching] Filter() elapsed: "
+            << std::chrono::duration_cast<std::chrono::microseconds>(
+                   start_time_1 - start_time_0)
+                       .count() /
+                   (double)CLOCKS_PER_SEC
+            << std::endl;
+  std::cout << "[WOJMatching] Join() elapsed: "
+            << std::chrono::duration_cast<std::chrono::microseconds>(
+                   start_time_2 - start_time_1)
+                       .count() /
+                   (double)CLOCKS_PER_SEC
+            << std::endl;
 }
 
 __host__ void SubIso::Run() {
@@ -270,10 +287,18 @@ __host__ void SubIso::Run() {
   auto start_time_2 = std::chrono::system_clock::now();
 
   WOJMatching(p_, g_, e_);
+  auto start_time_3 = std::chrono::system_clock::now();
 
   std::cout << "[SubIso] LoadData() elapsed: "
             << std::chrono::duration_cast<std::chrono::microseconds>(
                    start_time_1 - start_time_0)
+                       .count() /
+                   (double)CLOCKS_PER_SEC
+            << std::endl;
+
+  std::cout << "[SubIso] WOJMatching() elapsed: "
+            << std::chrono::duration_cast<std::chrono::microseconds>(
+                   start_time_2 - start_time_1)
                        .count() /
                    (double)CLOCKS_PER_SEC
             << std::endl;

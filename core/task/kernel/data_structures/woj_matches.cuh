@@ -26,22 +26,77 @@ public:
 
   __host__ WOJMatches() = default;
 
+  // __host__ WOJMatches(const WOJMatches &other);
+
+  // __host__ WOJMatches(WOJMatches &&other);
+
+  // WOJMatches &operator=(const WOJMatches &other);
+
+  // WOJMatches &operator=(WOJMatches &&other);
+
   void __host__ Init(VertexID x, VertexID y);
 
   void __host__ Free();
 
-  __host__ __device__ VertexID get_offset() const { return offset_[0]; }
+  __host__ __device__ VertexID BinarySearch(VertexID col, VertexID val) const;
 
-  __host__ __device__ VertexID get_n_stride() const { return n_stride_; }
+  __inline__ __host__ void SetYOffset(VertexID val) { *y_offset_ = val; }
 
-  __host__ __device__ VertexID *get_offset_ptr() const { return offset_; }
-  __host__ __device__ VertexID *get_data_ptr() const { return data_[0]; }
+  __inline__ __host__ void SetXOffset(VertexID val) { *x_offset_ = val; }
 
-  VertexID **data_ = nullptr;
-  VertexID *offset_ = nullptr;
+  __inline__ __host__ void SetHeader(VertexID idx, VertexID val) {
+    header_ptr_[idx] = val;
+  }
+
+  __host__ std::pair<VertexID, VertexID> GetJoinKey(const WOJMatches &other);
+
+  __host__ void SetHeader(const VertexID *left_header, VertexID left_x_offset,
+                          const VertexID *right_header, VertexID right_x_offset,
+                          const std::pair<VertexID, VertexID> &hash_keys);
+
+  __inline__ __host__ __device__ VertexID get_y_offset() const {
+    return *y_offset_;
+  }
+
+  __inline__ __host__ __device__ VertexID get_x_offset() const {
+    return *x_offset_;
+  }
+
+  __inline__ __host__ __device__ VertexID get_x() const { return x_; }
+
+  __inline__ __host__ __device__ VertexID get_y() const { return y_; }
+
+  __inline__ __host__ __device__ VertexID *get_y_offset_ptr() const {
+    return y_offset_;
+  }
+
+  __inline__ __host__ __device__ VertexID *get_x_offset_ptr() const {
+    return x_offset_;
+  }
+
+  __inline__ __host__ __device__ VertexID *get_data_ptr() const {
+    return data_;
+  }
+
+  __inline__ __host__ __device__ VertexID *get_header_ptr() const {
+    return header_ptr_;
+  }
+
+  __inline __host__ void Clear() {
+    *y_offset_ = 0;
+    *x_offset_ = 0;
+    memset(data_, 0, sizeof(VertexID) * x_ * y_);
+  }
+
+  void Print(VertexID offset = 3) const;
+
+  VertexID *header_ptr_ = nullptr;
+  VertexID *data_ = nullptr;
+  VertexID *y_offset_ = nullptr;
+  VertexID *x_offset_ = nullptr;
+
   VertexID y_ = 0;
   VertexID x_ = 0;
-  VertexID n_stride_ = 2;
 };
 
 } // namespace kernel

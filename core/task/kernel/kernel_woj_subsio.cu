@@ -9,11 +9,13 @@
 #include "core/data_structures/device_buffer.cuh"
 #include "core/data_structures/host_buffer.cuh"
 #include "core/data_structures/unified_buffer.cuh"
+#include "core/task/kernel/algorithms/sort.cuh"
 #include "core/task/kernel/data_structures/immutable_csr_gpu.cuh"
 #include "core/task/kernel/data_structures/kernel_bitmap.cuh"
 #include "core/task/kernel/data_structures/mini_kernel_bitmap.cuh"
 #include "core/task/kernel/data_structures/woj_matches.cuh"
 #include "core/task/kernel/kernel_woj_subiso.cuh"
+#include "core/util/bitmap.h"
 
 namespace sics {
 namespace matrixgraph {
@@ -24,6 +26,7 @@ namespace kernel {
 using EdgeIndex = sics::matrixgraph::core::common::EdgeIndex;
 using VertexLabel = sics::matrixgraph::core::common::VertexLabel;
 using VertexID = sics::matrixgraph::core::common::VertexID;
+using Bitmap = sics::matrixgraph::core::util::Bitmap;
 using sics::matrixgraph::core::common::kBlockDim;
 using sics::matrixgraph::core::common::kGridDim;
 using sics::matrixgraph::core::common::kLogWarpSize;
@@ -36,7 +39,6 @@ using sics::matrixgraph::core::common::kNWarpPerCUDACore;
 using sics::matrixgraph::core::common::kSharedMemoryCapacity;
 using sics::matrixgraph::core::common::kSharedMemorySize;
 using sics::matrixgraph::core::common::kWarpSize;
-
 using sics::matrixgraph::core::task::kernel::HostKernelBitmap;
 using sics::matrixgraph::core::task::kernel::HostMiniKernelBitmap;
 using sics::matrixgraph::core::task::kernel::KernelBitmap;
@@ -76,32 +78,16 @@ struct ParametersFilter {
   uint8_t *data_g = nullptr;
   VertexID *edgelist_g = nullptr;
   VertexLabel *v_label_g = nullptr;
-  WOJMatches woj_matchess;
+  WOJMatches woj_matches;
 };
 
-static __forceinline__ __device__ void
-EdgesBitonicCompare(VertexID *data, VertexID i, VertexID j, VertexID dir,
-                    VertexID n_cols) {
-  VertexID temp;
-  if (data[n_cols * i] > data[n_cols * j] == dir) {
-    temp = data[n_cols * i];
-    data[n_cols * i] = data[n_cols * j];
-    data[n_cols * j] = temp;
-  }
-}
-
-__global__ void EdgesBitonicSortKernel(VertexID *data, VertexID n,
-                                       VertexID stage, VertexID step,
-                                       VertexID n_cols) {
-  unsigned int idx = blockIdx.x * blockDim.x + threadIdx.x;
-  unsigned int ixj = idx ^ step;
-
-  if (ixj > idx && ixj < n) {
-    VertexID dir = ((dir & stage) == 0) ? 1 : 0;
-    EdgesBitonicCompare(data, idx, ixj, dir, n_cols);
-  }
-  __syncthreads();
-}
+struct ParametersJoin {
+  WOJMatches left_woj_matches;
+  WOJMatches right_woj_matches;
+  WOJMatches output_woj_matches;
+  VertexID left_hash_idx;
+  VertexID right_hash_idx;
+};
 
 static __forceinline__ __device__ bool
 LabelFilter(const ParametersFilter &params, VertexID u_idx, VertexID v_idx) {
@@ -136,14 +122,14 @@ LabelDegreeFilter(const ParametersFilter &params, VertexID u_idx,
 static __forceinline__ __device__ bool Filter(const ParametersFilter &params,
                                               VertexID u_idx, VertexID v_idx) {
 
-  return LabelFilter(params, u_idx, v_idx);
+  // return LabelFilter(params, u_idx, v_idx);
 
   // return NeighborLabelCounterFilter(params, u_idx, v_idx);
 
-  // return LabelDegreeFilter(params, u_idx, v_idx);
+  return LabelDegreeFilter(params, u_idx, v_idx);
 }
 
-static __noinline__ __global__ void WOJExtendKernel(ParametersFilter params) {
+static __global__ void WOJFilterKernel(ParametersFilter params) {
   unsigned int tid = blockIdx.x * blockDim.x + threadIdx.x;
   unsigned int step = blockDim.x * gridDim.x;
 
@@ -156,13 +142,13 @@ static __noinline__ __global__ void WOJExtendKernel(ParametersFilter params) {
     local_matches_offset = 0;
   __syncthreads();
 
-  auto data_ptr = params.woj_matchess.get_data_ptr();
+  auto data_ptr = params.woj_matches.get_data_ptr();
 
   VertexID u_eid = params.u_eid;
   VertexID u_src = params.exec_path_in_edges[2 * u_eid];
   VertexID u_dst = params.exec_path_in_edges[2 * u_eid + 1];
   VertexID offset = 0;
-  VertexID *global_offset_ptr = params.woj_matchess.get_offset_ptr();
+  VertexID *global_y_offset_ptr = params.woj_matches.get_y_offset_ptr();
   for (VertexID e_idx = tid; e_idx < params.n_edges_g; e_idx += step) {
     VertexID v_src = params.edgelist_g[2 * e_idx];
     VertexID v_dst = params.edgelist_g[2 * e_idx + 1];
@@ -176,9 +162,9 @@ static __noinline__ __global__ void WOJExtendKernel(ParametersFilter params) {
       offset = atomicAdd(&local_matches_offset, 1);
       local_matches_data[2 * offset] = v_src;
       local_matches_data[2 * offset + 1] = v_dst;
-      if (offset > kSharedMemorySize - 1) {
-        VertexID write_offset = atomicAdd(global_offset_ptr, offset + 1);
-        memcpy(data_ptr + 2 * write_offset, local_matches_data,
+      if (offset > kSharedMemorySize / 2) {
+        VertexID write_y_offset = atomicAdd(global_y_offset_ptr, offset + 1);
+        memcpy(data_ptr + 2 * write_y_offset, local_matches_data,
                sizeof(VertexID) * 2 * (offset + 1));
         atomicMin(&local_matches_offset, 0);
       }
@@ -187,17 +173,81 @@ static __noinline__ __global__ void WOJExtendKernel(ParametersFilter params) {
 
   __syncthreads();
   if (threadIdx.x == 0) {
-    auto offset = atomicAdd(global_offset_ptr, local_matches_offset);
+    auto offset = atomicAdd(global_y_offset_ptr, local_matches_offset);
     memcpy(data_ptr + 2 * offset, local_matches_data,
            sizeof(VertexID) * 2 * local_matches_offset);
   }
 }
 
-std::vector<WOJMatches>
-WOJSubIsoKernelWrapper::Filter(const ExecutionPlan &exec_plan,
+static __noinline__ __global__ void WOJJoinKernel(ParametersJoin params) {
+  unsigned int tid = blockIdx.x * blockDim.x + threadIdx.x;
+  unsigned int step = blockDim.x * gridDim.x;
+
+  auto lane_id = threadIdx.x & (kWarpSize - 1);
+  auto warp_id = threadIdx.x >> kLogWarpSize;
+
+  __shared__ VertexID local_matches_data[kSharedMemorySize];
+  __shared__ VertexID local_matches_offset;
+  if (threadIdx.x == 0) {
+    local_matches_offset = 0;
+    memset(local_matches_data, 0, sizeof(VertexID) * kSharedMemorySize);
+  }
+  __syncthreads();
+
+  VertexID *left_data = params.left_woj_matches.get_data_ptr();
+  VertexID *right_data = params.right_woj_matches.get_data_ptr();
+  VertexID *output_data = params.output_woj_matches.get_data_ptr();
+  VertexID left_x_offset = params.left_woj_matches.get_x_offset();
+  VertexID right_x_offset = params.right_woj_matches.get_x_offset();
+  VertexID output_x_offset = params.output_woj_matches.get_x_offset();
+
+  VertexID *global_offset_ptr = params.output_woj_matches.get_y_offset_ptr();
+
+  for (VertexID left_data_offset = tid;
+       left_data_offset < params.left_woj_matches.get_y_offset();
+       left_data_offset += step) {
+    //    printf("%d->%d\n", right_data[right_x * e_idx],
+    //           right_data[right_x * e_idx + 1]);
+    VertexID target =
+        left_data[left_x_offset * left_data_offset + params.left_hash_idx];
+    VertexID right_data_offset =
+        params.right_woj_matches.BinarySearch(params.right_hash_idx, target);
+    if (right_data_offset != kMaxVertexID) {
+      auto shared_mem_offset = atomicAdd(&local_matches_offset, 1);
+      memcpy(local_matches_data + shared_mem_offset * output_x_offset,
+             left_data + left_data_offset * left_x_offset,
+             sizeof(VertexID) * left_x_offset);
+
+      VertexID write_col = 0;
+      for (VertexID right_col_idx = 0; right_col_idx < right_x_offset;
+           right_col_idx++) {
+        if (right_col_idx == params.right_hash_idx)
+          continue;
+        local_matches_data[shared_mem_offset * output_x_offset + left_x_offset +
+                           write_col] =
+            right_data[right_data_offset * right_x_offset + right_col_idx];
+        // printf("append %d at %d/ %d\n",
+        //        right_data[right_data_offset * right_x_offset +
+        //        right_col_idx], write_col + left_x_offset, output_x_offset);
+        write_col++;
+      }
+    }
+  }
+
+  __syncthreads();
+  if (threadIdx.x == 0) {
+    auto offset = atomicAdd(global_offset_ptr, local_matches_offset);
+    memcpy(output_data + output_x_offset * offset, local_matches_data,
+           sizeof(VertexID) * output_x_offset * local_matches_offset);
+  }
+}
+
+std::vector<WOJMatches *>
+WOJSubIsoKernelWrapper::Filter(const WOJExecutionPlan &exec_plan,
                                const ImmutableCSR &p, const ImmutableCSR &g,
                                const Edges &e) {
-  std::cout << "Filter" << std::endl;
+  dim3 dimBlock(kBlockDim);
+  dim3 dimGrid(kGridDim);
   auto parallelism = std::thread::hardware_concurrency();
   std::vector<size_t> worker(parallelism);
   std::mutex mtx;
@@ -209,9 +259,10 @@ WOJSubIsoKernelWrapper::Filter(const ExecutionPlan &exec_plan,
   std::vector<cudaStream_t> p_streams_vec;
   p_streams_vec.resize(p.get_num_outgoing_edges());
   std::for_each(std::execution::par, worker.begin(), worker.end(),
-                [step, &p_streams_vec, &mtx](auto w) {
+                [step, &exec_plan, &p_streams_vec, &mtx](auto w) {
                   for (VertexID i = w; i < p_streams_vec.size(); i += step) {
-                    cudaSetDevice(common::hash_function(i) % 4);
+                    cudaSetDevice(common::hash_function(i) %
+                                  exec_plan.get_n_devices());
                     cudaStreamCreate(&p_streams_vec[i]);
                   }
                 });
@@ -219,7 +270,6 @@ WOJSubIsoKernelWrapper::Filter(const ExecutionPlan &exec_plan,
   // Init pattern.
   BufferUint8 data_p;
   BufferVertexLabel v_label_p;
-  BufferVertexID buffer_exec_path;
   BufferVertexID buffer_exec_path_in_edges;
 
   data_p.data = p.GetGraphBuffer();
@@ -231,9 +281,6 @@ WOJSubIsoKernelWrapper::Filter(const ExecutionPlan &exec_plan,
                 sizeof(VertexID) * p.get_num_incoming_edges() +
                 sizeof(VertexID) * p.get_num_outgoing_edges() +
                 sizeof(VertexID) * (p.get_max_vid() + 1);
-
-  buffer_exec_path.data = exec_plan.get_exec_path_ptr();
-  buffer_exec_path.size = sizeof(VertexID) * p.get_num_vertices();
 
   buffer_exec_path_in_edges.data = exec_plan.get_exec_path_in_edges_ptr();
   buffer_exec_path_in_edges.size =
@@ -264,28 +311,28 @@ WOJSubIsoKernelWrapper::Filter(const ExecutionPlan &exec_plan,
   data_edgelist_g.size = sizeof(VertexID) * e.get_metadata().num_edges * 2;
 
   //  Init output.
-  std::vector<WOJMatches> woj_matchess_vec;
-  woj_matchess_vec.resize(p.get_num_outgoing_edges());
+  std::vector<WOJMatches *> woj_matches_vec;
+  woj_matches_vec.resize(exec_plan.get_n_edges());
 
   std::vector<ImmutableCSRGPU> data_graph_gpu_vec;
-  data_graph_gpu_vec.resize(4);
+  data_graph_gpu_vec.resize(exec_plan.get_n_devices());
   std::vector<ImmutableCSRGPU> pattern_graph_gpu_vec;
-  pattern_graph_gpu_vec.resize(4);
+  pattern_graph_gpu_vec.resize(exec_plan.get_n_devices());
 
   std::vector<UnifiedOwnedBufferVertexID> exec_path_in_edges_vec;
-  exec_path_in_edges_vec.resize(4);
+  exec_path_in_edges_vec.resize(exec_plan.get_n_devices());
   std::vector<UnifiedOwnedBufferUint8> data_p_vec;
-  data_p_vec.resize(4);
+  data_p_vec.resize(exec_plan.get_n_devices());
   std::vector<UnifiedOwnedBufferVertexLabel> v_label_p_vec;
-  v_label_p_vec.resize(4);
+  v_label_p_vec.resize(exec_plan.get_n_devices());
   std::vector<UnifiedOwnedBufferUint8> data_g_vec;
-  data_g_vec.resize(4);
+  data_g_vec.resize(exec_plan.get_n_devices());
   std::vector<UnifiedOwnedBufferVertexID> edgelist_g_vec;
-  edgelist_g_vec.resize(4);
+  edgelist_g_vec.resize(exec_plan.get_n_devices());
   std::vector<UnifiedOwnedBufferVertexLabel> v_label_g_vec;
   v_label_g_vec.resize(4);
 
-  for (VertexID _ = 0; _ < 4; _++) {
+  for (VertexID _ = 0; _ < exec_plan.get_n_devices(); _++) {
     data_graph_gpu_vec[_].Init(g);
     pattern_graph_gpu_vec[_].Init(p);
     exec_path_in_edges_vec[_].Init(buffer_exec_path_in_edges);
@@ -295,16 +342,19 @@ WOJSubIsoKernelWrapper::Filter(const ExecutionPlan &exec_plan,
     edgelist_g_vec[_].Init(data_edgelist_g);
     v_label_g_vec[_].Init(v_label_g);
   }
-  for (VertexID _ = 0; _ < p.get_num_outgoing_edges(); _++) {
-    woj_matchess_vec[_].Init(p.get_num_outgoing_edges(), kMaxNumWeft);
+  for (VertexID _ = 0; _ < exec_plan.get_n_edges(); _++) {
+    woj_matches_vec[_] = new WOJMatches();
+    woj_matches_vec[_]->Init(exec_plan.get_n_edges(), kMaxNumWeft);
+    woj_matches_vec[_]->SetXOffset(2);
+    woj_matches_vec[_]->SetHeader(
+        0, exec_plan.get_exec_path_in_edges_ptr()[_ * 2]);
+    woj_matches_vec[_]->SetHeader(
+        1, exec_plan.get_exec_path_in_edges_ptr()[_ * 2 + 1]);
   }
 
-  dim3 dimBlock(kBlockDim);
-  dim3 dimGrid(kGridDim);
-
   auto time1 = std::chrono::system_clock::now();
-  for (VertexID _ = 0; _ < p.get_num_outgoing_edges(); _++) {
-    VertexID device_id = common::hash_function(_) % 4;
+  for (VertexID _ = 0; _ < exec_plan.get_n_edges(); _++) {
+    VertexID device_id = common::hash_function(_) % exec_plan.get_n_devices();
     cudaSetDevice(device_id);
     cudaStream_t &stream = p_streams_vec[_];
     ParametersFilter params{
@@ -319,42 +369,21 @@ WOJSubIsoKernelWrapper::Filter(const ExecutionPlan &exec_plan,
         .data_g = data_g_vec[device_id].GetPtr(),
         .edgelist_g = edgelist_g_vec[device_id].GetPtr(),
         .v_label_g = v_label_g_vec[device_id].GetPtr(),
-        .woj_matchess = woj_matchess_vec[_],
+        .woj_matches = *woj_matches_vec[_],
     };
-    WOJExtendKernel<<<dimGrid, dimBlock, 0, stream>>>(params);
+
+    WOJFilterKernel<<<dimGrid, dimBlock, 0, stream>>>(params);
   }
 
-  for (VertexID device_id = 0; device_id < 4; device_id++) {
+  for (VertexID device_id = 0; device_id < exec_plan.get_n_devices();
+       device_id++) {
     cudaSetDevice(device_id);
     cudaDeviceSynchronize();
+    pattern_graph_gpu_vec[device_id].Free();
+    data_graph_gpu_vec[device_id].Free();
   }
 
   auto time2 = std::chrono::system_clock::now();
-
-  cudaError_t err = cudaGetLastError();
-  if (err != cudaSuccess) {
-    CUDA_CHECK(err);
-  }
-
-  // Sorted candidates
-  // for (auto j = 0; j < p.get_num_outgoing_edges(); j++) {
-  //  VertexID device_id = common::hash_function(j) % 4;
-  //  cudaSetDevice(device_id);
-  //  cudaStream_t &stream = p_streams_vec[j];
-  //  for (int stage = 2; stage < woj_matchess_vec[0].offset_[j]; stage <<= 1) {
-  //    for (int step = stage >> 1; step > 0; step >>= 1) {
-  //      EdgesBitonicSortKernel<<<dimGrid, dimBlock, 0, stream>>>(
-  //          woj_matchess_vec[0].data_[j], woj_matchess_vec[0].offset_[j],
-  //          stage, step, 2);
-  //      cudaDeviceSynchronize();
-  //    }
-  //  }
-  //}
-
-  err = cudaGetLastError();
-  if (err != cudaSuccess) {
-    CUDA_CHECK(err);
-  }
 
   std::cout << "[Filter]:"
             << std::chrono::duration_cast<std::chrono::microseconds>(time2 -
@@ -363,30 +392,64 @@ WOJSubIsoKernelWrapper::Filter(const ExecutionPlan &exec_plan,
                    (double)CLOCKS_PER_SEC
             << std::endl;
 
-  for (VertexID _ = 0; _ < 4; _++) {
-    pattern_graph_gpu_vec[_].Free();
-    data_graph_gpu_vec[_].Free();
+  for (VertexID _ = 0; _ < exec_plan.get_n_edges(); _++) {
+    std::cout << "Eid - " << _ << " has " << woj_matches_vec[_]->get_y_offset()
+              << " matches." << std::endl;
   }
-  return woj_matchess_vec;
+  return woj_matches_vec;
 }
 
 void WOJSubIsoKernelWrapper::Join(
-    const ExecutionPlan &exec_plan,
-    const std::vector<WOJMatches> &input_woj_matches_vec,
+    const WOJExecutionPlan &exec_plan,
+    const std::vector<WOJMatches *> &input_woj_matches_vec,
     WOJMatches *output_woj_matches) {
+  std::cout << "Join" << std::endl;
 
-  for (VertexID _ = 0; _ < input_woj_matches_vec.size(); _++) {
-    auto woj_matches = input_woj_matches_vec[_];
+  // Join Tables.
+  dim3 dimBlock(512);
+  dim3 dimGrid(1024);
 
-    std::cout << " woj matches: " << _ << std::endl;
-    auto offset = woj_matches.get_offset();
-    offset = std::min(3u, offset);
-    auto data = woj_matches.get_data_ptr();
-    auto n_stride = woj_matches.get_n_stride();
-    for (VertexID eid = 0; eid < woj_matches.get_offset(); eid++) {
-      std::cout << data[n_stride * eid] << " -> " << data[n_stride * eid + 1]
-                << std::endl;
+  std::cout << "--------------join----------------" << std::endl;
+  output_woj_matches = new WOJMatches();
+  output_woj_matches->Init(exec_plan.get_n_edges(), kMaxNumWeft);
+
+  auto left_woj_matches = input_woj_matches_vec[0];
+
+  for (VertexID _ = 1; _ < input_woj_matches_vec.size(); _++) {
+    auto right_woj_matches = input_woj_matches_vec[_];
+    auto join_keys = left_woj_matches->GetJoinKey(*right_woj_matches);
+
+    std::cout << "join_key" << join_keys.first << " " << join_keys.second
+              << std::endl;
+
+    MergeSort(right_woj_matches->get_data_ptr(),
+              right_woj_matches->get_x_offset(),
+              right_woj_matches->get_y_offset(),
+              sizeof(VertexID) * right_woj_matches->get_y() *
+                  right_woj_matches->get_x());
+
+    if (join_keys.first == kMaxVertexID || join_keys.second == kMaxVertexID)
+      continue;
+
+    output_woj_matches->SetHeader(left_woj_matches->get_header_ptr(),
+                                  left_woj_matches->get_x_offset(),
+                                  right_woj_matches->get_header_ptr(),
+                                  right_woj_matches->get_x_offset(), join_keys);
+    ParametersJoin params{.left_woj_matches = *left_woj_matches,
+                          .right_woj_matches = *right_woj_matches,
+                          .output_woj_matches = *output_woj_matches,
+                          .left_hash_idx = join_keys.first,
+                          .right_hash_idx = join_keys.second};
+    WOJJoinKernel<<<dimGrid, dimBlock, 0>>>(params);
+    cudaDeviceSynchronize();
+
+    if (output_woj_matches->get_y_offset() == 0) {
+      break;
     }
+    // output_woj_matches->Print();
+    std::swap(left_woj_matches, output_woj_matches);
+
+    output_woj_matches->Clear();
   }
 }
 

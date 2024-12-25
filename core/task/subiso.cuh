@@ -9,6 +9,7 @@
 #include "core/data_structures/immutable_csr.cuh"
 #include "core/data_structures/unified_buffer.cuh"
 #include "core/task/kernel/data_structures/exec_plan.cuh"
+#include "core/task/kernel/data_structures/woj_exec_plan.cuh"
 #include "core/task/task_base.cuh"
 
 namespace sics {
@@ -35,6 +36,8 @@ private:
   using UnifiedOwnedBufferVertexID =
       sics::matrixgraph::core::data_structures::UnifiedOwnedBuffer<VertexID>;
   using ExecutionPlan = sics::matrixgraph::core::task::kernel::ExecutionPlan;
+  using WOJExecutionPlan =
+      sics::matrixgraph::core::task::kernel::WOJExecutionPlan;
 
 public:
   SubIso(const std::string &pattern_path, const std::string &data_graph_path,

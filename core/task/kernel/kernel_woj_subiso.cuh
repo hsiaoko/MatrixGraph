@@ -9,6 +9,7 @@
 #include "core/data_structures/immutable_csr.cuh"
 #include "core/data_structures/unified_buffer.cuh"
 #include "core/task/kernel/data_structures/exec_plan.cuh"
+#include "core/task/kernel/data_structures/woj_exec_plan.cuh"
 #include "core/task/kernel/data_structures/woj_matches.cuh"
 
 namespace sics {
@@ -38,12 +39,13 @@ public:
   // than once as an instance of Singleton class is already created.
   static WOJSubIsoKernelWrapper *GetInstance();
 
-  static std::vector<WOJMatches> Filter(const ExecutionPlan &exec_plan,
-                                        const ImmutableCSR &p,
-                                        const ImmutableCSR &g, const Edges &e);
+  static std::vector<WOJMatches *> Filter(const WOJExecutionPlan &exec_plan,
+                                          const ImmutableCSR &p,
+                                          const ImmutableCSR &g,
+                                          const Edges &e);
 
-  static void Join(const ExecutionPlan &exec_plan,
-                   const std::vector<WOJMatches> &input_woj_matches,
+  static void Join(const WOJExecutionPlan &exec_plan,
+                   const std::vector<WOJMatches *> &input_woj_matches,
                    WOJMatches *output_woj_matches);
 
 private:

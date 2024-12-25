@@ -2,6 +2,8 @@
 #ifndef MATRIX_CORE_COMMON_CONSTS_H_
 #define MATRIX_CORE_COMMON_CONSTS_H_
 
+#include <cstdint>
+
 namespace sics {
 namespace matrixgraph {
 namespace core {
@@ -20,7 +22,7 @@ static const uint32_t kDefalutNumVerticesPerTile = 64;
 static const uint64_t kMaxNumCandidates = 65536;
 
 static const uint64_t kMaxNumCandidatesPerThread = 32;
-static const uint64_t kMaxNumWeft = 655360;
+static const uint64_t kMaxNumWeft = 1 << 17;
 
 // GPU configure.
 static const uint32_t kSharedMemoryCapacity = 65536; // 64kb per SM for V100
