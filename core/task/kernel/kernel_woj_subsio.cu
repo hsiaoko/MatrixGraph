@@ -9,7 +9,9 @@
 #include "core/data_structures/device_buffer.cuh"
 #include "core/data_structures/host_buffer.cuh"
 #include "core/data_structures/unified_buffer.cuh"
+#include "core/task/kernel/algorithms/hash.cuh"
 #include "core/task/kernel/algorithms/sort.cuh"
+#include "core/task/kernel/data_structures/heap.cuh"
 #include "core/task/kernel/data_structures/immutable_csr_gpu.cuh"
 #include "core/task/kernel/data_structures/kernel_bitmap.cuh"
 #include "core/task/kernel/data_structures/mini_kernel_bitmap.cuh"
@@ -44,6 +46,7 @@ using sics::matrixgraph::core::task::kernel::HostMiniKernelBitmap;
 using sics::matrixgraph::core::task::kernel::KernelBitmap;
 using sics::matrixgraph::core::task::kernel::MiniKernelBitmap;
 using WOJMatches = sics::matrixgraph::core::task::kernel::WOJMatches;
+using MinHeap = sics::matrixgraph::core::task::kernel::MinHeap;
 using BufferUint8 = sics::matrixgraph::core::data_structures::Buffer<uint8_t>;
 using BufferUint32 = sics::matrixgraph::core::data_structures::Buffer<uint32_t>;
 using BufferVertexID =
@@ -119,14 +122,142 @@ LabelDegreeFilter(const ParametersFilter &params, VertexID u_idx,
   }
 }
 
+static __forceinline__ __device__ bool
+MinWiseIPFilter(const ParametersFilter &params, VertexID u_idx,
+                VertexID v_idx) {
+  VertexID *globalid_p = (VertexID *)(params.data_p);
+  VertexID *in_degree_p = globalid_p + params.n_vertices_p;
+  VertexID *out_degree_p = in_degree_p + params.n_vertices_p;
+  EdgeIndex *in_offset_p = (EdgeIndex *)(out_degree_p + params.n_vertices_p);
+  EdgeIndex *out_offset_p =
+      (EdgeIndex *)(in_offset_p + params.n_vertices_p + 1);
+  EdgeIndex *in_edges_p = (EdgeIndex *)(out_offset_p + params.n_vertices_p + 1);
+  VertexID *out_edges_p = in_edges_p + params.n_edges_p;
+  VertexID *edges_globalid_by_localid_p = out_edges_p + params.n_edges_p;
+
+  VertexID *globalid_g = (VertexID *)(params.data_g);
+  VertexID *in_degree_g = globalid_g + params.n_vertices_g;
+  VertexID *out_degree_g = in_degree_g + params.n_vertices_g;
+  EdgeIndex *in_offset_g = (EdgeIndex *)(out_degree_g + params.n_vertices_g);
+  EdgeIndex *out_offset_g =
+      (EdgeIndex *)(in_offset_g + params.n_vertices_g + 1);
+  EdgeIndex *in_edges_g = (EdgeIndex *)(out_offset_g + params.n_vertices_g + 1);
+  VertexID *out_edges_g = in_edges_g + params.n_edges_g;
+  VertexID *edges_globalid_by_localid_g = out_edges_g + params.n_edges_g;
+
+  VertexLabel v_label = params.v_label_g[v_idx];
+  VertexLabel u_label = params.v_label_p[u_idx];
+
+  if (u_label != v_label)
+    return false;
+
+  EdgeIndex u_offset_base = out_offset_p[u_idx];
+  VertexID max_v_ip_val = 0;
+  MiniKernelBitmap u_label_visited(32);
+  MiniKernelBitmap v_label_visited(32);
+
+  MinHeap u_k_min_heap;
+  MinHeap v_k_min_heap;
+
+  for (VertexID nbr_u_idx = 0; nbr_u_idx < out_degree_p[u_idx]; nbr_u_idx++) {
+    VertexID nbr_u = out_edges_p[u_offset_base + nbr_u_idx];
+    VertexLabel u_label = params.v_label_p[nbr_u];
+    // auto u_ip_val = FNV_1a_Hash(u_label);
+    VertexID u_ip_val = Hash(u_label);
+    u_label_visited.SetBit(u_label);
+    u_k_min_heap.Insert(u_ip_val);
+  }
+
+  EdgeIndex v_offset_base = out_offset_g[v_idx];
+  for (VertexID nbr_v_idx = 0; nbr_v_idx < out_degree_g[v_idx]; nbr_v_idx++) {
+    VertexID nbr_v = out_edges_g[v_offset_base + nbr_v_idx];
+    VertexLabel v_label = params.v_label_g[nbr_v];
+    // auto v_ip_val = FNV_1a_Hash(v_label);
+    VertexID v_ip_val = Hash(v_label);
+    max_v_ip_val = max_v_ip_val > v_ip_val ? max_v_ip_val : v_ip_val;
+    v_label_visited.SetBit(v_label);
+    v_k_min_heap.Insert(v_ip_val);
+  }
+
+  // remove duplicated elements of u_k_min_heap.
+  for (VertexID _ = 0; _ < u_k_min_heap.get_offset(); _++) {
+    for (VertexID __ = 0; __ < v_k_min_heap.get_offset(); __++) {
+      if (u_k_min_heap.get_element_by_idx(_) ==
+          v_k_min_heap.get_element_by_idx(__)) {
+        u_k_min_heap.SetElementByIdx(kMaxVertexID, _);
+      }
+    }
+  }
+
+  for (VertexID _ = 0; _ < u_k_min_heap.get_offset(); _++) {
+    if (u_k_min_heap.get_element_by_idx(_) != kMaxVertexID) {
+      if (u_k_min_heap.get_element_by_idx(_) < max_v_ip_val) {
+        return false;
+      }
+    }
+  }
+
+  return v_label_visited.Count() >= u_label_visited.Count();
+}
+
+static __forceinline__ __device__ bool
+NeighborLabelCounterFilter(const ParametersFilter &params, VertexID u_idx,
+                           VertexID v_idx) {
+  VertexID *globalid_p = (VertexID *)(params.data_p);
+  VertexID *in_degree_p = globalid_p + params.n_vertices_p;
+  VertexID *out_degree_p = in_degree_p + params.n_vertices_p;
+  EdgeIndex *in_offset_p = (EdgeIndex *)(out_degree_p + params.n_vertices_p);
+  EdgeIndex *out_offset_p =
+      (EdgeIndex *)(in_offset_p + params.n_vertices_p + 1);
+  EdgeIndex *in_edges_p = (EdgeIndex *)(out_offset_p + params.n_vertices_p + 1);
+  VertexID *out_edges_p = in_edges_p + params.n_edges_p;
+  VertexID *edges_globalid_by_localid_p = out_edges_p + params.n_edges_p;
+
+  VertexID *globalid_g = (VertexID *)(params.data_g);
+  VertexID *in_degree_g = globalid_g + params.n_vertices_g;
+  VertexID *out_degree_g = in_degree_g + params.n_vertices_g;
+  EdgeIndex *in_offset_g = (EdgeIndex *)(out_degree_g + params.n_vertices_g);
+  EdgeIndex *out_offset_g =
+      (EdgeIndex *)(in_offset_g + params.n_vertices_g + 1);
+  EdgeIndex *in_edges_g = (EdgeIndex *)(out_offset_g + params.n_vertices_g + 1);
+  VertexID *out_edges_g = in_edges_g + params.n_edges_g;
+  VertexID *edges_globalid_by_localid_g = out_edges_g + params.n_edges_g;
+
+  VertexLabel v_label = params.v_label_g[globalid_g[v_idx]];
+  VertexLabel u_label = params.v_label_p[u_idx];
+
+  if (u_label != v_label)
+    return false;
+
+  MiniKernelBitmap u_label_visited(32);
+  MiniKernelBitmap v_label_visited(32);
+
+  EdgeIndex u_offset_base = out_offset_p[u_idx];
+  for (VertexID nbr_u_idx = 0; nbr_u_idx < out_degree_p[u_idx]; nbr_u_idx++) {
+    VertexID nbr_u = out_edges_p[u_offset_base + nbr_u_idx];
+    VertexLabel u_label = params.v_label_p[nbr_u];
+    u_label_visited.SetBit(u_label);
+  }
+
+  EdgeIndex v_offset_base = out_offset_g[v_idx];
+  for (VertexID nbr_v_idx = 0; nbr_v_idx < out_degree_g[v_idx]; nbr_v_idx++) {
+    VertexID nbr_v = out_edges_g[v_offset_base + nbr_v_idx];
+    VertexLabel v_label = params.v_label_g[nbr_v];
+    v_label_visited.SetBit(v_label);
+  }
+
+  return v_label_visited.Count() >= u_label_visited.Count();
+}
+
 static __forceinline__ __device__ bool Filter(const ParametersFilter &params,
                                               VertexID u_idx, VertexID v_idx) {
 
   // return LabelFilter(params, u_idx, v_idx);
 
-  // return NeighborLabelCounterFilter(params, u_idx, v_idx);
+  return MinWiseIPFilter(params, u_idx, v_idx);
+  //  return NeighborLabelCounterFilter(params, u_idx, v_idx);
 
-  return LabelDegreeFilter(params, u_idx, v_idx);
+  // return LabelDegreeFilter(params, u_idx, v_idx);
 }
 
 static __global__ void WOJFilterKernel(ParametersFilter params) {
@@ -248,6 +379,7 @@ WOJSubIsoKernelWrapper::Filter(const WOJExecutionPlan &exec_plan,
                                const Edges &e) {
   dim3 dimBlock(kBlockDim);
   dim3 dimGrid(kGridDim);
+
   auto parallelism = std::thread::hardware_concurrency();
   std::vector<size_t> worker(parallelism);
   std::mutex mtx;
@@ -396,6 +528,7 @@ WOJSubIsoKernelWrapper::Filter(const WOJExecutionPlan &exec_plan,
     std::cout << "Eid - " << _ << " has " << woj_matches_vec[_]->get_y_offset()
               << " matches." << std::endl;
   }
+
   return woj_matches_vec;
 }
 
