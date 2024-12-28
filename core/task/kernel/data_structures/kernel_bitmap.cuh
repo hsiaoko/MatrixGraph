@@ -19,6 +19,11 @@ public:
 
   __device__ KernelBitmap(uint64_t size) { Init(size); }
 
+  __device__ KernelBitmap(uint64_t size, uint64_t *data) {
+    size = size;
+    data_ = data;
+  }
+
   __device__ KernelBitmap(const KernelBitmap &other) {
     if (this != &other)
       free(data_);

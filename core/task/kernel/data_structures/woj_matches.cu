@@ -102,8 +102,6 @@ void WOJMatches::SetHeader(const VertexID *left_header, VertexID left_offset_x,
   for (VertexID _ = 0; _ < right_offset_x; _++) {
     if (_ == hash_keys.second)
       continue;
-    std::cout << "set, :_" << _ << " right header: " << right_header[_] << " "
-              << hash_keys.second << std::endl;
     header_ptr_[*x_offset_] = right_header[_];
     (*x_offset_)++;
   }
@@ -111,7 +109,6 @@ void WOJMatches::SetHeader(const VertexID *left_header, VertexID left_offset_x,
 
 std::pair<VertexID, VertexID> WOJMatches::GetJoinKey(const WOJMatches &other) {
 
-  std::cout << "GetJoinKey" << std::endl;
   Bitmap visited(32);
   VertexID inverted_index[32];
   VertexID left_hash_idx = kMaxVertexID;

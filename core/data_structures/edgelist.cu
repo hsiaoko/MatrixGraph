@@ -95,6 +95,7 @@ void Edges::WriteToBinary(const std::string &output_path) {
 
   std::ofstream out_data_file(output_path + "edgelist.bin");
   std::ofstream out_localid2globalid_file(output_path + "localid2globalid.bin");
+  std::ofstream out_vlabel_file(output_path + "vlabel.bin");
   std::ofstream out_meta_file(output_path + "meta.yaml");
 
   out_data_file.write(reinterpret_cast<char *>(edges_ptr_),
@@ -103,6 +104,9 @@ void Edges::WriteToBinary(const std::string &output_path) {
   out_localid2globalid_file.write(
       reinterpret_cast<char *>(localid_to_globalid_),
       sizeof(VertexID) * edgelist_metadata_.num_vertices);
+
+  out_vlabel_file.write(reinterpret_cast<char *>(vertex_label_base_pointer_),
+                        sizeof(VertexLabel) * edgelist_metadata_.num_vertices);
 
   YAML::Node node;
   node["EdgelistBin"]["num_vertices"] = edgelist_metadata_.num_vertices;
@@ -113,11 +117,11 @@ void Edges::WriteToBinary(const std::string &output_path) {
 
   out_data_file.close();
   out_localid2globalid_file.close();
+  out_vlabel_file.close();
   out_meta_file.close();
 }
 
 void Edges::ReadFromBin(const std::string &input_path) {
-  std::cout << "read from bin" << std::endl;
   YAML::Node node = YAML::LoadFile(input_path + "meta.yaml");
 
   edgelist_metadata_ = {node["EdgelistBin"]["num_vertices"].as<VertexID>(),
@@ -144,10 +148,23 @@ void Edges::ReadFromBin(const std::string &input_path) {
     exit(EXIT_FAILURE);
   }
 
+  // Read local id to global id.
   localid_to_globalid_ = new VertexID[edgelist_metadata_.num_vertices]();
   in_localid2globalid_file.read(reinterpret_cast<char *>(localid_to_globalid_),
                                 sizeof(VertexID) *
                                     edgelist_metadata_.num_vertices);
+
+  // Read vertex label.
+  std::ifstream in_vlabel_file(input_path + "vlabel.bin");
+  if (!in_vlabel_file) {
+    std::cout << "Open file failed: " + input_path + "vlabel.bin" << std::endl;
+    exit(EXIT_FAILURE);
+  }
+
+  vertex_label_base_pointer_ =
+      new VertexLabel[edgelist_metadata_.num_vertices]();
+  in_vlabel_file.read(reinterpret_cast<char *>(vertex_label_base_pointer_),
+                      sizeof(VertexLabel) * edgelist_metadata_.num_vertices);
 }
 
 void Edges::ReadFromCSV(const std::string &filename, const std::string &sep,
@@ -218,6 +235,9 @@ void Edges::ReadFromCSV(const std::string &filename, const std::string &sep,
   edgelist_metadata_.num_vertices = bitmap.Count();
   edgelist_metadata_.max_vid = max_vid;
   GenerateLocalID2GlobalID();
+
+  vertex_label_base_pointer_ =
+      new VertexLabel[edgelist_metadata_.num_vertices]();
 
   if (compressed) {
     std::cout << "[Edges] Reading CSV with compressed ..." << std::endl;

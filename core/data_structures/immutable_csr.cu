@@ -231,6 +231,7 @@ void ImmutableCSR::Read(const std::string &root_path) {
   label_file.seekg(0, std::ios::end);
   file_size = label_file.tellg();
   label_file.seekg(0, std::ios::beg);
+  std::cout << "filesize: " << file_size << std::endl;
   vertex_label_base_pointer_ = std::make_unique<VertexLabel[]>(file_size);
 
   // Read the label.

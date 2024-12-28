@@ -22,7 +22,7 @@ static const uint32_t kDefalutNumVerticesPerTile = 64;
 static const uint64_t kMaxNumCandidates = 65536;
 
 static const uint64_t kMaxNumCandidatesPerThread = 32;
-static const uint64_t kMaxNumWeft = 1 << 17;
+static const uint64_t kMaxNumWeft = 1 << 18;
 
 // GPU configure.
 static const uint32_t kSharedMemoryCapacity = 65536; // 64kb per SM for V100
@@ -35,6 +35,8 @@ static const uint32_t kGridDim = 1024;
 static const uint32_t kBlockDim = 320;
 static const uint32_t kWarpSize = 32;
 static const uint32_t kLogWarpSize = 5;
+
+static const uint32_t kDefaultHeapCapacity = 7;
 
 } // namespace common
 } // namespace core

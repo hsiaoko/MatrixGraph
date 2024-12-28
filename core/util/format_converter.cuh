@@ -269,6 +269,14 @@ static ImmutableCSR *Edgelist2ImmutableCSR(const Edges &edgelist) {
                   }
                 });
 
+  // VertexLabel *vlabel = new
+  // VertexLabel[edgelist.get_metadata().num_vertices]();
+
+  immutable_csr->SetVertexLabelBuffer(edgelist.get_metadata().num_vertices);
+
+  memcpy(immutable_csr->GetVLabelBasePointer(), edgelist.get_vertex_label_ptr(),
+         sizeof(VertexLabel) * edgelist.get_metadata().num_vertices);
+
   immutable_csr->SetEdgesGlobalIDBuffer(buffer_edges_globalid_by_localid);
   immutable_csr->SetGlobalIDBuffer(buffer_globalid);
   immutable_csr->SetInDegreeBuffer(buffer_indegree);
@@ -277,7 +285,6 @@ static ImmutableCSR *Edgelist2ImmutableCSR(const Edges &edgelist) {
   immutable_csr->SetOutOffsetBuffer(buffer_out_offset);
   immutable_csr->SetIncomingEdgesBuffer(buffer_in_edges);
   immutable_csr->SetOutgoingEdgesBuffer(buffer_out_edges);
-  immutable_csr->SetVertexLabelBuffer(edgelist.get_metadata().num_vertices);
   immutable_csr->SetNumVertices(edgelist.get_metadata().num_vertices);
   immutable_csr->SetNumIncomingEdges(count_in_edges);
   immutable_csr->SetNumOutgoingEdges(count_out_edges);

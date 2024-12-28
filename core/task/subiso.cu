@@ -109,8 +109,8 @@ __host__ void SubIso::LoadData() {
   g_.Read(data_graph_path_);
   g_.PrintGraph(3);
 
-  e_.ReadFromBin(data_graph_edgelist_path_);
-  e_.ShowGraph(3);
+  // e_.ReadFromBin(data_graph_edgelist_path_);
+  // e_.ShowGraph(3);
 }
 
 __host__ void SubIso::InitLabel() {
@@ -260,7 +260,10 @@ __host__ void SubIso::WOJMatching(const ImmutableCSR &p, const ImmutableCSR &g,
   auto woj_matches = WOJSubIsoKernelWrapper::Filter(exec_plan, p, g, e);
   auto start_time_1 = std::chrono::system_clock::now();
 
-  WOJSubIsoKernelWrapper::Join(exec_plan, woj_matches, nullptr);
+  auto output_woj_matches = new WOJMatches();
+
+  WOJSubIsoKernelWrapper::Join(exec_plan, woj_matches, output_woj_matches);
+
   auto start_time_2 = std::chrono::system_clock::now();
 
   std::cout << "[WOJMatching] Filter() elapsed: "
@@ -282,7 +285,7 @@ __host__ void SubIso::Run() {
   auto start_time_0 = std::chrono::system_clock::now();
   LoadData();
   auto start_time_1 = std::chrono::system_clock::now();
-  InitLabel();
+  // InitLabel();
 
   auto start_time_2 = std::chrono::system_clock::now();
 

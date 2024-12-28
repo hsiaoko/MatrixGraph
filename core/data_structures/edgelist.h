@@ -2,13 +2,10 @@
 #define SICS_MATRIXGRAPH_CORE_DATA_STRUCTURES_EDGELIST_H_
 
 #include <cstring>
+#include <execution>
 #include <iostream>
 
 #include <yaml-cpp/yaml.h>
-
-#ifdef TBB_FOUND
-#include <execution>
-#endif
 
 #include "core/common/consts.h"
 #include "core/common/types.h"
@@ -24,6 +21,7 @@ struct EdgelistMetadata {
 private:
   using VertexID = sics::matrixgraph::core::common::VertexID;
   using EdgeIndex = sics::matrixgraph::core::common::EdgeIndex;
+  using VertexLabel = sics::matrixgraph::core::common::VertexLabel;
 
 public:
   VertexID num_vertices = 0;
@@ -53,6 +51,7 @@ private:
   using EdgelistMetadata =
       sics::matrixgraph::core::data_structures::EdgelistMetadata;
   using Bitmap = sics::matrixgraph::core::util::Bitmap;
+  using VertexLabel = sics::matrixgraph::core::common::VertexLabel;
 
 public:
   struct Iterator {
@@ -128,6 +127,13 @@ public:
 
   Edges() = default;
 
+  Edges(const EdgelistMetadata &edgelist_metadata)
+      : edgelist_metadata_(edgelist_metadata) {
+    edges_ptr_ = new Edge[edgelist_metadata.num_edges]();
+    vertex_label_base_pointer_ =
+        new VertexLabel[edgelist_metadata.num_vertices]();
+  }
+
   Edges(const EdgelistMetadata &edgelist_metadata, Edge *edges_ptr)
       : edgelist_metadata_(edgelist_metadata), edges_ptr_(edges_ptr) {}
 
@@ -136,10 +142,11 @@ public:
       : edgelist_metadata_(edgelist_metadata), edges_ptr_(edges_ptr),
         localid_to_globalid_(localid_to_globalid) {}
 
-  Edges(const EdgelistMetadata &edgelist_metadata)
-      : edgelist_metadata_(edgelist_metadata) {
-    edges_ptr_ = new Edge[edgelist_metadata.num_edges]();
-  }
+  Edges(const EdgelistMetadata &edgelist_metadata, Edge *edges_ptr,
+        VertexID *localid_to_globalid, VertexLabel *vertex_label_base_pointer)
+      : edgelist_metadata_(edgelist_metadata), edges_ptr_(edges_ptr),
+        localid_to_globalid_(localid_to_globalid),
+        vertex_label_base_pointer_(vertex_label_base_pointer) {}
 
   Edges(EdgeIndex n_edges, VertexID *edges_buf,
         VertexID *localid2globalid = nullptr);
@@ -152,6 +159,7 @@ public:
   ~Edges() { delete[] edges_ptr_; }
 
   Iterator begin() { return Iterator(&edges_ptr_[0]); }
+
   Iterator end() {
     return Iterator(&edges_ptr_[edgelist_metadata_.num_edges - 1]);
   }
@@ -180,6 +188,10 @@ public:
 
   VertexID *get_localid_to_globalid_ptr() const { return localid_to_globalid_; }
 
+  VertexLabel *get_vertex_label_ptr() const {
+    return vertex_label_base_pointer_;
+  }
+
   EdgelistMetadata get_metadata() const { return edgelist_metadata_; }
 
   VertexID get_src_by_index(size_t i) const { return edges_ptr_[i].src; }
@@ -198,6 +210,8 @@ public:
 
 private:
   VertexID *localid_to_globalid_ = nullptr;
+
+  VertexLabel *vertex_label_base_pointer_ = nullptr;
 
   Edge *edges_ptr_;
   EdgelistMetadata edgelist_metadata_;

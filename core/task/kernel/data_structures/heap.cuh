@@ -5,24 +5,18 @@
 
 #include <cuda_runtime.h>
 
+#include "core/common/consts.h"
+
 namespace sics {
 namespace matrixgraph {
 namespace core {
 namespace task {
 namespace kernel {
 
+using sics::matrixgraph::core::common::kDefaultHeapCapacity;
 class MinHeap {
+private:
 public:
-  //__host__ __device__ MinHeap(uint32_t capacity) {
-  // capacity_ = capacity;
-  // offset_ = 0;
-  // data_ = (uint32_t *)malloc(capacity_ * sizeof(uint32_t));
-  // data_ = (uint32_t *)malloc(capacity_ * sizeof(uint32_t));
-  //}
-
-  //__host__ __device__ ~MinHeap() { free(data_);
-  //}
-
   __host__ __device__ __forceinline__ void Insert(uint32_t val) {
     if (offset_ < capacity_) {
       data_[offset_++] = val;
@@ -42,18 +36,16 @@ public:
   }
 
   __host__ __device__ void Print() const {
-    printf("\nMinHeap Print: ");
+    printf("MinHeap Print: ");
     for (uint32_t _ = 0; _ < offset_; _++) {
       printf("%u ", data_[_]);
     }
     printf("\n");
   }
 
-  __host__ __device__ __forceinline__ uint32_t SetElementByIdx(uint32_t val,
-                                                               uint32_t idx) {
-    data_[idx] = val;
+  __host__ __device__ void CopyData(uint32_t *other) {
+    memcpy(other, data_, sizeof(uint32_t) * capacity_);
   }
-  //__forceinline__ uint32_t *get_data_ptr() const { return data_; }
 
   __host__ __device__ __forceinline__ uint32_t
   get_element_by_idx(uint32_t idx) const {
@@ -62,6 +54,10 @@ public:
 
   __host__ __device__ __forceinline__ uint32_t get_offset() const {
     return offset_;
+  }
+
+  __host__ __device__ __forceinline__ uint32_t get_min() const {
+    return data_[0];
   }
 
 private:
@@ -94,14 +90,14 @@ private:
     *b = tmp;
   }
 
-  // Array to store heap elements.
-  uint32_t data_[3] = {0};
-
   // current number of elements in the heap.
   uint32_t offset_ = 0;
 
   // maximum capacity of the heap (k).
-  uint32_t capacity_ = 3;
+  const uint32_t capacity_ = kDefaultHeapCapacity;
+
+  // Array to store heap elements.
+  uint32_t data_[kDefaultHeapCapacity] = {0};
 };
 
 } // namespace kernel

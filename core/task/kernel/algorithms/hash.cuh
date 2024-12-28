@@ -50,6 +50,8 @@ static __forceinline__ __device__ VertexID HashTable(VertexID key) {
   return 0;
 }
 
+static __forceinline__ __device__ VertexID NoHash(VertexID key) { return key; }
+
 static __forceinline__ __device__ VertexID FNV_1a_Hash(VertexID key) {
 
   uint32_t hash = FNV_OFFSET;
