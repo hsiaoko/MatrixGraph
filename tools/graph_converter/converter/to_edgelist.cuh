@@ -1,8 +1,10 @@
 #ifndef MATRIXGRAPH_TOOLS_GRAPH_CONVERTER_CONVERTER_TO_EDGELIST_CUH_
 #define MATRIXGRAPH_TOOLS_GRAPH_CONVERTER_CONVERTER_TO_EDGELIST_CUH_
 
+#include "core/common/types.h"
 #include "core/data_structures/edgelist.h"
 #include "core/data_structures/immutable_csr.cuh"
+#include "core/util/atomic.h"
 #include "core/util/format_converter.cuh"
 
 namespace sics {
@@ -11,6 +13,7 @@ namespace tools {
 namespace converter {
 
 using sics::matrixgraph::core::data_structures::ImmutableCSR;
+using VertexLabel = sics::matrixgraph::core::common::VertexLabel;
 
 static void ConvertEdgelistCSV2EdgelistBin(const std::string &input_path,
                                            const std::string &output_path,
@@ -85,6 +88,67 @@ ConvertEdgelistBin2TransposedEdgelistBin(const std::string &input_path,
   edgelist.Transpose();
   edgelist.WriteToBinary(output_path);
   std::cout << "[ConvertEdgelistBin2TransposedEdgelistBin] Done!" << std::endl;
+}
+
+static void ConvertEGSMGraph2EdgelistBin(const std::string &input_path,
+                                         const std::string &output_path) {
+  auto parallelism = std::thread::hardware_concurrency();
+  std::vector<size_t> worker(parallelism);
+  std::iota(worker.begin(), worker.end(), 0);
+  auto step = worker.size();
+
+  std::ifstream ifs(input_path);
+  if (ifs.fail()) {
+    std::cout << "File not exist!\n";
+    exit(-1);
+  }
+
+  // true for the query graph, false for the data graph
+
+  sics::matrixgraph::core::data_structures::EdgelistMetadata edgelist_metadata;
+
+  edgelist_metadata.num_edges;
+  edgelist_metadata.num_vertices;
+
+  char type;
+  ifs >> type >> edgelist_metadata.num_vertices >> edgelist_metadata.num_edges;
+
+  auto buffer_edges =
+      new sics::matrixgraph::core::data_structures::Edge[edgelist_metadata
+                                                             .num_edges]();
+
+  VertexLabel *v_label = new VertexLabel[edgelist_metadata.num_vertices]();
+
+  VertexID *localid2globalid = new VertexID[edgelist_metadata.num_vertices]();
+
+  EdgeIndex eid = 0;
+  while (ifs >> type) {
+    if (type == 'v') {
+      VertexID vid, degree;
+      VertexLabel label;
+      ifs >> vid >> label >> degree;
+      sics::matrixgraph::core::util::atomic::WriteMax(
+          &edgelist_metadata.max_vid, vid);
+      sics::matrixgraph::core::util::atomic::WriteMin(
+          &edgelist_metadata.min_vid, vid);
+      v_label[vid] = label;
+      localid2globalid[vid] = vid;
+    } else {
+      VertexID src, dst;
+      ifs >> buffer_edges[eid].src >> buffer_edges[eid].dst;
+      eid++;
+    }
+  }
+
+  sics::matrixgraph::core::data_structures::Edges edgelist(
+      edgelist_metadata, buffer_edges, localid2globalid, v_label);
+
+  edgelist.ShowGraph();
+
+  edgelist.WriteToBinary(output_path);
+  std::cout << "[ConvertEGSMGraph2EdgelistBin] Done!" << std::endl;
+
+  ifs.close();
 }
 
 } // namespace converter

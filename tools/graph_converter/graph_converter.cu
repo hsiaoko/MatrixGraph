@@ -60,6 +60,7 @@ enum ConvertMode {
   kEdgelistCSV2CGGraphCSR,
   kEdgelistBin2CGGraphCSR,
   kCSRBin2EGSM,
+  kEGSM2EdgelistBin,
   kUndefinedMode
 };
 
@@ -94,6 +95,8 @@ static inline ConvertMode ConvertMode2Enum(const std::string &s) {
     return kEdgelistBin2CGGraphCSR;
   if (s == "csrbin2egsm")
     return kCSRBin2EGSM;
+  if (s == "egsm2edgelistbin")
+    return kEGSM2EdgelistBin;
   return kUndefinedMode;
 };
 
@@ -150,6 +153,10 @@ int main(int argc, char **argv) {
   case kCSRBin2EGSM:
     sics::matrixgraph::tools::converter::ConvertCSRBin2EGSMGraph(FLAGS_i,
                                                                  FLAGS_o);
+    break;
+  case kEGSM2EdgelistBin:
+    sics::matrixgraph::tools::converter::ConvertEGSMGraph2EdgelistBin(FLAGS_i,
+                                                                      FLAGS_o);
     break;
   default:
     exit(EXIT_FAILURE);

@@ -266,6 +266,8 @@ __host__ void SubIso::WOJMatching(const ImmutableCSR &p, const ImmutableCSR &g,
 
   auto start_time_2 = std::chrono::system_clock::now();
 
+  output_woj_matches->Print();
+
   std::cout << "[WOJMatching] Filter() elapsed: "
             << std::chrono::duration_cast<std::chrono::microseconds>(
                    start_time_1 - start_time_0)
