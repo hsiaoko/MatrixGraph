@@ -130,10 +130,10 @@ public:
            (KERNEL_WORD_OFFSET(size_) + 1) * sizeof(uint64_t));
   }
 
-  ~HostKernelBitmap() {
-    free(data_);
-    data_ = nullptr;
-  }
+  //~HostKernelBitmap() {
+  //  free(data_);
+  //  data_ = nullptr;
+  //}
 
   void Init(uint64_t size, uint64_t *data) {
     if (data_ != nullptr)

@@ -35,6 +35,11 @@ public:
     }
   }
 
+  __host__ __device__ void Clear() {
+    memset(data_, 0, sizeof(uint32_t) * capacity_);
+    offset_ = 0;
+  }
+
   __host__ __device__ void Print() const {
     printf("MinHeap Print: ");
     for (uint32_t _ = 0; _ < offset_; _++) {

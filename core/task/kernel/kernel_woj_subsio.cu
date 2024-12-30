@@ -14,6 +14,7 @@
 #include "core/task/kernel/data_structures/heap.cuh"
 #include "core/task/kernel/data_structures/immutable_csr_gpu.cuh"
 #include "core/task/kernel/data_structures/kernel_bitmap.cuh"
+#include "core/task/kernel/data_structures/kernel_bitmap_no_ownership.cuh"
 #include "core/task/kernel/data_structures/mini_kernel_bitmap.cuh"
 #include "core/task/kernel/data_structures/woj_matches.cuh"
 #include "core/task/kernel/kernel_woj_subiso.cuh"
@@ -44,6 +45,7 @@ using sics::matrixgraph::core::common::kWarpSize;
 using sics::matrixgraph::core::task::kernel::HostKernelBitmap;
 using sics::matrixgraph::core::task::kernel::HostMiniKernelBitmap;
 using sics::matrixgraph::core::task::kernel::KernelBitmap;
+using sics::matrixgraph::core::task::kernel::KernelBitmapNoOwnership;
 using sics::matrixgraph::core::task::kernel::MiniKernelBitmap;
 using WOJMatches = sics::matrixgraph::core::task::kernel::WOJMatches;
 using MinHeap = sics::matrixgraph::core::task::kernel::MinHeap;
@@ -85,12 +87,20 @@ struct ParametersFilter {
   uint64_t *test;
 };
 
+struct ParametersWedgeFilter {
+  WOJMatches woj_matches;
+  VertexID hash_idx;
+  uint64_t *visited_data;
+};
+
 struct ParametersJoin {
   WOJMatches left_woj_matches;
   WOJMatches right_woj_matches;
   WOJMatches output_woj_matches;
   VertexID left_hash_idx;
   VertexID right_hash_idx;
+  uint64_t *right_visited_data;
+  VertexID *jump_count;
 };
 
 static __forceinline__ __device__ bool
@@ -153,7 +163,6 @@ MinWiseIPFilter(const ParametersFilter &params, VertexID u_idx,
   if (u_label != v_label)
     return false;
 
-  EdgeIndex u_offset_base = out_offset_p[u_idx];
   VertexID max_v_ip_val = 0;
   VertexID min_v_ip_val = kMaxVertexID;
   VertexID max_u_ip_val = 0;
@@ -170,18 +179,15 @@ MinWiseIPFilter(const ParametersFilter &params, VertexID u_idx,
   uint32_t u_k_min_heap_data[kDefaultHeapCapacity];
   uint32_t v_k_min_heap_data[kDefaultHeapCapacity];
 
-  //  printf("check %d %d\n", u_idx, v_idx);
+  // Filter by out edges.
+  EdgeIndex u_offset_base = out_offset_p[u_idx];
   for (VertexID nbr_u_idx = 0; nbr_u_idx < out_degree_p[u_idx]; nbr_u_idx++) {
     VertexID nbr_u = out_edges_p[u_offset_base + nbr_u_idx];
     VertexLabel u_label = params.v_label_p[nbr_u];
-    // VertexID u_ip_val = FNV_1a_Hash(u_label);
     VertexID u_ip_val = HashTable(u_label);
-    // VertexID u_ip_val = NoHash(u_label);
-    //  VertexID u_ip_val = Hash(u_label);
     u_label_visited.SetBit(u_label);
     u_ip_val_visited.SetBit(u_ip_val);
     u_k_min_heap.Insert(u_ip_val);
-    //   printf("u%d insert %d\n", u_idx, u_ip_val);
   }
 
   EdgeIndex v_offset_base = out_offset_g[v_idx];
@@ -189,13 +195,9 @@ MinWiseIPFilter(const ParametersFilter &params, VertexID u_idx,
     VertexID nbr_v = out_edges_g[v_offset_base + nbr_v_idx];
     VertexLabel v_label = params.v_label_g[nbr_v];
     VertexID v_ip_val = HashTable(v_label);
-    // VertexID v_ip_val = NoHash(v_label);
-    //  VertexID v_ip_val = FNV_1a_Hash(v_label);
-    //   VertexID v_ip_val = Hash(v_label);
     v_label_visited.SetBit(v_label);
     v_ip_val_visited.SetBit(v_ip_val);
     v_k_min_heap.Insert(v_ip_val);
-    //  printf("v_idx %d, insert %d\n", v_idx, v_ip_val);
   }
 
   u_k_min_heap.CopyData(u_k_min_heap_data);
@@ -223,46 +225,78 @@ MinWiseIPFilter(const ParametersFilter &params, VertexID u_idx,
     min_u_ip_val = min_u_ip_val < u_ip_val ? min_u_ip_val : u_ip_val;
   }
 
-  // for (VertexID _ = 0; _ < v_k_min_heap.get_offset(); _++) {
-  //   auto v_ip_val = v_k_min_heap_data[_];
-  //   if (u_ip_val_visited.GetBit(v_ip_val)) {
-  //     v_k_min_heap_data[_] = kMaxVertexID;
-  //   } else {
-  //     max_v_ip_val = max_v_ip_val > v_ip_val ? max_v_ip_val : v_ip_val;
-  //     min_v_ip_val = min_v_ip_val < v_ip_val ? min_v_ip_val : v_ip_val;
-  //   }
-  // }
+  if (min_v_ip_val == kMaxVertexID && min_u_ip_val != kMaxVertexID)
+    return false;
 
-  // remove duplicated elements of u_k_min_heap.
-  // for (VertexID _ = 0; _ < u_k_min_heap.get_offset(); _++) {
-  //   auto u_ip_val = u_k_min_heap_data[_];
-  //   if (v_label_visited.GetBit(u_ip_val)) {
-  //     u_k_min_heap_data[_] = kMaxVertexID;
-  //   } else {
-  //     max_u_ip_val = max_u_ip_val > u_ip_val ? max_u_ip_val : u_ip_val;
-  //     min_u_ip_val = min_u_ip_val < u_ip_val ? min_u_ip_val : u_ip_val;
-  //   }
-  // }
+  for (VertexID _ = 0; _ < u_k_min_heap.get_offset(); _++) {
+    if (u_k_min_heap_data[_] < min_v_ip_val) {
+
+      return false;
+    }
+  }
+
+  // Filter by in edges.
+  max_v_ip_val = 0;
+  min_v_ip_val = kMaxVertexID;
+  max_u_ip_val = 0;
+  min_u_ip_val = kMaxVertexID;
+  u_label_visited.Clear();
+  u_ip_val_visited.Clear();
+  v_label_visited.Clear();
+  v_ip_val_visited.Clear();
+  u_k_min_heap.Clear();
+  v_k_min_heap.Clear();
+
+  u_offset_base = in_offset_p[u_idx];
+  for (VertexID nbr_u_idx = 0; nbr_u_idx < in_degree_p[u_idx]; nbr_u_idx++) {
+    VertexID nbr_u = in_edges_p[u_offset_base + nbr_u_idx];
+    VertexLabel u_label = params.v_label_p[nbr_u];
+    VertexID u_ip_val = HashTable(u_label);
+    u_label_visited.SetBit(u_label);
+    u_ip_val_visited.SetBit(u_ip_val);
+    u_k_min_heap.Insert(u_ip_val);
+  }
+
+  v_offset_base = in_offset_g[v_idx];
+  for (VertexID nbr_v_idx = 0; nbr_v_idx < in_degree_g[v_idx]; nbr_v_idx++) {
+    VertexID nbr_v = in_edges_g[v_offset_base + nbr_v_idx];
+    VertexLabel v_label = params.v_label_g[nbr_v];
+    VertexID v_ip_val = HashTable(v_label);
+    v_label_visited.SetBit(v_label);
+    v_ip_val_visited.SetBit(v_ip_val);
+    v_k_min_heap.Insert(v_ip_val);
+  }
+
+  u_k_min_heap.CopyData(u_k_min_heap_data);
+  v_k_min_heap.CopyData(v_k_min_heap_data);
+
+  for (VertexID _ = 0; _ < v_k_min_heap.get_offset(); _++) {
+    auto v_ip_val = v_k_min_heap_data[_];
+    for (VertexID __ = 0; __ < u_k_min_heap.get_offset(); __++) {
+      auto u_ip_val = u_k_min_heap_data[__];
+      if (v_ip_val == u_ip_val) {
+        v_k_min_heap_data[_] = kMaxVertexID;
+        u_k_min_heap_data[__] = kMaxVertexID;
+        break;
+      }
+    }
+  }
+
+  for (VertexID _ = 0; _ < v_k_min_heap.get_offset(); _++) {
+    auto v_ip_val = v_k_min_heap_data[_];
+    min_v_ip_val = min_v_ip_val < v_ip_val ? min_v_ip_val : v_ip_val;
+  }
+
+  for (VertexID _ = 0; _ < u_k_min_heap.get_offset(); _++) {
+    auto u_ip_val = u_k_min_heap_data[_];
+    min_u_ip_val = min_u_ip_val < u_ip_val ? min_u_ip_val : u_ip_val;
+  }
 
   if (min_v_ip_val == kMaxVertexID && min_u_ip_val != kMaxVertexID)
     return false;
 
   for (VertexID _ = 0; _ < u_k_min_heap.get_offset(); _++) {
     if (u_k_min_heap_data[_] < min_v_ip_val) {
-      // u_k_min_heap.Print();
-      // for (VertexID _ = 0; _ < u_k_min_heap.get_offset(); _++) {
-      //   printf(" %d ", u_k_min_heap_data[_]);
-      // }
-      // printf("\n");
-
-      // v_k_min_heap.Print();
-      // for (VertexID _ = 0; _ < v_k_min_heap.get_offset(); _++) {
-      //   printf(" %d ", v_k_min_heap_data[_]);
-      // }
-      // printf("\n");
-
-      // printf(" heap u: %d v: %d, max_v_ip_val%d, min_v_ip_val%d\n", u_idx,
-      //        v_idx, max_v_ip_val, min_v_ip_val);
       return false;
     }
   }
@@ -407,6 +441,24 @@ static __global__ void WOJFilterVCKernel(ParametersFilter params) {
   }
 }
 
+static __noinline__ __global__ void
+GetVisitedByKeyKernel(ParametersWedgeFilter params) {
+
+  unsigned int tid = blockIdx.x * blockDim.x + threadIdx.x;
+  unsigned int step = blockDim.x * gridDim.x;
+  KernelBitmapNoOwnership visited(3774768, params.visited_data);
+
+  VertexID *data_ptr = params.woj_matches.get_data_ptr();
+  VertexID x_offset = params.woj_matches.get_x_offset();
+  VertexID y_offset = params.woj_matches.get_y_offset();
+
+  for (VertexID data_offset = tid; data_offset < y_offset;
+       data_offset += step) {
+    VertexID target = data_ptr[x_offset * data_offset + params.hash_idx];
+    visited.SetBit(data_ptr[x_offset * data_offset + params.hash_idx]);
+  }
+}
+
 static __noinline__ __global__ void WOJJoinKernel(ParametersJoin params) {
   unsigned int tid = blockIdx.x * blockDim.x + threadIdx.x;
   unsigned int step = blockDim.x * gridDim.x;
@@ -430,14 +482,19 @@ static __noinline__ __global__ void WOJJoinKernel(ParametersJoin params) {
   VertexID output_x_offset = params.output_woj_matches.get_x_offset();
 
   VertexID *global_offset_ptr = params.output_woj_matches.get_y_offset_ptr();
+  KernelBitmapNoOwnership visited(3774768, params.right_visited_data);
 
   for (VertexID left_data_offset = tid;
        left_data_offset < params.left_woj_matches.get_y_offset();
        left_data_offset += step) {
-    //    printf("%d->%d\n", right_data[right_x * e_idx],
-    //           right_data[right_x * e_idx + 1]);
     VertexID target =
         left_data[left_x_offset * left_data_offset + params.left_hash_idx];
+
+    if (visited.GetBit(target) == 0) {
+      atomicAdd(params.jump_count, 1);
+      continue;
+    }
+
     VertexID right_data_offset =
         params.right_woj_matches.BinarySearch(params.right_hash_idx, target);
     if (right_data_offset != kMaxVertexID &&
@@ -731,6 +788,22 @@ void WOJSubIsoKernelWrapper::Join(
     // left_woj_matches->Print();
     // right_woj_matches->Print();
 
+    uint64_t *visited_data;
+    CUDA_CHECK(cudaMallocManaged(
+        &visited_data, sizeof(uint64_t) * KERNEL_WORD_OFFSET(3774768) + 1));
+    CUDA_CHECK(cudaMemset(visited_data, 0,
+                          sizeof(uint64_t) * KERNEL_WORD_OFFSET(3774768) + 1));
+
+    ParametersWedgeFilter wedge_filter_params{.woj_matches = *right_woj_matches,
+                                              .hash_idx = join_keys.second,
+                                              .visited_data = visited_data};
+
+    GetVisitedByKeyKernel<<<dimGrid, dimBlock, 0>>>(wedge_filter_params);
+
+    HostKernelBitmap visited;
+    visited.Init(3774768, visited_data);
+    std::cout << "visited: " << visited.Count() << std::endl;
+
     MergeSort(right_woj_matches->get_data_ptr(), join_keys.second,
               right_woj_matches->get_x_offset(),
               right_woj_matches->get_y_offset(),
@@ -745,19 +818,28 @@ void WOJSubIsoKernelWrapper::Join(
     if (join_keys.first == kMaxVertexID || join_keys.second == kMaxVertexID)
       continue;
 
+    VertexID *jump_count;
+    CUDA_CHECK(cudaMallocManaged(&jump_count, sizeof(VertexID)));
+    CUDA_CHECK(cudaMemset(jump_count, 0, sizeof(VertexID)));
+
     output_woj_matches->SetHeader(left_woj_matches->get_header_ptr(),
                                   left_woj_matches->get_x_offset(),
                                   right_woj_matches->get_header_ptr(),
                                   right_woj_matches->get_x_offset(), join_keys);
+
     ParametersJoin params{.left_woj_matches = *left_woj_matches,
                           .right_woj_matches = *right_woj_matches,
                           .output_woj_matches = *output_woj_matches,
                           .left_hash_idx = join_keys.first,
-                          .right_hash_idx = join_keys.second};
+                          .right_hash_idx = join_keys.second,
+                          .right_visited_data = visited_data,
+                          .jump_count = jump_count};
 
     WOJJoinKernel<<<dimGrid, dimBlock, 0>>>(params);
 
     cudaDeviceSynchronize();
+
+    std::cout << "Jump count: " << *jump_count << std::endl;
     if (output_woj_matches->get_y_offset() == 0) {
       break;
     }
