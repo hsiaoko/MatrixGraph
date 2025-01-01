@@ -71,6 +71,8 @@ void WOJMatches::Init(VertexID x, VertexID y) {
   CUDA_CHECK(cudaMallocManaged(&x_offset_, sizeof(VertexID)));
   CUDA_CHECK(cudaMallocManaged(&data_, sizeof(VertexID) * x_ * y_));
   CUDA_CHECK(cudaMallocManaged(&header_ptr_, sizeof(VertexID) * x_));
+  CUDA_CHECK(cudaMemset(y_offset_, 0, sizeof(VertexID)));
+  CUDA_CHECK(cudaMemset(x_offset_, 0, sizeof(VertexID)));
 }
 
 VertexID WOJMatches::BinarySearch(VertexID search_col, VertexID target) const {
@@ -107,6 +109,35 @@ void WOJMatches::SetHeader(const VertexID *left_header, VertexID left_offset_x,
   }
 }
 
+std::vector<WOJMatches *> WOJMatches::SplitAndCopy(VertexID n_partitions) {
+  std::vector<WOJMatches *> splitted_data;
+  splitted_data.resize(n_partitions);
+
+  VertexID base_size = get_y_offset() / n_partitions;
+  VertexID remainder = get_y_offset() % n_partitions;
+
+  VertexID count = 0;
+  for (VertexID _ = 0; _ < n_partitions; _++) {
+
+    VertexID partition_size =
+        base_size + (_ == n_partitions - 1 ? remainder : 0);
+    splitted_data[_] = new WOJMatches();
+    splitted_data[_]->Init(x_, y_);
+    splitted_data[_]->SetYOffset(partition_size);
+    splitted_data[_]->SetXOffset(get_x_offset());
+
+    CUDA_CHECK(cudaMemcpy(splitted_data[_]->get_data_ptr(),
+                          get_data_ptr() + count * get_x_offset(),
+                          sizeof(VertexID) * partition_size * get_x_offset(),
+                          cudaMemcpyDefault));
+
+    CUDA_CHECK(cudaMemcpy(splitted_data[_]->get_header_ptr(), get_header_ptr(),
+                          sizeof(VertexID) * x_, cudaMemcpyDefault));
+    count += partition_size;
+  }
+  return splitted_data;
+}
+
 std::pair<VertexID, VertexID> WOJMatches::GetJoinKey(const WOJMatches &other) {
 
   Bitmap visited(32);
@@ -133,6 +164,28 @@ void WOJMatches::Free() {
   CUDA_CHECK(cudaFree(data_));
   CUDA_CHECK(cudaFree(x_offset_));
   CUDA_CHECK(cudaFree(y_offset_));
+}
+
+void WOJMatches::CopyData(const WOJMatches &other) {
+  Init(other.get_x(), other.get_y());
+  SetXOffset(other.get_x_offset());
+  SetYOffset(other.get_y_offset());
+  CUDA_CHECK(cudaMemcpy(get_data_ptr(), other.get_data_ptr(),
+                        sizeof(VertexID) * x_ * y_, cudaMemcpyDefault));
+  CUDA_CHECK(cudaMemcpy(get_header_ptr(), other.get_header_ptr(),
+                        sizeof(VertexID) * x_, cudaMemcpyDefault));
+}
+
+void WOJMatches::CopyDataAsync(const WOJMatches &other,
+                               const cudaStream_t &stream) {
+  Init(other.get_x(), other.get_y());
+  SetXOffset(other.get_x_offset());
+  SetYOffset(other.get_y_offset());
+  CUDA_CHECK(cudaMemcpyAsync(get_data_ptr(), other.get_data_ptr(),
+                             sizeof(VertexID) * x_ * y_, cudaMemcpyDefault,
+                             stream));
+  CUDA_CHECK(cudaMemcpyAsync(get_header_ptr(), other.get_header_ptr(),
+                             sizeof(VertexID) * x_, cudaMemcpyDefault, stream));
 }
 
 void WOJMatches::Print(VertexID offset) const {

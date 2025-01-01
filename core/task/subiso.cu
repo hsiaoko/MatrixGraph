@@ -145,7 +145,7 @@ __host__ void SubIso::Matching(const ImmutableCSR &p, const ImmutableCSR &g,
   std::iota(worker.begin(), worker.end(), 0);
   auto step = worker.size();
 
-  cudaSetDevice(2);
+  // cudaSetDevice(2);
 
   // Init pattern.
   BufferUint8 data_p;
@@ -260,13 +260,16 @@ __host__ void SubIso::WOJMatching(const ImmutableCSR &p, const ImmutableCSR &g,
   auto woj_matches = WOJSubIsoKernelWrapper::Filter(exec_plan, p, g, e);
   auto start_time_1 = std::chrono::system_clock::now();
 
-  auto output_woj_matches = new WOJMatches();
+  exec_plan.SetNDevices(4);
+  auto output_woj_matches_vec =
+      WOJSubIsoKernelWrapper::Join(exec_plan, woj_matches);
+  std::cout << "Join Down" << std::endl;
 
-  WOJSubIsoKernelWrapper::Join(exec_plan, woj_matches, output_woj_matches);
+  for (auto _ = 0; _ < output_woj_matches_vec.size(); _++) {
+    output_woj_matches_vec[_]->Print();
+  }
 
   auto start_time_2 = std::chrono::system_clock::now();
-
-  output_woj_matches->Print();
 
   std::cout << "[WOJMatching] Filter() elapsed: "
             << std::chrono::duration_cast<std::chrono::microseconds>(

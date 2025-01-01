@@ -46,6 +46,7 @@ public:
       }
     }
     n_edges_ = eid;
+    n_data_vertices_ = g.get_num_vertices();
   }
 
   void GenerateJoinPlan(const ExecutionPlan &exec_plan) {}
@@ -58,11 +59,16 @@ public:
 
   inline VertexID get_n_edges() const { return n_edges_; }
 
+  inline VertexID get_n_data_vertices() const { return n_data_vertices_; }
+
   inline VertexID get_n_devices() const { return n_devices_; }
 
 private:
   VertexID *exec_path_in_edges_ = nullptr;
+
   VertexID n_edges_ = 0;
+  VertexID n_data_vertices_ = 0;
+
   int n_devices_ = 1;
 
   std::vector<VertexID> join_key_uid_;

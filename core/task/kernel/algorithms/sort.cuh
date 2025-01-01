@@ -71,21 +71,25 @@ static __global__ void MergeSortKernel(VertexID *input, VertexID *output,
 }
 
 // Host function for merge sort
-static void MergeSort(VertexID *data, VertexID key, VertexID x, VertexID y,
-                      VertexID data_size) {
+static void MergeSort(const cudaStream_t &stream, VertexID *data, VertexID key,
+                      VertexID x, VertexID y, VertexID data_size) {
   VertexID *input_data = data;
   VertexID *tmp_data;
   CUDA_CHECK(cudaMallocManaged(&tmp_data, data_size));
+  // CUDA_CHECK(cudaMalloc(&tmp_data, data_size));
 
   int step = 2;
   while (step / 2 < y) {
     int threadsPerBlock = 1024;
     int blocks = (y + step - 1) / step;
 
-    MergeSortKernel<<<blocks, threadsPerBlock>>>(data, tmp_data, key, x, y,
-                                                 step);
-    cudaDeviceSynchronize();
-
+    MergeSortKernel<<<blocks, threadsPerBlock, 0, stream>>>(data, tmp_data, key,
+                                                            x, y, step);
+    cudaStreamSynchronize(stream);
+    cudaError_t err = cudaGetLastError();
+    if (err != cudaSuccess) {
+      CUDA_CHECK(err);
+    }
     // Swap input and output arrays
     std::swap(data, tmp_data);
     step *= 2;
@@ -94,8 +98,8 @@ static void MergeSort(VertexID *data, VertexID key, VertexID x, VertexID y,
   if (data == input_data) {
     cudaFree(tmp_data);
   } else {
-    CUDA_CHECK(cudaMemcpy(input_data, data, x * y * sizeof(VertexID),
-                          cudaMemcpyDeviceToDevice));
+    CUDA_CHECK(cudaMemcpyAsync(input_data, data, x * y * sizeof(VertexID),
+                               cudaMemcpyDefault, stream));
     cudaFree(data);
   }
 }

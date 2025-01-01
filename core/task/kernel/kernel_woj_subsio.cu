@@ -459,6 +459,8 @@ GetVisitedByKeyKernel(ParametersWedgeFilter params) {
   }
 }
 
+static __global__ void TestKernel() {}
+
 static __noinline__ __global__ void WOJJoinKernel(ParametersJoin params) {
   unsigned int tid = blockIdx.x * blockDim.x + threadIdx.x;
   unsigned int step = blockDim.x * gridDim.x;
@@ -466,13 +468,13 @@ static __noinline__ __global__ void WOJJoinKernel(ParametersJoin params) {
   auto lane_id = threadIdx.x & (kWarpSize - 1);
   auto warp_id = threadIdx.x >> kLogWarpSize;
 
-  __shared__ VertexID local_matches_data[kSharedMemorySize];
-  __shared__ VertexID local_matches_offset;
-  if (threadIdx.x == 0) {
-    local_matches_offset = 0;
-    memset(local_matches_data, 0, sizeof(VertexID) * kSharedMemorySize);
-  }
-  __syncthreads();
+  // __shared__ VertexID local_matches_data[kSharedMemorySize];
+  // __shared__ VertexID local_matches_offset;
+  // if (threadIdx.x == 0) {
+  //   local_matches_offset = 0;
+  //   memset(local_matches_data, 0, sizeof(VertexID) * kSharedMemorySize);
+  // }
+  // __syncthreads();
 
   VertexID *left_data = params.left_woj_matches.get_data_ptr();
   VertexID *right_data = params.right_woj_matches.get_data_ptr();
@@ -702,11 +704,6 @@ WOJSubIsoKernelWrapper::Filter(const WOJExecutionPlan &exec_plan,
                             .test = test};
 
     WOJFilterVCKernel<<<dimGrid, dimBlock, 0, stream>>>(params);
-
-    cudaError_t err = cudaGetLastError();
-    if (err != cudaSuccess) {
-      CUDA_CHECK(err);
-    }
   }
 
   for (VertexID device_id = 0; device_id < exec_plan.get_n_devices();
@@ -746,10 +743,9 @@ WOJSubIsoKernelWrapper::Filter(const WOJExecutionPlan &exec_plan,
   return woj_matches_vec;
 }
 
-void WOJSubIsoKernelWrapper::Join(
+std::vector<WOJMatches *> WOJSubIsoKernelWrapper::Join(
     const WOJExecutionPlan &exec_plan,
-    const std::vector<WOJMatches *> &input_woj_matches_vec,
-    WOJMatches *output_woj_matches) {
+    const std::vector<WOJMatches *> &input_woj_matches_vec) {
   std::cout << " --- Join --- " << std::endl;
 
   // Join Tables.
@@ -763,99 +759,173 @@ void WOJSubIsoKernelWrapper::Join(
   std::iota(worker.begin(), worker.end(), 0);
   auto step = worker.size();
 
+  input_woj_matches_vec[0]->Print();
+  auto src_matches_vec =
+      input_woj_matches_vec[0]->SplitAndCopy(exec_plan.get_n_devices());
+
+  std::vector<WOJMatches *> output_woj_matches_vec;
+  output_woj_matches_vec.resize(exec_plan.get_n_devices());
+
+  for (auto _ = 0; _ < exec_plan.get_n_devices(); _++) {
+    output_woj_matches_vec[_] = new WOJMatches();
+    output_woj_matches_vec[_]->Init(exec_plan.get_n_edges(), kMaxNumWeft);
+  }
+
   // Init Streams
   std::vector<cudaStream_t> p_streams_vec;
   p_streams_vec.resize(exec_plan.get_n_devices());
-  std::for_each(std::execution::par, worker.begin(), worker.end(),
-                [step, &exec_plan, &p_streams_vec, &mtx](auto w) {
-                  for (VertexID i = w; i < p_streams_vec.size(); i += step) {
-                    cudaSetDevice(common::hash_function(i) %
-                                  exec_plan.get_n_devices());
-                    cudaStreamCreate(&p_streams_vec[i]);
-                  }
-                });
 
-  output_woj_matches->Init(exec_plan.get_n_edges(), kMaxNumWeft);
+  std::vector<HostKernelBitmap> visited_bm_vec;
+  visited_bm_vec.resize(p_streams_vec.size() * exec_plan.get_n_edges());
 
-  auto left_woj_matches = input_woj_matches_vec[0];
+  VertexID *jump_count_ptr;
+  CUDA_CHECK(cudaMallocManaged(&jump_count_ptr, sizeof(VertexID) *
+                                                    p_streams_vec.size() *
+                                                    exec_plan.get_n_edges()));
+  CUDA_CHECK(cudaMemset(jump_count_ptr, 0,
+                        sizeof(VertexID) * p_streams_vec.size() *
+                            exec_plan.get_n_edges()));
+
+  Bitmap candidates_visited(input_woj_matches_vec.size());
+
+  std::vector<Bitmap> candidates_visited_for_streams;
+  candidates_visited_for_streams.resize(p_streams_vec.size(),
+                                        input_woj_matches_vec.size());
+  cudaError_t err = cudaGetLastError();
+  if (err != cudaSuccess) {
+    CUDA_CHECK(err);
+  }
+
+  // Sort candidates.
+  Bitmap header_visited(32);
+  auto header_ptr = input_woj_matches_vec[0]->get_header_ptr();
+  for (auto _ = 0; _ < input_woj_matches_vec[0]->get_x_offset(); _++)
+    header_visited.SetBit(header_ptr[_]);
 
   for (VertexID _ = 1; _ < input_woj_matches_vec.size(); _++) {
-    auto right_woj_matches = input_woj_matches_vec[_];
-    auto join_keys = left_woj_matches->GetJoinKey(*right_woj_matches);
-
-    // std::cout << "\t Join_key " << join_keys.first << " " << join_keys.second
-    //           << std::endl;
-    // left_woj_matches->Print();
-    // right_woj_matches->Print();
-
-    uint64_t *visited_data;
-    CUDA_CHECK(cudaMallocManaged(
-        &visited_data, sizeof(uint64_t) * KERNEL_WORD_OFFSET(3774768) + 1));
-    CUDA_CHECK(cudaMemset(visited_data, 0,
-                          sizeof(uint64_t) * KERNEL_WORD_OFFSET(3774768) + 1));
-
-    ParametersWedgeFilter wedge_filter_params{.woj_matches = *right_woj_matches,
-                                              .hash_idx = join_keys.second,
-                                              .visited_data = visited_data};
-
-    GetVisitedByKeyKernel<<<dimGrid, dimBlock, 0>>>(wedge_filter_params);
-
-    HostKernelBitmap visited;
-    visited.Init(3774768, visited_data);
-    std::cout << "visited: " << visited.Count() << std::endl;
-
-    MergeSort(right_woj_matches->get_data_ptr(), join_keys.second,
-              right_woj_matches->get_x_offset(),
-              right_woj_matches->get_y_offset(),
-              sizeof(VertexID) * right_woj_matches->get_y() *
-                  right_woj_matches->get_x());
-
-    cudaDeviceSynchronize();
-
-    // std::cout << "After sorting." << std::endl;
-    // right_woj_matches->Print();
-
-    if (join_keys.first == kMaxVertexID || join_keys.second == kMaxVertexID)
-      continue;
-
-    VertexID *jump_count;
-    CUDA_CHECK(cudaMallocManaged(&jump_count, sizeof(VertexID)));
-    CUDA_CHECK(cudaMemset(jump_count, 0, sizeof(VertexID)));
-
-    output_woj_matches->SetHeader(left_woj_matches->get_header_ptr(),
-                                  left_woj_matches->get_x_offset(),
-                                  right_woj_matches->get_header_ptr(),
-                                  right_woj_matches->get_x_offset(), join_keys);
-
-    ParametersJoin params{.left_woj_matches = *left_woj_matches,
-                          .right_woj_matches = *right_woj_matches,
-                          .output_woj_matches = *output_woj_matches,
-                          .left_hash_idx = join_keys.first,
-                          .right_hash_idx = join_keys.second,
-                          .right_visited_data = visited_data,
-                          .jump_count = jump_count};
-
-    WOJJoinKernel<<<dimGrid, dimBlock, 0>>>(params);
-
-    cudaDeviceSynchronize();
-
-    std::cout << "Jump count: " << *jump_count << std::endl;
-    if (output_woj_matches->get_y_offset() == 0) {
-      break;
+    bool sort_tag = false;
+    auto header_ptr = input_woj_matches_vec[_]->get_header_ptr();
+    for (VertexID __ = 0; __ < input_woj_matches_vec[_]->get_x_offset(); __++) {
+      if (header_visited.GetBit(header_ptr[__]) && sort_tag == false) {
+        MergeSort(0, input_woj_matches_vec[_]->get_data_ptr(), __,
+                  input_woj_matches_vec[_]->get_x_offset(),
+                  input_woj_matches_vec[_]->get_y_offset(),
+                  sizeof(VertexID) * input_woj_matches_vec[_]->get_y() *
+                      input_woj_matches_vec[_]->get_x());
+        sort_tag = true;
+      }
+      header_visited.SetBit(header_ptr[__]);
     }
-
-    // output_woj_matches->Print();
-    std::swap(left_woj_matches, output_woj_matches);
-    output_woj_matches->Clear();
   }
 
-  for (VertexID device_id = 0; device_id < exec_plan.get_n_devices();
-       device_id++) {
-    cudaSetDevice(device_id);
-    cudaDeviceSynchronize();
-  }
+  // Join candidates
+  std::for_each(
+      std::execution::par, worker.begin(), worker.end(),
+      [step, &dimBlock, &dimGrid, &exec_plan, &p_streams_vec, &mtx,
+       &src_matches_vec, &input_woj_matches_vec, &output_woj_matches_vec,
+       &visited_bm_vec, &jump_count_ptr, &candidates_visited,
+       &candidates_visited_for_streams](auto w) {
+        for (VertexID s = w; s < p_streams_vec.size(); s += step) {
+          cudaSetDevice(common::hash_function(s) % exec_plan.get_n_devices());
+          cudaStream_t &stream = p_streams_vec[s];
 
-  cudaError_t err = cudaGetLastError();
+          cudaStreamCreate(&stream);
+
+          auto left_woj_matches = src_matches_vec[s];
+          cudaError_t err = cudaGetLastError();
+          if (err != cudaSuccess) {
+            CUDA_CHECK(err);
+          }
+
+          for (VertexID _ = 1; _ < input_woj_matches_vec.size(); _++) {
+            {
+              std::lock_guard<std::mutex> lock(mtx);
+
+              auto right_woj_matches = input_woj_matches_vec[_];
+
+              auto join_keys = left_woj_matches->GetJoinKey(*right_woj_matches);
+
+              visited_bm_vec[s * exec_plan.get_n_edges() + _].Init(
+                  exec_plan.get_n_data_vertices());
+              visited_bm_vec[s * exec_plan.get_n_edges() + _].ClearAsync(
+                  stream);
+              uint64_t *visited_data =
+                  visited_bm_vec[s * exec_plan.get_n_edges() + _].GetPtr();
+
+              ParametersWedgeFilter wedge_filter_params{
+                  .woj_matches = *right_woj_matches,
+                  .hash_idx = join_keys.second,
+                  .visited_data = visited_data};
+
+              GetVisitedByKeyKernel<<<dimGrid, dimBlock, 0, stream>>>(
+                  wedge_filter_params);
+
+              cudaError_t err = cudaGetLastError();
+              if (err != cudaSuccess) {
+                CUDA_CHECK(err);
+              }
+              auto local_matches = new WOJMatches();
+              local_matches->CopyDataAsync(*right_woj_matches, stream);
+
+              err = cudaGetLastError();
+              if (err != cudaSuccess) {
+                CUDA_CHECK(err);
+              }
+
+              err = cudaGetLastError();
+              if (err != cudaSuccess) {
+                CUDA_CHECK(err);
+              }
+
+              if (join_keys.first == kMaxVertexID ||
+                  join_keys.second == kMaxVertexID)
+                continue;
+
+              output_woj_matches_vec[s]->SetHeader(
+                  left_woj_matches->get_header_ptr(),
+                  left_woj_matches->get_x_offset(),
+                  right_woj_matches->get_header_ptr(),
+                  right_woj_matches->get_x_offset(), join_keys);
+
+              auto *jump_count = jump_count_ptr + s * p_streams_vec.size() + _;
+
+              ParametersJoin params{.left_woj_matches = *left_woj_matches,
+                                    .right_woj_matches = *local_matches,
+                                    //.right_woj_matches = *right_woj_matches,
+                                    .output_woj_matches =
+                                        *output_woj_matches_vec[s],
+                                    .left_hash_idx = join_keys.first,
+                                    .right_hash_idx = join_keys.second,
+                                    .right_visited_data = visited_data,
+                                    .jump_count = jump_count};
+
+              WOJJoinKernel<<<dimGrid, dimBlock, 0, stream>>>(params);
+            }
+
+            cudaStreamSynchronize(stream);
+
+            err = cudaGetLastError();
+            if (err != cudaSuccess) {
+              CUDA_CHECK(err);
+            }
+
+            if (output_woj_matches_vec[s]->get_y_offset() == 0) {
+              break;
+            }
+
+            if (output_woj_matches_vec[s]->get_x_offset() ==
+                output_woj_matches_vec[s]->get_x()) {
+              return;
+            } else {
+
+              std::swap(left_woj_matches, output_woj_matches_vec[s]);
+              output_woj_matches_vec[s]->Clear();
+            }
+          }
+        }
+      });
+
+  err = cudaGetLastError();
   if (err != cudaSuccess) {
     CUDA_CHECK(err);
   }
@@ -866,6 +936,9 @@ void WOJSubIsoKernelWrapper::Join(
                     cudaStreamDestroy(p_streams_vec[i]);
                   }
                 });
+
+  cudaFree(jump_count_ptr);
+  return output_woj_matches_vec;
 }
 
 } // namespace kernel

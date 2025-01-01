@@ -44,9 +44,9 @@ public:
                                           const ImmutableCSR &g,
                                           const Edges &e);
 
-  static void Join(const WOJExecutionPlan &exec_plan,
-                   const std::vector<WOJMatches *> &input_woj_matches,
-                   WOJMatches *output_woj_matches);
+  static std::vector<WOJMatches *>
+  Join(const WOJExecutionPlan &exec_plan,
+       const std::vector<WOJMatches *> &input_woj_matches);
 
 private:
   WOJSubIsoKernelWrapper() = default;

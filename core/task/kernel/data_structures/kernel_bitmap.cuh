@@ -121,40 +121,28 @@ public:
 
   HostKernelBitmap(uint64_t size) { Init(size); }
 
-  HostKernelBitmap(const HostKernelBitmap &other) {
-    if (this != &other)
-      free(data_);
-
-    Init(other.GetSize());
-    memcpy(data_, other.GetPtr(),
-           (KERNEL_WORD_OFFSET(size_) + 1) * sizeof(uint64_t));
-  }
-
-  //~HostKernelBitmap() {
-  //  free(data_);
-  //  data_ = nullptr;
-  //}
-
-  void Init(uint64_t size, uint64_t *data) {
-    if (data_ != nullptr)
-      free(data_);
-    data_ = data;
-    size_ = size;
+  ~HostKernelBitmap() {
+    cudaFree(data_);
+    data_ = nullptr;
   }
 
   void Init(uint64_t size) {
     if (data_ != nullptr) {
-      free(data_);
+      cudaFree(data_);
     }
     size_ = size;
-    data_ =
-        (uint64_t *)malloc(sizeof(uint64_t) * (KERNEL_WORD_OFFSET(size) + 1));
+
+    cudaMallocManaged(&data_,
+                      sizeof(uint64_t) * (KERNEL_WORD_OFFSET(size) + 1));
   }
 
   void Clear() {
-    uint64_t bm_size = KERNEL_WORD_OFFSET(size_);
-    for (uint64_t i = 0; i <= bm_size; i++)
-      data_[i] = 0;
+    cudaMemset(data_, 0, sizeof(uint64_t) * (KERNEL_WORD_OFFSET(size_) + 1));
+  }
+
+  void ClearAsync(const cudaStream_t &stream) {
+    cudaMemsetAsync(data_, 0,
+                    sizeof(uint64_t) * (KERNEL_WORD_OFFSET(size_) + 1), stream);
   }
 
   void Fill() {

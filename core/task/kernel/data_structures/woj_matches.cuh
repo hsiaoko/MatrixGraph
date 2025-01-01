@@ -26,14 +26,6 @@ public:
 
   __host__ WOJMatches() = default;
 
-  // __host__ WOJMatches(const WOJMatches &other);
-
-  // __host__ WOJMatches(WOJMatches &&other);
-
-  // WOJMatches &operator=(const WOJMatches &other);
-
-  // WOJMatches &operator=(WOJMatches &&other);
-
   void __host__ Init(VertexID x, VertexID y);
 
   void __host__ Free();
@@ -53,6 +45,13 @@ public:
   __host__ void SetHeader(const VertexID *left_header, VertexID left_x_offset,
                           const VertexID *right_header, VertexID right_x_offset,
                           const std::pair<VertexID, VertexID> &hash_keys);
+
+  __host__ std::vector<WOJMatches *> SplitAndCopy(VertexID n_partitions);
+
+  __host__ void CopyData(const WOJMatches &other);
+
+  __host__ void CopyDataAsync(const WOJMatches &other,
+                              const cudaStream_t &stream);
 
   __inline__ __host__ __device__ VertexID get_y_offset() const {
     return *y_offset_;
