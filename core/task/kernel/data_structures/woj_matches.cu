@@ -16,53 +16,7 @@ using sics::matrixgraph::core::common::kMaxVertexID;
 using VertexID = sics::matrixgraph::core::common::VertexID;
 using Bitmap = sics::matrixgraph::core::util::Bitmap;
 
-// WOJMatches::WOJMatches(const WOJMatches &other) {
-//   y_ = other.get_y();
-//   x_ = other.get_x();
-//   Init(x_, y_);
-//   *y_offset_ = other.get_y_offset();
-//   *x_offset_ = other.get_x_offset();
-//   memcpy(data_, other.get_data_ptr(), sizeof(VertexID) * x_ * y_);
-// }
-//
-// WOJMatches::WOJMatches(WOJMatches &&other) {
-//   y_ = other.get_y();
-//   x_ = other.get_x();
-//   Init(x_, y_);
-//   *y_offset_ = other.get_y_offset();
-//   *x_offset_ = other.get_x_offset();
-//   data_ = other.get_data_ptr();
-// }
-
 WOJMatches::WOJMatches(VertexID x, VertexID y) : x_(x), y_(y) { Init(x, y); }
-
-// WOJMatches &WOJMatches::operator=(const WOJMatches &other) {
-//   if (this != &other) {
-//     delete[] data_;
-//
-//     y_ = other.get_y();
-//     x_ = other.get_x();
-//     Init(x_, y_);
-//     *y_offset_ = other.get_y_offset();
-//     *x_offset_ = other.get_x_offset();
-//     memcpy(data_, other.get_data_ptr(), sizeof(VertexID) * x_ * y_);
-//   }
-//   return *this;
-// }
-//
-// WOJMatches &WOJMatches::operator=(WOJMatches &&other) {
-//   if (this != &other) {
-//     delete[] data_;
-//
-//     y_ = other.get_y();
-//     x_ = other.get_x();
-//     Init(x_, y_);
-//     *y_offset_ = other.get_y_offset();
-//     *x_offset_ = other.get_x_offset();
-//     data_ = other.get_data_ptr();
-//   }
-//   return *this;
-// }
 
 void WOJMatches::Init(VertexID x, VertexID y) {
   x_ = x;

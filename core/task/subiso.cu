@@ -108,36 +108,9 @@ __host__ void SubIso::LoadData() {
 
   g_.Read(data_graph_path_);
   g_.PrintGraph(3);
-
-  // e_.ReadFromBin(data_graph_edgelist_path_);
-  // e_.ShowGraph(3);
 }
 
-__host__ void SubIso::InitLabel() {
-  VertexLabel *p_vlabel = p_.GetVLabelBasePointer();
-  p_vlabel[0] = 0;
-  p_vlabel[1] = 1;
-  p_vlabel[2] = 2;
-  p_vlabel[3] = 3;
-  p_vlabel[4] = 4;
-  p_vlabel[5] = 3;
-
-  VertexLabel *g_vlabel = g_.GetVLabelBasePointer();
-
-  g_vlabel[0] = 0;
-  g_vlabel[1] = 1;
-  g_vlabel[2] = 2;
-  g_vlabel[3] = 3;
-  g_vlabel[4] = 3;
-  g_vlabel[5] = 4;
-  g_vlabel[6] = 4;
-  g_vlabel[7] = 1;
-  g_vlabel[8] = 0;
-  // g_vlabel[39] = 3;
-}
-
-__host__ void SubIso::Matching(const ImmutableCSR &p, const ImmutableCSR &g,
-                               const Edges &e) {
+__host__ void SubIso::Matching(const ImmutableCSR &p, const ImmutableCSR &g) {
   auto parallelism = std::thread::hardware_concurrency();
   std::vector<size_t> worker(parallelism);
   std::mutex mtx;
@@ -145,7 +118,7 @@ __host__ void SubIso::Matching(const ImmutableCSR &p, const ImmutableCSR &g,
   std::iota(worker.begin(), worker.end(), 0);
   auto step = worker.size();
 
-  // cudaSetDevice(2);
+  cudaSetDevice(1);
 
   // Init pattern.
   BufferUint8 data_p;
@@ -196,29 +169,6 @@ __host__ void SubIso::Matching(const ImmutableCSR &p, const ImmutableCSR &g,
 
   unified_v_label_g.Init(v_label_g);
 
-  data_edgelist_g.data = (VertexID *)e.get_base_ptr();
-  data_edgelist_g.size = sizeof(VertexID) * e.get_metadata().num_edges * 2;
-
-  unified_edgelist_g.Init(data_edgelist_g);
-
-  // Init output.
-  std::vector<UnifiedOwnedBufferVertexID> unified_edgelist_m;
-  unified_edgelist_m.resize(p.get_num_vertices() - 1);
-  std::for_each(
-      std::execution::par, worker.begin(), worker.end(),
-      [this, step, &mtx, &unified_edgelist_m, &p](auto w) {
-        for (VertexID _ = w; _ < p.get_num_vertices() - 1; _ += step) {
-          unified_edgelist_m[_].Init(sizeof(VertexID) * kMaxNumCandidates * 2);
-        }
-      });
-
-  sics::matrixgraph::core::data_structures::UnifiedOwnedBuffer<VertexID *>
-      unified_m_ptr;
-  unified_m_ptr.Init(sizeof(VertexID *) * (p.get_num_vertices() - 1) * 2);
-  for (auto _ = 0; _ < unified_edgelist_m.size(); _++) {
-    unified_m_ptr.GetPtr()[_] = unified_edgelist_m[_].GetPtr();
-  }
-
   UnifiedOwnedBufferEdgeIndex unified_m_offset;
   unified_m_offset.Init(sizeof(EdgeIndex) * p.get_num_vertices());
 
@@ -248,19 +198,19 @@ __host__ void SubIso::Matching(const ImmutableCSR &p, const ImmutableCSR &g,
   matches.Print(3);
 }
 
-__host__ void SubIso::WOJMatching(const ImmutableCSR &p, const ImmutableCSR &g,
-                                  const Edges &e) {
+__host__ void SubIso::WOJMatching(const ImmutableCSR &p,
+                                  const ImmutableCSR &g) {
 
   // Generate Execution Plan
   WOJExecutionPlan exec_plan;
   exec_plan.GenerateWOJExecutionPlan(p, g);
-  exec_plan.SetNDevices(1);
+  exec_plan.GenerateWOJExecutionPlan(p, g);
 
   auto start_time_0 = std::chrono::system_clock::now();
-  auto woj_matches = WOJSubIsoKernelWrapper::Filter(exec_plan, p, g, e);
+  auto woj_matches = WOJSubIsoKernelWrapper::Filter(exec_plan, p, g);
   auto start_time_1 = std::chrono::system_clock::now();
 
-  exec_plan.SetNDevices(4);
+  exec_plan.SetNDevices(1);
   auto output_woj_matches_vec =
       WOJSubIsoKernelWrapper::Join(exec_plan, woj_matches);
   std::cout << "Join Down" << std::endl;
@@ -290,11 +240,12 @@ __host__ void SubIso::Run() {
   auto start_time_0 = std::chrono::system_clock::now();
   LoadData();
   auto start_time_1 = std::chrono::system_clock::now();
-  // InitLabel();
+
+  WOJMatching(p_, g_);
+  // Matching(p_, g_);
 
   auto start_time_2 = std::chrono::system_clock::now();
 
-  WOJMatching(p_, g_, e_);
   auto start_time_3 = std::chrono::system_clock::now();
 
   std::cout << "[SubIso] LoadData() elapsed: "
@@ -304,7 +255,7 @@ __host__ void SubIso::Run() {
                    (double)CLOCKS_PER_SEC
             << std::endl;
 
-  std::cout << "[SubIso] WOJMatching() elapsed: "
+  std::cout << "[SubIso] Matching() elapsed: "
             << std::chrono::duration_cast<std::chrono::microseconds>(
                    start_time_2 - start_time_1)
                        .count() /

@@ -19,6 +19,8 @@ using VertexLabel = sics::matrixgraph::core::common::VertexLabel;
 using sics::matrixgraph::core::common::kMaxNumCandidatesPerThread;
 using VertexID = sics::matrixgraph::core::common::VertexID;
 using VertexID = sics::matrixgraph::core::common::VertexID;
+using sics::matrixgraph::core::common::kBlockDim;
+using sics::matrixgraph::core::common::kGridDim;
 using sics::matrixgraph::core::common::kMaxNumWeft;
 using sics::matrixgraph::core::common::kMaxVertexID;
 using sics::matrixgraph::core::task::kernel::HostKernelBitmap;
@@ -56,16 +58,15 @@ struct ParametersSubIso {
 static __noinline__ __device__ bool
 LabelFilter(const ParametersSubIso &params, VertexID u_idx, VertexID v_idx) {
 
-  VertexID *globalid_g = (VertexID *)(params.data_g);
-  VertexLabel v_label = params.v_label_g[globalid_g[v_idx]];
+  VertexLabel v_label = params.v_label_g[v_idx];
   VertexLabel u_label = params.v_label_p[u_idx];
 
   return u_label == v_label;
 }
 
-static
-    //__noinline__
-    __forceinline__ __device__ bool
+static __noinline__
+    //__forceinline__
+    __device__ bool
     LabelDegreeFilter(const ParametersSubIso &params, VertexID u_idx,
                       VertexID v_idx) {
 
@@ -136,14 +137,15 @@ NeighborLabelCounterFilter(const ParametersSubIso &params, VertexID u_idx,
   return v_label_visited.Count() >= u_label_visited.Count();
 }
 
-static __forceinline__ __device__ bool Filter(const ParametersSubIso &params,
-                                              VertexID u_idx, VertexID v_idx) {
+static //__forceinline__
+    __noinline__ __device__ bool
+    Filter(const ParametersSubIso &params, VertexID u_idx, VertexID v_idx) {
 
-  return LabelFilter(params, u_idx, v_idx);
+  // return LabelFilter(params, u_idx, v_idx);
 
   // return NeighborLabelCounterFilter(params, u_idx, v_idx);
 
-  // return LabelDegreeFilter(params, u_idx, v_idx);
+  return LabelDegreeFilter(params, u_idx, v_idx);
 }
 
 static __noinline__ __device__ bool SteadyRefine(const ParametersSubIso &params,
@@ -432,20 +434,21 @@ DFSExtend(const ParametersSubIso &params,
   }
 
   if (local_match_tag && global_match_tag) {
+
     VertexID offset = local_matches.size[exec_plan_idx];
 
     if (pre_v_idx == kMaxVertexID) {
-      local_matches
-          .data[kMaxNumCandidatesPerThread * 2 * exec_plan_idx + 2 * offset] =
-          pre_v_idx;
+      // local_matches
+      //     .data[kMaxNumCandidatesPerThread * 2 * exec_plan_idx + 2 * offset]
+      //     = pre_v_idx;
     } else {
-      local_matches
-          .data[kMaxNumCandidatesPerThread * 2 * exec_plan_idx + 2 * offset] =
-          globalid_g[pre_v_idx];
+      // local_matches
+      //     .data[kMaxNumCandidatesPerThread * 2 * exec_plan_idx + 2 * offset]
+      //     = globalid_g[pre_v_idx];
     }
-    local_matches
-        .data[kMaxNumCandidatesPerThread * 2 * exec_plan_idx + 2 * offset + 1] =
-        globalid_g[v_idx];
+    // local_matches
+    //     .data[kMaxNumCandidatesPerThread * 2 * exec_plan_idx + 2 * offset +
+    //     1] = globalid_g[v_idx];
     local_matches.size[exec_plan_idx]++;
 
     if (!level_visited_ptr_array[exec_plan_idx]->GetBit(v_idx)) {
@@ -458,12 +461,12 @@ DFSExtend(const ParametersSubIso &params,
   } else if (local_match_tag) {
     VertexID offset = local_matches.size[exec_plan_idx];
 
-    local_matches
-        .data[kMaxNumCandidatesPerThread * 2 * exec_plan_idx + 2 * offset] =
-        globalid_g[pre_v_idx];
-    local_matches
-        .data[kMaxNumCandidatesPerThread * 2 * exec_plan_idx + 2 * offset + 1] =
-        globalid_g[v_idx];
+    // local_matches
+    //     .data[kMaxNumCandidatesPerThread * 2 * exec_plan_idx + 2 * offset] =
+    //     globalid_g[pre_v_idx];
+    // local_matches
+    //     .data[kMaxNumCandidatesPerThread * 2 * exec_plan_idx + 2 * offset +
+    //     1] = globalid_g[v_idx];
     local_matches.size[exec_plan_idx]++;
     local_visited.SetBit(u);
     if (!level_visited_ptr_array[exec_plan_idx]->GetBit(v_idx)) {
@@ -473,10 +476,12 @@ DFSExtend(const ParametersSubIso &params,
   } else if (global_match_tag) {
     VertexID offset = local_matches.size[global_exec_plan_idx];
 
-    local_matches.data[kMaxNumCandidatesPerThread * 2 * global_exec_plan_idx +
-                       2 * offset] = globalid_g[pre_v_idx];
-    local_matches.data[kMaxNumCandidatesPerThread * 2 * global_exec_plan_idx +
-                       2 * offset + 1] = globalid_g[v_idx];
+    // local_matches.data[kMaxNumCandidatesPerThread * 2 * global_exec_plan_idx
+    // +
+    //                    2 * offset] = globalid_g[pre_v_idx];
+    // local_matches.data[kMaxNumCandidatesPerThread * 2 * global_exec_plan_idx
+    // +
+    //                    2 * offset + 1] = globalid_g[v_idx];
     local_matches.size[global_exec_plan_idx]++;
     local_visited.SetBit(u);
     if (!level_visited_ptr_array[global_exec_plan_idx]->GetBit(v_idx)) {
@@ -509,8 +514,8 @@ static __noinline__ __global__ void ExtendKernel(ParametersSubIso params) {
 
   for (VertexID _ = 0; _ < params.n_vertices_p; _++) {
     level_visited_ptr_array[_] = new KernelBitmap();
-    uint64_t size = params.n_vertices_g;
-    // uint64_t size = 1 << 10;
+    // uint64_t size = params.n_vertices_g;
+    uint64_t size = 1 << 15;
     uint64_t *data =
         (uint64_t *)malloc(sizeof(uint64_t) * KERNEL_WORD_OFFSET(size));
     level_visited_ptr_array[_]->Init(size, data);
@@ -569,9 +574,9 @@ static __noinline__ __global__ void ExtendKernel(ParametersSubIso params) {
       for (VertexID _ = 0; _ < params.n_vertices_p; _++) {
         VertexID v_offset = *(params.v_candidate_offset_for_each_weft +
                               weft_id * (params.n_vertices_p + 1) + _);
-        memcpy(base_ptr + v_offset * 2,
-               local_matches.data + kMaxNumCandidatesPerThread * 2 * _,
-               local_matches.size[_] * sizeof(VertexID) * 2);
+        // memcpy(base_ptr + v_offset * 2,
+        //        local_matches.data + kMaxNumCandidatesPerThread * 2 * _,
+        //        local_matches.size[_] * sizeof(VertexID) * 2);
       }
     }
   }
@@ -590,22 +595,6 @@ static __global__ void CheckKernel(ParametersSubIso params) {
        weft_idx += step) {
     Check(params, weft_idx);
   }
-}
-
-static __noinline__ __global__ void WOJFilter(ParametersSubIso params) {}
-
-static __noinline__ __global__ void WOJExtendKernel(ParametersSubIso params) {
-  unsigned int tid = blockIdx.x * blockDim.x + threadIdx.x;
-  unsigned int step = blockDim.x * gridDim.x;
-
-  // for (VertexID u_idx = 0; u_idx < params.n_vertices_p; u_idx++) {
-  for (VertexID e_idx = tid; e_idx < params.n_edges_g; e_idx += step) {
-    printf("%d->%d\n", params.edgelist_g[2 * e_idx],
-           params.edgelist_g[2 * e_idx + 1]);
-    // Filter(params, 0, v_idx);
-  }
-
-  //}
 }
 
 void SubIsoKernelWrapper::SubIso(
@@ -628,8 +617,8 @@ void SubIsoKernelWrapper::SubIso(
         &v_candidate_offset_for_each_weft,
     const data_structures::UnifiedOwnedBuffer<VertexID> &matches_data) {
 
-  dim3 dimBlock(64);
-  dim3 dimGrid(64);
+  dim3 dimBlock(kBlockDim);
+  dim3 dimGrid(kGridDim);
 
   LocalMatches m0;
   ParametersSubIso params{.depth_p = depth_p,
@@ -653,16 +642,11 @@ void SubIsoKernelWrapper::SubIso(
                               v_candidate_offset_for_each_weft.GetPtr(),
                           .matches_data = matches_data.GetPtr()};
 
-  for (auto i = 0; i < 10; i++) {
-    std::cout << params.edgelist_g[2 * i] << "->"
-              << params.edgelist_g[2 * i + 1] << std::endl;
-  }
   // The default heap size is 8M.
-  // cudaDeviceSetLimit(cudaLimitMallocHeapSize, 8388608 * 256);
+  cudaDeviceSetLimit(cudaLimitMallocHeapSize, 8388608 * 128);
   auto time1 = std::chrono::system_clock::now();
 
-  // ExtendKernel<<<dimGrid, dimBlock, 0, stream>>>(params);
-  WOJExtendKernel<<<dimGrid, dimBlock, 0, stream>>>(params);
+  ExtendKernel<<<dimGrid, dimBlock, 0, stream>>>(params);
 
   cudaStreamSynchronize(stream);
   auto time2 = std::chrono::system_clock::now();

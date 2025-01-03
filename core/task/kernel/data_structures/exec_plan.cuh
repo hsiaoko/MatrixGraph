@@ -63,21 +63,6 @@ public:
       }
     }
   }
-  __host__ void GenerateWOJExecutionPlan(const ImmutableCSR &p,
-                                         const ImmutableCSR &g) {
-
-    exec_path_in_edges_ = new VertexID[p.get_num_outgoing_edges() * 2]();
-
-    EdgeIndex eid = 0;
-    for (VertexID v_idx = 0; v_idx < p.get_num_vertices(); v_idx++) {
-      auto u = p.GetVertexByLocalID(v_idx);
-      for (EdgeIndex v_nbr_idx = 0; v_nbr_idx < u.outdegree; v_nbr_idx++) {
-        exec_path_in_edges_[2 * eid] = u.vid;
-        exec_path_in_edges_[2 * eid + 1] = u.outgoing_edges[v_nbr_idx];
-        eid++;
-      }
-    }
-  }
 
   __host__ void GenerateDFSExecutionPlan(const ImmutableCSR &p,
                                          const ImmutableCSR &g) {
@@ -134,7 +119,7 @@ public:
   VertexID *get_exec_path_in_edges_ptr() const { return exec_path_in_edges_; }
 
   UnifiedOwnedBufferVertexID *get_sequential_exec_path_ptr() const {
-    return sequential_exec_path_in_edges_;
+    return sequential_exec_path_;
   }
 
   UnifiedOwnedBufferVertexID *get_sequential_exec_path_in_edges_ptr() const {

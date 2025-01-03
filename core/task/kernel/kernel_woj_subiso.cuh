@@ -41,8 +41,7 @@ public:
 
   static std::vector<WOJMatches *> Filter(const WOJExecutionPlan &exec_plan,
                                           const ImmutableCSR &p,
-                                          const ImmutableCSR &g,
-                                          const Edges &e);
+                                          const ImmutableCSR &g);
 
   static std::vector<WOJMatches *>
   Join(const WOJExecutionPlan &exec_plan,

@@ -62,11 +62,12 @@ private:
 
   __host__ void AllocMappingBuf();
 
-  __host__ void Matching(const ImmutableCSR &p, const ImmutableCSR &g,
-                         const Edges &e);
+  __host__ void Matching(const ImmutableCSR &p,
+                         const ImmutableCSR &g //
+                                               // const Edges &e
+  );
 
-  __host__ void WOJMatching(const ImmutableCSR &p, const ImmutableCSR &g,
-                            const Edges &e);
+  __host__ void WOJMatching(const ImmutableCSR &p, const ImmutableCSR &g);
 
   ImmutableCSR p_;
 
