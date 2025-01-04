@@ -36,12 +36,12 @@ static const uint32_t kNWarpPerCUDACore = 2; // 2 warps per CUDA core.
 static const uint32_t kSharedMemorySize = 1024;
 static const uint32_t kGridDim = 1024;
 static const uint32_t kBlockDim = 320;
-// static const uint32_t kGridDim = 1;
-// static const uint32_t kBlockDim = 1;
+// static const uint32_t kGridDim = 64;
+// static const uint32_t kBlockDim = 64;
 static const uint32_t kWarpSize = 32;
 static const uint32_t kLogWarpSize = 5;
 
-static const uint32_t kDefaultHeapCapacity = 15;
+static const uint32_t kDefaultHeapCapacity = 3;
 
 } // namespace common
 } // namespace core

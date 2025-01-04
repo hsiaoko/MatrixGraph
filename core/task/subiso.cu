@@ -104,10 +104,10 @@ __host__ void SubIso::LoadData() {
   std::cout << "[SubIso] LoadData()" << std::endl;
 
   p_.Read(pattern_path_);
-  p_.PrintGraph(10);
+  p_.PrintGraph(3);
 
   g_.Read(data_graph_path_);
-  g_.PrintGraph(10);
+  g_.PrintGraph(3);
 }
 
 __host__ void SubIso::Matching(const ImmutableCSR &p, const ImmutableCSR &g) {

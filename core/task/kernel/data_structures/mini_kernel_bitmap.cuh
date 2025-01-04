@@ -13,43 +13,43 @@ namespace kernel {
 
 class MiniKernelBitmap {
 public:
-  __device__ MiniKernelBitmap(unsigned size) { Init(size); }
+  __forceinline__ __device__ MiniKernelBitmap(unsigned size) { Init(size); }
 
-  __device__ MiniKernelBitmap(const MiniKernelBitmap &other) {
+  __forceinline__ __device__ MiniKernelBitmap(const MiniKernelBitmap &other) {
     Init(other.GetSize());
     data_ = other.GetData();
   }
 
-  __device__ ~MiniKernelBitmap() = default;
+  __forceinline__ __device__ ~MiniKernelBitmap() = default;
 
-  __device__ void Init(unsigned size) {
+  __forceinline__ __device__ void Init(unsigned size) {
     size_ = size;
     data_ = 0;
   }
 
-  __device__ void Clear() { data_ = 0; }
+  __forceinline__ __device__ void Clear() { data_ = 0; }
 
-  __device__ void Fill() { data_ = 0xffffffff; }
+  __forceinline__ __device__ void Fill() { data_ = 0xffffffff; }
 
-  __device__ bool GetBit(unsigned i) const {
+  __forceinline__ __device__ bool GetBit(unsigned i) const {
     if (i > size_)
       return 0;
     return data_ & (1u << i);
   }
 
-  __device__ void SetBit(unsigned i) {
+  __forceinline__ __device__ void SetBit(unsigned i) {
     if (i > size_)
       return;
     data_ |= (unsigned)(1u << i);
   }
 
-  __device__ void ClearBit(const unsigned i) {
+  __forceinline__ __device__ void ClearBit(const unsigned i) {
     if (i > size_)
       return;
     data_ &= ~(unsigned)(1u << i);
   }
 
-  __device__ unsigned Count() const {
+  __forceinline__ __device__ unsigned Count() const {
     unsigned count = 0;
     unsigned x = data_;
     x = (x & (0x55555555)) + ((x >> 1) & (0x5555555));
@@ -61,9 +61,9 @@ public:
     return count;
   }
 
-  __device__ unsigned GetSize() const { return size_; }
+  __forceinline__ __device__ unsigned GetSize() const { return size_; }
 
-  __device__ unsigned GetData() const { return data_; }
+  __forceinline__ __device__ unsigned GetData() const { return data_; }
 
   unsigned size_ = 0;
   unsigned data_ = 0;
