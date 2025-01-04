@@ -104,10 +104,10 @@ __host__ void SubIso::LoadData() {
   std::cout << "[SubIso] LoadData()" << std::endl;
 
   p_.Read(pattern_path_);
-  p_.PrintGraph(3);
+  p_.PrintGraph(10);
 
   g_.Read(data_graph_path_);
-  g_.PrintGraph(3);
+  g_.PrintGraph(10);
 }
 
 __host__ void SubIso::Matching(const ImmutableCSR &p, const ImmutableCSR &g) {
@@ -205,12 +205,12 @@ __host__ void SubIso::WOJMatching(const ImmutableCSR &p,
   WOJExecutionPlan exec_plan;
   exec_plan.GenerateWOJExecutionPlan(p, g);
   exec_plan.GenerateWOJExecutionPlan(p, g);
+  exec_plan.SetNDevices(1);
 
   auto start_time_0 = std::chrono::system_clock::now();
   auto woj_matches = WOJSubIsoKernelWrapper::Filter(exec_plan, p, g);
   auto start_time_1 = std::chrono::system_clock::now();
 
-  exec_plan.SetNDevices(1);
   auto output_woj_matches_vec =
       WOJSubIsoKernelWrapper::Join(exec_plan, woj_matches);
   std::cout << "Join Down" << std::endl;

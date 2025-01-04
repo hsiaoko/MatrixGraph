@@ -84,7 +84,7 @@ public:
   __inline __host__ void Clear() {
     *y_offset_ = 0;
     *x_offset_ = 0;
-    memset(data_, 0, sizeof(VertexID) * x_ * y_);
+    cudaMemset(data_, 0, sizeof(VertexID) * x_ * y_);
   }
 
   void Print(VertexID offset = 3) const;

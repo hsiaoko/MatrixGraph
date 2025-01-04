@@ -25,7 +25,7 @@ static const uint64_t kMaxNumCandidates = 65536;
 static const uint64_t kMaxNumCandidatesPerThread = 64;
 
 // WOJ SubIso
-static const uint64_t kMaxNumWeft = 1 << 18;
+static const uint64_t kMaxNumWeft = 1 << 24;
 
 // GPU configure.
 static const uint32_t kSharedMemoryCapacity = 65536; // 64kb per SM for V100
@@ -36,8 +36,8 @@ static const uint32_t kNWarpPerCUDACore = 2; // 2 warps per CUDA core.
 static const uint32_t kSharedMemorySize = 1024;
 static const uint32_t kGridDim = 1024;
 static const uint32_t kBlockDim = 320;
-// static const uint32_t kGridDim = 64;
-// static const uint32_t kBlockDim = 64;
+// static const uint32_t kGridDim = 1;
+// static const uint32_t kBlockDim = 1;
 static const uint32_t kWarpSize = 32;
 static const uint32_t kLogWarpSize = 5;
 

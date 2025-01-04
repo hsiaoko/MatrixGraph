@@ -45,8 +45,10 @@ public:
         eid++;
       }
     }
-    n_edges_ = eid;
-    n_data_vertices_ = g.get_num_vertices();
+    n_edges_p_ = p.get_num_outgoing_edges();
+    n_edges_g_ = g.get_num_outgoing_edges();
+    n_vertices_p_ = p.get_num_vertices();
+    n_vertices_g_ = g.get_num_vertices();
   }
 
   void GenerateJoinPlan(const ExecutionPlan &exec_plan) {}
@@ -57,17 +59,23 @@ public:
     return exec_path_in_edges_;
   }
 
-  inline VertexID get_n_edges() const { return n_edges_; }
+  inline VertexID get_n_edges_p() const { return n_edges_p_; }
 
-  inline VertexID get_n_data_vertices() const { return n_data_vertices_; }
+  inline VertexID get_n_vertices_p() const { return n_vertices_p_; }
+
+  inline VertexID get_n_vertices_g() const { return n_vertices_g_; }
+
+  inline VertexID get_n_edges_g() const { return n_edges_g_; }
 
   inline VertexID get_n_devices() const { return n_devices_; }
 
 private:
   VertexID *exec_path_in_edges_ = nullptr;
 
-  VertexID n_edges_ = 0;
-  VertexID n_data_vertices_ = 0;
+  VertexID n_vertices_p_ = 0;
+  VertexID n_edges_p_ = 0;
+  VertexID n_vertices_g_ = 0;
+  VertexID n_edges_g_ = 0;
 
   int n_devices_ = 1;
 

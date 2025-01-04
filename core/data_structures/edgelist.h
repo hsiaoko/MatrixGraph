@@ -184,6 +184,8 @@ public:
 
   void ShowGraph(EdgeIndex n_edges = 3) const;
 
+  void GenerateVLabel(VertexID range = 5);
+
   Edge *get_base_ptr() const { return edges_ptr_; }
 
   VertexID *get_localid_to_globalid_ptr() const { return localid_to_globalid_; }
