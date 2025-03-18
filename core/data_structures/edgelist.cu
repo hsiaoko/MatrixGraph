@@ -1,5 +1,3 @@
-#include "core/data_structures/edgelist.h"
-
 #include <execution>
 #include <filesystem>
 #include <fstream>
@@ -9,8 +7,10 @@
 
 #include "core/common/consts.h"
 #include "core/common/types.h"
+#include "core/data_structures/edgelist.h"
 #include "core/util/atomic.h"
 #include "core/util/bitmap.h"
+#include "core/util/bitmap_ownership.h"
 
 namespace sics {
 namespace matrixgraph {
@@ -25,7 +25,7 @@ using sics::matrixgraph::core::util::atomic::WriteMin;
 using std::filesystem::create_directory;
 using std::filesystem::exists;
 
-Edges::Edges(const Edges &edges) {
+Edges::Edges(const Edges& edges) {
   edgelist_metadata_ = edges.get_metadata();
   edges_ptr_ = new Edge[edgelist_metadata_.num_edges]();
   memcpy(edges_ptr_, edges.get_base_ptr(),
@@ -36,20 +36,20 @@ Edges::Edges(const Edges &edges) {
   }
 }
 
-Edges::Edges(EdgeIndex n_edges, VertexID *edges_buf,
-             VertexID *localid2globalid) {
+Edges::Edges(EdgeIndex n_edges, VertexID* edges_buf,
+             VertexID* localid2globalid) {
   Init(n_edges, edges_buf, localid2globalid);
 }
 
-void Edges::Init(EdgeIndex n_edges, VertexID *edges_buf,
-                 VertexID *localid2globalid) {
+void Edges::Init(EdgeIndex n_edges, VertexID* edges_buf,
+                 VertexID* localid2globalid) {
   auto parallelism = std::thread::hardware_concurrency();
   std::vector<size_t> worker(parallelism);
   std::mutex mtx;
   std::iota(worker.begin(), worker.end(), 0);
   auto step = worker.size();
 
-  Bitmap bm(n_edges);
+  BitmapOwnership bm(n_edges);
   edges_ptr_ = new Edge[n_edges]();
   VertexID max_vid = 0;
   VertexID min_vid = MAX_VERTEX_ID;
@@ -67,7 +67,7 @@ void Edges::Init(EdgeIndex n_edges, VertexID *edges_buf,
                   }
                 });
 
-  Bitmap visited(max_vid);
+  BitmapOwnership visited(max_vid);
 
   // Get number of vertices.
   std::for_each(std::execution::par, worker.begin(), worker.end(),
@@ -89,7 +89,7 @@ void Edges::Init(EdgeIndex n_edges, VertexID *edges_buf,
   }
 }
 
-void Edges::WriteToBinary(const std::string &output_path) {
+void Edges::WriteToBinary(const std::string& output_path) {
   std::cout << "Write to binary" << std::endl;
   if (!std::filesystem::exists(output_path))
     std::filesystem::create_directory(output_path);
@@ -99,14 +99,14 @@ void Edges::WriteToBinary(const std::string &output_path) {
   std::ofstream out_vlabel_file(output_path + "vlabel.bin");
   std::ofstream out_meta_file(output_path + "meta.yaml");
 
-  out_data_file.write(reinterpret_cast<char *>(edges_ptr_),
+  out_data_file.write(reinterpret_cast<char*>(edges_ptr_),
                       sizeof(Edge) * edgelist_metadata_.num_edges);
 
   out_localid2globalid_file.write(
-      reinterpret_cast<char *>(localid_to_globalid_),
+      reinterpret_cast<char*>(localid_to_globalid_),
       sizeof(VertexID) * edgelist_metadata_.num_vertices);
 
-  out_vlabel_file.write(reinterpret_cast<char *>(vertex_label_base_pointer_),
+  out_vlabel_file.write(reinterpret_cast<char*>(vertex_label_base_pointer_),
                         sizeof(VertexLabel) * edgelist_metadata_.num_vertices);
 
   YAML::Node node;
@@ -122,7 +122,7 @@ void Edges::WriteToBinary(const std::string &output_path) {
   out_meta_file.close();
 }
 
-void Edges::ReadFromBin(const std::string &input_path) {
+void Edges::ReadFromBin(const std::string& input_path) {
   YAML::Node node = YAML::LoadFile(input_path + "meta.yaml");
 
   edgelist_metadata_ = {node["EdgelistBin"]["num_vertices"].as<VertexID>(),
@@ -139,7 +139,7 @@ void Edges::ReadFromBin(const std::string &input_path) {
               << std::endl;
     exit(EXIT_FAILURE);
   }
-  in_file.read(reinterpret_cast<char *>(edges_ptr_),
+  in_file.read(reinterpret_cast<char*>(edges_ptr_),
                sizeof(Edge) * edgelist_metadata_.num_edges);
 
   std::ifstream in_localid2globalid_file(input_path + "localid2globalid.bin");
@@ -151,9 +151,9 @@ void Edges::ReadFromBin(const std::string &input_path) {
 
   // Read local id to global id.
   localid_to_globalid_ = new VertexID[edgelist_metadata_.num_vertices]();
-  in_localid2globalid_file.read(reinterpret_cast<char *>(localid_to_globalid_),
-                                sizeof(VertexID) *
-                                    edgelist_metadata_.num_vertices);
+  in_localid2globalid_file.read(
+      reinterpret_cast<char*>(localid_to_globalid_),
+      sizeof(VertexID) * edgelist_metadata_.num_vertices);
 
   // Read vertex label.
   std::ifstream in_vlabel_file(input_path + "vlabel.bin");
@@ -164,11 +164,11 @@ void Edges::ReadFromBin(const std::string &input_path) {
 
   vertex_label_base_pointer_ =
       new VertexLabel[edgelist_metadata_.num_vertices]();
-  in_vlabel_file.read(reinterpret_cast<char *>(vertex_label_base_pointer_),
+  in_vlabel_file.read(reinterpret_cast<char*>(vertex_label_base_pointer_),
                       sizeof(VertexLabel) * edgelist_metadata_.num_vertices);
 }
 
-void Edges::ReadFromCSV(const std::string &filename, const std::string &sep,
+void Edges::ReadFromCSV(const std::string& filename, const std::string& sep,
                         bool compressed) {
   auto parallelism = std::thread::hardware_concurrency();
   std::vector<size_t> worker(parallelism);
@@ -181,7 +181,7 @@ void Edges::ReadFromCSV(const std::string &filename, const std::string &sep,
   size_t length = in_file.tellg();
   in_file.seekg(0, std::ios::beg);
 
-  char *buff = new char[length]();
+  char* buff = new char[length]();
   in_file.read(buff, length);
   std::string content(buff, length);
 
@@ -195,8 +195,7 @@ void Edges::ReadFromCSV(const std::string &filename, const std::string &sep,
   std::string line, vid_str;
 
   while (getline(ss, line, '\n')) {
-    if (*line.c_str() == '\0')
-      break;
+    if (*line.c_str() == '\0') break;
     std::stringstream ss_line(line);
     while (getline(ss_line, vid_str, *sep.c_str())) {
       VertexID vid = stoll(vid_str);
@@ -209,7 +208,7 @@ void Edges::ReadFromCSV(const std::string &filename, const std::string &sep,
 
   auto aligned_max_vid = (((max_vid + 1) >> 6) << 6) + 64;
   edges_ptr_ = new Edge[n_edges]();
-  Bitmap bitmap(aligned_max_vid);
+  BitmapOwnership bitmap(aligned_max_vid);
 
   auto vid_map = new VertexID[aligned_max_vid]();
   auto compressed_buffer_edges = new VertexID[n_edges * 2]();
@@ -261,14 +260,14 @@ void Edges::GenerateLocalID2GlobalID() {
   std::iota(worker.begin(), worker.end(), 0);
   auto step = worker.size();
 
-  VertexID *new_localid_to_globalid =
+  VertexID* new_localid_to_globalid =
       new VertexID[edgelist_metadata_.num_vertices]();
 
-  VertexID *vid_map = new VertexID[edgelist_metadata_.max_vid + 1]();
+  VertexID* vid_map = new VertexID[edgelist_metadata_.max_vid + 1]();
 
   VertexID compressed_vid = 0;
 
-  Bitmap bitmap(edgelist_metadata_.max_vid);
+  BitmapOwnership bitmap(edgelist_metadata_.max_vid);
 
   for (EdgeIndex index = 0; index < edgelist_metadata_.num_edges; index++) {
     auto e = get_edge_by_index(index);
@@ -338,7 +337,7 @@ void Edges::Transpose() {
                 [this, step](auto w) {
                   for (auto i = w; i < get_metadata().num_edges; i += step) {
                     VertexID tmp = edges_ptr_[i].src;
-                    edges_ptr_[i].src = edges_ptr_[i].dst; // swap src and dst
+                    edges_ptr_[i].src = edges_ptr_[i].dst;  // swap src and dst
                     edges_ptr_[i].dst = tmp;
                   }
                 });
@@ -388,18 +387,16 @@ void Edges::GenerateVLabel(VertexID range) {
 }
 
 VertexID Edges::get_globalid_by_localid(VertexID localid) const {
-  if (localid_to_globalid_ == nullptr)
-    return localid;
+  if (localid_to_globalid_ == nullptr) return localid;
   return localid_to_globalid_[localid];
 }
 
-void Edges::SetLocalIDToGlobalID(VertexID *localid_to_globalid) {
-  if (localid_to_globalid_ != nullptr)
-    delete[] localid_to_globalid;
+void Edges::SetLocalIDToGlobalID(VertexID* localid_to_globalid) {
+  if (localid_to_globalid_ != nullptr) delete[] localid_to_globalid;
   localid_to_globalid_ = localid_to_globalid;
 }
 
-} // namespace data_structures
-} // namespace core
-} // namespace matrixgraph
-} // namespace sics
+}  // namespace data_structures
+}  // namespace core
+}  // namespace matrixgraph
+}  // namespace sics

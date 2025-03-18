@@ -21,53 +21,10 @@ namespace util {
 // is zero.
 // make sure the pointer is created by new[].
 class Bitmap {
-public:
+ protected:
   Bitmap() = default;
 
-  Bitmap(size_t size) { Init(size); }
-
-  // copy constructor
-  Bitmap(const Bitmap &other) {
-    size_ = other.size();
-    data_ = new uint64_t[WORD_OFFSET(size_) + 1]();
-    memcpy(data_, other.GetDataBasePointer(),
-           (WORD_OFFSET(size_) + 1) * sizeof(uint64_t));
-  };
-
-  // move constructor
-  Bitmap(Bitmap &&other) noexcept : size_(other.size_), data_(other.data_) {
-    other.size_ = 0;
-    other.data_ = nullptr;
-  }
-
-  ~Bitmap() {
-    delete[] data_;
-    size_ = 0;
-  }
-
-  // copy assignment
-  Bitmap &operator=(const Bitmap &other) {
-    if (this != &other) {
-      delete[] data_;
-      size_ = other.size();
-      data_ = new uint64_t[WORD_OFFSET(size_) + 1]();
-      memcpy(data_, other.GetDataBasePointer(),
-             (WORD_OFFSET(size_) + 1) * sizeof(uint64_t));
-    }
-    return *this;
-  };
-
-  // move assignment
-  Bitmap &operator=(Bitmap &&other) noexcept {
-    if (this != &other) {
-      delete[] data_;
-      size_ = other.size_;
-      data_ = other.data_;
-      other.size_ = 0;
-      other.data_ = nullptr;
-    }
-    return *this;
-  };
+  virtual ~Bitmap() {}
 
   void Init(size_t size) {
     delete[] data_;
@@ -77,33 +34,30 @@ public:
 
   // init data pointer from call function， and own the pointer of data
   // delete pointer in decstructor
-  virtual void Init(size_t size, uint64_t *data) {
+  virtual void Init(size_t size, uint64_t* data) {
     delete[] data_;
     size_ = size;
     data_ = data;
   }
 
+ public:
   void Clear() {
     size_t bm_size = WORD_OFFSET(size_);
-    for (size_t i = 0; i <= bm_size; i++)
-      data_[i] = 0;
+    for (size_t i = 0; i <= bm_size; i++) data_[i] = 0;
   }
 
   bool IsEmpty() const {
     size_t bm_size = WORD_OFFSET(size_);
     for (size_t i = 0; i <= bm_size; i++)
-      if (data_[i] != 0)
-        return false;
+      if (data_[i] != 0) return false;
     return true;
   }
 
-  bool IsEqual(Bitmap &b) const {
-    if (size_ != b.size_)
-      return false;
+  bool IsEqual(Bitmap& b) const {
+    if (size_ != b.size_) return false;
     size_t bm_size = WORD_OFFSET(size_);
     for (size_t i = 0; i <= bm_size; i++)
-      if (data_[i] != b.data_[i])
-        return false;
+      if (data_[i] != b.data_[i]) return false;
     return true;
   }
 
@@ -119,24 +73,22 @@ public:
   }
 
   bool GetBit(size_t i) const {
-    if (i > size_)
-      return 0;
+    if (i > size_) return 0;
     return data_[WORD_OFFSET(i)] & (1ul << BIT_OFFSET(i));
   }
 
   void SetBit(size_t i) {
-    if (i > size_)
-      return;
+    if (i > size_) return;
     __sync_fetch_and_or(data_ + WORD_OFFSET(i), 1ul << BIT_OFFSET(i));
   }
 
   void ClearBit(const size_t i) {
-    if (i > size_)
-      return;
+    if (i > size_) return;
     __sync_fetch_and_and(data_ + WORD_OFFSET(i), ~(1ul << BIT_OFFSET(i)));
   }
 
   size_t Count() const {
+    std::cout << "size: " << size_ << std::endl;
     size_t count = 0;
     for (size_t i = 0; i <= WORD_OFFSET(size_); i++) {
       auto x = data_[i];
@@ -152,8 +104,7 @@ public:
   }
 
   size_t PreElementCount(size_t idx) const {
-    if (idx > size_)
-      return Count();
+    if (idx > size_) return Count();
     size_t count = 0;
     size_t bm_size = WORD_OFFSET(idx);
     size_t idx_offset = WORD_OFFSET(idx);
@@ -180,13 +131,18 @@ public:
   }
 
   size_t size() const { return size_; }
-  uint64_t *data() const { return data_; }
+
+  uint64_t* data() const { return data_; }
+
+  void SetSize(size_t size) { size_ = size; }
+
+  void SetDataPtr(uint64_t* ptr) { data_ = ptr; }
 
   size_t GetBufferSize() const {
     return sizeof(uint64_t) * (WORD_OFFSET(size_) + 1);
   }
 
-  uint64_t *GetDataBasePointer() const { return data_; }
+  uint64_t* GetDataBasePointer() const { return data_; }
 
   uint64_t GetMaxWordOffset() const { return WORD_OFFSET(size_); }
 
@@ -196,18 +152,16 @@ public:
 
   // @return the pointer of fragment of the bitmap at index i
   // @param i the index point of bitmap.
-  uint64_t *GetPFragment(int i) const { return data_ + WORD_OFFSET(i); }
+  uint64_t* GetPFragment(int i) const { return data_ + WORD_OFFSET(i); }
 
-  void FreeDevice() { cudaFree(data_); }
-
-protected:
+ public:
   size_t size_ = 0;
-  uint64_t *data_ = nullptr;
+  uint64_t* data_ = nullptr;
 };
 
-} // namespace util
-} // namespace core
-} // namespace matrixgraph
-} // namespace sics
+}  // namespace util
+}  // namespace core
+}  // namespace matrixgraph
+}  // namespace sics
 
-#endif // CORE_UTIL_BITMAP_H_
+#endif  // CORE_UTIL_BITMAP_H_

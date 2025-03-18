@@ -1,8 +1,7 @@
-#include "core/task/subiso.cuh"
+#include <cuda_runtime.h>
 
 #include <algorithm>
 #include <ctime>
-#include <cuda_runtime.h>
 #include <execution>
 #include <iostream>
 #include <mutex>
@@ -22,8 +21,8 @@
 #include "core/task/kernel/data_structures/woj_matches.cuh"
 #include "core/task/kernel/kernel_subiso.cuh"
 #include "core/task/kernel/kernel_woj_subiso.cuh"
+#include "core/task/subiso.cuh"
 #include "core/util/atomic.h"
-#include "core/util/bitmap.h"
 #include "core/util/bitmap_no_ownership.h"
 #include "core/util/format_converter.cuh"
 
@@ -72,7 +71,6 @@ using SubIsoKernelWrapper =
     sics::matrixgraph::core::task::kernel::SubIsoKernelWrapper;
 using WOJSubIsoKernelWrapper =
     sics::matrixgraph::core::task::kernel::WOJSubIsoKernelWrapper;
-using Bitmap = sics::matrixgraph::core::util::Bitmap;
 using GPUBitmap = sics::matrixgraph::core::util::GPUBitmap;
 using BitmapNoOwnerShip = sics::matrixgraph::core::util::BitmapNoOwnerShip;
 using sics::matrixgraph::core::util::atomic::WriteAdd;
@@ -101,16 +99,17 @@ using WOJMatches = sics::matrixgraph::core::task::kernel::WOJMatches;
 using sics::matrixgraph::core::common::kMaxNumWeft;
 
 __host__ void SubIso::LoadData() {
-  std::cout << "[SubIso] LoadData()" << std::endl;
+  std::cout << "[SubIso] LoadData() ..." << std::endl;
 
   p_.Read(pattern_path_);
-  p_.PrintGraph(3);
+  p_.PrintGraph(10);
 
   g_.Read(data_graph_path_);
-  g_.PrintGraph(3);
+  g_.PrintGraph(1);
 }
 
-__host__ void SubIso::Matching(const ImmutableCSR &p, const ImmutableCSR &g) {
+__host__ void SubIso::Matching(const ImmutableCSR& p, const ImmutableCSR& g) {
+  std::cout << "Matching ..." << std::endl;
   auto parallelism = std::thread::hardware_concurrency();
   std::vector<size_t> worker(parallelism);
   std::mutex mtx;
@@ -198,12 +197,10 @@ __host__ void SubIso::Matching(const ImmutableCSR &p, const ImmutableCSR &g) {
   matches.Print(3);
 }
 
-__host__ void SubIso::WOJMatching(const ImmutableCSR &p,
-                                  const ImmutableCSR &g) {
-
+__host__ void SubIso::WOJMatching(const ImmutableCSR& p,
+                                  const ImmutableCSR& g) {
   // Generate Execution Plan
   WOJExecutionPlan exec_plan;
-  exec_plan.GenerateWOJExecutionPlan(p, g);
   exec_plan.GenerateWOJExecutionPlan(p, g);
   exec_plan.SetNDevices(1);
 
@@ -236,7 +233,6 @@ __host__ void SubIso::WOJMatching(const ImmutableCSR &p,
 }
 
 __host__ void SubIso::Run() {
-
   auto start_time_0 = std::chrono::system_clock::now();
   LoadData();
   auto start_time_1 = std::chrono::system_clock::now();
@@ -245,7 +241,6 @@ __host__ void SubIso::Run() {
   // Matching(p_, g_);
 
   auto start_time_2 = std::chrono::system_clock::now();
-
   auto start_time_3 = std::chrono::system_clock::now();
 
   std::cout << "[SubIso] LoadData() elapsed: "
@@ -263,7 +258,7 @@ __host__ void SubIso::Run() {
             << std::endl;
 }
 
-} // namespace task
-} // namespace core
-} // namespace matrixgraph
-} // namespace sics
+}  // namespace task
+}  // namespace core
+}  // namespace matrixgraph
+}  // namespace sics

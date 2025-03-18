@@ -48,8 +48,12 @@ public:
     printf("\n");
   }
 
-  __host__ __device__ void CopyData(uint32_t *other) {
+  __host__ __device__ __forceinline__ void CopyData(uint32_t *other) {
     memcpy(other, data_, sizeof(uint32_t) * capacity_);
+  }
+
+  __host__ __device__ __forceinline__ void MoveData(uint32_t **other) {
+    *other = data_;
   }
 
   __host__ __device__ __forceinline__ uint32_t
@@ -102,6 +106,7 @@ private:
   const uint32_t capacity_ = kDefaultHeapCapacity;
 
   // Array to store heap elements.
+public:
   uint32_t data_[kDefaultHeapCapacity] = {0};
 };
 

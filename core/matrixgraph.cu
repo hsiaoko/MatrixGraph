@@ -1,10 +1,10 @@
-#include "core/matrixgraph.cuh"
-
 #include <chrono>
 #include <ctime>
 
+#include "core/matrixgraph.cuh"
 #include "core/task/gemm.cuh"
 #include "core/task/subiso.cuh"
+#include "core/task/wcc.cuh"
 
 namespace sics {
 namespace matrixgraph {
@@ -14,40 +14,45 @@ MatrixGraph::MatrixGraph(SchedulerType scheduler_type) {
   CUDA_CHECK(cudaGetDeviceCount(&n_device_));
 
   switch (scheduler_type) {
-  case components::scheduler::kCHBL:
-    scheduler_ = new components::scheduler::CHBLScheduler(n_device_);
-    break;
-  default:
-    break;
+    case components::scheduler::kCHBL:
+      scheduler_ = new components::scheduler::CHBLScheduler(n_device_);
+      break;
+    default:
+      break;
   }
 }
 
-void MatrixGraph::Run(GPUTaskType task_type, TaskBase *task_ptr) {
-
+void MatrixGraph::Run(GPUTaskType task_type, TaskBase* task_ptr) {
   PrintDeviceInfo();
   auto start_time = std::chrono::system_clock::now();
 
   auto prepare_end_time = std::chrono::system_clock::now();
   switch (task_type) {
-  case task::kGEMM: {
-    auto task = reinterpret_cast<task::GEMM *>(task_ptr);
-    task->Run();
-    break;
-  }
-  case task::kSubIso: {
-    std::cout << "SubIso Query" << std::endl;
-    auto task = reinterpret_cast<task::SubIso *>(task_ptr);
-    task->Run();
-    break;
-  }
-  case task::kPPRQuery: {
-    std::cout << "[PPR Query]" << std::endl;
-    auto task = reinterpret_cast<task::PPRQuery *>(task_ptr);
-    task->Run();
-    break;
-  }
-  default:
-    break;
+    case task::kGEMM: {
+      auto task = reinterpret_cast<task::GEMM*>(task_ptr);
+      task->Run();
+      break;
+    }
+    case task::kSubIso: {
+      std::cout << "SubIso Query" << std::endl;
+      auto task = reinterpret_cast<task::SubIso*>(task_ptr);
+      task->Run();
+      break;
+    }
+    case task::kPPRQuery: {
+      std::cout << "[PPR Query]" << std::endl;
+      auto task = reinterpret_cast<task::PPRQuery*>(task_ptr);
+      task->Run();
+      break;
+    }
+    case task::kWCC: {
+      std::cout << "[WCC Query]" << std::endl;
+      auto task = reinterpret_cast<task::WCC*>(task_ptr);
+      task->Run();
+      break;
+    }
+    default:
+      break;
   }
 
   auto end_time = std::chrono::system_clock::now();
@@ -83,6 +88,6 @@ void MatrixGraph::PrintDeviceInfo() const {
   }
 }
 
-} // namespace core
-} // namespace matrixgraph
-} // namespace sics
+}  // namespace core
+}  // namespace matrixgraph
+}  // namespace sics

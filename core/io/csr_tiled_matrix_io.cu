@@ -9,6 +9,7 @@
 #include "core/data_structures/metadata.h"
 #include "core/io/csr_tiled_matrix_io.cuh"
 #include "core/util/atomic.h"
+#include "core/util/bitmap_ownership.h"
 
 namespace sics {
 namespace matrixgraph {
@@ -23,14 +24,14 @@ using EdgeIndex = sics::matrixgraph::core::common::EdgeIndex;
 using GraphMetadata = sics::matrixgraph::core::data_structures::GraphMetadata;
 using SubGraphMetadata =
     sics::matrixgraph::core::data_structures::SubGraphMetadata;
-using Bitmap = sics::matrixgraph::core::util::Bitmap;
+using BitmapOwnership = sics::matrixgraph::core::util::BitmapOwnership;
 using CSRTiledMatrix = sics::matrixgraph::core::data_structures::CSRTiledMatrix;
 using ImmutableCSR = sics::matrixgraph::core::data_structures::ImmutableCSR;
 using sics::matrixgraph::core::util::atomic::WriteAdd;
 using sics::matrixgraph::core::util::atomic::WriteMax;
 
-void CSRTiledMatrixIO::Write(const std::string &output_path,
-                             const CSRTiledMatrix &csr_tiled_matrix) {
+void CSRTiledMatrixIO::Write(const std::string& output_path,
+                             const CSRTiledMatrix& csr_tiled_matrix) {
   // Create dir of grid of gid.
   if (!std::filesystem::exists(output_path))
     std::filesystem::create_directory(output_path);
@@ -63,26 +64,26 @@ void CSRTiledMatrixIO::Write(const std::string &output_path,
     std::ofstream out_data(output_path + "meta_buf/data.bin");
 
     out_row_idx_file.write(
-        reinterpret_cast<char *>(csr_tiled_matrix.GetTileRowIdxPtr()),
+        reinterpret_cast<char*>(csr_tiled_matrix.GetTileRowIdxPtr()),
         sizeof(VertexID) * metadata.n_nz_tile);
 
     out_col_idx_file.write(
-        reinterpret_cast<char *>(csr_tiled_matrix.GetTileColIdxPtr()),
+        reinterpret_cast<char*>(csr_tiled_matrix.GetTileColIdxPtr()),
         sizeof(VertexID) * metadata.n_nz_tile);
 
     out_tile_offset_row_file.write(
-        reinterpret_cast<char *>(csr_tiled_matrix.GetTileOffsetRowPtr()),
+        reinterpret_cast<char*>(csr_tiled_matrix.GetTileOffsetRowPtr()),
         sizeof(VertexID) * (metadata.n_strips + 1));
 
     out_nz_tile_bm.write(
-        reinterpret_cast<char *>(csr_tiled_matrix.GetNzTileBitmapPtr()->data()),
+        reinterpret_cast<char*>(csr_tiled_matrix.GetNzTileBitmapPtr()->data()),
         csr_tiled_matrix.GetNzTileBitmapPtr()->GetBufferSize());
 
     csr_offset.write(
-        reinterpret_cast<char *>(csr_tiled_matrix.GetCSROffsetPtr()),
+        reinterpret_cast<char*>(csr_tiled_matrix.GetCSROffsetPtr()),
         sizeof(uint64_t) * (metadata.n_nz_tile + 1));
 
-    out_data.write(reinterpret_cast<char *>(csr_tiled_matrix.GetDataPtr()),
+    out_data.write(reinterpret_cast<char*>(csr_tiled_matrix.GetDataPtr()),
                    csr_tiled_matrix.GetDataBufferSize());
 
     // for (int i = 0; i < csr_tiled_matrix.GetMetadata().n_nz_tile; i++) {
@@ -91,7 +92,7 @@ void CSRTiledMatrixIO::Write(const std::string &output_path,
     //   csr.ParseBasePtr(data);
     //   csr.PrintGraph();
     // }
-    auto data_buf = (VertexID *)csr_tiled_matrix.GetDataPtr();
+    auto data_buf = (VertexID*)csr_tiled_matrix.GetDataPtr();
 
     out_row_idx_file.close();
     out_col_idx_file.close();
@@ -102,9 +103,8 @@ void CSRTiledMatrixIO::Write(const std::string &output_path,
   std::cout << " Done!" << std::endl;
 }
 
-void CSRTiledMatrixIO::Read(const std::string &input_path,
-                            CSRTiledMatrix *csr_tiled_matrix) {
-
+void CSRTiledMatrixIO::Read(const std::string& input_path,
+                            CSRTiledMatrix* csr_tiled_matrix) {
   // Read meta.yaml
   YAML::Node in_node = YAML::LoadFile(input_path + "meta.yaml");
 
@@ -127,7 +127,7 @@ void CSRTiledMatrixIO::Read(const std::string &input_path,
 
   csr_tiled_matrix->SetCSRMetadata(csr_metadata);
 
-  auto *nz_tile_bm = new util::Bitmap(pow(metadata.n_strips, 2));
+  auto* nz_tile_bm = new BitmapOwnership(pow(metadata.n_strips, 2));
 
   std::ifstream in_row_idx_file(input_path + "meta_buf/row_idx.bin");
   std::ifstream in_col_idx_file(input_path + "meta_buf/col_idx.bin");
@@ -138,22 +138,22 @@ void CSRTiledMatrixIO::Read(const std::string &input_path,
   std::ifstream csr_offset(input_path + "meta_buf/csr_offset.bin");
 
   in_row_idx_file.read(
-      reinterpret_cast<char *>(csr_tiled_matrix->GetTileRowIdxPtr()),
+      reinterpret_cast<char*>(csr_tiled_matrix->GetTileRowIdxPtr()),
       sizeof(VertexID) * metadata.n_nz_tile);
 
   in_col_idx_file.read(
-      reinterpret_cast<char *>(csr_tiled_matrix->GetTileColIdxPtr()),
+      reinterpret_cast<char*>(csr_tiled_matrix->GetTileColIdxPtr()),
       sizeof(VertexID) * metadata.n_nz_tile);
 
   in_tile_offset_row_file.read(
-      reinterpret_cast<char *>(csr_tiled_matrix->GetTileOffsetRowPtr()),
+      reinterpret_cast<char*>(csr_tiled_matrix->GetTileOffsetRowPtr()),
       sizeof(VertexID) * (metadata.n_strips + 1));
 
   in_nz_tile_bm.read(
-      reinterpret_cast<char *>(csr_tiled_matrix->GetNzTileBitmapPtr()->data()),
+      reinterpret_cast<char*>(csr_tiled_matrix->GetNzTileBitmapPtr()->data()),
       csr_tiled_matrix->GetNzTileBitmapPtr()->GetBufferSize());
 
-  csr_offset.read(reinterpret_cast<char *>(csr_tiled_matrix->GetCSROffsetPtr()),
+  csr_offset.read(reinterpret_cast<char*>(csr_tiled_matrix->GetCSROffsetPtr()),
                   sizeof(uint64_t) * (metadata.n_nz_tile + 1));
 
   in_data.seekg(0, std::ios::end);
@@ -161,8 +161,8 @@ void CSRTiledMatrixIO::Read(const std::string &input_path,
   in_data.seekg(0, std::ios::beg);
 
   csr_tiled_matrix->InitDataPtr(file_size);
-  auto *data = csr_tiled_matrix->GetDataPtr();
-  in_data.read(reinterpret_cast<char *>(csr_tiled_matrix->GetDataPtr()),
+  auto* data = csr_tiled_matrix->GetDataPtr();
+  in_data.read(reinterpret_cast<char*>(csr_tiled_matrix->GetDataPtr()),
                csr_tiled_matrix->GetDataBufferSize());
 
   in_row_idx_file.close();
@@ -171,7 +171,7 @@ void CSRTiledMatrixIO::Read(const std::string &input_path,
   in_nz_tile_bm.close();
 }
 
-} // namespace io
-} // namespace core
-} // namespace matrixgraph
-} // namespace sics
+}  // namespace io
+}  // namespace core
+}  // namespace matrixgraph
+}  // namespace sics

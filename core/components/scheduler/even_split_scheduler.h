@@ -2,7 +2,7 @@
 #define HYPERBLOCKER_CORE_COMPONENTS_SCHEDULER_EVEN_SPLIT_SCHEDULER_H_
 
 #include "core/components/scheduler/scheduler.h"
-#include "core/util/bitmap.h"
+#include "core/util/bitmap_ownership.h"
 
 namespace sics {
 namespace matrixgraph {
@@ -11,11 +11,11 @@ namespace components {
 namespace scheduler {
 
 class EvenSplitScheduler : public Scheduler {
-  using Bitmap = sics::matrixgraph::core::util::Bitmap;
+  using BitmapOwnership = sics::matrixgraph::core::util::BitmapOwnership;
 
-public:
-  EvenSplitScheduler(int n_device) : Scheduler(n_device) {
-    bitmap_.Init(n_device);
+ public:
+  EvenSplitScheduler(int n_device) : Scheduler(n_device), bitmap_(n_device) {
+    //    bitmap_.Init(n_device);
     std::cout << "Scheduler: EvenSplit." << std::endl;
   }
 
@@ -28,13 +28,13 @@ public:
     return 0;
   }
 
-private:
-  Bitmap bitmap_;
+ private:
+  BitmapOwnership bitmap_;
 };
 
-} // namespace scheduler
-} // namespace components
-} // namespace core
-} // namespace matrixgraph
-} // namespace sics
-#endif // HYPERBLOCKER_CORE_COMPONENTS_SCHEDULER_EVEN_SPLIT_SCHEDULER_H_
+}  // namespace scheduler
+}  // namespace components
+}  // namespace core
+}  // namespace matrixgraph
+}  // namespace sics
+#endif  // HYPERBLOCKER_CORE_COMPONENTS_SCHEDULER_EVEN_SPLIT_SCHEDULER_H_

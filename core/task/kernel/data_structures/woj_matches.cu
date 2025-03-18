@@ -3,7 +3,7 @@
 #include "core/common/consts.h"
 #include "core/common/types.h"
 #include "core/task/kernel/data_structures/woj_matches.cuh"
-#include "core/util/bitmap.h"
+#include "core/util/bitmap_ownership.h"
 #include "core/util/cuda_check.cuh"
 
 namespace sics {
@@ -14,7 +14,7 @@ namespace kernel {
 
 using sics::matrixgraph::core::common::kMaxVertexID;
 using VertexID = sics::matrixgraph::core::common::VertexID;
-using Bitmap = sics::matrixgraph::core::util::Bitmap;
+using BitmapOwnership = sics::matrixgraph::core::util::BitmapOwnership;
 
 WOJMatches::WOJMatches(VertexID x, VertexID y) : x_(x), y_(y) { Init(x, y); }
 
@@ -46,25 +46,23 @@ VertexID WOJMatches::BinarySearch(VertexID search_col, VertexID target) const {
   return kMaxVertexID;
 }
 
-void WOJMatches::SetHeader(const VertexID *left_header, VertexID left_offset_x,
-                           const VertexID *right_header,
+void WOJMatches::SetHeader(const VertexID* left_header, VertexID left_offset_x,
+                           const VertexID* right_header,
                            VertexID right_offset_x,
-                           const std::pair<VertexID, VertexID> &hash_keys) {
-
+                           const std::pair<VertexID, VertexID>& hash_keys) {
   *x_offset_ = left_offset_x;
   for (VertexID _ = 0; _ < left_offset_x; _++) {
     header_ptr_[_] = left_header[_];
   }
   for (VertexID _ = 0; _ < right_offset_x; _++) {
-    if (_ == hash_keys.second)
-      continue;
+    if (_ == hash_keys.second) continue;
     header_ptr_[*x_offset_] = right_header[_];
     (*x_offset_)++;
   }
 }
 
-std::vector<WOJMatches *> WOJMatches::SplitAndCopy(VertexID n_partitions) {
-  std::vector<WOJMatches *> splitted_data;
+std::vector<WOJMatches*> WOJMatches::SplitAndCopy(VertexID n_partitions) {
+  std::vector<WOJMatches*> splitted_data;
   splitted_data.resize(n_partitions);
 
   VertexID base_size = get_y_offset() / n_partitions;
@@ -72,7 +70,6 @@ std::vector<WOJMatches *> WOJMatches::SplitAndCopy(VertexID n_partitions) {
 
   VertexID count = 0;
   for (VertexID _ = 0; _ < n_partitions; _++) {
-
     VertexID partition_size =
         base_size + (_ == n_partitions - 1 ? remainder : 0);
     splitted_data[_] = new WOJMatches();
@@ -92,9 +89,8 @@ std::vector<WOJMatches *> WOJMatches::SplitAndCopy(VertexID n_partitions) {
   return splitted_data;
 }
 
-std::pair<VertexID, VertexID> WOJMatches::GetJoinKey(const WOJMatches &other) {
-
-  Bitmap visited(32);
+std::pair<VertexID, VertexID> WOJMatches::GetJoinKey(const WOJMatches& other) {
+  BitmapOwnership visited(32);
   VertexID inverted_index[32];
   VertexID left_hash_idx = kMaxVertexID;
   VertexID right_hash_idx = kMaxVertexID;
@@ -120,7 +116,7 @@ void WOJMatches::Free() {
   CUDA_CHECK(cudaFree(y_offset_));
 }
 
-void WOJMatches::CopyData(const WOJMatches &other) {
+void WOJMatches::CopyData(const WOJMatches& other) {
   Init(other.get_x(), other.get_y());
   SetXOffset(other.get_x_offset());
   SetYOffset(other.get_y_offset());
@@ -130,8 +126,8 @@ void WOJMatches::CopyData(const WOJMatches &other) {
                         sizeof(VertexID) * x_, cudaMemcpyDefault));
 }
 
-void WOJMatches::CopyDataAsync(const WOJMatches &other,
-                               const cudaStream_t &stream) {
+void WOJMatches::CopyDataAsync(const WOJMatches& other,
+                               const cudaStream_t& stream) {
   Init(other.get_x(), other.get_y());
   SetXOffset(other.get_x_offset());
   SetYOffset(other.get_y_offset());
@@ -163,8 +159,8 @@ void WOJMatches::Print(VertexID offset) const {
   }
 }
 
-} // namespace kernel
-} // namespace task
-} // namespace core
-} // namespace matrixgraph
-} // namespace sics
+}  // namespace kernel
+}  // namespace task
+}  // namespace core
+}  // namespace matrixgraph
+}  // namespace sics

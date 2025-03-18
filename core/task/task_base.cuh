@@ -13,15 +13,19 @@ namespace task {
 
 // Enum defining different GPU task types
 enum GPUTaskType {
-  kGEMM, // Default task type
+  kGEMM,  // Default task type
   kMatrixAnalysis,
   kPPRQuery,
   kSubIso,
+  kWCC,
+  kSSSP,
+  kBFS,
+  kPageRank
   // Other types.
 };
 
 class TaskBase {
-public:
+ public:
   ~TaskBase() = default;
 
   // Get CUDA stream for a task
@@ -36,14 +40,14 @@ public:
   // @param task_id: Identifier for the task
   bool IsTaskFinished(size_t task_id);
 
-protected:
+ protected:
   std::mutex streams_mtx_;
-  std::unordered_map<size_t, cudaStream_t *> streams_by_task_id_;
+  std::unordered_map<size_t, cudaStream_t*> streams_by_task_id_;
 };
 
-} // namespace task
-} // namespace core
-} // namespace matrixgraph
-} // namespace sics
+}  // namespace task
+}  // namespace core
+}  // namespace matrixgraph
+}  // namespace sics
 
-#endif // MATRIXGRAPH_CORE_COMPONENTS_TASK_TASK_BASE_CUH_
+#endif  // MATRIXGRAPH_CORE_COMPONENTS_TASK_TASK_BASE_CUH_

@@ -1,5 +1,3 @@
-#include "tools/graph_partitioner/partitioner/grid_cut.cuh"
-
 #include <algorithm>
 #include <fstream>
 #include <mutex>
@@ -12,10 +10,10 @@
 #include "core/data_structures/edgelist.h"
 #include "core/data_structures/metadata.h"
 #include "core/util/atomic.h"
-#include "core/util/bitmap.h"
-
+#include "core/util/bitmap_ownership.h"
 #include "core/util/format_converter.cuh"
 #include "tools/common/edgelist_subgraphs_io.cuh"
+#include "tools/graph_partitioner/partitioner/grid_cut.cuh"
 
 namespace sics {
 namespace matrixgraph {
@@ -26,7 +24,7 @@ using VertexID = sics::matrixgraph::core::common::VertexID;
 using EdgeIndex = sics::matrixgraph::core::common::EdgeIndex;
 using EdgelistMetadata =
     sics::matrixgraph::core::data_structures::EdgelistMetadata;
-using Bitmap = sics::matrixgraph::core::util::Bitmap;
+using BitmapOwnership = sics::matrixgraph::core::util::BitmapOwnership;
 using Edge = sics::matrixgraph::core::data_structures::Edge;
 using Edges = sics::matrixgraph::core::data_structures::Edges;
 using sics::matrixgraph::core::util::atomic::WriteAdd;
@@ -62,11 +60,11 @@ void GridCutPartitioner::RunPartitioner() {
               << std::endl;
     exit(EXIT_FAILURE);
   }
-  in_file.read(reinterpret_cast<char *>(buffer_edges),
+  in_file.read(reinterpret_cast<char*>(buffer_edges),
                sizeof(sics::matrixgraph::core::data_structures::Edge) *
                    edgelist_metadata.num_edges);
 
-  VertexID *localid_to_globalid =
+  VertexID* localid_to_globalid =
       new VertexID[edgelist_metadata.num_vertices]();
   std::ifstream in_localid2globalid_file(input_path_ + "localid2globalid.bin");
   if (!in_localid2globalid_file) {
@@ -75,9 +73,9 @@ void GridCutPartitioner::RunPartitioner() {
     exit(EXIT_FAILURE);
   }
 
-  in_localid2globalid_file.read(reinterpret_cast<char *>(localid_to_globalid),
-                                sizeof(VertexID) *
-                                    edgelist_metadata.num_vertices);
+  in_localid2globalid_file.read(
+      reinterpret_cast<char*>(localid_to_globalid),
+      sizeof(VertexID) * edgelist_metadata.num_vertices);
 
   in_file.close();
   in_localid2globalid_file.close();
@@ -90,10 +88,10 @@ void GridCutPartitioner::RunPartitioner() {
       ceil((edges.get_metadata().max_vid + 1) / (float)n_partitions_);
 
   auto size_per_bucket = new EdgeIndex[n_partitions_ * n_partitions_]();
-  auto *n_edges_for_each_block = new EdgeIndex[n_partitions_ * n_partitions_]();
-  auto *max_vid_for_each_block = new VertexID[n_partitions_ * n_partitions_]();
-  auto *min_vid_for_each_block = new VertexID[n_partitions_ * n_partitions_]();
-  Bitmap vertices_bm_for_each_block[n_partitions_ * n_partitions_];
+  auto* n_edges_for_each_block = new EdgeIndex[n_partitions_ * n_partitions_]();
+  auto* max_vid_for_each_block = new VertexID[n_partitions_ * n_partitions_]();
+  auto* min_vid_for_each_block = new VertexID[n_partitions_ * n_partitions_]();
+  BitmapOwnership vertices_bm_for_each_block[n_partitions_ * n_partitions_];
 
   for (GraphID _ = 0; _ < n_partitions_ * n_partitions_; _++) {
     vertices_bm_for_each_block[_].Init(edges.get_metadata().max_vid);
@@ -111,7 +109,7 @@ void GridCutPartitioner::RunPartitioner() {
        &vertices_bm_for_each_block](auto w) {
         for (auto eid = w; eid < edges.get_metadata().num_edges; eid += step) {
           auto edge = edges.get_edge_by_index(eid);
-          auto *localid_to_globalid = edges.get_localid_to_globalid_ptr();
+          auto* localid_to_globalid = edges.get_localid_to_globalid_ptr();
           if (localid_to_globalid != nullptr) {
             edge.src = localid_to_globalid[edge.src];
             edge.dst = localid_to_globalid[edge.dst];
@@ -138,12 +136,12 @@ void GridCutPartitioner::RunPartitioner() {
 
   std::cout << "[GridCutPartitioner] Allocating space for each block...\n"
             << std::endl;
-  Edge **edge_blocks_buf = new Edge *[n_partitions_ * n_partitions_]();
+  Edge** edge_blocks_buf = new Edge*[n_partitions_ * n_partitions_]();
   for (GraphID _ = 0; _ < n_partitions_ * n_partitions_; _++) {
     edge_blocks_buf[_] = new Edge[n_edges_for_each_block[_]]();
   }
 
-  auto *offset_for_each_block =
+  auto* offset_for_each_block =
       new std::atomic<EdgeIndex>[n_partitions_ * n_partitions_]();
 
   std::cout << "[GridCutPartitioner] Dropping edges into blocks...\n"
@@ -154,7 +152,7 @@ void GridCutPartitioner::RunPartitioner() {
        &n_edges_for_each_block, &offset_for_each_block](auto w) {
         for (auto eid = w; eid < edges.get_metadata().num_edges; eid += step) {
           auto edge = edges.get_edge_by_index(eid);
-          auto *localid_to_globalid = edges.get_localid_to_globalid_ptr();
+          auto* localid_to_globalid = edges.get_localid_to_globalid_ptr();
           if (localid_to_globalid != nullptr) {
             edge.src = localid_to_globalid[edge.src];
             edge.dst = localid_to_globalid[edge.dst];
@@ -182,8 +180,7 @@ void GridCutPartitioner::RunPartitioner() {
   }
 
   for (auto _ = 0; _ < n_partitions_ * n_partitions_; _++) {
-    if (edge_blocks[_].get_metadata().num_vertices == 0)
-      continue;
+    if (edge_blocks[_].get_metadata().num_vertices == 0) continue;
     std::cout << "[GridCutPartitioner] Reassigning vertex ids for block: "
               << " x: " << _ / n_partitions_ << " y: " << _ % n_partitions_
               << " ...\n"
@@ -209,7 +206,7 @@ void GridCutPartitioner::RunPartitioner() {
   delete[] min_vid_for_each_block;
 }
 
-} // namespace partitioner
-} // namespace tools
-} // namespace matrixgraph
-} // namespace sics
+}  // namespace partitioner
+}  // namespace tools
+}  // namespace matrixgraph
+}  // namespace sics

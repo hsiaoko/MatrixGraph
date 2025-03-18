@@ -19,7 +19,7 @@ namespace task {
 namespace kernel {
 
 class WOJSubIsoKernelWrapper {
-private:
+ private:
   using EdgeIndex = sics::matrixgraph::core::common::EdgeIndex;
   using VertexLabel = sics::matrixgraph::core::common::VertexLabel;
   using VertexID = sics::matrixgraph::core::common::VertexID;
@@ -28,35 +28,35 @@ private:
   using ImmutableCSR = sics::matrixgraph::core::data_structures::ImmutableCSR;
   using Edges = sics::matrixgraph::core::data_structures::Edges;
 
-public:
+ public:
   // deleting copy constructor
-  WOJSubIsoKernelWrapper(const WOJSubIsoKernelWrapper &obj) = delete;
+  WOJSubIsoKernelWrapper(const WOJSubIsoKernelWrapper& obj) = delete;
 
-  void operator=(const WOJSubIsoKernelWrapper &) = delete;
+  void operator=(const WOJSubIsoKernelWrapper&) = delete;
 
   // @Description: GetInstance() is a method that returns an instance
   // when it is invoked. It returns the same instance if it is invoked more
   // than once as an instance of Singleton class is already created.
-  static WOJSubIsoKernelWrapper *GetInstance();
+  static WOJSubIsoKernelWrapper* GetInstance();
 
-  static std::vector<WOJMatches *> Filter(const WOJExecutionPlan &exec_plan,
-                                          const ImmutableCSR &p,
-                                          const ImmutableCSR &g);
+  static std::vector<WOJMatches*> Filter(const WOJExecutionPlan& exec_plan,
+                                         const ImmutableCSR& p,
+                                         const ImmutableCSR& g);
 
-  static std::vector<WOJMatches *>
-  Join(const WOJExecutionPlan &exec_plan,
-       const std::vector<WOJMatches *> &input_woj_matches);
+  static std::vector<WOJMatches*> Join(
+      const WOJExecutionPlan& exec_plan,
+      const std::vector<WOJMatches*>& input_woj_matches);
 
-private:
+ private:
   WOJSubIsoKernelWrapper() = default;
 
-  inline static WOJSubIsoKernelWrapper *ptr_ = nullptr;
+  inline static WOJSubIsoKernelWrapper* ptr_ = nullptr;
 };
 
-} // namespace kernel
-} // namespace task
-} // namespace core
-} // namespace matrixgraph
-} // namespace sics
+}  // namespace kernel
+}  // namespace task
+}  // namespace core
+}  // namespace matrixgraph
+}  // namespace sics
 
-#endif // INC_51_11_GRAPH_COMPUTING_MATRIXGRAPH_CORE_TASK_KERNEL_KERNEL_SUBISO_CUH_
+#endif  // GRAPH_COMPUTING_MATRIXGRAPH_CORE_TASK_KERNEL_KERNEL_SUBISO_CUH_
