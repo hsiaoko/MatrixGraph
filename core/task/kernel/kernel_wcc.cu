@@ -42,6 +42,14 @@ struct ParametersWCC {
   uint64_t* out_visited_bitmap_data;
 };
 
+static __global__ void InitKernel(ParametersWCC params) {
+  unsigned int tid = blockIdx.x * blockDim.x + threadIdx.x;
+  unsigned int step = blockDim.x * gridDim.x;
+  for (VertexID v_idx = tid; v_idx < params.n_vertices_g; v_idx += step) {
+    params.v_label_g[v_idx] = v_idx;
+  }
+}
+
 static __global__ void HashMinKernel(ParametersWCC params) {
   unsigned int tid = blockIdx.x * blockDim.x + threadIdx.x;
   unsigned int step = blockDim.x * gridDim.x;
@@ -60,18 +68,30 @@ static __global__ void HashMinKernel(ParametersWCC params) {
   KernelBitmapNoOwnership out_visited(params.n_vertices_g,
                                       params.out_visited_bitmap_data);
 
-  out_visited.SetBit(1);
-  // for (VertexID vid = tid; vid < params.n_vertices_g; vid += step) {
-  //   printf("%d ", vid);
-  // }
+  for (VertexID v_idx = tid; v_idx < params.n_vertices_g; v_idx += step) {
+    if (!in_visited.GetBit(v_idx)) continue;
+    EdgeIndex v_offset_base = out_offset_g[v_idx];
+
+    VertexLabel v_label = params.v_label_g[v_idx];
+    for (VertexID nbr_v_idx = 0; nbr_v_idx < out_degree_g[v_idx]; nbr_v_idx++) {
+      VertexID nbr_v = out_edges_g[v_offset_base + nbr_v_idx];
+
+      VertexLabel label_nbr_v = *(params.v_label_g + nbr_v);
+      if (atomicMin(params.v_label_g + nbr_v, v_label)) {
+        out_visited.SetBit(nbr_v);
+      }
+    }
+  }
 }
 
 void WCCKernelWrapper::WCC(
     const cudaStream_t& stream, VertexID n_vertices_g, EdgeIndex n_edges_g,
     const data_structures::UnifiedOwnedBuffer<uint8_t>& data_g,
     const data_structures::UnifiedOwnedBuffer<VertexLabel>& v_label_g) {
-  dim3 dimBlock(kBlockDim);
-  dim3 dimGrid(kGridDim);
+  // dim3 dimBlock(kBlockDim);
+  // dim3 dimGrid(kGridDim);
+  dim3 dimBlock(1);
+  dim3 dimGrid(1);
 
   // The default heap size is 8M.
   cudaDeviceSetLimit(cudaLimitMallocHeapSize, 8388608 * 128);
@@ -80,27 +100,49 @@ void WCCKernelWrapper::WCC(
   // Initialize.
   uint64_t* in_visited_bitmap_data;
   CUDA_CHECK(cudaMallocManaged(&in_visited_bitmap_data,
-                               KERNEL_WORD_OFFSET(n_vertices_g)));
+                               KERNEL_WORD_OFFSET(n_vertices_g) + 1));
   uint64_t* out_visited_bitmap_data;
   CUDA_CHECK(cudaMallocManaged(&out_visited_bitmap_data,
-                               KERNEL_WORD_OFFSET(n_vertices_g)));
+                               KERNEL_WORD_OFFSET(n_vertices_g) + 1));
 
+  std::cout << out_visited_bitmap_data << std::endl;
   BitmapNoOwnerShip out_visited(n_vertices_g, out_visited_bitmap_data);
-  std::cout << "Count: " << out_visited.Count() << std::endl;
-  ParametersWCC params{
-      .n_vertices_g = n_vertices_g,
-      .n_edges_g = n_edges_g,
-      .data_g = data_g.GetPtr(),
-      .v_label_g = v_label_g.GetPtr(),
-      .in_visited_bitmap_data = in_visited_bitmap_data,
-      .out_visited_bitmap_data = out_visited_bitmap_data,
-  };
+  BitmapNoOwnerShip in_visited(n_vertices_g, in_visited_bitmap_data);
 
-  HashMinKernel<<<dimGrid, dimBlock, 0, stream>>>(params);
+  // ParametersWCC params{.n_vertices_g = n_vertices_g,
+  //                      .n_edges_g = n_edges_g,
+  //                      .data_g = data_g.GetPtr(),
+  //                      .v_label_g = v_label_g.GetPtr(),
+  //                      .in_visited_bitmap_data = in_visited.data(),
+  //                      .out_visited_bitmap_data = out_visited.data()};
+
+  // InitKernel<<<dimGrid, dimBlock, 0, stream>>>(params);
+
+  for (int i = 0; i < n_vertices_g; i++) {
+    v_label_g.GetPtr()[i] = i;
+  }
   cudaStreamSynchronize(stream);
-  auto time2 = std::chrono::system_clock::now();
 
-  std::cout << "Count: " << out_visited.Count() << std::endl;
+  in_visited.Fill();
+  size_t round = 0;
+  while (!in_visited.IsEmpty()) {
+    ParametersWCC params{.n_vertices_g = n_vertices_g,
+                         .n_edges_g = n_edges_g,
+                         .data_g = data_g.GetPtr(),
+                         .v_label_g = v_label_g.GetPtr(),
+                         .in_visited_bitmap_data = in_visited.data(),
+                         .out_visited_bitmap_data = out_visited.data()};
+
+    HashMinKernel<<<dimGrid, dimBlock, 0, stream>>>(params);
+    cudaStreamSynchronize(stream);
+
+    std::swap(in_visited, out_visited);
+    out_visited.Clear();
+    std::cout << "Round " << round++
+              << " Active vertices: " << in_visited.Count() << std::endl;
+    std::cout << std::endl;
+  }
+  auto time2 = std::chrono::system_clock::now();
 
   std::cout << "[WCC]:"
             << std::chrono::duration_cast<std::chrono::microseconds>(time2 -
@@ -118,6 +160,8 @@ void WCCKernelWrapper::WCC(
   if (err != cudaSuccess) {
     CUDA_CHECK(err);
   }
+  cudaFree(in_visited_bitmap_data);
+  cudaFree(out_visited_bitmap_data);
 }
 
 }  // namespace kernel

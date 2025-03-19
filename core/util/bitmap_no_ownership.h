@@ -17,15 +17,13 @@ class BitmapNoOwnerShip : public Bitmap {
   BitmapNoOwnerShip(size_t size, uint64_t* data) { Init(size, data); }
 
   ~BitmapNoOwnerShip() {
-    std::cout << "~BitmapNoOwnerShip" << std::endl;
-
     data_ = nullptr;
     size_ = 0;
   };
 
   void Init(size_t size, uint64_t* data) override {
-    size_ = size;
-    data_ = data;
+    this->data_ = data;
+    this->size_ = size;
   }
 };
 

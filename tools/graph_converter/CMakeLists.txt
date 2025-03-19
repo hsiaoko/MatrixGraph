@@ -1,29 +1,48 @@
 cmake_minimum_required(VERSION 3.20)
-project(matrixgraph_tools LANGUAGES CXX CUDA)
-
-# Directories
-set(EXECUTABLE_OUTPUT_PATH ${PROJECT_ROOT_DIR}/bin/tools/)
-
-file(GLOB CONVERTER_SOURCES
-        ${CMAKE_CURRENT_SOURCE_DIR}/converter/*.cu
-        ${CMAKE_CURRENT_SOURCE_DIR}/converter/*.cpp
-        )
+project(graph_converter LANGUAGES CXX CUDA)
 
 #######################
-# Artifacts
+# Directory Structure
 #######################
-file(GLOB appfiles "${CMAKE_CURRENT_SOURCE_DIR}/*.cu")
-foreach (appfile ${appfiles})
-    message(STATUS "Found tool: ${appfile}")
-    get_filename_component(app ${appfile} NAME_WE)
-    add_executable("${app}_exec" ${appfile} ${TOOLS_SOURCES} ${CONVERTER_SOURCES})
-    target_link_libraries("${app}_exec"
-            PRIVATE
+set(EXECUTABLE_OUTPUT_PATH ${PROJECT_ROOT_DIR}/bin/tools)
+
+#######################
+# Source Files
+#######################
+file(GLOB_RECURSE CONVERTER_SOURCES
+    "${CMAKE_CURRENT_SOURCE_DIR}/converter/*.cu"
+    "${CMAKE_CURRENT_SOURCE_DIR}/converter/*.cpp"
+)
+
+#######################
+# Executables
+#######################
+file(GLOB CONVERTER_APPS "${CMAKE_CURRENT_SOURCE_DIR}/*.cu")
+foreach(app_source ${CONVERTER_APPS})
+    get_filename_component(app_name ${app_source} NAME_WE)
+    message(STATUS "[Graph Converter] Adding executable: ${app_name}")
+    
+    # Create executable
+    add_executable("${app_name}" 
+        ${app_source} 
+        ${TOOLS_SOURCES} 
+        ${CONVERTER_SOURCES}
+    )
+    
+    # Set target properties
+    set_target_properties("${app_name}" PROPERTIES
+        CUDA_SEPARABLE_COMPILATION ON
+        POSITION_INDEPENDENT_CODE ON
+    )
+    
+    # Link dependencies
+    target_link_libraries("${app_name}"
+        PRIVATE
+            matrixgraph_core
             yaml-cpp
             gflags
             TBB::tbb
             stdc++fs
-            matrixgraph_core
-            ${CMAKE_CUDA_COMPILER_LIBRARY_ROOT}/lib64/libcudadevrt.a
-            )
-endforeach ()
+            "${CMAKE_CUDA_COMPILER_LIBRARY_ROOT}/lib64/libcudadevrt.a"
+    )
+endforeach()

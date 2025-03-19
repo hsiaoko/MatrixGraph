@@ -88,7 +88,6 @@ class Bitmap {
   }
 
   size_t Count() const {
-    std::cout << "size: " << size_ << std::endl;
     size_t count = 0;
     for (size_t i = 0; i <= WORD_OFFSET(size_); i++) {
       auto x = data_[i];
