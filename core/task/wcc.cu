@@ -136,7 +136,7 @@ __host__ void WCC::HashMin(const ImmutableCSR& g) {
   unified_data_g.Init(data_g);
 
   v_label_g.data = g.GetVLabelBasePointer();
-  v_label_g.size = sizeof(VertexLabel) * g.get_num_vertices();
+  v_label_g.size = sizeof(VertexLabel) * g.get_max_vid();
 
   unified_v_label_g.Init(v_label_g);
 
@@ -157,7 +157,6 @@ __host__ void WCC::Run() {
   LoadData();
   auto start_time_1 = std::chrono::system_clock::now();
 
-  // WOJMatching(p_, g_);
   HashMin(g_);
 
   auto start_time_2 = std::chrono::system_clock::now();
