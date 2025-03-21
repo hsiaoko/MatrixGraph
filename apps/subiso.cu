@@ -1,6 +1,6 @@
-#include <cuda_runtime.h>
+//#include <cuda_runtime.h>
 
-#include <device_launch_parameters.h>
+//#include <device_launch_parameters.h>
 #include <gflags/gflags.h>
 
 #include <fstream>
@@ -8,25 +8,21 @@
 #include <list>
 #include <utility>
 
-#include <cutlass/gemm/device/gemm.h>
-
 #include "core/common/types.h"
 #include "core/common/yaml_config.h"
 #include "core/components/scheduler/scheduler.h"
 #include "core/matrixgraph.cuh"
-#include "core/task/matrix_multiplier.cuh"
-#include "core/task/ppr_query.cuh"
+#include "core/task/subiso.cuh"
 #include "core/task/task_base.cuh"
 
-DEFINE_string(i, "", "input data dir path for graph.");
-DEFINE_string(it, "", "input data dir path for transposed graph.");
+DEFINE_string(p, "", "input data dir path for pattern.");
+DEFINE_string(g, "", "input data dir path for data graph");
+DEFINE_string(e, "", "input data dir path for edgelist of data graph");
 DEFINE_string(o, "", "output path.");
-DEFINE_int32(count, 1, "count");
 DEFINE_string(scheduler, "CHBL", "scheduler type.");
 
 using sics::matrixgraph::core::components::scheduler::SchedulerType;
-using sics::matrixgraph::core::task::MatrixMultiplier;
-using sics::matrixgraph::core::task::PPRQuery;
+using sics::matrixgraph::core::task::SubIso;
 
 SchedulerType Scheduler2Enum(const std::string &s) {
   if (s == "EvenSplit")
@@ -44,10 +40,10 @@ int main(int argc, char *argv[]) {
   auto scheduler_type = Scheduler2Enum(FLAGS_scheduler);
   sics::matrixgraph::core::MatrixGraph system(scheduler_type);
 
-  auto *ppr_query = new PPRQuery(FLAGS_i, FLAGS_it, FLAGS_o, FLAGS_count);
+  auto *task = new SubIso(FLAGS_p, FLAGS_g, FLAGS_e, FLAGS_o);
 
   // State which application is going to be running.
-  system.Run(sics::matrixgraph::core::task::kPPRQuery, ppr_query);
+  system.Run(sics::matrixgraph::core::task::kSubIso, task);
 
   gflags::ShutDownCommandLineFlags();
   return EXIT_SUCCESS;

@@ -141,7 +141,6 @@ __host__ void WCC::HashMin(const ImmutableCSR& g) {
   unified_v_label_g.Init(v_label_g);
 
   // Start HashMin ...
-  cudaDeviceSynchronize();
   cudaStream_t stream;
   cudaStreamCreate(&stream);
 
@@ -149,7 +148,7 @@ __host__ void WCC::HashMin(const ImmutableCSR& g) {
                         g.get_num_outgoing_edges(), unified_data_g,
                         unified_v_label_g);
 
-  cudaDeviceSynchronize();
+  cudaStreamDestroy(stream);
 }
 
 __host__ void WCC::Run() {

@@ -2,7 +2,9 @@
 #include <ctime>
 
 #include "core/matrixgraph.cuh"
+#include "core/task/bfs.cuh"
 #include "core/task/gemm.cuh"
+#include "core/task/pagerank.cuh"
 #include "core/task/subiso.cuh"
 #include "core/task/wcc.cuh"
 
@@ -48,6 +50,18 @@ void MatrixGraph::Run(GPUTaskType task_type, TaskBase* task_ptr) {
     case task::kWCC: {
       std::cout << "[WCC Query]" << std::endl;
       auto task = reinterpret_cast<task::WCC*>(task_ptr);
+      task->Run();
+      break;
+    }
+    case task::kPageRank: {
+      std::cout << "[PageRank Query]" << std::endl;
+      auto task = reinterpret_cast<task::PageRank*>(task_ptr);
+      task->Run();
+      break;
+    }
+    case task::kBFS: {
+      std::cout << "[BFS Traverse]" << std::endl;
+      auto task = reinterpret_cast<task::BFS*>(task_ptr);
       task->Run();
       break;
     }

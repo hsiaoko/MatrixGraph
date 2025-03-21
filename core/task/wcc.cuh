@@ -21,7 +21,6 @@ class WCC : public TaskBase {
  private:
   using VertexID = sics::matrixgraph::core::common::VertexID;
   using GraphID = sics::matrixgraph::core::common::GraphID;
-  using TileIndex = sics::matrixgraph::core::common::TileIndex;
   using VertexLabel = sics::matrixgraph::core::common::VertexLabel;
   using GridCSRTiledMatrix =
       sics::matrixgraph::core::data_structures::GridCSRTiledMatrix;
@@ -43,15 +42,11 @@ class WCC : public TaskBase {
 
  private:
   __host__ void LoadData();
-
   __host__ void HashMin(const ImmutableCSR& g);
 
   ImmutableCSR g_;
-
   Edges e_;
-
   const std::string data_graph_path_;
-
   VertexLabel* label_p_ = nullptr;
 };
 
