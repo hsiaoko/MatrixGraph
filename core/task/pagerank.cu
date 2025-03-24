@@ -52,7 +52,7 @@ __host__ void PageRank::LoadData() {
   std::cout << "[PageRank] LoadData()" << std::endl;
 
   g_.Read(data_graph_path_);
-  g_.PrintGraph();
+  // g_.PrintGraph();
 }
 
 __host__ void PageRank::ComputePageRank(const ImmutableCSR& g) {

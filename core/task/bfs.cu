@@ -49,7 +49,7 @@ using BufferUint8 = sics::matrixgraph::core::data_structures::Buffer<uint8_t>;
 __host__ void BFS::LoadData() {
   std::cout << "[BFS] LoadData()" << std::endl;
   g_.Read(data_graph_path_);
-  g_.PrintGraph();
+  // g_.PrintGraph();
 }
 
 __host__ void BFS::ExecuteBFS(const ImmutableCSR& g, VertexID src) {

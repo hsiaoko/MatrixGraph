@@ -5,7 +5,10 @@
 
 #include "core/common/consts.h"
 #include "core/common/types.h"
+#include "core/task/kernel/data_structures/kernel_bitmap.cuh"
+#include "core/task/kernel/data_structures/kernel_bitmap_no_ownership.cuh"
 #include "core/task/kernel/kernel_pagerank.cuh"
+#include "core/util/bitmap_no_ownership.h"
 
 namespace sics {
 namespace matrixgraph {
@@ -17,6 +20,9 @@ using EdgeIndex = sics::matrixgraph::core::common::EdgeIndex;
 using VertexID = sics::matrixgraph::core::common::VertexID;
 using sics::matrixgraph::core::common::kBlockDim;
 using sics::matrixgraph::core::common::kGridDim;
+using KernelBitmapNoOwnership =
+    sics::matrixgraph::core::task::kernel::KernelBitmapNoOwnership;
+using BitmapNoOwnerShip = sics::matrixgraph::core::util::BitmapNoOwnerShip;
 
 struct ParametersPageRank {
   VertexID n_vertices_g;
@@ -26,6 +32,7 @@ struct ParametersPageRank {
   float* next_page_ranks;
   float damping_factor;
   float epsilon;
+  uint64_t* visited_bitmap_data;  // Global visited bitmap
 };
 
 static __global__ void InitKernel(ParametersPageRank params) {
@@ -51,8 +58,80 @@ static __global__ void PageRankKernel(ParametersPageRank params) {
   EdgeIndex* in_edges_g = (EdgeIndex*)(out_offset_g + params.n_vertices_g + 1);
   VertexID* out_edges_g = in_edges_g + params.n_edges_g;
 
+  KernelBitmapNoOwnership visited(params.n_vertices_g,
+                                  params.visited_bitmap_data);
   // Process each vertex
   for (VertexID v_idx = tid; v_idx < params.n_vertices_g; v_idx += step) {
+    if (visited.GetBit(v_idx)) continue;
+    visited.SetBit(v_idx);
+    float sum = 0.0f;
+    EdgeIndex v_offset_base = in_offset_g[v_idx];
+
+    // Sum up contributions from incoming edges
+    for (VertexID nbr_idx = 0; nbr_idx < in_degree_g[v_idx]; nbr_idx++) {
+      VertexID nbr_v = in_edges_g[v_offset_base + nbr_idx];
+      float nbr_rank = params.curr_page_ranks[nbr_v];
+      float out_degree = static_cast<float>(out_degree_g[nbr_v]);
+      if (out_degree > 0) {
+        sum += nbr_rank / out_degree;
+      }
+    }
+
+    // Calculate new PageRank value
+    params.next_page_ranks[v_idx] =
+        (1.0f - params.damping_factor) / params.n_vertices_g +
+        params.damping_factor * sum;
+  }
+
+  for (int v_idx = params.n_vertices_g - tid;
+       v_idx > params.n_vertices_g - tid - 1; v_idx--) {
+    if (visited.GetBit(v_idx)) continue;
+    visited.SetBit(v_idx);
+
+    float sum = 0.0f;
+    EdgeIndex v_offset_base = in_offset_g[v_idx];
+
+    // Sum up contributions from incoming edges
+    for (VertexID nbr_idx = 0; nbr_idx < in_degree_g[v_idx]; nbr_idx++) {
+      VertexID nbr_v = in_edges_g[v_offset_base + nbr_idx];
+      float nbr_rank = params.curr_page_ranks[nbr_v];
+      float out_degree = static_cast<float>(out_degree_g[nbr_v]);
+      if (out_degree > 0) {
+        sum += nbr_rank / out_degree;
+      }
+    }
+
+    // Calculate new PageRank value
+    params.next_page_ranks[v_idx] =
+        (1.0f - params.damping_factor) / params.n_vertices_g +
+        params.damping_factor * sum;
+  }
+}
+
+static __global__ void PageRankRangeKernel(ParametersPageRank params) {
+  unsigned int tid = blockIdx.x * blockDim.x + threadIdx.x;
+  unsigned int step = blockDim.x * gridDim.x;
+
+  VertexID* globalid_g = (VertexID*)(params.data_g);
+  VertexID* in_degree_g = globalid_g + params.n_vertices_g;
+  VertexID* out_degree_g = in_degree_g + params.n_vertices_g;
+  EdgeIndex* in_offset_g = (EdgeIndex*)(out_degree_g + params.n_vertices_g);
+  EdgeIndex* out_offset_g = (EdgeIndex*)(in_offset_g + params.n_vertices_g + 1);
+  EdgeIndex* in_edges_g = (EdgeIndex*)(out_offset_g + params.n_vertices_g + 1);
+  VertexID* out_edges_g = in_edges_g + params.n_edges_g;
+
+  KernelBitmapNoOwnership visited(params.n_vertices_g,
+                                  params.visited_bitmap_data);
+  // Process each vertex
+  VertexID scope = params.n_vertices_g / step;
+  VertexID scope_top = scope * (tid + 1) < params.n_vertices_g
+                           ? scope * (tid + 1)
+                           : params.n_vertices_g;
+  VertexID scope_bottom = scope * tid;
+
+  for (VertexID v_idx = scope_bottom; v_idx < scope_top; v_idx++) {
+    if (visited.GetBit(v_idx)) continue;
+    visited.SetBit(v_idx);
     float sum = 0.0f;
     EdgeIndex v_offset_base = in_offset_g[v_idx];
 
@@ -113,6 +192,13 @@ void PageRankKernelWrapper::PageRank(
   dim3 dimBlock(kBlockDim);
   dim3 dimGrid(kGridDim);
 
+  uint64_t* visited_bitmap_data;
+  CUDA_CHECK(cudaMallocManaged(
+      &visited_bitmap_data,
+      sizeof(uint64_t) * (KERNEL_WORD_OFFSET(n_vertices_g) + 1)));
+  BitmapNoOwnerShip visited(n_vertices_g, visited_bitmap_data);
+  visited.Clear();
+
   // Allocate device memory for next_page_ranks and max_diff
   float* d_next_page_ranks;
   float* d_max_diff;
@@ -121,7 +207,7 @@ void PageRankKernelWrapper::PageRank(
 
   ParametersPageRank params{
       n_vertices_g,      n_edges_g,      data_g.GetPtr(), page_ranks.GetPtr(),
-      d_next_page_ranks, damping_factor, epsilon};
+      d_next_page_ranks, damping_factor, epsilon,         visited_bitmap_data};
 
   // Initialize PageRank values
   InitKernel<<<dimGrid, dimBlock, 0, stream>>>(params);
@@ -137,6 +223,7 @@ void PageRankKernelWrapper::PageRank(
 
     // Compute new PageRank values
     PageRankKernel<<<dimGrid, dimBlock, 0, stream>>>(params);
+    // PageRankRangeKernel<<<dimGrid, dimBlock, 0, stream>>>(params);
 
     // Swap buffers and check for convergence
     SwapAndCheckConvergenceKernel<<<dimGrid, dimBlock, 0, stream>>>(params,
@@ -148,6 +235,7 @@ void PageRankKernelWrapper::PageRank(
 
     cudaStreamSynchronize(stream);
     iteration++;
+    visited.Clear();
   }
 
   std::cout << "[PageRank] Converged after " << iteration

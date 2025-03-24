@@ -86,6 +86,7 @@ static __global__ void BFSKernel(ParametersBFS params) {
 
   for (VertexID offset = tid; offset < *(params.in_active_vertices_offset);
        offset += step) {
+    if (!in_visited.GetBit(tid)) continue;
     VertexID v_idx = params.in_active_vertices[offset];
     EdgeIndex v_offset_base = out_offset_g[v_idx];
     VertexLabel v_level = params.v_level_g[v_idx];
@@ -94,7 +95,7 @@ static __global__ void BFSKernel(ParametersBFS params) {
       VertexID nbr_v = out_edges_g[v_offset_base + nbr_v_idx];
       VertexLabel label_nbr_v = params.v_level_g[nbr_v];
 
-      if (label_nbr_v > v_level + 1) {
+      if (label_nbr_v == kMaxVertexID) {
         atomicMin(params.v_level_g + nbr_v, v_level + 1);
         out_visited.SetBit(nbr_v);
         auto new_offset =

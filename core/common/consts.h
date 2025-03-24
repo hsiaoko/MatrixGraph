@@ -34,8 +34,8 @@ static const uint32_t kNSMsPerGPU = 80;       // V100 have 80 SMs.
 static const uint32_t kNWarpPerCUDACore = 2;  // 2 warps per CUDA core.
 
 static const uint32_t kSharedMemorySize = 1024;
-static const uint32_t kGridDim = 1024;
-static const uint32_t kBlockDim = 512;
+static const uint32_t kGridDim = 512;
+static const uint32_t kBlockDim = 128;
 // static const uint32_t kGridDim = 64;
 // static const uint32_t kBlockDim = 64;
 static const uint32_t kWarpSize = 32;

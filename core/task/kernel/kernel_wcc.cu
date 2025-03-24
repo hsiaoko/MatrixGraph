@@ -114,9 +114,11 @@ static __global__ void HashMinKernel(ParametersWCC params) {
       }
     }
   }
-  for (int v_idx = params.n_vertices_g - tid; v_idx > 0; v_idx -= step) {
+  for (int v_idx = params.n_vertices_g - tid; v_idx > params.n_vertices_g / 3;
+       v_idx -= step) {
     if (!in_visited.GetBit(v_idx)) continue;
-    if (visited.GetBit(v_idx)) break;
+    if (visited.GetBit(v_idx)) continue;
+
     visited.SetBit(v_idx);
     EdgeIndex v_offset_base = out_offset_g[v_idx];
 
@@ -181,6 +183,26 @@ static __global__ void HashMinRangeKernel(ParametersWCC params) {
       }
     }
   }
+  // for (int v_idx = params.n_vertices_g - tid; v_idx > 1024; v_idx -= step) {
+  //   if (!in_visited.GetBit(v_idx)) continue;
+  //   if (visited.GetBit(v_idx)) continue;
+
+  //  visited.SetBit(v_idx);
+  //  EdgeIndex v_offset_base = out_offset_g[v_idx];
+
+  //  VertexLabel v_label = params.v_label_g[v_idx];
+  //  for (VertexID nbr_v_idx = 0; nbr_v_idx < out_degree_g[v_idx]; nbr_v_idx++)
+  //  {
+  //    VertexID nbr_v = out_edges_g[v_offset_base + nbr_v_idx];
+
+  //    VertexLabel label_nbr_v = *(params.v_label_g + nbr_v);
+
+  //    if (label_nbr_v > v_label) {
+  //      atomicMin(params.v_label_g + nbr_v, v_label);
+  //      out_visited.SetBit(nbr_v);
+  //    }
+  //  }
+  //}
 }
 
 /**
@@ -207,8 +229,13 @@ static __global__ void HashMinKernelActiveVertices(ParametersWCC params) {
                                      params.in_visited_bitmap_data);
   KernelBitmapNoOwnership out_visited(params.n_vertices_g,
                                       params.out_visited_bitmap_data);
+  KernelBitmapNoOwnership visited(params.n_vertices_g,
+                                  params.visited_bitmap_data);
+
   for (VertexID offset = tid; offset < *(params.in_active_vertices_offset);
        offset += step) {
+    if (visited.GetBit(offset)) continue;
+    visited.SetBit(offset);
     auto v_idx = params.in_active_vertices[offset];
     EdgeIndex v_offset_base = in_offset_g[v_idx];
 
@@ -317,9 +344,9 @@ void WCCKernelWrapper::WCC(
     std::cout << "Round " << round++
               << " Active vertices: " << *(in_active_vertices_offset)
               << std::endl;
-    // HashMinKernel<<<dimGrid, dimBlock, 0, stream>>>(params);
+    HashMinKernel<<<dimGrid, dimBlock, 0, stream>>>(params);
     // HashMinRangeKernel<<<dimGrid, dimBlock, 0, stream>>>(params);
-    HashMinKernelActiveVertices<<<dimGrid, dimBlock, 0, stream>>>(params);
+    //    HashMinKernelActiveVertices<<<dimGrid, dimBlock, 0, stream>>>(params);
     cudaStreamSynchronize(stream);
 
     std::swap(in_visited, out_visited);
@@ -333,9 +360,6 @@ void WCCKernelWrapper::WCC(
   }
   auto time2 = std::chrono::system_clock::now();
 
-  for (int i = 0; i < 5; i++) {
-    std::cout << v_label_g.GetPtr()[i] << " ";
-  }
   std::cout << "[WCC]:"
             << std::chrono::duration_cast<std::chrono::microseconds>(time2 -
                                                                      time1)
