@@ -48,6 +48,9 @@ using sics::matrixgraph::core::task::kernel::HostMiniKernelBitmap;
 using sics::matrixgraph::core::task::kernel::KernelBitmap;
 using sics::matrixgraph::core::task::kernel::KernelBitmapNoOwnership;
 using sics::matrixgraph::core::task::kernel::MiniKernelBitmap;
+using WOJExecutionPlan =
+    sics::matrixgraph::core::data_structures::WOJExecutionPlan;
+using WOJMatches = sics::matrixgraph::core::data_structures::WOJMatches;
 using MinHeap = sics::matrixgraph::core::task::kernel::MinHeap;
 using BufferUint8 = sics::matrixgraph::core::data_structures::Buffer<uint8_t>;
 using BufferUint32 = sics::matrixgraph::core::data_structures::Buffer<uint32_t>;
@@ -65,9 +68,6 @@ using BufferVertexLabel =
     sics::matrixgraph::core::data_structures::Buffer<VertexLabel>;
 using BufferVertexID =
     sics::matrixgraph::core::data_structures::Buffer<VertexID>;
-using WOJExecutionPlan =
-    sics::matrixgraph::core::data_structures::WOJExecutionPlan;
-using WOJMatches = sics::matrixgraph::core::data_structures::WOJMatches;
 
 struct LocalMatches {
   VertexID* data = nullptr;
