@@ -27,43 +27,47 @@ include_directories(${CMAKE_CURRENT_SOURCE_DIR})
 #######################
 # Core CUDA sources
 file(GLOB_RECURSE CORE_SOURCES
-    "*.cu"
-    "components/*.cu"
-    "io/*.cu"
-    "data_structures/*.cu"
-    "util/*.cu"
-    "task/*.cu"
-    "task/kernel/*.cu"
-    "task/kernel/data_structures/*.cu"
-    "task/kernel/algorithms/*.cu"
-)
+        "*.cu"
+        "components/*.cu"
+        "io/*.cu"
+        "data_structures/*.cu"
+        "util/*.cu"
+        "task/*.cu"
+        "task/gpu_task/kernel/*.cu"
+        "task/gpu_task/kernel/data_structures/*.cu"
+        "task/gpu_task/kernel/algorithms/*.cu"
+        "task/gpu_task/*.cu"
+        "task/cpu_task/*.cpp"
+        )
 
 # Header files
 file(GLOB_RECURSE CORE_HEADERS
-    "*.h"
-    "*.cuh"
-    "components/*.h"
-    "components/*.cuh"
-    "io/*.cuh"
-    "components/scheduler/*.h"
-    "components/scheduler/*.cuh"
-    "data_structures/*.h"
-    "data_structures/*.cuh"
-    "util/*.h"
-    "util/*.cuh"
-    "task/*.cuh"
-    "task/kernel/*.cuh"
-    "task/kernel/data_structures/*.cuh"
-    "task/kernel/algorithms/*.cuh"
-)
+        "*.h"
+        "*.cuh"
+        "components/*.h"
+        "components/*.cuh"
+        "io/*.cuh"
+        "components/scheduler/*.h"
+        "components/scheduler/*.cuh"
+        "data_structures/*.h"
+        "data_structures/*.cuh"
+        "util/*.h"
+        "util/*.cuh"
+        "task/*.cuh"
+        "task/gpu_task/kernel/*.cuh"
+        "task/gpu_task/kernel/data_structures/*.cuh"
+        "task/gpu_task/kernel/algorithms/*.cuh"
+        "task/gpu_task/*.cu"
+        "task/cpu_task/*.h"
+        )
 
 #######################
 # Tests Configuration
 #######################
 list(FILTER CORE_SOURCES EXCLUDE REGEX ".*_test\\.cpp$")
-if(TEST)
+if (TEST)
     add_subdirectory(tests)
-endif()
+endif ()
 
 #######################
 # Library Target
@@ -72,17 +76,17 @@ add_library(${PROJECT_NAME} STATIC ${CORE_SOURCES} ${CORE_HEADERS})
 
 # Library properties
 set_target_properties(${PROJECT_NAME} PROPERTIES
-    CUDA_SEPARABLE_COMPILATION ON
-    POSITION_INDEPENDENT_CODE ON
-    CUDA_RESOLVE_DEVICE_SYMBOLS ON
-)
+        CUDA_SEPARABLE_COMPILATION ON
+        POSITION_INDEPENDENT_CODE ON
+        CUDA_RESOLVE_DEVICE_SYMBOLS ON
+        )
 
 # Dependencies
 target_link_libraries(${PROJECT_NAME}
-    PUBLIC
+        PUBLIC
         yaml-cpp
         cublas
         TBB::tbb
-    PRIVATE
+        PRIVATE
         -static-libstdc++
-)
+        )

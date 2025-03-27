@@ -1,6 +1,6 @@
-#include "core/task/task_base.cuh"
-
 #include <cuda_runtime.h>
+
+#include "core/task/gpu_task/task_base.cuh"
 
 namespace sics {
 namespace matrixgraph {
@@ -12,7 +12,7 @@ cudaStream_t TaskBase::GetStream(size_t task_id) {
   auto iter = streams_by_task_id_.find(task_id);
   if (iter == streams_by_task_id_.end()) {
     // If stream doesn't exist create a new CUDA stream
-    cudaStream_t *p_stream = new cudaStream_t;
+    cudaStream_t* p_stream = new cudaStream_t;
     cudaStreamCreate(p_stream);
     streams_by_task_id_.insert(std::make_pair(task_id, p_stream));
     return *p_stream;
@@ -47,7 +47,7 @@ void TaskBase::ReleaseStream(size_t task_id) {
   }
 }
 
-} // namespace task
-} // namespace core
-} // namespace matrixgraph
-} // namespace sics
+}  // namespace task
+}  // namespace core
+}  // namespace matrixgraph
+}  // namespace sics

@@ -3,20 +3,21 @@
 #include <fstream>
 #include <iostream>
 #include <list>
-#include <string>
 #include <utility>
 
 #include "core/common/types.h"
 #include "core/common/yaml_config.h"
 #include "core/components/scheduler/scheduler.h"
 #include "core/matrixgraph.cuh"
-#include "core/task/gpu_task/bfs.cuh"
-#include "core/task/gpu_task/task_base.cuh"
+#include "core/task/cpu_task/cpu_subiso.cuh"
+#include "core/task/cpu_task/cpu_task_base.h"
 
 // Input/Output flags
-DEFINE_string(g, "", "Path to the input graph file (required)");
-
-DEFINE_int32(src, 0, "Default source vertex id");
+DEFINE_string(p, "", "Path to the pattern graph file (required)");
+DEFINE_string(g, "", "Path to the data graph file (required)");
+DEFINE_string(e, "", "Path to the edge list file of data graph (required)");
+DEFINE_string(o, "", "Path for output results (required)");
+DEFINE_int32(t, 72, "Number of CPU threads to use (default: 1)");
 
 // System configuration
 DEFINE_string(
@@ -24,7 +25,7 @@ DEFINE_string(
     "Scheduler type (options: CHBL, EvenSplit, RoundRobin, default: CHBL)");
 
 using sics::matrixgraph::core::components::scheduler::SchedulerType;
-using sics::matrixgraph::core::task::BFS;
+using sics::matrixgraph::core::task::CPUSubIso;
 
 SchedulerType Scheduler2Enum(const std::string& s) {
   if (s == "EvenSplit")
@@ -40,8 +41,17 @@ bool ValidateParameters() {
   bool is_valid = true;
 
   // Check required parameters
+  if (FLAGS_p.empty()) {
+    std::cerr << "Error: Pattern graph path (-p) is required" << std::endl;
+    is_valid = false;
+  }
   if (FLAGS_g.empty()) {
-    std::cerr << "Error: Input graph path (-g) is required" << std::endl;
+    std::cerr << "Error: Data graph path (-g) is required" << std::endl;
+    is_valid = false;
+  }
+  if (FLAGS_t < 1) {
+    std::cerr << "Error: Number of threads (-t) must be at least 1"
+              << std::endl;
     is_valid = false;
   }
 
@@ -49,23 +59,28 @@ bool ValidateParameters() {
 }
 
 void PrintConfig() {
-  std::cout << "\n=== BFS Configuration ===" << std::endl;
-  std::cout << "Input Graph: " << FLAGS_g << std::endl;
-  std::cout << "Source: " << FLAGS_src << std::endl;
+  std::cout << "\n=== CPU SubIso Configuration ===" << std::endl;
+  std::cout << "Pattern Graph: " << FLAGS_p << std::endl;
+  std::cout << "Data Graph: " << FLAGS_g << std::endl;
+  std::cout << "Edge List: " << FLAGS_e << std::endl;
+  std::cout << "Output Path: " << FLAGS_o << std::endl;
+  std::cout << "Num Threads: " << FLAGS_t << std::endl;
   std::cout << "Scheduler: " << FLAGS_scheduler << std::endl;
-  std::cout << "=======================\n" << std::endl;
+  std::cout << "==============================\n" << std::endl;
 }
 
 int main(int argc, char* argv[]) {
   gflags::SetUsageMessage(
-      "BFS computation using MatrixGraph\n"
+      "CPU Subgraph Isomorphism computation using MatrixGraph\n"
       "Usage: " +
-      std::string(argv[0]) + " -g <graph_path> [options] -src <source_vertex>");
+      std::string(argv[0]) +
+      " -p <pattern_path> -g <graph_path> -e <edge_list> -o <output_path> "
+      "[-t <num_threads>] [options]");
 
   gflags::ParseCommandLineFlags(&argc, &argv, true);
 
   if (!ValidateParameters()) {
-    gflags::ShowUsageWithFlagsRestrict(argv[0], "apps/wcc.cu");
+    gflags::ShowUsageWithFlagsRestrict(argv[0], "apps/cpu_subiso.cu");
     return EXIT_FAILURE;
   }
 
@@ -75,8 +90,8 @@ int main(int argc, char* argv[]) {
     auto scheduler_type = Scheduler2Enum(FLAGS_scheduler);
     sics::matrixgraph::core::MatrixGraph system(scheduler_type);
 
-    auto* task = new BFS(FLAGS_g, FLAGS_src);
-    system.Run(sics::matrixgraph::core::common::kBFS, task);
+    auto* task = new CPUSubIso(FLAGS_p, FLAGS_g, FLAGS_o, FLAGS_t);
+    system.Run(sics::matrixgraph::core::common::kCPUSubIso, task);
     delete task;
 
   } catch (const std::exception& e) {

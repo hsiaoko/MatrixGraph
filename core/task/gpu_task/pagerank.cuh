@@ -5,7 +5,7 @@
 
 #include "core/common/types.h"
 #include "core/data_structures/immutable_csr.cuh"
-#include "core/task/task_base.cuh"
+#include "core/task/gpu_task/task_base.cuh"
 
 namespace sics {
 namespace matrixgraph {

@@ -11,19 +11,6 @@ namespace matrixgraph {
 namespace core {
 namespace task {
 
-// Enum defining different GPU task types
-enum GPUTaskType {
-  kGEMM,  // Default task type
-  kMatrixAnalysis,
-  kPPRQuery,
-  kSubIso,
-  kWCC,
-  kSSSP,
-  kBFS,
-  kPageRank
-  // Other types.
-};
-
 class TaskBase {
  public:
   ~TaskBase() = default;

@@ -10,8 +10,8 @@
 #include "core/common/yaml_config.h"
 #include "core/components/scheduler/scheduler.h"
 #include "core/matrixgraph.cuh"
-#include "core/task/pagerank.cuh"
-#include "core/task/task_base.cuh"
+#include "core/task/gpu_task/pagerank.cuh"
+#include "core/task/gpu_task/task_base.cuh"
 
 // Input/Output flags
 DEFINE_string(g, "", "Path to the input graph file (required)");
@@ -102,7 +102,7 @@ int main(int argc, char* argv[]) {
 
     auto* task = new PageRank(FLAGS_g, FLAGS_o, FLAGS_damping, FLAGS_epsilon,
                               FLAGS_max_iter);
-    system.Run(sics::matrixgraph::core::task::kPageRank, task);
+    system.Run(sics::matrixgraph::core::common::kPageRank, task);
     delete task;
 
   } catch (const std::exception& e) {

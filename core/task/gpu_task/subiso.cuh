@@ -8,9 +8,9 @@
 #include "core/data_structures/grid_csr_tiled_matrix.cuh"
 #include "core/data_structures/immutable_csr.cuh"
 #include "core/data_structures/unified_buffer.cuh"
-#include "core/task/kernel/data_structures/exec_plan.cuh"
-#include "core/task/kernel/data_structures/woj_exec_plan.cuh"
-#include "core/task/task_base.cuh"
+#include "core/task/gpu_task/kernel/data_structures/exec_plan.cuh"
+#include "core/task/gpu_task/kernel/data_structures/woj_exec_plan.cuh"
+#include "core/task/gpu_task/task_base.cuh"
 
 namespace sics {
 namespace matrixgraph {

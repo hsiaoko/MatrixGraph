@@ -1,12 +1,13 @@
-#include <chrono>
 #include <cuda_runtime.h>
+
+#include <chrono>
 #include <iostream>
 
 #include "core/common/consts.h"
 #include "core/common/types.h"
-#include "core/task/kernel/data_structures/kernel_bitmap.cuh"
-#include "core/task/kernel/data_structures/mini_kernel_bitmap.cuh"
-#include "core/task/kernel/kernel_subiso.cuh"
+#include "core/task/gpu_task/kernel/data_structures/kernel_bitmap.cuh"
+#include "core/task/gpu_task/kernel/data_structures/mini_kernel_bitmap.cuh"
+#include "core/task/gpu_task/kernel/kernel_subiso.cuh"
 
 namespace sics {
 namespace matrixgraph {
@@ -29,35 +30,35 @@ using sics::matrixgraph::core::task::kernel::KernelBitmap;
 using sics::matrixgraph::core::task::kernel::MiniKernelBitmap;
 
 struct LocalMatches {
-  VertexID *data = nullptr;
-  VertexID *size = nullptr;
+  VertexID* data = nullptr;
+  VertexID* size = nullptr;
 };
 
 struct ParametersSubIso {
   VertexID depth_p;
-  VertexID *exec_path;
-  VertexID *inverted_index_of_exec_path;
-  VertexID *exec_path_in_edges;
+  VertexID* exec_path;
+  VertexID* inverted_index_of_exec_path;
+  VertexID* exec_path_in_edges;
   VertexID n_vertices_p;
   EdgeIndex n_edges_p;
-  uint8_t *data_p;
-  VertexLabel *v_label_p;
+  uint8_t* data_p;
+  VertexLabel* v_label_p;
   VertexID n_vertices_g;
   EdgeIndex n_edges_g;
-  uint8_t *data_g;
-  VertexID *edgelist_g;
-  VertexLabel *v_label_g;
-  VertexID *weft_count;
-  EdgeIndex *weft_offset;
-  VertexID *weft_size;
-  VertexID *v_candidate_offset_for_each_weft;
-  VertexID *matches_data;
+  uint8_t* data_g;
+  VertexID* edgelist_g;
+  VertexLabel* v_label_g;
+  VertexID* weft_count;
+  EdgeIndex* weft_offset;
+  VertexID* weft_size;
+  VertexID* v_candidate_offset_for_each_weft;
+  VertexID* matches_data;
 };
 // candidates in M should be an index (localid) instead of globalid.
 
-static __noinline__ __device__ bool
-LabelFilter(const ParametersSubIso &params, VertexID u_idx, VertexID v_idx) {
-
+static __noinline__ __device__ bool LabelFilter(const ParametersSubIso& params,
+                                                VertexID u_idx,
+                                                VertexID v_idx) {
   VertexLabel v_label = params.v_label_g[v_idx];
   VertexLabel u_label = params.v_label_p[u_idx];
 
@@ -67,16 +68,15 @@ LabelFilter(const ParametersSubIso &params, VertexID u_idx, VertexID v_idx) {
 static __noinline__
     //__forceinline__
     __device__ bool
-    LabelDegreeFilter(const ParametersSubIso &params, VertexID u_idx,
+    LabelDegreeFilter(const ParametersSubIso& params, VertexID u_idx,
                       VertexID v_idx) {
+  VertexID* globalid_p = (VertexID*)(params.data_p);
+  VertexID* in_degree_p = globalid_p + params.n_vertices_p;
+  VertexID* out_degree_p = in_degree_p + params.n_vertices_p;
 
-  VertexID *globalid_p = (VertexID *)(params.data_p);
-  VertexID *in_degree_p = globalid_p + params.n_vertices_p;
-  VertexID *out_degree_p = in_degree_p + params.n_vertices_p;
-
-  VertexID *globalid_g = (VertexID *)(params.data_g);
-  VertexID *in_degree_g = globalid_g + params.n_vertices_g;
-  VertexID *out_degree_g = in_degree_g + params.n_vertices_g;
+  VertexID* globalid_g = (VertexID*)(params.data_g);
+  VertexID* in_degree_g = globalid_g + params.n_vertices_g;
+  VertexID* out_degree_g = in_degree_g + params.n_vertices_g;
 
   VertexLabel v_label = params.v_label_g[globalid_g[v_idx]];
   VertexLabel u_label = params.v_label_p[u_idx];
@@ -88,34 +88,30 @@ static __noinline__
   }
 }
 
-static __noinline__ __device__ bool
-NeighborLabelCounterFilter(const ParametersSubIso &params, VertexID u_idx,
-                           VertexID v_idx) {
-  VertexID *globalid_p = (VertexID *)(params.data_p);
-  VertexID *in_degree_p = globalid_p + params.n_vertices_p;
-  VertexID *out_degree_p = in_degree_p + params.n_vertices_p;
-  EdgeIndex *in_offset_p = (EdgeIndex *)(out_degree_p + params.n_vertices_p);
-  EdgeIndex *out_offset_p =
-      (EdgeIndex *)(in_offset_p + params.n_vertices_p + 1);
-  EdgeIndex *in_edges_p = (EdgeIndex *)(out_offset_p + params.n_vertices_p + 1);
-  VertexID *out_edges_p = in_edges_p + params.n_edges_p;
-  VertexID *edges_globalid_by_localid_p = out_edges_p + params.n_edges_p;
+static __noinline__ __device__ bool NeighborLabelCounterFilter(
+    const ParametersSubIso& params, VertexID u_idx, VertexID v_idx) {
+  VertexID* globalid_p = (VertexID*)(params.data_p);
+  VertexID* in_degree_p = globalid_p + params.n_vertices_p;
+  VertexID* out_degree_p = in_degree_p + params.n_vertices_p;
+  EdgeIndex* in_offset_p = (EdgeIndex*)(out_degree_p + params.n_vertices_p);
+  EdgeIndex* out_offset_p = (EdgeIndex*)(in_offset_p + params.n_vertices_p + 1);
+  EdgeIndex* in_edges_p = (EdgeIndex*)(out_offset_p + params.n_vertices_p + 1);
+  VertexID* out_edges_p = in_edges_p + params.n_edges_p;
+  VertexID* edges_globalid_by_localid_p = out_edges_p + params.n_edges_p;
 
-  VertexID *globalid_g = (VertexID *)(params.data_g);
-  VertexID *in_degree_g = globalid_g + params.n_vertices_g;
-  VertexID *out_degree_g = in_degree_g + params.n_vertices_g;
-  EdgeIndex *in_offset_g = (EdgeIndex *)(out_degree_g + params.n_vertices_g);
-  EdgeIndex *out_offset_g =
-      (EdgeIndex *)(in_offset_g + params.n_vertices_g + 1);
-  EdgeIndex *in_edges_g = (EdgeIndex *)(out_offset_g + params.n_vertices_g + 1);
-  VertexID *out_edges_g = in_edges_g + params.n_edges_g;
-  VertexID *edges_globalid_by_localid_g = out_edges_g + params.n_edges_g;
+  VertexID* globalid_g = (VertexID*)(params.data_g);
+  VertexID* in_degree_g = globalid_g + params.n_vertices_g;
+  VertexID* out_degree_g = in_degree_g + params.n_vertices_g;
+  EdgeIndex* in_offset_g = (EdgeIndex*)(out_degree_g + params.n_vertices_g);
+  EdgeIndex* out_offset_g = (EdgeIndex*)(in_offset_g + params.n_vertices_g + 1);
+  EdgeIndex* in_edges_g = (EdgeIndex*)(out_offset_g + params.n_vertices_g + 1);
+  VertexID* out_edges_g = in_edges_g + params.n_edges_g;
+  VertexID* edges_globalid_by_localid_g = out_edges_g + params.n_edges_g;
 
   VertexLabel v_label = params.v_label_g[globalid_g[v_idx]];
   VertexLabel u_label = params.v_label_p[u_idx];
 
-  if (u_label != v_label)
-    return false;
+  if (u_label != v_label) return false;
 
   MiniKernelBitmap u_label_visited(32);
   MiniKernelBitmap v_label_visited(32);
@@ -137,10 +133,9 @@ NeighborLabelCounterFilter(const ParametersSubIso &params, VertexID u_idx,
   return v_label_visited.Count() >= u_label_visited.Count();
 }
 
-static //__forceinline__
+static  //__forceinline__
     __noinline__ __device__ bool
-    Filter(const ParametersSubIso &params, VertexID u_idx, VertexID v_idx) {
-
+    Filter(const ParametersSubIso& params, VertexID u_idx, VertexID v_idx) {
   // return LabelFilter(params, u_idx, v_idx);
 
   // return NeighborLabelCounterFilter(params, u_idx, v_idx);
@@ -148,27 +143,25 @@ static //__forceinline__
   return LabelDegreeFilter(params, u_idx, v_idx);
 }
 
-static __noinline__ __device__ bool SteadyRefine(const ParametersSubIso &params,
-                                                 LocalMatches &local_matches) {
-  VertexID *globalid_p = (VertexID *)(params.data_p);
-  VertexID *in_degree_p = globalid_p + params.n_vertices_p;
-  VertexID *out_degree_p = in_degree_p + params.n_vertices_p;
-  EdgeIndex *in_offset_p = (EdgeIndex *)(out_degree_p + params.n_vertices_p);
-  EdgeIndex *out_offset_p =
-      (EdgeIndex *)(in_offset_p + params.n_vertices_p + 1);
-  EdgeIndex *in_edges_p = (EdgeIndex *)(out_offset_p + params.n_vertices_p + 1);
-  VertexID *out_edges_p = in_edges_p + params.n_edges_p;
-  VertexID *edges_globalid_by_localid_p = out_edges_p + params.n_edges_p;
+static __noinline__ __device__ bool SteadyRefine(const ParametersSubIso& params,
+                                                 LocalMatches& local_matches) {
+  VertexID* globalid_p = (VertexID*)(params.data_p);
+  VertexID* in_degree_p = globalid_p + params.n_vertices_p;
+  VertexID* out_degree_p = in_degree_p + params.n_vertices_p;
+  EdgeIndex* in_offset_p = (EdgeIndex*)(out_degree_p + params.n_vertices_p);
+  EdgeIndex* out_offset_p = (EdgeIndex*)(in_offset_p + params.n_vertices_p + 1);
+  EdgeIndex* in_edges_p = (EdgeIndex*)(out_offset_p + params.n_vertices_p + 1);
+  VertexID* out_edges_p = in_edges_p + params.n_edges_p;
+  VertexID* edges_globalid_by_localid_p = out_edges_p + params.n_edges_p;
 
-  VertexID *globalid_g = (VertexID *)(params.data_g);
-  VertexID *in_degree_g = globalid_g + params.n_vertices_g;
-  VertexID *out_degree_g = in_degree_g + params.n_vertices_g;
-  EdgeIndex *in_offset_g = (EdgeIndex *)(out_degree_g + params.n_vertices_g);
-  EdgeIndex *out_offset_g =
-      (EdgeIndex *)(in_offset_g + params.n_vertices_g + 1);
-  EdgeIndex *in_edges_g = (EdgeIndex *)(out_offset_g + params.n_vertices_g + 1);
-  VertexID *out_edges_g = in_edges_g + params.n_edges_g;
-  VertexID *edges_globalid_by_localid_g = out_edges_g + params.n_edges_g;
+  VertexID* globalid_g = (VertexID*)(params.data_g);
+  VertexID* in_degree_g = globalid_g + params.n_vertices_g;
+  VertexID* out_degree_g = in_degree_g + params.n_vertices_g;
+  EdgeIndex* in_offset_g = (EdgeIndex*)(out_degree_g + params.n_vertices_g);
+  EdgeIndex* out_offset_g = (EdgeIndex*)(in_offset_g + params.n_vertices_g + 1);
+  EdgeIndex* in_edges_g = (EdgeIndex*)(out_offset_g + params.n_vertices_g + 1);
+  VertexID* out_edges_g = in_edges_g + params.n_edges_g;
+  VertexID* edges_globalid_by_localid_g = out_edges_g + params.n_edges_g;
 
   KernelBitmap visited(params.n_vertices_g);
 
@@ -226,31 +219,28 @@ static __noinline__ __device__ bool SteadyRefine(const ParametersSubIso &params,
   }
 }
 
-static __noinline__ __device__ bool
-GraphQLRefine(const ParametersSubIso &params, LocalMatches &local_matches,
-              VertexID k = 3) {
-  VertexID *globalid_p = (VertexID *)(params.data_p);
-  VertexID *in_degree_p = globalid_p + params.n_vertices_p;
-  VertexID *out_degree_p = in_degree_p + params.n_vertices_p;
-  EdgeIndex *in_offset_p = (EdgeIndex *)(out_degree_p + params.n_vertices_p);
-  EdgeIndex *out_offset_p =
-      (EdgeIndex *)(in_offset_p + params.n_vertices_p + 1);
-  EdgeIndex *in_edges_p = (EdgeIndex *)(out_offset_p + params.n_vertices_p + 1);
-  VertexID *out_edges_p = in_edges_p + params.n_edges_p;
-  VertexID *edges_globalid_by_localid_p = out_edges_p + params.n_edges_p;
+static __noinline__ __device__ bool GraphQLRefine(
+    const ParametersSubIso& params, LocalMatches& local_matches,
+    VertexID k = 3) {
+  VertexID* globalid_p = (VertexID*)(params.data_p);
+  VertexID* in_degree_p = globalid_p + params.n_vertices_p;
+  VertexID* out_degree_p = in_degree_p + params.n_vertices_p;
+  EdgeIndex* in_offset_p = (EdgeIndex*)(out_degree_p + params.n_vertices_p);
+  EdgeIndex* out_offset_p = (EdgeIndex*)(in_offset_p + params.n_vertices_p + 1);
+  EdgeIndex* in_edges_p = (EdgeIndex*)(out_offset_p + params.n_vertices_p + 1);
+  VertexID* out_edges_p = in_edges_p + params.n_edges_p;
+  VertexID* edges_globalid_by_localid_p = out_edges_p + params.n_edges_p;
 
-  VertexID *globalid_g = (VertexID *)(params.data_g);
-  VertexID *in_degree_g = globalid_g + params.n_vertices_g;
-  VertexID *out_degree_g = in_degree_g + params.n_vertices_g;
-  EdgeIndex *in_offset_g = (EdgeIndex *)(out_degree_g + params.n_vertices_g);
-  EdgeIndex *out_offset_g =
-      (EdgeIndex *)(in_offset_g + params.n_vertices_g + 1);
-  EdgeIndex *in_edges_g = (EdgeIndex *)(out_offset_g + params.n_vertices_g + 1);
-  VertexID *out_edges_g = in_edges_g + params.n_edges_g;
-  VertexID *edges_globalid_by_localid_g = out_edges_g + params.n_edges_g;
+  VertexID* globalid_g = (VertexID*)(params.data_g);
+  VertexID* in_degree_g = globalid_g + params.n_vertices_g;
+  VertexID* out_degree_g = in_degree_g + params.n_vertices_g;
+  EdgeIndex* in_offset_g = (EdgeIndex*)(out_degree_g + params.n_vertices_g);
+  EdgeIndex* out_offset_g = (EdgeIndex*)(in_offset_g + params.n_vertices_g + 1);
+  EdgeIndex* in_edges_g = (EdgeIndex*)(out_offset_g + params.n_vertices_g + 1);
+  VertexID* out_edges_g = in_edges_g + params.n_edges_g;
+  VertexID* edges_globalid_by_localid_g = out_edges_g + params.n_edges_g;
 
   for (VertexID u_idx = 0; u_idx < params.n_vertices_p; u_idx++) {
-
     for (VertexID nbr_u_idx = 0; nbr_u_idx < out_degree_p[u_idx]; nbr_u_idx++) {
     }
 
@@ -263,33 +253,29 @@ GraphQLRefine(const ParametersSubIso &params, LocalMatches &local_matches,
   }
 }
 
-static __noinline__ __device__ bool Refine(const ParametersSubIso &params,
-                                           LocalMatches &local_matches) {
-
+static __noinline__ __device__ bool Refine(const ParametersSubIso& params,
+                                           LocalMatches& local_matches) {
   // SteadyRefine(params, local_matches);
 }
 
-static __device__ bool Check(const ParametersSubIso &params, VertexID weft_id) {
+static __device__ bool Check(const ParametersSubIso& params, VertexID weft_id) {
+  VertexID* globalid_p = (VertexID*)(params.data_p);
+  VertexID* in_degree_p = globalid_p + params.n_vertices_p;
+  VertexID* out_degree_p = in_degree_p + params.n_vertices_p;
+  EdgeIndex* in_offset_p = (EdgeIndex*)(out_degree_p + params.n_vertices_p);
+  EdgeIndex* out_offset_p = (EdgeIndex*)(in_offset_p + params.n_vertices_p + 1);
+  EdgeIndex* in_edges_p = (EdgeIndex*)(out_offset_p + params.n_vertices_p + 1);
+  VertexID* out_edges_p = in_edges_p + params.n_edges_p;
+  VertexID* edges_globalid_by_localid_p = out_edges_p + params.n_edges_p;
 
-  VertexID *globalid_p = (VertexID *)(params.data_p);
-  VertexID *in_degree_p = globalid_p + params.n_vertices_p;
-  VertexID *out_degree_p = in_degree_p + params.n_vertices_p;
-  EdgeIndex *in_offset_p = (EdgeIndex *)(out_degree_p + params.n_vertices_p);
-  EdgeIndex *out_offset_p =
-      (EdgeIndex *)(in_offset_p + params.n_vertices_p + 1);
-  EdgeIndex *in_edges_p = (EdgeIndex *)(out_offset_p + params.n_vertices_p + 1);
-  VertexID *out_edges_p = in_edges_p + params.n_edges_p;
-  VertexID *edges_globalid_by_localid_p = out_edges_p + params.n_edges_p;
-
-  VertexID *globalid_g = (VertexID *)(params.data_g);
-  VertexID *in_degree_g = globalid_g + params.n_vertices_g;
-  VertexID *out_degree_g = in_degree_g + params.n_vertices_g;
-  EdgeIndex *in_offset_g = (EdgeIndex *)(out_degree_g + params.n_vertices_g);
-  EdgeIndex *out_offset_g =
-      (EdgeIndex *)(in_offset_g + params.n_vertices_g + 1);
-  EdgeIndex *in_edges_g = (EdgeIndex *)(out_offset_g + params.n_vertices_g + 1);
-  VertexID *out_edges_g = in_edges_g + params.n_edges_g;
-  VertexID *edges_globalid_by_localid_g = out_edges_g + params.n_edges_g;
+  VertexID* globalid_g = (VertexID*)(params.data_g);
+  VertexID* in_degree_g = globalid_g + params.n_vertices_g;
+  VertexID* out_degree_g = in_degree_g + params.n_vertices_g;
+  EdgeIndex* in_offset_g = (EdgeIndex*)(out_degree_g + params.n_vertices_g);
+  EdgeIndex* out_offset_g = (EdgeIndex*)(in_offset_g + params.n_vertices_g + 1);
+  EdgeIndex* in_edges_g = (EdgeIndex*)(out_offset_g + params.n_vertices_g + 1);
+  VertexID* out_edges_g = in_edges_g + params.n_edges_g;
+  VertexID* edges_globalid_by_localid_g = out_edges_g + params.n_edges_g;
 
   KernelBitmap visited(params.n_vertices_g);
 
@@ -316,8 +302,7 @@ static __device__ bool Check(const ParametersSubIso &params, VertexID weft_id) {
     for (VertexID _ = 0; _ < n_candidates; _++) {
       VertexID v_idx =
           params.matches_data[weft_offset + candidate_offset * 2 + 2 * _ + 1];
-      if (v_idx == kMaxVertexID)
-        continue;
+      if (v_idx == kMaxVertexID) continue;
 
       // Check for each in neighbor of candidate
       for (VertexID nbr_u_idx = 0; nbr_u_idx < in_degree_p[u_idx];
@@ -352,8 +337,7 @@ static __device__ bool Check(const ParametersSubIso &params, VertexID weft_id) {
         for (VertexID nbr_v_idx = 0; nbr_v_idx < in_degree_g[v_idx];
              nbr_v_idx++) {
           VertexID nbr_v = in_edges_g[in_offset_base_v + nbr_v_idx];
-          if (nbr_v == kMaxVertexID)
-            continue;
+          if (nbr_v == kMaxVertexID) continue;
           if (visited.GetBit(nbr_v)) {
             match_count++;
             break;
@@ -373,15 +357,12 @@ static __device__ bool Check(const ParametersSubIso &params, VertexID weft_id) {
   }
 }
 
-static __noinline__ __device__ void
-DFSExtend(const ParametersSubIso &params,
-          KernelBitmap **level_visited_ptr_array, uint32_t level,
-          VertexID pre_v_idx, VertexID v_idx, MiniKernelBitmap &global_visited,
-          MiniKernelBitmap local_visited, bool &match,
-          LocalMatches &local_matches) {
-
-  if (level > params.depth_p)
-    return;
+static __noinline__ __device__ void DFSExtend(
+    const ParametersSubIso& params, KernelBitmap** level_visited_ptr_array,
+    uint32_t level, VertexID pre_v_idx, VertexID v_idx,
+    MiniKernelBitmap& global_visited, MiniKernelBitmap local_visited,
+    bool& match, LocalMatches& local_matches) {
+  if (level > params.depth_p) return;
 
   unsigned exec_plan_idx = local_visited.Count();
   unsigned global_exec_plan_idx = global_visited.Count();
@@ -402,15 +383,14 @@ DFSExtend(const ParametersSubIso &params,
   VertexID global_u = params.exec_path[global_exec_plan_idx];
   VertexLabel global_u_label = params.v_label_p[global_exec_plan_idx];
 
-  VertexID *globalid_g = (VertexID *)(params.data_g);
-  VertexID *in_degree_g = globalid_g + params.n_vertices_g;
-  VertexID *out_degree_g = in_degree_g + params.n_vertices_g;
-  EdgeIndex *in_offset_g = (EdgeIndex *)(out_degree_g + params.n_vertices_g);
-  EdgeIndex *out_offset_g =
-      (EdgeIndex *)(in_offset_g + params.n_vertices_g + 1);
-  EdgeIndex *in_edges_g = (EdgeIndex *)(out_offset_g + params.n_vertices_g + 1);
-  VertexID *out_edges_g = in_edges_g + params.n_edges_g;
-  VertexID *edges_globalid_by_localid_g = out_edges_g + params.n_edges_g;
+  VertexID* globalid_g = (VertexID*)(params.data_g);
+  VertexID* in_degree_g = globalid_g + params.n_vertices_g;
+  VertexID* out_degree_g = in_degree_g + params.n_vertices_g;
+  EdgeIndex* in_offset_g = (EdgeIndex*)(out_degree_g + params.n_vertices_g);
+  EdgeIndex* out_offset_g = (EdgeIndex*)(in_offset_g + params.n_vertices_g + 1);
+  EdgeIndex* in_edges_g = (EdgeIndex*)(out_offset_g + params.n_vertices_g + 1);
+  VertexID* out_edges_g = in_edges_g + params.n_edges_g;
+  VertexID* edges_globalid_by_localid_g = out_edges_g + params.n_edges_g;
 
   // Paste Filter function gere.
   VertexLabel v_label = params.v_label_g[globalid_g[v_idx]];
@@ -434,7 +414,6 @@ DFSExtend(const ParametersSubIso &params,
   }
 
   if (local_match_tag && global_match_tag) {
-
     VertexID offset = local_matches.size[exec_plan_idx];
 
     if (pre_v_idx == kMaxVertexID) {
@@ -509,30 +488,29 @@ static __noinline__ __global__ void ExtendKernel(ParametersSubIso params) {
   unsigned int tid = blockIdx.x * blockDim.x + threadIdx.x;
   unsigned int step = blockDim.x * gridDim.x;
 
-  KernelBitmap **level_visited_ptr_array =
-      (KernelBitmap **)malloc(sizeof(KernelBitmap *) * params.n_vertices_p);
+  KernelBitmap** level_visited_ptr_array =
+      (KernelBitmap**)malloc(sizeof(KernelBitmap*) * params.n_vertices_p);
 
   for (VertexID _ = 0; _ < params.n_vertices_p; _++) {
     level_visited_ptr_array[_] = new KernelBitmap();
     // uint64_t size = params.n_vertices_g;
     uint64_t size = 1 << 15;
-    uint64_t *data =
-        (uint64_t *)malloc(sizeof(uint64_t) * KERNEL_WORD_OFFSET(size));
+    uint64_t* data =
+        (uint64_t*)malloc(sizeof(uint64_t) * KERNEL_WORD_OFFSET(size));
     level_visited_ptr_array[_]->Init(size, data);
   }
 
   MiniKernelBitmap visited(params.n_vertices_p);
 
-  VertexID *globalid_g = (VertexID *)(params.data_g);
+  VertexID* globalid_g = (VertexID*)(params.data_g);
 
   LocalMatches local_matches;
-  local_matches.data = (VertexID *)malloc(
+  local_matches.data = (VertexID*)malloc(
       sizeof(VertexID) * params.n_vertices_p * 2 * kMaxNumCandidatesPerThread);
   local_matches.size =
-      (VertexID *)malloc(sizeof(VertexID) * params.n_vertices_p);
+      (VertexID*)malloc(sizeof(VertexID) * params.n_vertices_p);
 
   for (VertexID v_idx = tid; v_idx < params.n_vertices_g; v_idx += step) {
-
     visited.Clear();
     memset(local_matches.data, 0,
            params.n_vertices_p * 2 * kMaxNumCandidatesPerThread *
@@ -548,8 +526,7 @@ static __noinline__ __global__ void ExtendKernel(ParametersSubIso params) {
     // Write result to the global buffer. Obtain space for each. The last
     // pattern vertex dosen't get a match.
     if (local_matches.size[params.n_vertices_p - 1] != 0) {
-      if (*params.weft_count >= kMaxNumWeft)
-        break;
+      if (*params.weft_count >= kMaxNumWeft) break;
 
       // Refined local matches.
       //    Refine(params, local_matches);
@@ -569,7 +546,7 @@ static __noinline__ __global__ void ExtendKernel(ParametersSubIso params) {
           weft_id * 2 * params.n_vertices_p * kMaxNumCandidatesPerThread;
 
       // Fill weft forest.
-      VertexID *base_ptr = params.matches_data + weft_offset;
+      VertexID* base_ptr = params.matches_data + weft_offset;
 
       for (VertexID _ = 0; _ < params.n_vertices_p; _++) {
         VertexID v_offset = *(params.v_candidate_offset_for_each_weft +
@@ -598,49 +575,48 @@ static __global__ void CheckKernel(ParametersSubIso params) {
 }
 
 void SubIsoKernelWrapper::SubIso(
-    const cudaStream_t &stream, VertexID depth_p,
-    const data_structures::UnifiedOwnedBuffer<VertexID> &exec_path,
-    const data_structures::UnifiedOwnedBuffer<VertexID>
-        &inverted_index_of_exec_path,
-    const data_structures::UnifiedOwnedBuffer<VertexID> &exec_path_in_edges,
+    const cudaStream_t& stream, VertexID depth_p,
+    const data_structures::UnifiedOwnedBuffer<VertexID>& exec_path,
+    const data_structures::UnifiedOwnedBuffer<VertexID>&
+        inverted_index_of_exec_path,
+    const data_structures::UnifiedOwnedBuffer<VertexID>& exec_path_in_edges,
     VertexID n_vertices_p, EdgeIndex n_edges_p,
-    const data_structures::UnifiedOwnedBuffer<uint8_t> &data_p,
-    const data_structures::UnifiedOwnedBuffer<VertexLabel> &v_label_p,
+    const data_structures::UnifiedOwnedBuffer<uint8_t>& data_p,
+    const data_structures::UnifiedOwnedBuffer<VertexLabel>& v_label_p,
     VertexID n_vertices_g, EdgeIndex n_edges_g,
-    const data_structures::UnifiedOwnedBuffer<uint8_t> &data_g,
-    const data_structures::UnifiedOwnedBuffer<VertexID> &edgelist_g,
-    const data_structures::UnifiedOwnedBuffer<VertexLabel> &v_label_g,
-    const data_structures::UnifiedOwnedBuffer<VertexID> &weft_count,
-    const data_structures::UnifiedOwnedBuffer<EdgeIndex> &weft_offset,
-    const data_structures::UnifiedOwnedBuffer<VertexID> &weft_size,
-    const data_structures::UnifiedOwnedBuffer<VertexID>
-        &v_candidate_offset_for_each_weft,
-    const data_structures::UnifiedOwnedBuffer<VertexID> &matches_data) {
-
+    const data_structures::UnifiedOwnedBuffer<uint8_t>& data_g,
+    const data_structures::UnifiedOwnedBuffer<VertexID>& edgelist_g,
+    const data_structures::UnifiedOwnedBuffer<VertexLabel>& v_label_g,
+    const data_structures::UnifiedOwnedBuffer<VertexID>& weft_count,
+    const data_structures::UnifiedOwnedBuffer<EdgeIndex>& weft_offset,
+    const data_structures::UnifiedOwnedBuffer<VertexID>& weft_size,
+    const data_structures::UnifiedOwnedBuffer<VertexID>&
+        v_candidate_offset_for_each_weft,
+    const data_structures::UnifiedOwnedBuffer<VertexID>& matches_data) {
   dim3 dimBlock(kBlockDim);
   dim3 dimGrid(kGridDim);
 
   LocalMatches m0;
-  ParametersSubIso params{.depth_p = depth_p,
-                          .exec_path = exec_path.GetPtr(),
-                          .inverted_index_of_exec_path =
-                              inverted_index_of_exec_path.GetPtr(),
-                          .exec_path_in_edges = exec_path_in_edges.GetPtr(),
-                          .n_vertices_p = n_vertices_p,
-                          .n_edges_p = n_edges_p,
-                          .data_p = data_p.GetPtr(),
-                          .v_label_p = v_label_p.GetPtr(),
-                          .n_vertices_g = n_vertices_g,
-                          .n_edges_g = n_edges_g,
-                          .data_g = data_g.GetPtr(),
-                          .edgelist_g = edgelist_g.GetPtr(),
-                          .v_label_g = v_label_g.GetPtr(),
-                          .weft_count = weft_count.GetPtr(),
-                          .weft_offset = weft_offset.GetPtr(),
-                          .weft_size = weft_size.GetPtr(),
-                          .v_candidate_offset_for_each_weft =
-                              v_candidate_offset_for_each_weft.GetPtr(),
-                          .matches_data = matches_data.GetPtr()};
+  ParametersSubIso params{
+      .depth_p = depth_p,
+      .exec_path = exec_path.GetPtr(),
+      .inverted_index_of_exec_path = inverted_index_of_exec_path.GetPtr(),
+      .exec_path_in_edges = exec_path_in_edges.GetPtr(),
+      .n_vertices_p = n_vertices_p,
+      .n_edges_p = n_edges_p,
+      .data_p = data_p.GetPtr(),
+      .v_label_p = v_label_p.GetPtr(),
+      .n_vertices_g = n_vertices_g,
+      .n_edges_g = n_edges_g,
+      .data_g = data_g.GetPtr(),
+      .edgelist_g = edgelist_g.GetPtr(),
+      .v_label_g = v_label_g.GetPtr(),
+      .weft_count = weft_count.GetPtr(),
+      .weft_offset = weft_offset.GetPtr(),
+      .weft_size = weft_size.GetPtr(),
+      .v_candidate_offset_for_each_weft =
+          v_candidate_offset_for_each_weft.GetPtr(),
+      .matches_data = matches_data.GetPtr()};
 
   // The default heap size is 8M.
   cudaDeviceSetLimit(cudaLimitMallocHeapSize, 8388608 * 128);
@@ -676,8 +652,8 @@ void SubIsoKernelWrapper::SubIso(
   }
 }
 
-} // namespace kernel
-} // namespace task
-} // namespace core
-} // namespace matrixgraph
-} // namespace sics
+}  // namespace kernel
+}  // namespace task
+}  // namespace core
+}  // namespace matrixgraph
+}  // namespace sics

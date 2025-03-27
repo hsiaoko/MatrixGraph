@@ -1,4 +1,4 @@
-#include "core/task/kernel/data_structures/immutable_csr_gpu.cuh"
+#include "core/task/gpu_task/kernel/data_structures/immutable_csr_gpu.cuh"
 
 namespace sics {
 namespace matrixgraph {

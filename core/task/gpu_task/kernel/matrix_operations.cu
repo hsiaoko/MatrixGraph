@@ -1,11 +1,11 @@
-#include "core/task/kernel/matrix_operations.cuh"
-
 #include <cuda_runtime.h>
+
 #include <iostream>
 
 #include "core/common/consts.h"
 #include "core/common/types.h"
-#include "core/task/kernel/data_structures/kernel_bitmap.cuh"
+#include "core/task/gpu_task/kernel/data_structures/kernel_bitmap.cuh"
+#include "core/task/gpu_task/kernel/matrix_operations.cuh"
 #include "core/util/cuda_check.cuh"
 
 namespace sics {
@@ -31,25 +31,25 @@ using sics::matrixgraph::core::task::kernel::KernelBitmap;
 static const uint32_t kProcessorWordSize = 64;
 
 struct ParametersForMatrixBitAnd {
-  uint64_t *matrix_a;
-  uint64_t *matrix_b;
-  uint64_t *matrix_c;
+  uint64_t* matrix_a;
+  uint64_t* matrix_b;
+  uint64_t* matrix_c;
   uint64_t m;
   uint64_t k;
   uint64_t n;
 };
 
 struct ParametersForMatrixBitCount {
-  unsigned long long *data;
-  unsigned long long *count;
+  unsigned long long* data;
+  unsigned long long* count;
   unsigned long long size;
 };
 
 struct ParametersInitBitTiledMatrix {
-  unsigned long long *layout_matrix;
-  unsigned *tile_offset_row;
-  unsigned *tile_row_idx;
-  unsigned *tile_col_idx;
+  unsigned long long* layout_matrix;
+  unsigned* tile_offset_row;
+  unsigned* tile_row_idx;
+  unsigned* tile_col_idx;
   unsigned long tile_size;
 };
 
@@ -61,28 +61,28 @@ struct ParametersFillTiles {
   unsigned long n_nz_tile_c;
   unsigned long tile_unit;
   unsigned long tile_buffer_size;
-  unsigned long long *layout_matrix_c;
-  unsigned *tile_offset_row_a;
-  unsigned *tile_offset_row_b;
-  unsigned *tile_offset_row_c;
-  unsigned *tile_row_idx_a;
-  unsigned *tile_row_idx_b;
-  unsigned *tile_row_idx_c;
-  unsigned *tile_col_idx_a;
-  unsigned *tile_col_idx_b;
-  unsigned *tile_col_idx_c;
-  uint8_t *data_a;
-  uint8_t *data_b;
-  uint8_t *data_c;
-  uint32_t *csr_n_vertices_a = nullptr;
-  uint32_t *csr_n_vertices_b = nullptr;
-  uint32_t *csr_n_vertices_c = nullptr;
-  uint64_t *csr_n_edges_a = nullptr;
-  uint64_t *csr_n_edges_b = nullptr;
-  uint64_t *csr_n_edges_c = nullptr;
-  uint64_t *csr_offset_a = nullptr;
-  uint64_t *csr_offset_b = nullptr;
-  uint64_t *csr_offset_c = nullptr;
+  unsigned long long* layout_matrix_c;
+  unsigned* tile_offset_row_a;
+  unsigned* tile_offset_row_b;
+  unsigned* tile_offset_row_c;
+  unsigned* tile_row_idx_a;
+  unsigned* tile_row_idx_b;
+  unsigned* tile_row_idx_c;
+  unsigned* tile_col_idx_a;
+  unsigned* tile_col_idx_b;
+  unsigned* tile_col_idx_c;
+  uint8_t* data_a;
+  uint8_t* data_b;
+  uint8_t* data_c;
+  uint32_t* csr_n_vertices_a = nullptr;
+  uint32_t* csr_n_vertices_b = nullptr;
+  uint32_t* csr_n_vertices_c = nullptr;
+  uint64_t* csr_n_edges_a = nullptr;
+  uint64_t* csr_n_edges_b = nullptr;
+  uint64_t* csr_n_edges_c = nullptr;
+  uint64_t* csr_offset_a = nullptr;
+  uint64_t* csr_offset_b = nullptr;
+  uint64_t* csr_offset_c = nullptr;
 };
 
 struct ParametersWalk {
@@ -92,42 +92,42 @@ struct ParametersWalk {
   const unsigned long n_nz_tile_b;
   const unsigned long tile_unit;
   const unsigned long tile_buffer_size;
-  unsigned *tile_offset_row_a;
-  unsigned *tile_offset_row_b;
-  unsigned *tile_row_idx_a;
-  unsigned *tile_row_idx_b;
-  unsigned *tile_col_idx_a;
-  unsigned *tile_col_idx_b;
-  uint8_t *data_a;
-  uint8_t *data_b;
-  uint32_t *csr_n_vertices_a = nullptr;
-  uint32_t *csr_n_vertices_b = nullptr;
-  uint64_t *csr_n_edges_a = nullptr;
-  uint64_t *csr_n_edges_b = nullptr;
-  uint64_t *csr_offset_a = nullptr;
-  uint64_t *csr_offset_b = nullptr;
-  uint32_t *edgelist_c = nullptr;
-  uint32_t *output_offset = nullptr;
+  unsigned* tile_offset_row_a;
+  unsigned* tile_offset_row_b;
+  unsigned* tile_row_idx_a;
+  unsigned* tile_row_idx_b;
+  unsigned* tile_col_idx_a;
+  unsigned* tile_col_idx_b;
+  uint8_t* data_a;
+  uint8_t* data_b;
+  uint32_t* csr_n_vertices_a = nullptr;
+  uint32_t* csr_n_vertices_b = nullptr;
+  uint64_t* csr_n_edges_a = nullptr;
+  uint64_t* csr_n_edges_b = nullptr;
+  uint64_t* csr_offset_a = nullptr;
+  uint64_t* csr_offset_b = nullptr;
+  uint32_t* edgelist_c = nullptr;
+  uint32_t* output_offset = nullptr;
 };
 
 struct ParametersCount {
   unsigned n_nz_tile;
   unsigned n_uint64_t;
-  unsigned long long *data;
-  unsigned long long *count;
+  unsigned long long* data;
+  unsigned long long* count;
 };
 
-__device__ static inline uint64_t get_bit(uint64_t *data, size_t i,
+__device__ static inline uint64_t get_bit(uint64_t* data, size_t i,
                                           size_t size) {
-  if (i > size)
-    return 0;
+  if (i > size) return 0;
   return data[WORD_OFFSET(i)] & (1ull << BIT_OFFSET(i));
 }
 
 __device__ static inline bool drop() { return false; }
 
-__device__ static inline uint64_t
-get_aligned_k_bits(uint64_t *data, uint64_t start, uint64_t end) {
+__device__ static inline uint64_t get_aligned_k_bits(uint64_t* data,
+                                                     uint64_t start,
+                                                     uint64_t end) {
   uint64_t start_word = WORD_OFFSET(start);
   uint64_t end_word = WORD_OFFSET(end);
 
@@ -141,14 +141,13 @@ get_aligned_k_bits(uint64_t *data, uint64_t start, uint64_t end) {
   return result;
 }
 
-__device__ static inline uint64_t set_bit(unsigned long long *data,
+__device__ static inline uint64_t set_bit(unsigned long long* data,
                                           unsigned long long i) {
   atomicOr(data + WORD_OFFSET(i), (1ull << BIT_OFFSET(i)));
 }
 
-__device__ static inline size_t pre_element_count(const uint64_t *data,
+__device__ static inline size_t pre_element_count(const uint64_t* data,
                                                   uint64_t idx) {
-
   size_t count = 0;
   size_t bm_size = WORD_OFFSET(idx);
   size_t idx_offset = WORD_OFFSET(idx);
@@ -174,13 +173,12 @@ __device__ static inline size_t pre_element_count(const uint64_t *data,
   return count;
 }
 
-__device__ static inline bool get_bit(uint64_t *data, uint64_t i) {
+__device__ static inline bool get_bit(uint64_t* data, uint64_t i) {
   return data[WORD_OFFSET(i)] & (1ull << BIT_OFFSET(i));
 }
 
-__device__ static inline unsigned long long
-count_per_uint64_t(unsigned long long x) {
-
+__device__ static inline unsigned long long count_per_uint64_t(
+    unsigned long long x) {
   x = (x & (0x5555555555555555)) + ((x >> 1) & (0x5555555555555555));
   x = (x & (0x3333333333333333)) + ((x >> 2) & (0x3333333333333333));
   x = (x & (0x0f0f0f0f0f0f0f0f)) + ((x >> 4) & (0x0f0f0f0f0f0f0f0f));
@@ -190,16 +188,14 @@ count_per_uint64_t(unsigned long long x) {
   return x;
 }
 
-__device__ static inline VertexID binary_search(VertexID *data, VertexID size,
+__device__ static inline VertexID binary_search(VertexID* data, VertexID size,
                                                 VertexID target) {
-  if (size == 0)
-    return kMaxVertexID;
+  if (size == 0) return kMaxVertexID;
   VertexID low = 0, high = size - 1;
 
   while (low <= high) {
     VertexID mid = low + (high - low) / 2;
-    if (mid >= size)
-      return kMaxVertexID;
+    if (mid >= size) return kMaxVertexID;
     if (data[mid] == target) {
       return (VertexID)mid;
     }
@@ -214,20 +210,20 @@ __device__ static inline VertexID binary_search(VertexID *data, VertexID size,
 }
 
 __device__ static inline bool single_thread_matrix_bit_and(
-    unsigned long tile_size, unsigned long long *matrix_a,
-    unsigned long long *matrix_b, unsigned long long *matrix_c) {
+    unsigned long tile_size, unsigned long long* matrix_a,
+    unsigned long long* matrix_b, unsigned long long* matrix_c) {
   for (unsigned int row_a = 0; row_a < tile_size; ++row_a) {
     for (unsigned int row_b = 0; row_b < tile_size; ++row_b) {
       for (unsigned int k = 0; k < tile_size; k += kProcessorWordSize) {
         uint64_t processor_word_a = get_aligned_k_bits(
-            (uint64_t *)matrix_a, row_a * tile_size, (row_a + 1) * tile_size);
+            (uint64_t*)matrix_a, row_a * tile_size, (row_a + 1) * tile_size);
         uint64_t processor_word_b = get_aligned_k_bits(
-            (uint64_t *)matrix_b, row_b * tile_size, (row_b + 1) * tile_size);
+            (uint64_t*)matrix_b, row_b * tile_size, (row_b + 1) * tile_size);
 
         if ((processor_word_a & processor_word_b) == 0) {
           continue;
         } else {
-          set_bit((unsigned long long *)matrix_c,
+          set_bit((unsigned long long*)matrix_c,
                   (unsigned long long)row_a * tile_size + row_b);
           break;
         }
@@ -236,10 +232,9 @@ __device__ static inline bool single_thread_matrix_bit_and(
   }
 }
 
-__device__ static inline void
-find_intersection(unsigned size_l, unsigned size_r, unsigned *data_l,
-                  unsigned *data_r, unsigned *data_out_l, unsigned *data_out_r,
-                  unsigned *n_intersections) {
+__device__ static inline void find_intersection(
+    unsigned size_l, unsigned size_r, unsigned* data_l, unsigned* data_r,
+    unsigned* data_out_l, unsigned* data_out_r, unsigned* n_intersections) {
   unsigned i = 0;
   unsigned j = 0;
 
@@ -275,7 +270,7 @@ static __global__ void matrix_and_kernel(ParametersForMatrixBitAnd params) {
         if ((processor_word_a & processor_word_b) == 0) {
           continue;
         } else {
-          set_bit((unsigned long long *)params.matrix_c,
+          set_bit((unsigned long long*)params.matrix_c,
                   (unsigned long long)row_a * params.n + row_b);
           break;
         }
@@ -300,17 +295,17 @@ static __global__ void matrix_count_kernel(ParametersForMatrixBitCount params) {
   }
 }
 
-static __global__ void
-init_bit_tiled_matrix_metadata_kernel(ParametersInitBitTiledMatrix params) {
+static __global__ void init_bit_tiled_matrix_metadata_kernel(
+    ParametersInitBitTiledMatrix params) {
   unsigned int tid = blockIdx.x * blockDim.x + threadIdx.x;
   unsigned int step = blockDim.x * gridDim.x;
 
   for (unsigned int i = tid; i < params.tile_size; i += step) {
     for (unsigned int j = 0; j < params.tile_size; j++) {
-      if (get_bit((uint64_t *)params.layout_matrix,
+      if (get_bit((uint64_t*)params.layout_matrix,
                   (uint64_t)(i * params.tile_size + j))) {
         unsigned long long pre_element_count_val =
-            pre_element_count((uint64_t *)params.layout_matrix,
+            pre_element_count((uint64_t*)params.layout_matrix,
                               (uint64_t)i * params.tile_size + j);
         params.tile_row_idx[pre_element_count_val] = i;
         params.tile_col_idx[pre_element_count_val] = j;
@@ -328,8 +323,8 @@ static __global__ void fill_tiles_kernel(ParametersFillTiles params) {
     unsigned int x = params.tile_row_idx_c[i];
     unsigned int y = params.tile_col_idx_c[i];
 
-    unsigned long long *matrix_c =
-        ((unsigned long long *)params.data_c) + params.tile_unit * i;
+    unsigned long long* matrix_c =
+        ((unsigned long long*)params.data_c) + params.tile_unit * i;
 
     unsigned int nz_tile_line_x =
         params.tile_offset_row_a[x + 1] - params.tile_offset_row_a[x];
@@ -353,11 +348,11 @@ static __global__ void fill_tiles_kernel(ParametersFillTiles params) {
         // idx_intersection_l[l])-th  tile and (params.tile_offset_row_b[y] +
         // idx_intersection_r[r])-th tile.
 
-        unsigned long long *matrix_a =
-            ((unsigned long long *)params.data_a) +
+        unsigned long long* matrix_a =
+            ((unsigned long long*)params.data_a) +
             params.tile_unit * (params.tile_offset_row_a[x] + nz_idx_x);
-        unsigned long long *matrix_b =
-            ((unsigned long long *)params.data_b) +
+        unsigned long long* matrix_b =
+            ((unsigned long long*)params.data_b) +
             params.tile_unit * (params.tile_offset_row_b[y] + nz_idx_y);
 
         single_thread_matrix_bit_and(params.tile_size, matrix_a, matrix_b,
@@ -407,33 +402,31 @@ static __global__ void fill_csr_tiles_kernel(ParametersFillTiles params) {
         size_t csr_offset_b =
             params.csr_offset_b[params.tile_offset_row_b[y] + nz_idx_y];
 
-        VertexID *globalid_a = (VertexID *)(params.data_a + csr_offset_a);
-        VertexID *globalid_b = (VertexID *)(params.data_b + csr_offset_b);
-        VertexID *in_degree_a = globalid_a + params.csr_n_vertices_a[tile_id_a];
-        VertexID *in_degree_b = globalid_b + params.csr_n_vertices_b[tile_id_b];
-        VertexID *out_degree_a =
+        VertexID* globalid_a = (VertexID*)(params.data_a + csr_offset_a);
+        VertexID* globalid_b = (VertexID*)(params.data_b + csr_offset_b);
+        VertexID* in_degree_a = globalid_a + params.csr_n_vertices_a[tile_id_a];
+        VertexID* in_degree_b = globalid_b + params.csr_n_vertices_b[tile_id_b];
+        VertexID* out_degree_a =
             in_degree_a + params.csr_n_vertices_a[tile_id_a];
-        VertexID *out_degree_b =
+        VertexID* out_degree_b =
             in_degree_b + params.csr_n_vertices_b[tile_id_b];
-        EdgeIndex *in_offset_a =
-            (EdgeIndex *)(out_degree_a + params.csr_n_vertices_a[tile_id_a]);
-        EdgeIndex *in_offset_b =
-            (EdgeIndex *)(out_degree_b + params.csr_n_vertices_b[tile_id_b]);
-        EdgeIndex *out_offset_a =
-            (EdgeIndex *)(in_offset_a + params.csr_n_vertices_a[tile_id_a] + 1);
-        EdgeIndex *out_offset_b =
-            (EdgeIndex *)(in_offset_b + params.csr_n_vertices_b[tile_id_b] + 1);
-        EdgeIndex *in_edges_a =
-            (EdgeIndex *)(out_offset_a + params.csr_n_vertices_a[tile_id_a] +
-                          1);
-        VertexID *in_edges_b =
-            (EdgeIndex *)(out_offset_b + params.csr_n_vertices_b[tile_id_b] +
-                          1);
-        VertexID *out_edges_a = in_edges_a + 0;
-        VertexID *out_edges_b = in_edges_b + 0;
-        VertexID *edges_globalid_by_localid_a =
+        EdgeIndex* in_offset_a =
+            (EdgeIndex*)(out_degree_a + params.csr_n_vertices_a[tile_id_a]);
+        EdgeIndex* in_offset_b =
+            (EdgeIndex*)(out_degree_b + params.csr_n_vertices_b[tile_id_b]);
+        EdgeIndex* out_offset_a =
+            (EdgeIndex*)(in_offset_a + params.csr_n_vertices_a[tile_id_a] + 1);
+        EdgeIndex* out_offset_b =
+            (EdgeIndex*)(in_offset_b + params.csr_n_vertices_b[tile_id_b] + 1);
+        EdgeIndex* in_edges_a =
+            (EdgeIndex*)(out_offset_a + params.csr_n_vertices_a[tile_id_a] + 1);
+        VertexID* in_edges_b =
+            (EdgeIndex*)(out_offset_b + params.csr_n_vertices_b[tile_id_b] + 1);
+        VertexID* out_edges_a = in_edges_a + 0;
+        VertexID* out_edges_b = in_edges_b + 0;
+        VertexID* edges_globalid_by_localid_a =
             out_edges_a + params.csr_n_edges_a[tile_id_a];
-        VertexID *edges_globalid_by_localid_b =
+        VertexID* edges_globalid_by_localid_b =
             out_edges_b + params.csr_n_edges_b[tile_id_b];
 
         {
@@ -443,7 +436,6 @@ static __global__ void fill_csr_tiles_kernel(ParametersFillTiles params) {
           // Step 1. traversal edges of tile_a
           for (VertexID v_idx_a = 0;
                v_idx_a < params.csr_n_vertices_a[tile_id_a]; v_idx_a++) {
-
             // printf("vid %d\n", globalid_a[v_idx_a]);
             EdgeIndex offset_base_a = out_offset_a[v_idx_a];
             // printf("\t edges: ");
@@ -473,8 +465,7 @@ static __global__ void fill_csr_tiles_kernel(ParametersFillTiles params) {
               //   }
               // }
 
-              if (v_idx_b == kMaxVertexID)
-                continue;
+              if (v_idx_b == kMaxVertexID) continue;
               // printf("found: %d\n", v_idx_b);
 
               // Generate Output a 2-hop edge from src of A to dst of B.
@@ -524,17 +515,17 @@ static __global__ void walk_kernel(const ParametersWalk params) {
     VertexID col_idx_a = params.tile_col_idx_a[nz_idx_a];
     VertexID row_idx_a = params.tile_row_idx_a[nz_idx_a];
 
-    VertexID *globalid_a = (VertexID *)(params.data_a + csr_offset_a);
-    VertexID *in_degree_a = globalid_a + params.csr_n_vertices_a[nz_idx_a];
-    VertexID *out_degree_a = in_degree_a + params.csr_n_vertices_a[nz_idx_a];
-    EdgeIndex *in_offset_a =
-        (EdgeIndex *)(out_degree_a + params.csr_n_vertices_a[nz_idx_a]);
-    EdgeIndex *out_offset_a =
-        (EdgeIndex *)(in_offset_a + params.csr_n_vertices_a[nz_idx_a] + 1);
-    EdgeIndex *in_edges_a =
-        (EdgeIndex *)(out_offset_a + params.csr_n_vertices_a[nz_idx_a] + 1);
-    VertexID *out_edges_a = in_edges_a + 0;
-    VertexID *edges_globalid_by_localid_a =
+    VertexID* globalid_a = (VertexID*)(params.data_a + csr_offset_a);
+    VertexID* in_degree_a = globalid_a + params.csr_n_vertices_a[nz_idx_a];
+    VertexID* out_degree_a = in_degree_a + params.csr_n_vertices_a[nz_idx_a];
+    EdgeIndex* in_offset_a =
+        (EdgeIndex*)(out_degree_a + params.csr_n_vertices_a[nz_idx_a]);
+    EdgeIndex* out_offset_a =
+        (EdgeIndex*)(in_offset_a + params.csr_n_vertices_a[nz_idx_a] + 1);
+    EdgeIndex* in_edges_a =
+        (EdgeIndex*)(out_offset_a + params.csr_n_vertices_a[nz_idx_a] + 1);
+    VertexID* out_edges_a = in_edges_a + 0;
+    VertexID* edges_globalid_by_localid_a =
         out_edges_a + params.csr_n_edges_a[nz_idx_a];
 
     for (VertexID v_idx_a = tid; v_idx_a < params.csr_n_vertices_a[nz_idx_a];
@@ -547,15 +538,14 @@ static __global__ void walk_kernel(const ParametersWalk params) {
       VertexID local_buf[kDefalutOutputBufferSize * 2];
 
       kbm.Clear();
-      EdgeIndex *out_offset_base = out_offset_a;
+      EdgeIndex* out_offset_base = out_offset_a;
 
       for (VertexID nbr_idx_a = 0; nbr_idx_a < out_degree_a[v_idx_a];
            nbr_idx_a++) {
         VertexID dst = out_edges_a[out_offset_base[v_idx_a] + nbr_idx_a];
         VertexID global_dst = edges_globalid_by_localid_a[dst];
 
-        if (global_dst == global_src)
-          continue;
+        if (global_dst == global_src) continue;
 
         // Walks to next hop nbr.
         GraphID n_tile_b = params.tile_offset_row_b[col_idx_a + 1] -
@@ -563,43 +553,38 @@ static __global__ void walk_kernel(const ParametersWalk params) {
         for (GraphID tile_id_b = 0; tile_id_b < n_tile_b; tile_id_b++) {
           GraphID nz_idx_b = params.tile_offset_row_b[col_idx_a] + tile_id_b;
           auto csr_offset_b = params.csr_offset_b[nz_idx_b];
-          VertexID *globalid_b = (VertexID *)(params.data_b + csr_offset_b);
-          VertexID *in_degree_b =
+          VertexID* globalid_b = (VertexID*)(params.data_b + csr_offset_b);
+          VertexID* in_degree_b =
               globalid_b + params.csr_n_vertices_b[nz_idx_b];
-          VertexID *out_degree_b =
+          VertexID* out_degree_b =
               in_degree_b + params.csr_n_vertices_b[nz_idx_b];
-          EdgeIndex *in_offset_b =
-              (EdgeIndex *)(out_degree_b + params.csr_n_vertices_b[nz_idx_b]);
-          EdgeIndex *out_offset_b =
-              (EdgeIndex *)(in_offset_b + params.csr_n_vertices_b[nz_idx_b] +
-                            1);
-          EdgeIndex *in_edges_b =
-              (EdgeIndex *)(out_offset_b + params.csr_n_vertices_b[nz_idx_b] +
-                            1);
-          VertexID *out_edges_b = in_edges_b + 0;
-          VertexID *edges_globalid_by_localid_b =
+          EdgeIndex* in_offset_b =
+              (EdgeIndex*)(out_degree_b + params.csr_n_vertices_b[nz_idx_b]);
+          EdgeIndex* out_offset_b =
+              (EdgeIndex*)(in_offset_b + params.csr_n_vertices_b[nz_idx_b] + 1);
+          EdgeIndex* in_edges_b =
+              (EdgeIndex*)(out_offset_b + params.csr_n_vertices_b[nz_idx_b] +
+                           1);
+          VertexID* out_edges_b = in_edges_b + 0;
+          VertexID* edges_globalid_by_localid_b =
               out_edges_b + params.csr_n_edges_b[nz_idx_b];
 
           auto v_idx_b = binary_search(
               globalid_b, params.csr_n_vertices_b[nz_idx_b], global_dst);
 
-          if (v_idx_b == kMaxVertexID)
-            continue;
+          if (v_idx_b == kMaxVertexID) continue;
 
-          EdgeIndex *out_offset_base = out_offset_b;
+          EdgeIndex* out_offset_base = out_offset_b;
 
           for (VertexID nbr_idx_b = 0; nbr_idx_b < out_degree_b[v_idx_b];
                nbr_idx_b++) {
-
             VertexID local_walk_to_dst =
                 out_edges_b[out_offset_base[v_idx_b] + nbr_idx_b];
             VertexID walk_to_dst = edges_globalid_by_localid_b
                 [out_edges_b[out_offset_base[v_idx_b] + nbr_idx_b]];
 
-            if (globalid_b[v_idx_b] == walk_to_dst)
-              continue;
-            if (global_src == walk_to_dst)
-              continue;
+            if (globalid_b[v_idx_b] == walk_to_dst) continue;
+            if (global_src == walk_to_dst) continue;
 
             if (kbm.GetBit(local_walk_to_dst)) {
               continue;
@@ -636,10 +621,10 @@ static __global__ void walk_kernel(const ParametersWalk params) {
 }
 
 void MatrixOperationsKernelWrapper::MatrixBitAnd(
-    const cudaStream_t &stream,
-    const data_structures::DeviceOwnedBuffer<uint64_t> &matrix_a_buf,
-    const data_structures::DeviceOwnedBuffer<uint64_t> &matrix_b_buf,
-    data_structures::DeviceOwnedBuffer<uint64_t> *matrix_c_buf, uint32_t m,
+    const cudaStream_t& stream,
+    const data_structures::DeviceOwnedBuffer<uint64_t>& matrix_a_buf,
+    const data_structures::DeviceOwnedBuffer<uint64_t>& matrix_b_buf,
+    data_structures::DeviceOwnedBuffer<uint64_t>* matrix_c_buf, uint32_t m,
     uint32_t k, uint32_t n) {
   dim3 dimBlock(64);
   dim3 dimGrid(64);
@@ -659,15 +644,14 @@ void MatrixOperationsKernelWrapper::MatrixBitAnd(
 }
 
 void MatrixOperationsKernelWrapper::MatrixBitCount(
-    const cudaStream_t &stream,
-    const data_structures::DeviceOwnedBuffer<uint64_t> &matrix_buf,
-    data_structures::DeviceOwnedBuffer<uint64_t> *count_buf, uint64_t size) {
-
+    const cudaStream_t& stream,
+    const data_structures::DeviceOwnedBuffer<uint64_t>& matrix_buf,
+    data_structures::DeviceOwnedBuffer<uint64_t>* count_buf, uint64_t size) {
   dim3 dimBlock(256);
   dim3 dimGrid(256);
   ParametersForMatrixBitCount params{
-      .data = reinterpret_cast<unsigned long long *>(matrix_buf.GetPtr()),
-      .count = reinterpret_cast<unsigned long long *>(count_buf->GetPtr()),
+      .data = reinterpret_cast<unsigned long long*>(matrix_buf.GetPtr()),
+      .count = reinterpret_cast<unsigned long long*>(count_buf->GetPtr()),
       .size = size};
   matrix_count_kernel<<<dimBlock, dimGrid, 0, stream>>>(params);
   cudaError_t err = cudaGetLastError();
@@ -677,22 +661,20 @@ void MatrixOperationsKernelWrapper::MatrixBitCount(
 }
 
 void MatrixOperationsKernelWrapper::InitBitTiledMatrixMetadataByLayoutMatrix(
-    const cudaStream_t &stream,
-    const data_structures::DeviceOwnedBuffer<uint64_t> &layout_matrix,
-    data_structures::DeviceOwnedBuffer<uint32_t> *tile_offset_row,
-    data_structures::DeviceOwnedBuffer<uint32_t> *tile_row_idx,
-    data_structures::DeviceOwnedBuffer<uint32_t> *tile_col_idx,
+    const cudaStream_t& stream,
+    const data_structures::DeviceOwnedBuffer<uint64_t>& layout_matrix,
+    data_structures::DeviceOwnedBuffer<uint32_t>* tile_offset_row,
+    data_structures::DeviceOwnedBuffer<uint32_t>* tile_row_idx,
+    data_structures::DeviceOwnedBuffer<uint32_t>* tile_col_idx,
     uint32_t tile_size) {
-
   dim3 dimBlock(64);
   dim3 dimGrid(64);
   ParametersInitBitTiledMatrix params{
       .layout_matrix =
-          reinterpret_cast<unsigned long long *>(layout_matrix.GetPtr()),
-      .tile_offset_row =
-          reinterpret_cast<unsigned *>(tile_offset_row->GetPtr()),
-      .tile_row_idx = reinterpret_cast<unsigned *>(tile_row_idx->GetPtr()),
-      .tile_col_idx = reinterpret_cast<unsigned *>(tile_col_idx->GetPtr()),
+          reinterpret_cast<unsigned long long*>(layout_matrix.GetPtr()),
+      .tile_offset_row = reinterpret_cast<unsigned*>(tile_offset_row->GetPtr()),
+      .tile_row_idx = reinterpret_cast<unsigned*>(tile_row_idx->GetPtr()),
+      .tile_col_idx = reinterpret_cast<unsigned*>(tile_col_idx->GetPtr()),
       .tile_size = tile_size};
 
   init_bit_tiled_matrix_metadata_kernel<<<dimBlock, dimGrid, 0, stream>>>(
@@ -704,22 +686,21 @@ void MatrixOperationsKernelWrapper::InitBitTiledMatrixMetadataByLayoutMatrix(
 }
 
 void MatrixOperationsKernelWrapper::FillTiles(
-    const cudaStream_t &stream, size_t tile_size, size_t n_strips,
+    const cudaStream_t& stream, size_t tile_size, size_t n_strips,
     size_t n_nz_tile_a, size_t n_nz_tile_b, size_t n_nz_tile_c,
-    const data_structures::UnifiedOwnedBuffer<uint64_t> &layout_matrix_c,
-    const data_structures::UnifiedOwnedBuffer<uint32_t> &tile_offset_row_a,
-    const data_structures::UnifiedOwnedBuffer<uint32_t> &tile_offset_row_b,
-    const data_structures::UnifiedOwnedBuffer<uint32_t> &tile_offset_row_c,
-    const data_structures::UnifiedOwnedBuffer<uint32_t> &tile_row_idx_a,
-    const data_structures::UnifiedOwnedBuffer<uint32_t> &tile_row_idx_b,
-    const data_structures::UnifiedOwnedBuffer<uint32_t> &tile_row_idx_c,
-    const data_structures::UnifiedOwnedBuffer<uint32_t> &tile_col_idx_a,
-    const data_structures::UnifiedOwnedBuffer<uint32_t> &tile_col_idx_b,
-    const data_structures::UnifiedOwnedBuffer<uint32_t> &tile_col_idx_c,
-    const data_structures::UnifiedOwnedBuffer<uint64_t> &data_a,
-    const data_structures::UnifiedOwnedBuffer<uint64_t> &data_b,
-    data_structures::UnifiedOwnedBuffer<uint64_t> *data_c) {
-
+    const data_structures::UnifiedOwnedBuffer<uint64_t>& layout_matrix_c,
+    const data_structures::UnifiedOwnedBuffer<uint32_t>& tile_offset_row_a,
+    const data_structures::UnifiedOwnedBuffer<uint32_t>& tile_offset_row_b,
+    const data_structures::UnifiedOwnedBuffer<uint32_t>& tile_offset_row_c,
+    const data_structures::UnifiedOwnedBuffer<uint32_t>& tile_row_idx_a,
+    const data_structures::UnifiedOwnedBuffer<uint32_t>& tile_row_idx_b,
+    const data_structures::UnifiedOwnedBuffer<uint32_t>& tile_row_idx_c,
+    const data_structures::UnifiedOwnedBuffer<uint32_t>& tile_col_idx_a,
+    const data_structures::UnifiedOwnedBuffer<uint32_t>& tile_col_idx_b,
+    const data_structures::UnifiedOwnedBuffer<uint32_t>& tile_col_idx_c,
+    const data_structures::UnifiedOwnedBuffer<uint64_t>& data_a,
+    const data_structures::UnifiedOwnedBuffer<uint64_t>& data_b,
+    data_structures::UnifiedOwnedBuffer<uint64_t>* data_c) {
   dim3 dimBlock(256);
   dim3 dimGrid(128);
 
@@ -727,27 +708,27 @@ void MatrixOperationsKernelWrapper::FillTiles(
   auto tile_buffer_size =
       sizeof(uint64_t) * max(1u, WORD_OFFSET(tile_size * tile_size));
 
-  ParametersFillTiles params{.tile_size = tile_size,
-                             .n_strips = n_strips,
-                             .n_nz_tile_a = n_nz_tile_a,
-                             .n_nz_tile_b = n_nz_tile_b,
-                             .n_nz_tile_c = n_nz_tile_c,
-                             .tile_unit = tile_unit,
-                             .tile_buffer_size = tile_buffer_size,
-                             .layout_matrix_c =
-                                 (unsigned long long *)layout_matrix_c.GetPtr(),
-                             .tile_offset_row_a = tile_offset_row_a.GetPtr(),
-                             .tile_offset_row_b = tile_offset_row_b.GetPtr(),
-                             .tile_offset_row_c = tile_offset_row_c.GetPtr(),
-                             .tile_row_idx_a = tile_row_idx_a.GetPtr(),
-                             .tile_row_idx_b = tile_row_idx_b.GetPtr(),
-                             .tile_row_idx_c = tile_row_idx_c.GetPtr(),
-                             .tile_col_idx_a = tile_col_idx_a.GetPtr(),
-                             .tile_col_idx_b = tile_col_idx_b.GetPtr(),
-                             .tile_col_idx_c = tile_col_idx_c.GetPtr(),
-                             .data_a = (uint8_t *)data_a.GetPtr(),
-                             .data_b = (uint8_t *)data_b.GetPtr(),
-                             .data_c = (uint8_t *)(data_c->GetPtr())};
+  ParametersFillTiles params{
+      .tile_size = tile_size,
+      .n_strips = n_strips,
+      .n_nz_tile_a = n_nz_tile_a,
+      .n_nz_tile_b = n_nz_tile_b,
+      .n_nz_tile_c = n_nz_tile_c,
+      .tile_unit = tile_unit,
+      .tile_buffer_size = tile_buffer_size,
+      .layout_matrix_c = (unsigned long long*)layout_matrix_c.GetPtr(),
+      .tile_offset_row_a = tile_offset_row_a.GetPtr(),
+      .tile_offset_row_b = tile_offset_row_b.GetPtr(),
+      .tile_offset_row_c = tile_offset_row_c.GetPtr(),
+      .tile_row_idx_a = tile_row_idx_a.GetPtr(),
+      .tile_row_idx_b = tile_row_idx_b.GetPtr(),
+      .tile_row_idx_c = tile_row_idx_c.GetPtr(),
+      .tile_col_idx_a = tile_col_idx_a.GetPtr(),
+      .tile_col_idx_b = tile_col_idx_b.GetPtr(),
+      .tile_col_idx_c = tile_col_idx_c.GetPtr(),
+      .data_a = (uint8_t*)data_a.GetPtr(),
+      .data_b = (uint8_t*)data_b.GetPtr(),
+      .data_c = (uint8_t*)(data_c->GetPtr())};
 
   fill_tiles_kernel<<<dimBlock, dimGrid, 0, stream>>>(params);
   cudaError_t err = cudaGetLastError();
@@ -757,31 +738,30 @@ void MatrixOperationsKernelWrapper::FillTiles(
 }
 
 void MatrixOperationsKernelWrapper::FillCSRTiles(
-    const cudaStream_t &stream, size_t tile_size, size_t n_strips,
+    const cudaStream_t& stream, size_t tile_size, size_t n_strips,
     size_t n_nz_tile_a, size_t n_nz_tile_b, size_t n_nz_tile_c,
-    const data_structures::UnifiedOwnedBuffer<uint32_t> &csr_n_vertices_a,
-    const data_structures::UnifiedOwnedBuffer<uint32_t> &csr_n_vertices_b,
-    const data_structures::UnifiedOwnedBuffer<uint32_t> &csr_n_vertices_c,
-    const data_structures::UnifiedOwnedBuffer<uint64_t> &csr_n_edges_a,
-    const data_structures::UnifiedOwnedBuffer<uint64_t> &csr_n_edges_b,
-    const data_structures::UnifiedOwnedBuffer<uint64_t> &csr_n_edges_c,
-    const data_structures::UnifiedOwnedBuffer<uint64_t> &layout_matrix_c,
-    const data_structures::UnifiedOwnedBuffer<uint32_t> &tile_offset_row_a,
-    const data_structures::UnifiedOwnedBuffer<uint32_t> &tile_offset_row_b,
-    const data_structures::UnifiedOwnedBuffer<uint32_t> &tile_offset_row_c,
-    const data_structures::UnifiedOwnedBuffer<uint32_t> &tile_row_idx_a,
-    const data_structures::UnifiedOwnedBuffer<uint32_t> &tile_row_idx_b,
-    const data_structures::UnifiedOwnedBuffer<uint32_t> &tile_row_idx_c,
-    const data_structures::UnifiedOwnedBuffer<uint32_t> &tile_col_idx_a,
-    const data_structures::UnifiedOwnedBuffer<uint32_t> &tile_col_idx_b,
-    const data_structures::UnifiedOwnedBuffer<uint32_t> &tile_col_idx_c,
-    const data_structures::UnifiedOwnedBuffer<uint64_t> &csr_offset_a,
-    const data_structures::UnifiedOwnedBuffer<uint64_t> &csr_offset_b,
-    const data_structures::UnifiedOwnedBuffer<uint64_t> &csr_offset_c,
-    const data_structures::UnifiedOwnedBuffer<uint8_t> &data_a,
-    const data_structures::UnifiedOwnedBuffer<uint8_t> &data_b,
-    data_structures::UnifiedOwnedBuffer<uint8_t> *data_c) {
-
+    const data_structures::UnifiedOwnedBuffer<uint32_t>& csr_n_vertices_a,
+    const data_structures::UnifiedOwnedBuffer<uint32_t>& csr_n_vertices_b,
+    const data_structures::UnifiedOwnedBuffer<uint32_t>& csr_n_vertices_c,
+    const data_structures::UnifiedOwnedBuffer<uint64_t>& csr_n_edges_a,
+    const data_structures::UnifiedOwnedBuffer<uint64_t>& csr_n_edges_b,
+    const data_structures::UnifiedOwnedBuffer<uint64_t>& csr_n_edges_c,
+    const data_structures::UnifiedOwnedBuffer<uint64_t>& layout_matrix_c,
+    const data_structures::UnifiedOwnedBuffer<uint32_t>& tile_offset_row_a,
+    const data_structures::UnifiedOwnedBuffer<uint32_t>& tile_offset_row_b,
+    const data_structures::UnifiedOwnedBuffer<uint32_t>& tile_offset_row_c,
+    const data_structures::UnifiedOwnedBuffer<uint32_t>& tile_row_idx_a,
+    const data_structures::UnifiedOwnedBuffer<uint32_t>& tile_row_idx_b,
+    const data_structures::UnifiedOwnedBuffer<uint32_t>& tile_row_idx_c,
+    const data_structures::UnifiedOwnedBuffer<uint32_t>& tile_col_idx_a,
+    const data_structures::UnifiedOwnedBuffer<uint32_t>& tile_col_idx_b,
+    const data_structures::UnifiedOwnedBuffer<uint32_t>& tile_col_idx_c,
+    const data_structures::UnifiedOwnedBuffer<uint64_t>& csr_offset_a,
+    const data_structures::UnifiedOwnedBuffer<uint64_t>& csr_offset_b,
+    const data_structures::UnifiedOwnedBuffer<uint64_t>& csr_offset_c,
+    const data_structures::UnifiedOwnedBuffer<uint8_t>& data_a,
+    const data_structures::UnifiedOwnedBuffer<uint8_t>& data_b,
+    data_structures::UnifiedOwnedBuffer<uint8_t>* data_c) {
   dim3 dimBlock(128);
   dim3 dimGrid(128);
 
@@ -797,7 +777,7 @@ void MatrixOperationsKernelWrapper::FillCSRTiles(
       .n_nz_tile_c = n_nz_tile_c,
       .tile_unit = tile_unit,
       .tile_buffer_size = tile_buffer_size,
-      .layout_matrix_c = (unsigned long long *)layout_matrix_c.GetPtr(),
+      .layout_matrix_c = (unsigned long long*)layout_matrix_c.GetPtr(),
       .tile_offset_row_a = tile_offset_row_a.GetPtr(),
       .tile_offset_row_b = tile_offset_row_b.GetPtr(),
       .tile_offset_row_c = tile_offset_row_c.GetPtr(),
@@ -829,25 +809,24 @@ void MatrixOperationsKernelWrapper::FillCSRTiles(
 }
 
 void MatrixOperationsKernelWrapper::Walk(
-    const cudaStream_t &stream, size_t tile_size, size_t n_strips,
+    const cudaStream_t& stream, size_t tile_size, size_t n_strips,
     size_t n_nz_tile_a, size_t n_nz_tile_b,
-    const data_structures::UnifiedOwnedBuffer<uint32_t> &csr_n_vertices_a,
-    const data_structures::UnifiedOwnedBuffer<uint32_t> &csr_n_vertices_b,
-    const data_structures::UnifiedOwnedBuffer<uint64_t> &csr_n_edges_a,
-    const data_structures::UnifiedOwnedBuffer<uint64_t> &csr_n_edges_b,
-    const data_structures::UnifiedOwnedBuffer<uint32_t> &tile_offset_row_a,
-    const data_structures::UnifiedOwnedBuffer<uint32_t> &tile_offset_row_b,
-    const data_structures::UnifiedOwnedBuffer<uint32_t> &tile_row_idx_a,
-    const data_structures::UnifiedOwnedBuffer<uint32_t> &tile_row_idx_b,
-    const data_structures::UnifiedOwnedBuffer<uint32_t> &tile_col_idx_a,
-    const data_structures::UnifiedOwnedBuffer<uint32_t> &tile_col_idx_b,
-    const data_structures::UnifiedOwnedBuffer<uint64_t> &csr_offset_a,
-    const data_structures::UnifiedOwnedBuffer<uint64_t> &csr_offset_b,
-    const data_structures::UnifiedOwnedBuffer<uint8_t> &data_a,
-    const data_structures::UnifiedOwnedBuffer<uint8_t> &data_b,
-    data_structures::UnifiedOwnedBuffer<uint32_t> *edgelist_c,
-    data_structures::UnifiedOwnedBuffer<EdgeIndex> *output_offset) {
-
+    const data_structures::UnifiedOwnedBuffer<uint32_t>& csr_n_vertices_a,
+    const data_structures::UnifiedOwnedBuffer<uint32_t>& csr_n_vertices_b,
+    const data_structures::UnifiedOwnedBuffer<uint64_t>& csr_n_edges_a,
+    const data_structures::UnifiedOwnedBuffer<uint64_t>& csr_n_edges_b,
+    const data_structures::UnifiedOwnedBuffer<uint32_t>& tile_offset_row_a,
+    const data_structures::UnifiedOwnedBuffer<uint32_t>& tile_offset_row_b,
+    const data_structures::UnifiedOwnedBuffer<uint32_t>& tile_row_idx_a,
+    const data_structures::UnifiedOwnedBuffer<uint32_t>& tile_row_idx_b,
+    const data_structures::UnifiedOwnedBuffer<uint32_t>& tile_col_idx_a,
+    const data_structures::UnifiedOwnedBuffer<uint32_t>& tile_col_idx_b,
+    const data_structures::UnifiedOwnedBuffer<uint64_t>& csr_offset_a,
+    const data_structures::UnifiedOwnedBuffer<uint64_t>& csr_offset_b,
+    const data_structures::UnifiedOwnedBuffer<uint8_t>& data_a,
+    const data_structures::UnifiedOwnedBuffer<uint8_t>& data_b,
+    data_structures::UnifiedOwnedBuffer<uint32_t>* edgelist_c,
+    data_structures::UnifiedOwnedBuffer<EdgeIndex>* output_offset) {
   dim3 dimBlock(32);
   dim3 dimGrid(32);
 
@@ -886,17 +865,16 @@ void MatrixOperationsKernelWrapper::Walk(
 }
 
 void MatrixOperationsKernelWrapper::Count(
-    const cudaStream_t &stream, size_t tile_size, size_t n_strips,
-    size_t n_nz_tile, const data_structures::UnifiedOwnedBuffer<uint64_t> &data,
-    data_structures::UnifiedOwnedBuffer<uint64_t> *count) {
-
+    const cudaStream_t& stream, size_t tile_size, size_t n_strips,
+    size_t n_nz_tile, const data_structures::UnifiedOwnedBuffer<uint64_t>& data,
+    data_structures::UnifiedOwnedBuffer<uint64_t>* count) {
   dim3 dimBlock(256);
   dim3 dimGrid(256);
 
   unsigned n_uint64_t = data.GetSize() / sizeof(uint64_t);
   ParametersCount params{.n_uint64_t = n_uint64_t,
-                         .data = (unsigned long long *)(data.GetPtr()),
-                         .count = (unsigned long long *)(count->GetPtr())};
+                         .data = (unsigned long long*)(data.GetPtr()),
+                         .count = (unsigned long long*)(count->GetPtr())};
 
   count_kernel<<<dimGrid, dimBlock, 0, stream>>>(params);
   cudaError_t err = cudaGetLastError();
@@ -905,8 +883,8 @@ void MatrixOperationsKernelWrapper::Count(
   }
 }
 
-} // namespace kernel
-} // namespace task
-} // namespace core
-} // namespace matrixgraph
-} // namespace sics
+}  // namespace kernel
+}  // namespace task
+}  // namespace core
+}  // namespace matrixgraph
+}  // namespace sics

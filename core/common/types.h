@@ -1,8 +1,9 @@
 #ifndef HYPERBLOCKER_CORE_COMMON_TYPES_H_
 #define HYPERBLOCKER_CORE_COMMON_TYPES_H_
 
-#include <climits>
 #include <stdint.h>
+
+#include <climits>
 
 #define EQUALITIES 'e'
 #define SIM 's'
@@ -20,7 +21,7 @@ namespace matrixgraph {
 namespace core {
 namespace common {
 
-typedef uint32_t GraphID; // uint32_t: 0 ~ 4,294,967,295
+typedef uint32_t GraphID;  // uint32_t: 0 ~ 4,294,967,295
 typedef uint32_t VertexID;
 typedef uint32_t VertexIndex;
 typedef uint16_t TileIndex;
@@ -35,15 +36,29 @@ typedef uint32_t EdgeIndex;
 #define CHECK MAX_VERTEX_ID
 
 enum StoreStrategy {
-  kUnconstrained, // default
+  kUnconstrained,  // default
   kIncomingOnly,
   kOutgoingOnly,
   kUndefinedStrategy
 };
 
-} // namespace common
-} // namespace core
-} // namespace matrixgraph
-} // namespace sics
+// Enum defining different GPU task types
+enum TaskType {
+  kGEMM,  // Default task type
+  kMatrixAnalysis,
+  kPPRQuery,
+  kSubIso,
+  kCPUSubIso,
+  kWCC,
+  kSSSP,
+  kBFS,
+  kPageRank
+  // Other types.
+};
 
-#endif // MATRIXGRAPH_CORE_COMMON_TYPES_H_
+}  // namespace common
+}  // namespace core
+}  // namespace matrixgraph
+}  // namespace sics
+
+#endif  // MATRIXGRAPH_CORE_COMMON_TYPES_H_

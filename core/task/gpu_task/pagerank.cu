@@ -15,8 +15,8 @@
 #include "core/data_structures/host_buffer.cuh"
 #include "core/data_structures/metadata.h"
 #include "core/data_structures/unified_buffer.cuh"
-#include "core/task/kernel/kernel_pagerank.cuh"
-#include "core/task/pagerank.cuh"
+#include "core/task/gpu_task/kernel/kernel_pagerank.cuh"
+#include "core/task/gpu_task/pagerank.cuh"
 #include "core/util/atomic.h"
 
 namespace sics {

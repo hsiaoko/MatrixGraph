@@ -5,9 +5,9 @@
 
 #include "core/common/consts.h"
 #include "core/common/types.h"
-#include "core/task/kernel/data_structures/kernel_bitmap.cuh"
-#include "core/task/kernel/data_structures/kernel_bitmap_no_ownership.cuh"
-#include "core/task/kernel/kernel_pagerank.cuh"
+#include "core/task/gpu_task/kernel/data_structures/kernel_bitmap.cuh"
+#include "core/task/gpu_task/kernel/data_structures/kernel_bitmap_no_ownership.cuh"
+#include "core/task/gpu_task/kernel/kernel_pagerank.cuh"
 #include "core/util/bitmap_no_ownership.h"
 
 namespace sics {

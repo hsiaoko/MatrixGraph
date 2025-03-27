@@ -2,7 +2,7 @@
 
 #include "core/common/consts.h"
 #include "core/common/types.h"
-#include "core/task/kernel/data_structures/woj_matches.cuh"
+#include "core/task/gpu_task/kernel/data_structures/woj_matches.cuh"
 #include "core/util/bitmap_ownership.h"
 #include "core/util/cuda_check.cuh"
 

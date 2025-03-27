@@ -10,8 +10,8 @@
 #include "core/common/yaml_config.h"
 #include "core/components/scheduler/scheduler.h"
 #include "core/matrixgraph.cuh"
-#include "core/task/task_base.cuh"
-#include "core/task/wcc.cuh"
+#include "core/task/gpu_task/task_base.cuh"
+#include "core/task/gpu_task/wcc.cuh"
 
 // Input/Output flags
 DEFINE_string(g, "", "Path to the input graph file (required)");
@@ -73,7 +73,7 @@ int main(int argc, char* argv[]) {
     sics::matrixgraph::core::MatrixGraph system(scheduler_type);
 
     auto* task = new WCC(FLAGS_g);
-    system.Run(sics::matrixgraph::core::task::kWCC, task);
+    system.Run(sics::matrixgraph::core::common::kWCC, task);
     delete task;
 
   } catch (const std::exception& e) {
