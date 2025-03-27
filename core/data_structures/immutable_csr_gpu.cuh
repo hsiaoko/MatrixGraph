@@ -9,11 +9,10 @@
 namespace sics {
 namespace matrixgraph {
 namespace core {
-namespace task {
-namespace kernel {
+namespace data_structures {
 
 class ImmutableCSRGPU {
-private:
+ private:
   using VertexID = sics::matrixgraph::core::common::VertexID;
   using GraphID = sics::matrixgraph::core::common::GraphID;
   using EdgeIndex = sics::matrixgraph::core::common::EdgeIndex;
@@ -24,52 +23,52 @@ private:
   using ImmutableCSRVertex =
       sics::matrixgraph::core::data_structures::ImmutableCSRVertex;
 
-public:
-  ImmutableCSRGPU(const ImmutableCSR &csr_cpu);
+ public:
+  ImmutableCSRGPU(const ImmutableCSR& csr_cpu);
 
   ImmutableCSRGPU() = default;
 
   ~ImmutableCSRGPU() = default;
 
-  void Init(const ImmutableCSR &csr_cpu);
+  void Init(const ImmutableCSR& csr_cpu);
 
   void Free() { CUDA_CHECK(cudaFree(graph_base_pointer_)); }
 
-  void ParseBasePtr(uint8_t *graph_base_pointer);
+  void ParseBasePtr(uint8_t* graph_base_pointer);
 
-  __host__ __device__ void SetGraphBuffer(uint8_t *buffer) {
+  __host__ __device__ void SetGraphBuffer(uint8_t* buffer) {
     graph_base_pointer_ = buffer;
   }
 
-  __host__ __device__ void SetGlobalIDBuffer(VertexID *buffer) {
+  __host__ __device__ void SetGlobalIDBuffer(VertexID* buffer) {
     globalid_by_localid_base_pointer_ = buffer;
   }
 
-  __host__ __device__ void SetEdgesGlobalIDBuffer(VertexID *buffer) {
+  __host__ __device__ void SetEdgesGlobalIDBuffer(VertexID* buffer) {
     edges_globalid_by_localid_base_pointer_ = buffer;
   }
 
-  __host__ __device__ void SetInDegreeBuffer(VertexID *buffer) {
+  __host__ __device__ void SetInDegreeBuffer(VertexID* buffer) {
     indegree_base_pointer_ = buffer;
   }
 
-  __host__ __device__ void SetOutDegreeBuffer(VertexID *buffer) {
+  __host__ __device__ void SetOutDegreeBuffer(VertexID* buffer) {
     outdegree_base_pointer_ = buffer;
   }
 
-  __host__ __device__ void SetInOffsetBuffer(EdgeIndex *buffer) {
+  __host__ __device__ void SetInOffsetBuffer(EdgeIndex* buffer) {
     in_offset_base_pointer_ = buffer;
   }
 
-  __host__ __device__ void SetOutOffsetBuffer(EdgeIndex *buffer) {
+  __host__ __device__ void SetOutOffsetBuffer(EdgeIndex* buffer) {
     out_offset_base_pointer_ = buffer;
   }
 
-  __host__ __device__ void SetIncomingEdgesBuffer(VertexID *buffer) {
+  __host__ __device__ void SetIncomingEdgesBuffer(VertexID* buffer) {
     incoming_edges_base_pointer_ = buffer;
   }
 
-  __host__ __device__ void SetOutgoingEdgesBuffer(VertexID *buffer) {
+  __host__ __device__ void SetOutgoingEdgesBuffer(VertexID* buffer) {
     outgoing_edges_base_pointer_ = buffer;
   }
 
@@ -109,43 +108,43 @@ public:
 
   __host__ __device__ VertexID get_min_vid() const { return metadata_.min_vid; }
 
-  __host__ __device__ uint8_t *GetGraphBuffer() const {
+  __host__ __device__ uint8_t* GetGraphBuffer() const {
     return graph_base_pointer_;
   }
 
-  __host__ __device__ VertexID *GetGloablIDBasePointer() const {
+  __host__ __device__ VertexID* GetGloablIDBasePointer() const {
     return globalid_by_localid_base_pointer_;
   }
 
-  __host__ __device__ VertexID *GetEdgesGloablIDBasePointer() const {
+  __host__ __device__ VertexID* GetEdgesGloablIDBasePointer() const {
     return edges_globalid_by_localid_base_pointer_;
   }
 
-  __host__ __device__ VertexID *GetInDegreeBasePointer() const {
+  __host__ __device__ VertexID* GetInDegreeBasePointer() const {
     return indegree_base_pointer_;
   }
 
-  __host__ __device__ VertexID *GetOutDegreeBasePointer() const {
+  __host__ __device__ VertexID* GetOutDegreeBasePointer() const {
     return outdegree_base_pointer_;
   }
 
-  __host__ __device__ EdgeIndex *GetInOffsetBasePointer() const {
+  __host__ __device__ EdgeIndex* GetInOffsetBasePointer() const {
     return in_offset_base_pointer_;
   }
 
-  __host__ __device__ EdgeIndex *GetOutOffsetBasePointer() const {
+  __host__ __device__ EdgeIndex* GetOutOffsetBasePointer() const {
     return out_offset_base_pointer_;
   }
 
-  __host__ __device__ VertexID *GetIncomingEdgesBasePointer() const {
+  __host__ __device__ VertexID* GetIncomingEdgesBasePointer() const {
     return incoming_edges_base_pointer_;
   }
 
-  __host__ __device__ VertexID *GetOutgoingEdgesBasePointer() const {
+  __host__ __device__ VertexID* GetOutgoingEdgesBasePointer() const {
     return outgoing_edges_base_pointer_;
   }
 
-  __host__ __device__ VertexLabel *GetVLabelBasePointer() const {
+  __host__ __device__ VertexLabel* GetVLabelBasePointer() const {
     return vertex_label_base_pointer_;
   }
 
@@ -165,11 +164,11 @@ public:
     return out_offset_base_pointer_[i];
   }
 
-  __host__ __device__ VertexID *GetIncomingEdgesByLocalID(VertexID i) const {
+  __host__ __device__ VertexID* GetIncomingEdgesByLocalID(VertexID i) const {
     return incoming_edges_base_pointer_ + in_offset_base_pointer_[i];
   }
 
-  __host__ __device__ VertexID *GetOutgoingEdgesByLocalID(VertexID i) const {
+  __host__ __device__ VertexID* GetOutgoingEdgesByLocalID(VertexID i) const {
     return outgoing_edges_base_pointer_ + out_offset_base_pointer_[i];
   }
 
@@ -183,32 +182,31 @@ public:
 
   __host__ __device__ ImmutableCSRVertex GetVertexByLocalID(VertexID i) const;
 
-private:
+ private:
   // Metadata to build the CSR.
   SubGraphMetadata metadata_;
 
   // Serialized data in CSR format.
-  uint8_t *graph_base_pointer_ = nullptr;
+  uint8_t* graph_base_pointer_ = nullptr;
 
-  VertexID *globalid_by_localid_base_pointer_ = nullptr;
-  VertexID *edges_globalid_by_localid_base_pointer_ = nullptr;
+  VertexID* globalid_by_localid_base_pointer_ = nullptr;
+  VertexID* edges_globalid_by_localid_base_pointer_ = nullptr;
 
-  VertexID *local_vid_by_edges_globalid_base_pointer_ = nullptr;
+  VertexID* local_vid_by_edges_globalid_base_pointer_ = nullptr;
 
-  VertexID *incoming_edges_base_pointer_ = nullptr;
-  VertexID *outgoing_edges_base_pointer_ = nullptr;
-  VertexID *indegree_base_pointer_ = nullptr;
-  VertexID *outdegree_base_pointer_ = nullptr;
-  EdgeIndex *in_offset_base_pointer_ = nullptr;
-  EdgeIndex *out_offset_base_pointer_ = nullptr;
+  VertexID* incoming_edges_base_pointer_ = nullptr;
+  VertexID* outgoing_edges_base_pointer_ = nullptr;
+  VertexID* indegree_base_pointer_ = nullptr;
+  VertexID* outdegree_base_pointer_ = nullptr;
+  EdgeIndex* in_offset_base_pointer_ = nullptr;
+  EdgeIndex* out_offset_base_pointer_ = nullptr;
 
-  VertexLabel *vertex_label_base_pointer_ = nullptr;
-}; // namespace kernel
+  VertexLabel* vertex_label_base_pointer_ = nullptr;
+};
 
-} // namespace kernel
-} // namespace task
-} // namespace core
-} // namespace matrixgraph
-} // namespace sics
+}  // namespace data_structures
+}  // namespace core
+}  // namespace matrixgraph
+}  // namespace sics
 
-#endif // MATRIXGRAPH_CORE_TASK_KERNEL_DATA_STRUCTURES_IMMUTABLE_CSR_GPU_CUH_
+#endif  // MATRIXGRAPH_CORE_TASK_KERNEL_DATA_STRUCTURES_IMMUTABLE_CSR_GPU_CUH_

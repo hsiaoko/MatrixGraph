@@ -5,11 +5,11 @@
 
 #include "core/common/types.h"
 #include "core/data_structures/edgelist.h"
+#include "core/data_structures/exec_plan.cuh"
 #include "core/data_structures/grid_csr_tiled_matrix.cuh"
 #include "core/data_structures/immutable_csr.cuh"
 #include "core/data_structures/unified_buffer.cuh"
-#include "core/task/gpu_task/kernel/data_structures/exec_plan.cuh"
-#include "core/task/gpu_task/kernel/data_structures/woj_exec_plan.cuh"
+#include "core/data_structures/woj_exec_plan.cuh"
 #include "core/task/gpu_task/task_base.cuh"
 
 namespace sics {

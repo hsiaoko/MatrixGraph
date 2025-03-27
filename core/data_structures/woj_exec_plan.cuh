@@ -13,13 +13,12 @@
 namespace sics {
 namespace matrixgraph {
 namespace core {
-namespace task {
-namespace kernel {
+namespace data_structures {
 
 using sics::matrixgraph::core::common::kMaxVertexID;
 
 class WOJExecutionPlan {
-private:
+ private:
   using Bitmap = sics::matrixgraph::core::util::Bitmap;
   using VertexID = sics::matrixgraph::core::common::VertexID;
   using EdgeIndex = sics::matrixgraph::core::common::EdgeIndex;
@@ -28,12 +27,11 @@ private:
       sics::matrixgraph::core::data_structures::UnifiedOwnedBuffer<VertexID>;
   using ImmutableCSR = sics::matrixgraph::core::data_structures::ImmutableCSR;
 
-public:
+ public:
   WOJExecutionPlan() { CUDA_CHECK(cudaGetDeviceCount(&n_devices_)); }
 
-  __host__ void GenerateWOJExecutionPlan(const ImmutableCSR &p,
-                                         const ImmutableCSR &g) {
-
+  __host__ void GenerateWOJExecutionPlan(const ImmutableCSR& p,
+                                         const ImmutableCSR& g) {
     exec_path_in_edges_ = new VertexID[p.get_num_outgoing_edges() * 2]();
 
     EdgeIndex eid = 0;
@@ -51,11 +49,11 @@ public:
     n_vertices_g_ = g.get_num_vertices();
   }
 
-  void GenerateJoinPlan(const ExecutionPlan &exec_plan) {}
+  void GenerateJoinPlan(const ExecutionPlan& exec_plan) {}
 
   inline void SetNDevices(VertexID n_devices) { n_devices_ = n_devices; }
 
-  inline VertexID *get_exec_path_in_edges_ptr() const {
+  inline VertexID* get_exec_path_in_edges_ptr() const {
     return exec_path_in_edges_;
   }
 
@@ -69,8 +67,8 @@ public:
 
   inline VertexID get_n_devices() const { return n_devices_; }
 
-private:
-  VertexID *exec_path_in_edges_ = nullptr;
+ private:
+  VertexID* exec_path_in_edges_ = nullptr;
 
   VertexID n_vertices_p_ = 0;
   VertexID n_edges_p_ = 0;
@@ -82,10 +80,9 @@ private:
   std::vector<VertexID> join_key_uid_;
 };
 
-} // namespace kernel
-} // namespace task
-} // namespace core
-} // namespace matrixgraph
-} // namespace sics
+}  // namespace data_structures
+}  // namespace core
+}  // namespace matrixgraph
+}  // namespace sics
 
-#endif // MATRIXGRAPH_CORE_TASK_KERNEL_DATA_STRUCTURES_JOIN_PLAN_CUH_
+#endif  // MATRIXGRAPH_CORE_TASK_KERNEL_DATA_STRUCTURES_JOIN_PLAN_CUH_

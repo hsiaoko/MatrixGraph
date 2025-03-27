@@ -16,9 +16,6 @@
 #include "core/data_structures/metadata.h"
 #include "core/data_structures/unified_buffer.cuh"
 #include "core/io/grid_csr_tiled_matrix_io.cuh"
-#include "core/task/gpu_task/kernel/data_structures/exec_plan.cuh"
-#include "core/task/gpu_task/kernel/data_structures/matches.cuh"
-#include "core/task/gpu_task/kernel/data_structures/woj_matches.cuh"
 #include "core/task/gpu_task/kernel/kernel_wcc.cuh"
 #include "core/task/gpu_task/wcc.cuh"
 #include "core/util/atomic.h"
@@ -93,9 +90,6 @@ using sics::matrixgraph::core::common::kMaxNumCandidates;
 using sics::matrixgraph::core::common::kMaxNumEdges;
 using sics::matrixgraph::core::common::kMaxNumEdgesPerBlock;
 using sics::matrixgraph::core::common::kMaxVertexID;
-using Matches = sics::matrixgraph::core::task::kernel::Matches;
-using WOJMatches = sics::matrixgraph::core::task::kernel::WOJMatches;
-using sics::matrixgraph::core::common::kMaxNumWeft;
 
 __host__ void WCC::LoadData() {
   std::cout << "[WCC] LoadData()" << std::endl;

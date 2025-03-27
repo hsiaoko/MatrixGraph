@@ -12,13 +12,13 @@
 #include "core/common/host_algorithms.cuh"
 #include "core/common/types.h"
 #include "core/data_structures/device_buffer.cuh"
+#include "core/data_structures/exec_plan.cuh"
 #include "core/data_structures/host_buffer.cuh"
+#include "core/data_structures/matches.cuh"
 #include "core/data_structures/metadata.h"
 #include "core/data_structures/unified_buffer.cuh"
+#include "core/data_structures/woj_matches.cuh"
 #include "core/io/grid_csr_tiled_matrix_io.cuh"
-#include "core/task/gpu_task/kernel/data_structures/exec_plan.cuh"
-#include "core/task/gpu_task/kernel/data_structures/matches.cuh"
-#include "core/task/gpu_task/kernel/data_structures/woj_matches.cuh"
 #include "core/task/gpu_task/kernel/kernel_subiso.cuh"
 #include "core/task/gpu_task/kernel/kernel_woj_subiso.cuh"
 #include "core/task/gpu_task/subiso.cuh"
@@ -94,8 +94,8 @@ using sics::matrixgraph::core::common::kMaxNumCandidates;
 using sics::matrixgraph::core::common::kMaxNumEdges;
 using sics::matrixgraph::core::common::kMaxNumEdgesPerBlock;
 using sics::matrixgraph::core::common::kMaxVertexID;
-using Matches = sics::matrixgraph::core::task::kernel::Matches;
-using WOJMatches = sics::matrixgraph::core::task::kernel::WOJMatches;
+using Matches = sics::matrixgraph::core::data_structures::Matches;
+using WOJMatches = sics::matrixgraph::core::data_structures::WOJMatches;
 using sics::matrixgraph::core::common::kMaxNumWeft;
 
 __host__ void SubIso::LoadData() {

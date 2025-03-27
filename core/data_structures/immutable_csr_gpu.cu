@@ -1,15 +1,13 @@
-#include "core/task/gpu_task/kernel/data_structures/immutable_csr_gpu.cuh"
+#include "core/data_structures/immutable_csr_gpu.cuh"
 
 namespace sics {
 namespace matrixgraph {
 namespace core {
-namespace task {
-namespace kernel {
+namespace data_structures {
 
-ImmutableCSRGPU::ImmutableCSRGPU(const ImmutableCSR &csr) { Init(csr); }
+ImmutableCSRGPU::ImmutableCSRGPU(const ImmutableCSR& csr) { Init(csr); }
 
-void ImmutableCSRGPU::Init(const ImmutableCSR &csr) {
-
+void ImmutableCSRGPU::Init(const ImmutableCSR& csr) {
   metadata_ = csr.GetMetadata();
 
   size_t data_size = sizeof(VertexID) * get_num_vertices() +
@@ -28,30 +26,29 @@ void ImmutableCSRGPU::Init(const ImmutableCSR &csr) {
   ParseBasePtr(graph_base_pointer_);
 }
 
-void ImmutableCSRGPU::ParseBasePtr(uint8_t *graph_base_pointer) {
-  SetGlobalIDBuffer(reinterpret_cast<VertexID *>(graph_base_pointer));
+void ImmutableCSRGPU::ParseBasePtr(uint8_t* graph_base_pointer) {
+  SetGlobalIDBuffer(reinterpret_cast<VertexID*>(graph_base_pointer));
   SetInDegreeBuffer(
-      reinterpret_cast<VertexID *>(globalid_by_localid_base_pointer_) +
+      reinterpret_cast<VertexID*>(globalid_by_localid_base_pointer_) +
       metadata_.num_vertices);
-  SetOutDegreeBuffer(reinterpret_cast<VertexID *>(indegree_base_pointer_) +
+  SetOutDegreeBuffer(reinterpret_cast<VertexID*>(indegree_base_pointer_) +
                      metadata_.num_vertices);
-  SetInOffsetBuffer(reinterpret_cast<EdgeIndex *>(
-      reinterpret_cast<VertexID *>(outdegree_base_pointer_) +
+  SetInOffsetBuffer(reinterpret_cast<EdgeIndex*>(
+      reinterpret_cast<VertexID*>(outdegree_base_pointer_) +
       metadata_.num_vertices));
-  SetOutOffsetBuffer(reinterpret_cast<EdgeIndex *>(
-      reinterpret_cast<VertexID *>(in_offset_base_pointer_) +
+  SetOutOffsetBuffer(reinterpret_cast<EdgeIndex*>(
+      reinterpret_cast<VertexID*>(in_offset_base_pointer_) +
       metadata_.num_vertices + 1));
-  SetIncomingEdgesBuffer(reinterpret_cast<VertexID *>(
-      reinterpret_cast<EdgeIndex *>(out_offset_base_pointer_) +
+  SetIncomingEdgesBuffer(reinterpret_cast<VertexID*>(
+      reinterpret_cast<EdgeIndex*>(out_offset_base_pointer_) +
       metadata_.num_vertices + 1));
-  SetOutgoingEdgesBuffer(reinterpret_cast<VertexID *>(
+  SetOutgoingEdgesBuffer(reinterpret_cast<VertexID*>(
       incoming_edges_base_pointer_ + metadata_.num_incoming_edges));
-  SetEdgesGlobalIDBuffer(reinterpret_cast<VertexID *>(
+  SetEdgesGlobalIDBuffer(reinterpret_cast<VertexID*>(
       outgoing_edges_base_pointer_ + metadata_.num_outgoing_edges));
 }
 
-} // namespace kernel
-} // namespace task
-} // namespace core
-} // namespace matrixgraph
-} // namespace sics
+}  // namespace data_structures
+}  // namespace core
+}  // namespace matrixgraph
+}  // namespace sics

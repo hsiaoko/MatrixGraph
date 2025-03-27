@@ -4,7 +4,7 @@
 
 #include "core/common/consts.h"
 #include "core/common/types.h"
-#include "core/task/gpu_task/kernel/data_structures/kernel_bitmap.cuh"
+#include "core/data_structures/kernel_bitmap.cuh"
 #include "core/task/gpu_task/kernel/matrix_operations.cuh"
 #include "core/util/cuda_check.cuh"
 

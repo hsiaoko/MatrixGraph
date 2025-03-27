@@ -5,11 +5,11 @@
 
 #include "core/common/types.h"
 #include "core/data_structures/edgelist.h"
+#include "core/data_structures/exec_plan.cuh"
 #include "core/data_structures/grid_csr_tiled_matrix.cuh"
 #include "core/data_structures/immutable_csr.cuh"
 #include "core/data_structures/unified_buffer.cuh"
-#include "core/task/gpu_task/kernel/data_structures/exec_plan.cuh"
-#include "core/task/gpu_task/kernel/data_structures/woj_exec_plan.cuh"
+#include "core/data_structures/woj_exec_plan.cuh"
 #include "core/task/gpu_task/task_base.cuh"
 
 namespace sics {
@@ -35,9 +35,9 @@ class SubIso : public TaskBase {
       sics::matrixgraph::core::data_structures::UnifiedOwnedBuffer<uint64_t>;
   using UnifiedOwnedBufferVertexID =
       sics::matrixgraph::core::data_structures::UnifiedOwnedBuffer<VertexID>;
-  using ExecutionPlan = sics::matrixgraph::core::task::kernel::ExecutionPlan;
+  using ExecutionPlan = sics::matrixgraph::core::data_structures::ExecutionPlan;
   using WOJExecutionPlan =
-      sics::matrixgraph::core::task::kernel::WOJExecutionPlan;
+      sics::matrixgraph::core::data_structures::WOJExecutionPlan;
 
  public:
   SubIso(const std::string& pattern_path, const std::string& data_graph_path,

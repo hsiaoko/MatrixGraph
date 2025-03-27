@@ -2,15 +2,14 @@
 
 #include "core/common/consts.h"
 #include "core/common/types.h"
-#include "core/task/gpu_task/kernel/data_structures/woj_matches.cuh"
+#include "core/data_structures/woj_matches.cuh"
 #include "core/util/bitmap_ownership.h"
 #include "core/util/cuda_check.cuh"
 
 namespace sics {
 namespace matrixgraph {
 namespace core {
-namespace task {
-namespace kernel {
+namespace data_structures {
 
 using sics::matrixgraph::core::common::kMaxVertexID;
 using VertexID = sics::matrixgraph::core::common::VertexID;
@@ -159,8 +158,7 @@ void WOJMatches::Print(VertexID offset) const {
   }
 }
 
-}  // namespace kernel
-}  // namespace task
+}  // namespace data_structures
 }  // namespace core
 }  // namespace matrixgraph
 }  // namespace sics

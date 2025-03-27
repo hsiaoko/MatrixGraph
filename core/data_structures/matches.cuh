@@ -12,15 +12,14 @@
 namespace sics {
 namespace matrixgraph {
 namespace core {
-namespace task {
-namespace kernel {
+namespace data_structures {
 
 using sics::matrixgraph::core::common::kMaxNumCandidates;
 using sics::matrixgraph::core::common::kMaxNumCandidatesPerThread;
 using sics::matrixgraph::core::common::kMaxNumWeft;
 
 class Matches {
-private:
+ private:
   using EdgeIndex = sics::matrixgraph::core::common::EdgeIndex;
   using VertexID = sics::matrixgraph::core::common::VertexID;
   using VertexLabel = sics::matrixgraph::core::common::VertexLabel;
@@ -39,7 +38,7 @@ private:
   using UnifiedOwnedBufferVertexID =
       sics::matrixgraph::core::data_structures::UnifiedOwnedBuffer<VertexID>;
   using UnifiedOwnedBufferVertexIDPtr =
-      sics::matrixgraph::core::data_structures::UnifiedOwnedBuffer<VertexID *>;
+      sics::matrixgraph::core::data_structures::UnifiedOwnedBuffer<VertexID*>;
   using UnifiedOwnedBufferVertexLabel =
       sics::matrixgraph::core::data_structures::UnifiedOwnedBuffer<VertexLabel>;
   using UnifiedOwnedBufferUint8 =
@@ -56,10 +55,9 @@ private:
   using BufferVertexLabel =
       sics::matrixgraph::core::data_structures::Buffer<VertexLabel>;
 
-public:
+ public:
   Matches(VertexID n_vertices, VertexID max_n_weft)
       : n_vertices_(n_vertices), max_n_weft_(max_n_weft) {
-
     max_n_weft = max_n_weft;
     v_candidate_offset_for_each_weft_.Init(sizeof(VertexID) * (n_vertices + 1) *
                                            max_n_weft);
@@ -78,8 +76,7 @@ public:
     std::cout << "[Matches] Print n_matches:" << *weft_count_.GetPtr()
               << std::endl;
     for (VertexID weft_id = 0; weft_id < min_n_matches; weft_id++) {
-      if (weft_id > max_n_weft_)
-        break;
+      if (weft_id > max_n_weft_) break;
       std::cout << "Weft " << weft_id << std::endl;
       VertexID weft_offset =
           weft_id * 2 * n_vertices_ * kMaxNumCandidatesPerThread;
@@ -122,10 +119,9 @@ public:
   VertexID max_n_weft_ = 0;
 };
 
-} // namespace kernel
-} // namespace task
-} // namespace core
-} // namespace matrixgraph
-} // namespace sics
+}  // namespace data_structures
+}  // namespace core
+}  // namespace matrixgraph
+}  // namespace sics
 
-#endif // MATRIXGRAPH_CORE_DATA_STRUCTURES_MATHES_CUH_
+#endif  // MATRIXGRAPH_CORE_DATA_STRUCTURES_MATHES_CUH_

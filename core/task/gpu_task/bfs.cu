@@ -17,7 +17,6 @@
 #include "core/data_structures/unified_buffer.cuh"
 #include "core/io/grid_csr_tiled_matrix_io.cuh"
 #include "core/task/gpu_task/bfs.cuh"
-#include "core/task/gpu_task/kernel/data_structures/exec_plan.cuh"
 #include "core/task/gpu_task/kernel/kernel_bfs.cuh"
 #include "core/util/atomic.h"
 #include "core/util/bitmap.h"

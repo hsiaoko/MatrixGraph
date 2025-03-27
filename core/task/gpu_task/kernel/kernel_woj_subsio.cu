@@ -8,16 +8,16 @@
 #include "core/common/host_algorithms.cuh"
 #include "core/common/types.h"
 #include "core/data_structures/device_buffer.cuh"
+#include "core/data_structures/heap.cuh"
 #include "core/data_structures/host_buffer.cuh"
+#include "core/data_structures/immutable_csr_gpu.cuh"
+#include "core/data_structures/kernel_bitmap.cuh"
+#include "core/data_structures/kernel_bitmap_no_ownership.cuh"
+#include "core/data_structures/mini_kernel_bitmap.cuh"
 #include "core/data_structures/unified_buffer.cuh"
+#include "core/data_structures/woj_matches.cuh"
 #include "core/task/gpu_task/kernel/algorithms/hash.cuh"
 #include "core/task/gpu_task/kernel/algorithms/sort.cuh"
-#include "core/task/gpu_task/kernel/data_structures/heap.cuh"
-#include "core/task/gpu_task/kernel/data_structures/immutable_csr_gpu.cuh"
-#include "core/task/gpu_task/kernel/data_structures/kernel_bitmap.cuh"
-#include "core/task/gpu_task/kernel/data_structures/kernel_bitmap_no_ownership.cuh"
-#include "core/task/gpu_task/kernel/data_structures/mini_kernel_bitmap.cuh"
-#include "core/task/gpu_task/kernel/data_structures/woj_matches.cuh"
 #include "core/task/gpu_task/kernel/kernel_woj_subiso.cuh"
 #include "core/util/bitmap_ownership.h"
 
@@ -48,7 +48,6 @@ using sics::matrixgraph::core::task::kernel::HostMiniKernelBitmap;
 using sics::matrixgraph::core::task::kernel::KernelBitmap;
 using sics::matrixgraph::core::task::kernel::KernelBitmapNoOwnership;
 using sics::matrixgraph::core::task::kernel::MiniKernelBitmap;
-using WOJMatches = sics::matrixgraph::core::task::kernel::WOJMatches;
 using MinHeap = sics::matrixgraph::core::task::kernel::MinHeap;
 using BufferUint8 = sics::matrixgraph::core::data_structures::Buffer<uint8_t>;
 using BufferUint32 = sics::matrixgraph::core::data_structures::Buffer<uint32_t>;
@@ -66,6 +65,9 @@ using BufferVertexLabel =
     sics::matrixgraph::core::data_structures::Buffer<VertexLabel>;
 using BufferVertexID =
     sics::matrixgraph::core::data_structures::Buffer<VertexID>;
+using WOJExecutionPlan =
+    sics::matrixgraph::core::data_structures::WOJExecutionPlan;
+using WOJMatches = sics::matrixgraph::core::data_structures::WOJMatches;
 
 struct LocalMatches {
   VertexID* data = nullptr;

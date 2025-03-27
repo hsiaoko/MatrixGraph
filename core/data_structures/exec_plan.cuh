@@ -14,8 +14,7 @@
 namespace sics {
 namespace matrixgraph {
 namespace core {
-namespace task {
-namespace kernel {
+namespace data_structures {
 
 using sics::matrixgraph::core::common::kMaxVertexID;
 
@@ -149,10 +148,9 @@ class ExecutionPlan {
 
   VertexID n_vertices_ = 0;
   VertexID depth_ = 0;
-};  // namespace kernel
+};
 
-}  // namespace kernel
-}  // namespace task
+}  // namespace data_structures
 }  // namespace core
 }  // namespace matrixgraph
 }  // namespace sics
