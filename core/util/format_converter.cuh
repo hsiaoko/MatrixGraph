@@ -125,7 +125,6 @@ static ImmutableCSR* Edgelist2ImmutableCSR(const Edges& edgelist) {
           auto e = edgelist.get_edge_by_index(i);
           e.src = edgelist_localid_2_globalid[e.src];
           e.dst = edgelist_localid_2_globalid[e.dst];
-
           visited.SetBit(e.src);
           visited.SetBit(e.dst);
           WriteAdd(num_in_edges_by_vid + e.dst, (EdgeIndex)1);

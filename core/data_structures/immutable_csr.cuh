@@ -17,28 +17,28 @@ namespace core {
 namespace data_structures {
 
 struct ImmutableCSRVertex {
-private:
+ private:
   using VertexID = sics::matrixgraph::core::common::VertexID;
   using VertexLabel = sics::matrixgraph::core::common::VertexLabel;
 
-public:
+ public:
   VertexID vid;
   VertexID indegree = 0;
   VertexID outdegree = 0;
-  VertexID *incoming_edges;
-  VertexID *outgoing_edges;
+  VertexID* incoming_edges;
+  VertexID* outgoing_edges;
   VertexLabel vlabel = 0;
 };
 
 class ImmutableCSR {
-private:
+ private:
   using GraphID = sics::matrixgraph::core::common::GraphID;
   using VertexID = sics::matrixgraph::core::common::VertexID;
   using EdgeIndex = sics::matrixgraph::core::common::EdgeIndex;
   using VertexLabel = sics::matrixgraph::core::common::VertexLabel;
 
   struct VidCountPair {
-    bool operator<(const VidCountPair &other) const {
+    bool operator<(const VidCountPair& other) const {
       return count > other.count;
     }
 
@@ -46,7 +46,7 @@ private:
     VertexID count = 0;
   };
 
-public:
+ public:
   explicit ImmutableCSR(SubGraphMetadata metadata) : metadata_(metadata) {}
 
   ImmutableCSR() = default;
@@ -57,11 +57,11 @@ public:
 
   void PrintGraphAbs(VertexID display_num = 0) const;
 
-  void Write(const std::string &root_path, GraphID gid = 0);
+  void Write(const std::string& root_path, GraphID gid = 0);
 
-  void Read(const std::string &root_path);
+  void Read(const std::string& root_path);
 
-  void ParseBasePtr(uint8_t *graph_base_pointer);
+  void ParseBasePtr(uint8_t* graph_base_pointer);
 
   void SortByDegree();
 
@@ -69,39 +69,43 @@ public:
 
   void GenerateVLabel(VertexID range = 5);
 
-  void SetGraphBuffer(uint8_t *buffer) { graph_base_pointer_.reset(buffer); }
+  void SetGraphBuffer(uint8_t* buffer) { graph_base_pointer_.reset(buffer); }
 
   void SetVertexLabelBuffer(size_t n_vertices) {
     vertex_label_base_pointer_ = std::make_unique<VertexID[]>(n_vertices);
   }
 
-  void SetGlobalIDBuffer(VertexID *buffer) {
+  void SetGlobalIDBuffer(VertexID* buffer) {
     globalid_by_localid_base_pointer_ = buffer;
   }
 
-  void SetEdgesGlobalIDBuffer(VertexID *buffer) {
+  void SetLocalIDBuffer(VertexID* buffer) {
+    localid_by_globalid_base_pointer_ = buffer;
+  }
+
+  void SetEdgesGlobalIDBuffer(VertexID* buffer) {
     edges_globalid_by_localid_base_pointer_ = buffer;
   }
 
-  void SetInDegreeBuffer(VertexID *buffer) { indegree_base_pointer_ = buffer; }
+  void SetInDegreeBuffer(VertexID* buffer) { indegree_base_pointer_ = buffer; }
 
-  void SetOutDegreeBuffer(VertexID *buffer) {
+  void SetOutDegreeBuffer(VertexID* buffer) {
     outdegree_base_pointer_ = buffer;
   }
 
-  void SetInOffsetBuffer(EdgeIndex *buffer) {
+  void SetInOffsetBuffer(EdgeIndex* buffer) {
     in_offset_base_pointer_ = buffer;
   }
 
-  void SetOutOffsetBuffer(EdgeIndex *buffer) {
+  void SetOutOffsetBuffer(EdgeIndex* buffer) {
     out_offset_base_pointer_ = buffer;
   }
 
-  void SetIncomingEdgesBuffer(VertexID *buffer) {
+  void SetIncomingEdgesBuffer(VertexID* buffer) {
     incoming_edges_base_pointer_ = buffer;
   }
 
-  void SetOutgoingEdgesBuffer(VertexID *buffer) {
+  void SetOutgoingEdgesBuffer(VertexID* buffer) {
     outgoing_edges_base_pointer_ = buffer;
   }
 
@@ -143,40 +147,48 @@ public:
 
   VertexID get_min_vid() const { return metadata_.min_vid; }
 
-  uint8_t *GetGraphBuffer() const { return graph_base_pointer_.get(); }
+  uint8_t* GetGraphBuffer() const { return graph_base_pointer_.get(); }
 
-  VertexID *GetGloablIDBasePointer() const {
+  VertexID* GetGloablIDBasePointer() const {
     return globalid_by_localid_base_pointer_;
   }
 
-  VertexID *GetEdgesGloablIDBasePointer() const {
+  VertexID* GetLocalIDBasePointer() const {
+    return localid_by_globalid_base_pointer_;
+  }
+
+  VertexID* GetEdgesGloablIDBasePointer() const {
     return edges_globalid_by_localid_base_pointer_;
   }
 
-  VertexID *GetInDegreeBasePointer() const { return indegree_base_pointer_; }
+  VertexID* GetInDegreeBasePointer() const { return indegree_base_pointer_; }
 
-  VertexID *GetOutDegreeBasePointer() const { return outdegree_base_pointer_; }
+  VertexID* GetOutDegreeBasePointer() const { return outdegree_base_pointer_; }
 
-  EdgeIndex *GetInOffsetBasePointer() const { return in_offset_base_pointer_; }
+  EdgeIndex* GetInOffsetBasePointer() const { return in_offset_base_pointer_; }
 
-  EdgeIndex *GetOutOffsetBasePointer() const {
+  EdgeIndex* GetOutOffsetBasePointer() const {
     return out_offset_base_pointer_;
   }
 
-  VertexID *GetIncomingEdgesBasePointer() const {
+  VertexID* GetIncomingEdgesBasePointer() const {
     return incoming_edges_base_pointer_;
   }
 
-  VertexID *GetOutgoingEdgesBasePointer() const {
+  VertexID* GetOutgoingEdgesBasePointer() const {
     return outgoing_edges_base_pointer_;
   }
 
-  VertexLabel *GetVLabelBasePointer() const {
+  VertexLabel* GetVLabelBasePointer() const {
     return vertex_label_base_pointer_.get();
   }
 
   VertexID GetGlobalIDByLocalID(VertexID i) const {
     return globalid_by_localid_base_pointer_[i];
+  }
+
+  VertexID GetLocalIDByGlobalID(VertexID i) const {
+    return localid_by_globalid_base_pointer_[i];
   }
 
   VertexID GetEdgeGlobalIDByLocalID(VertexID i) const {
@@ -191,49 +203,51 @@ public:
     return out_offset_base_pointer_[i];
   }
 
-  VertexID *GetIncomingEdgesByLocalID(VertexID i) const {
+  VertexID* GetIncomingEdgesByLocalID(VertexID i) const {
     return incoming_edges_base_pointer_ + in_offset_base_pointer_[i];
   }
 
-  VertexID *GetOutgoingEdgesByLocalID(VertexID i) const {
+  VertexID* GetOutgoingEdgesByLocalID(VertexID i) const {
     return outgoing_edges_base_pointer_ + out_offset_base_pointer_[i];
   }
 
-  VertexID GetInDegreeByLocalID(VertexID i) const {
+  inline VertexID GetInDegreeByLocalID(VertexID i) const {
     return indegree_base_pointer_[i];
   }
 
-  VertexID GetOutDegreeByLocalID(VertexID i) const {
+  inline VertexID GetOutDegreeByLocalID(VertexID i) const {
     return outdegree_base_pointer_[i];
   }
 
   ImmutableCSRVertex GetVertexByLocalID(VertexID i) const;
 
-protected:
+ protected:
   // Metadata to build the CSR.
   SubGraphMetadata metadata_;
 
   // Serialized data in CSR format.
   std::unique_ptr<uint8_t[]> graph_base_pointer_ = nullptr;
 
-  VertexID *globalid_by_localid_base_pointer_ = nullptr;
-  VertexID *edges_globalid_by_localid_base_pointer_ = nullptr;
+  VertexID* globalid_by_localid_base_pointer_ = nullptr;
+  VertexID* localid_by_globalid_base_pointer_ = nullptr;
 
-  VertexID *local_vid_by_edges_globalid_base_pointer_ = nullptr;
+  VertexID* edges_globalid_by_localid_base_pointer_ = nullptr;
 
-  VertexID *incoming_edges_base_pointer_ = nullptr;
-  VertexID *outgoing_edges_base_pointer_ = nullptr;
-  VertexID *indegree_base_pointer_ = nullptr;
-  VertexID *outdegree_base_pointer_ = nullptr;
-  EdgeIndex *in_offset_base_pointer_ = nullptr;
-  EdgeIndex *out_offset_base_pointer_ = nullptr;
+  VertexID* local_vid_by_edges_globalid_base_pointer_ = nullptr;
+
+  VertexID* incoming_edges_base_pointer_ = nullptr;
+  VertexID* outgoing_edges_base_pointer_ = nullptr;
+  VertexID* indegree_base_pointer_ = nullptr;
+  VertexID* outdegree_base_pointer_ = nullptr;
+  EdgeIndex* in_offset_base_pointer_ = nullptr;
+  EdgeIndex* out_offset_base_pointer_ = nullptr;
 
   std::unique_ptr<VertexLabel[]> vertex_label_base_pointer_ = nullptr;
 };
 
-} // namespace data_structures
-} // namespace core
-} // namespace matrixgraph
-} // namespace sics
+}  // namespace data_structures
+}  // namespace core
+}  // namespace matrixgraph
+}  // namespace sics
 
-#endif // INC_51_11_GRAPH_COMPUTING_MATRIXGRAPH_CORE_DATA_STRUCTURES_IMMUTABLE_CSR_H_
+#endif  // INC_51_11_GRAPH_COMPUTING_MATRIXGRAPH_CORE_DATA_STRUCTURES_IMMUTABLE_CSR_H_

@@ -26,11 +26,13 @@ static void ConvertEdgelistCSV2ImmutableCSR(const std::string& input_path,
 
   sics::matrixgraph::core::data_structures::Edges edgelist;
   edgelist.ReadFromCSV(input_path, sep);
-  edgelist.ShowGraph(100);
+  edgelist.ShowGraph(5);
   auto p_immutable_csr =
       sics::matrixgraph::core::util::format_converter::Edgelist2ImmutableCSR(
           edgelist);
-  p_immutable_csr->PrintGraph(100);
+  p_immutable_csr->SortByDegree();
+  p_immutable_csr->GenerateVLabel(5);
+  p_immutable_csr->PrintGraph(1);
   p_immutable_csr->Write(output_path);
   delete p_immutable_csr;
 }
@@ -47,7 +49,7 @@ static void ConvertEdgelistBin2CSRBin(const std::string& input_path,
       sics::matrixgraph::core::util::format_converter::Edgelist2ImmutableCSR(
           edgelist);
   p_immutable_csr->SortByDegree();
-  // p_immutable_csr->GenerateVLabel(15);
+  p_immutable_csr->GenerateVLabel(15);
   p_immutable_csr->PrintGraph(1);
   p_immutable_csr->Write(output_path);
   delete p_immutable_csr;
@@ -110,7 +112,7 @@ static void ConvertEdgelistBin2CGGraphCSR(const std::string& input_path,
   std::ofstream out_edges_file(output_path + "/native_csrDest_u32.bin");
   std::ofstream weight_file(output_path + "/native_csrWeight_u32.bin");
 
-  p_immutable_csr->PrintGraph(2);
+  p_immutable_csr->PrintGraph(3);
 
   offset_file.write(
       (char*)offset,
