@@ -45,8 +45,9 @@ using sics::matrixgraph::core::common::kSharedMemoryCapacity;
 using sics::matrixgraph::core::common::kSharedMemorySize;
 using sics::matrixgraph::core::common::kWarpSize;
 
-static inline bool FilterCore(VertexID u_idx, VertexID v_idx,
-                              const ImmutableCSR& p, const ImmutableCSR& g) {
+static inline bool LabelDegreeFilter(VertexID u_idx, VertexID v_idx,
+                                     const ImmutableCSR& p,
+                                     const ImmutableCSR& g) {
   auto u_label = p.GetVLabelBasePointer()[u_idx];
   auto v_label = g.GetVLabelBasePointer()[v_idx];
   // printf("check %d(%d), %d(%d)\n", u_idx, u_label, v_idx, v_label);
@@ -54,6 +55,22 @@ static inline bool FilterCore(VertexID u_idx, VertexID v_idx,
     return true;
   else
     return false;
+  return u_label == v_label &&
+         g.GetOutDegreeByLocalID(v_idx) >= p.GetOutDegreeByLocalID(u_idx) &&
+         g.GetInDegreeByLocalID(v_idx) >= p.GetInDegreeByLocalID(u_idx);
+}
+
+static inline bool LabelFilter(VertexID u_idx, VertexID v_idx,
+                               const ImmutableCSR& p, const ImmutableCSR& g) {
+  auto u_label = p.GetVLabelBasePointer()[u_idx];
+  auto v_label = g.GetVLabelBasePointer()[v_idx];
+  return u_label == v_label;
+}
+
+static inline bool FilterCore(VertexID u_idx, VertexID v_idx,
+                              const ImmutableCSR& p, const ImmutableCSR& g) {
+  // return LabelFilter(u_idx, v_idx, p, g);
+  return LabelDegreeFilter(u_idx, v_idx, p, g);
 }
 
 static std::vector<WOJMatches*> WOJFilter(const WOJExecutionPlan& exec_plan,
@@ -284,18 +301,21 @@ static WOJMatches* WOJJoin(
     }
   }
 
-  output_woj_matches->Print(99);
-  return output_woj_matches;
+  if (input_woj_matches_vec.size() % 2 == 0) {
+    return output_woj_matches;
+  } else {
+    return left_woj_matches;
+  }
 }
 
 void CPUSubIso::LoadData() {
   std::cout << "[CPUSubIso] LoadData() ..." << std::endl;
 
   p_.Read(pattern_path_);
-  p_.PrintGraph(99);
+  p_.PrintGraph(10);
 
   g_.Read(data_graph_path_);
-  g_.PrintGraph(99);
+  g_.PrintGraph(3);
 }
 
 void CPUSubIso::Matching(const ImmutableCSR& p, const ImmutableCSR& g) {}
@@ -310,26 +330,27 @@ void CPUSubIso::WOJMatching(const ImmutableCSR& p, const ImmutableCSR& g) {
   auto start_time_0 = std::chrono::system_clock::now();
   auto woj_matches = WOJFilter(exec_plan, p, g);
 
-  for (auto iter : woj_matches) {
-    iter->Print();
-  }
+  // for (auto iter : woj_matches) {
+  //   iter->Print();
+  // }
   auto start_time_1 = std::chrono::system_clock::now();
 
-  WOJJoin(exec_plan, woj_matches);
+  auto output = WOJJoin(exec_plan, woj_matches);
   auto start_time_2 = std::chrono::system_clock::now();
 
+  output->Print(10);
   std::cout << "[WOJMatching] Filter() elapsed: "
             << std::chrono::duration_cast<std::chrono::microseconds>(
                    start_time_1 - start_time_0)
                        .count() /
                    (double)CLOCKS_PER_SEC
-            << std::endl;
+            << " sec" << std::endl;
   std::cout << "[WOJMatching] Join() elapsed: "
             << std::chrono::duration_cast<std::chrono::microseconds>(
                    start_time_2 - start_time_1)
                        .count() /
                    (double)CLOCKS_PER_SEC
-            << std::endl;
+            << " sec" << std::endl;
 }
 
 void CPUSubIso::Run() {
@@ -340,8 +361,9 @@ void CPUSubIso::Run() {
   std::cout << "Data loading time: "
             << std::chrono::duration_cast<std::chrono::milliseconds>(
                    start_time_1 - start_time_0)
-                   .count()
-            << " ms" << std::endl;
+                       .count() /
+                   (double)CLOCKS_PER_SEC
+            << " sec" << std::endl;
 
   WOJMatching(p_, g_);
 
@@ -349,8 +371,9 @@ void CPUSubIso::Run() {
   std::cout << "Total execution time: "
             << std::chrono::duration_cast<std::chrono::milliseconds>(
                    end_time - start_time_0)
-                   .count()
-            << " ms" << std::endl;
+                       .count() /
+                   (double)CLOCKS_PER_SEC
+            << " sec" << std::endl;
 }
 
 }  // namespace task

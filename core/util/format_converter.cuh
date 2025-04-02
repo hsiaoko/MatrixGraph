@@ -256,10 +256,14 @@ static ImmutableCSR* Edgelist2ImmutableCSR(const Edges& edgelist) {
   delete[] buffer_csr_vertices;
   delete[] vid_map;
 
+  VertexID* buffer_localid_by_globalid = new VertexID[max_vid]();
+
   std::for_each(std::execution::par, worker.begin(), worker.end(),
-                [&buffer_edges_globalid_by_localid, step, max_vid](auto w) {
+                [&buffer_edges_globalid_by_localid, &buffer_localid_by_globalid,
+                 step, max_vid](auto w) {
                   for (auto j = w; j < max_vid + 1; j += step) {
                     buffer_edges_globalid_by_localid[j] = j;
+                    buffer_localid_by_globalid[j] = j;
                   }
                 });
 
@@ -284,6 +288,7 @@ static ImmutableCSR* Edgelist2ImmutableCSR(const Edges& edgelist) {
   immutable_csr->SetNumOutgoingEdges(count_out_edges);
   immutable_csr->SetMaxVid(edgelist.get_metadata().max_vid);
   immutable_csr->SetMinVid(min_vid);
+  immutable_csr->SetLocalIDBuffer(buffer_localid_by_globalid);
 
   std::cout << "[Edgelist2ImmutableCSR] done !" << std::endl;
   return immutable_csr;

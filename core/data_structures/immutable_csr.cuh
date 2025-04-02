@@ -149,65 +149,71 @@ class ImmutableCSR {
 
   uint8_t* GetGraphBuffer() const { return graph_base_pointer_.get(); }
 
-  VertexID* GetGloablIDBasePointer() const {
+  inline VertexID* GetGloablIDBasePointer() const {
     return globalid_by_localid_base_pointer_;
   }
 
-  VertexID* GetLocalIDBasePointer() const {
+  inline VertexID* GetLocalIDBasePointer() const {
     return localid_by_globalid_base_pointer_;
   }
 
-  VertexID* GetEdgesGloablIDBasePointer() const {
+  inline VertexID* GetEdgesGloablIDBasePointer() const {
     return edges_globalid_by_localid_base_pointer_;
   }
 
-  VertexID* GetInDegreeBasePointer() const { return indegree_base_pointer_; }
+  inline VertexID* GetInDegreeBasePointer() const {
+    return indegree_base_pointer_;
+  }
 
-  VertexID* GetOutDegreeBasePointer() const { return outdegree_base_pointer_; }
+  inline VertexID* GetOutDegreeBasePointer() const {
+    return outdegree_base_pointer_;
+  }
 
-  EdgeIndex* GetInOffsetBasePointer() const { return in_offset_base_pointer_; }
+  inline EdgeIndex* GetInOffsetBasePointer() const {
+    return in_offset_base_pointer_;
+  }
 
-  EdgeIndex* GetOutOffsetBasePointer() const {
+  inline EdgeIndex* GetOutOffsetBasePointer() const {
     return out_offset_base_pointer_;
   }
 
-  VertexID* GetIncomingEdgesBasePointer() const {
+  inline VertexID* GetIncomingEdgesBasePointer() const {
     return incoming_edges_base_pointer_;
   }
 
-  VertexID* GetOutgoingEdgesBasePointer() const {
+  inline VertexID* GetOutgoingEdgesBasePointer() const {
     return outgoing_edges_base_pointer_;
   }
 
-  VertexLabel* GetVLabelBasePointer() const {
+  inline VertexLabel* GetVLabelBasePointer() const {
     return vertex_label_base_pointer_.get();
   }
 
-  VertexID GetGlobalIDByLocalID(VertexID i) const {
+  inline VertexID GetGlobalIDByLocalID(VertexID i) const {
     return globalid_by_localid_base_pointer_[i];
   }
 
-  VertexID GetLocalIDByGlobalID(VertexID i) const {
+  inline VertexID GetLocalIDByGlobalID(VertexID i) const {
     return localid_by_globalid_base_pointer_[i];
   }
 
-  VertexID GetEdgeGlobalIDByLocalID(VertexID i) const {
+  inline VertexID GetEdgeGlobalIDByLocalID(VertexID i) const {
     return edges_globalid_by_localid_base_pointer_[i];
   }
 
-  VertexID GetInOffsetByLocalID(VertexID i) const {
+  inline VertexID GetInOffsetByLocalID(VertexID i) const {
     return in_offset_base_pointer_[i];
   }
 
-  VertexID GetOutOffsetByLocalID(VertexID i) const {
+  inline VertexID GetOutOffsetByLocalID(VertexID i) const {
     return out_offset_base_pointer_[i];
   }
 
-  VertexID* GetIncomingEdgesByLocalID(VertexID i) const {
+  inline VertexID* GetIncomingEdgesByLocalID(VertexID i) const {
     return incoming_edges_base_pointer_ + in_offset_base_pointer_[i];
   }
 
-  VertexID* GetOutgoingEdgesByLocalID(VertexID i) const {
+  inline VertexID* GetOutgoingEdgesByLocalID(VertexID i) const {
     return outgoing_edges_base_pointer_ + out_offset_base_pointer_[i];
   }
 
@@ -219,7 +225,7 @@ class ImmutableCSR {
     return outdegree_base_pointer_[i];
   }
 
-  ImmutableCSRVertex GetVertexByLocalID(VertexID i) const;
+  inline ImmutableCSRVertex GetVertexByLocalID(VertexID i) const;
 
  protected:
   // Metadata to build the CSR.

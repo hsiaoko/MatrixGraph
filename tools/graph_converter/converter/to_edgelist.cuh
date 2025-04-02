@@ -15,9 +15,9 @@ namespace converter {
 using sics::matrixgraph::core::data_structures::ImmutableCSR;
 using VertexLabel = sics::matrixgraph::core::common::VertexLabel;
 
-static void ConvertEdgelistCSV2EdgelistBin(const std::string &input_path,
-                                           const std::string &output_path,
-                                           const std::string &sep,
+static void ConvertEdgelistCSV2EdgelistBin(const std::string& input_path,
+                                           const std::string& output_path,
+                                           const std::string& sep,
                                            bool compressed = false) {
   std::cout << "ConvertEdgelistCSV2EdgelistBin" << std::endl;
   if (!std::filesystem::exists(output_path))
@@ -30,23 +30,22 @@ static void ConvertEdgelistCSV2EdgelistBin(const std::string &input_path,
   edgelist.WriteToBinary(output_path);
 }
 
-static void ConvertImmutableCSR2EdgelistBin(const std::string &input_path,
-                                            const std::string &output_path,
+static void ConvertImmutableCSR2EdgelistBin(const std::string& input_path,
+                                            const std::string& output_path,
                                             bool compressed = false) {
-
   ImmutableCSR csr;
   csr.Read(input_path);
 
   csr.SortByDegree();
   std::cout << "[ConvertImmutableCSR2EdgelistBin]" << std::endl;
 
-  EdgelistMetadata edgelist_metadata = {.num_vertices = csr.get_num_vertices(),
-                                        .num_edges =
-                                            csr.get_num_outgoing_edges(),
-                                        .max_vid = csr.get_max_vid(),
-                                        .min_vid = 0};
+  EdgelistMetadata edgelist_metadata = {
+      .num_vertices = csr.get_num_vertices(),
+      .num_edges = csr.get_num_outgoing_edges(),
+      .max_vid = csr.get_max_vid(),
+      .min_vid = 0};
 
-  auto *edges_ptr =
+  auto* edges_ptr =
       sics::matrixgraph::core::util::format_converter::ImmutableCSR2Edgelist(
           csr);
 
@@ -59,9 +58,8 @@ static void ConvertImmutableCSR2EdgelistBin(const std::string &input_path,
   std::cout << "[ConvertImmutableCSR2EdgelistBin] Done!" << std::endl;
 }
 
-static void
-ConvertEdgelistBin2TransposedEdgelistBin(const std::string &input_path,
-                                         const std::string &output_path) {
+static void ConvertEdgelistBin2TransposedEdgelistBin(
+    const std::string& input_path, const std::string& output_path) {
   YAML::Node node = YAML::LoadFile(input_path + "meta.yaml");
 
   sics::matrixgraph::core::data_structures::EdgelistMetadata edgelist_metadata =
@@ -75,12 +73,11 @@ ConvertEdgelistBin2TransposedEdgelistBin(const std::string &input_path,
 
   std::ifstream in_file(input_path + "edgelist.bin");
   if (!in_file) {
-
     std::cout << "Open file failed: " + input_path + "edgelist.bin"
               << std::endl;
     exit(EXIT_FAILURE);
   }
-  in_file.read(reinterpret_cast<char *>(buffer_edges),
+  in_file.read(reinterpret_cast<char*>(buffer_edges),
                sizeof(sics::matrixgraph::core::data_structures::Edge) *
                    edgelist_metadata.num_edges);
 
@@ -91,8 +88,8 @@ ConvertEdgelistBin2TransposedEdgelistBin(const std::string &input_path,
   std::cout << "[ConvertEdgelistBin2TransposedEdgelistBin] Done!" << std::endl;
 }
 
-static void ConvertEGSMGraph2EdgelistBin(const std::string &input_path,
-                                         const std::string &output_path) {
+static void ConvertEGSMGraph2EdgelistBin(const std::string& input_path,
+                                         const std::string& output_path) {
   auto parallelism = std::thread::hardware_concurrency();
   std::vector<size_t> worker(parallelism);
   std::iota(worker.begin(), worker.end(), 0);
@@ -118,9 +115,8 @@ static void ConvertEGSMGraph2EdgelistBin(const std::string &input_path,
       new sics::matrixgraph::core::data_structures::Edge[edgelist_metadata
                                                              .num_edges]();
 
-  VertexLabel *v_label = new VertexLabel[edgelist_metadata.num_vertices]();
-
-  VertexID *localid2globalid = new VertexID[edgelist_metadata.num_vertices]();
+  VertexID* localid2globalid = new VertexID[edgelist_metadata.num_vertices]();
+  VertexLabel* v_label = new VertexLabel[edgelist_metadata.max_vid]();
 
   EdgeIndex eid = 0;
   while (ifs >> type) {
@@ -152,9 +148,9 @@ static void ConvertEGSMGraph2EdgelistBin(const std::string &input_path,
   ifs.close();
 }
 
-} // namespace converter
-} // namespace tools
-} // namespace matrixgraph
-} // namespace sics
+}  // namespace converter
+}  // namespace tools
+}  // namespace matrixgraph
+}  // namespace sics
 
-#endif // MATRIXGRAPH_TOOLS_GRAPH_CONVERTER_CONVERTER_TO_EDGELIST_CUH_
+#endif  // MATRIXGRAPH_TOOLS_GRAPH_CONVERTER_CONVERTER_TO_EDGELIST_CUH_
