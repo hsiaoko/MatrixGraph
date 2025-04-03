@@ -1,8 +1,8 @@
 #ifndef HYPERBLOCKER_CORE_HYPER_BLOCKER_CUH_
 #define HYPERBLOCKER_CORE_HYPER_BLOCKER_CUH_
 
-#include <cuda_runtime.h>
-#include <device_launch_parameters.h>
+//#include <cuda_runtime.h>
+//#include <device_launch_parameters.h>
 
 #include <condition_variable>
 #include <iostream>
@@ -20,7 +20,7 @@
 #include "core/components/scheduler/scheduler.h"
 #include "core/task/cpu_task/cpu_task_base.h"
 #include "core/task/gpu_task/task_base.cuh"
-#include "core/util/cuda_check.cuh"
+//#include "core/util/cuda_check.cuh"
 
 namespace sics {
 namespace matrixgraph {

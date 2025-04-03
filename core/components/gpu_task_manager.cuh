@@ -1,19 +1,17 @@
 #ifndef MATRIXGRAPH_CORE_COMPONENTS_GPU_TASK_MANAGER_CUH_
 
-#include <cuda_runtime.h>
-#include <unistd.h>
-
-#include <climits>
-#include <condition_variable>
-#include <mutex>
-#include <string>
-
 #include "core/common/types.h"
 #include "core/components/scheduler/CHBL_scheduler.h"
 #include "core/components/scheduler/even_split_scheduler.h"
 #include "core/components/scheduler/round_robin_scheduler.h"
 #include "core/task/cpu_task/cpu_task_base.h"
 #include "core/task/gpu_task/task_base.cuh"
+#include <climits>
+#include <condition_variable>
+#include <cuda_runtime.h>
+#include <mutex>
+#include <string>
+#include <unistd.h>
 
 namespace sics {
 namespace matrixgraph {

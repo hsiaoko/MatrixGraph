@@ -6,10 +6,7 @@
 #include <mutex>
 #include <numeric>
 #include <thread>
-
-#ifdef TBB_FOUND
 #include <execution>
-#endif
 
 #include "core/util/bitmap.h"
 #include "core/util/bitmap_no_ownership.h"
