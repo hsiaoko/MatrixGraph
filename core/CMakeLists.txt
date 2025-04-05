@@ -19,9 +19,6 @@ set(CMAKE_CUDA_FLAGS_DEBUG "${CMAKE_CUDA_FLAGS_DEBUG} -g -G")
 # Directory Structure
 #######################
 #set(LIBRARY_OUTPUT_PATH ${PROJECT_ROOT_DIR}/lib)
-#include_directories(${CMAKE_CURRENT_SOURCE_DIR})
-#include_directories(${PROJECT_ROOT_DIR})
-message(STATUS ${PROJECT_ROOT_DIR})
 
 #######################
 # Source Files
@@ -41,31 +38,10 @@ file(GLOB_RECURSE CORE_SOURCES
         "task/cpu_task/*.cpp"
         )
 
-# Header files
-#file(GLOB_RECURSE CORE_HEADERS
-#        "*.h"
-#        "*.cuh"
-#        "components/*.h"
-#        "components/*.cuh"
-#        "io/*.cuh"
-#        "components/scheduler/*.h"
-#        "components/scheduler/*.cuh"
-#        "data_structures/*.h"
-#        "data_structures/*.cuh"
-#        "util/*.h"
-#        "util/*.cuh"
-#        "task/*.cuh"
-#        "task/gpu_task/kernel/*.cuh"
-#        "task/gpu_task/kernel/data_structures/*.cuh"
-#        "task/gpu_task/kernel/algorithms/*.cuh"
-#        "task/gpu_task/*.cu"
-#        "task/cpu_task/*.h"
-#        )
 
 #######################
 # Tests Configuration
 #######################
-#list(FILTER CORE_SOURCES EXCLUDE REGEX ".*_test\\.cpp$")
 if (TEST)
     add_subdirectory(tests)
 endif ()
@@ -80,18 +56,17 @@ target_link_libraries(${PROJECT_NAME}
         PRIVATE
         yaml-cpp
         cublas
-	#matrixgraph_core
-	#TBB::tbb
-	${TBB_LIBRARIES}
-	#-static-libstdc++
+        gflags
+        TBB::tbb
+        ${TBB_LIBRARIES}
         )
 
 target_include_directories(${PROJECT_NAME}
-	PRIVATE
-	${THIRD_PARTY_ROOT}/yaml-cpp/include/
-	${THIRD_PARTY_ROOT}/cutlass/include
-	${PROJECT_ROOT_DIR}
-	)
+        PRIVATE
+        ${THIRD_PARTY_ROOT}/yaml-cpp/include/
+        ${THIRD_PARTY_ROOT}/cutlass/include
+        ${PROJECT_ROOT_DIR}
+        )
 
 # Library properties
 set_target_properties(${PROJECT_NAME} PROPERTIES

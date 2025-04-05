@@ -11,16 +11,16 @@ set(CMAKE_CUDA_STANDARD 20)
 set(CMAKE_CUDA_STANDARD_REQUIRED ON)
 
 # Build Type
-if(NOT CMAKE_BUILD_TYPE)
+if (NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE "Debug")
-endif()
+endif ()
 
 # Compiler flags
-if(CMAKE_BUILD_TYPE STREQUAL "Release")
+if (CMAKE_BUILD_TYPE STREQUAL "Release")
     set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -O3 -gdwarf-4")
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3 -gdwarf-4")
     set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -O3 -gdwarf-4")
-endif()
+endif ()
 
 # Status messages
 message(STATUS "[MatrixGraph] Build type: ${CMAKE_BUILD_TYPE}")
@@ -40,58 +40,49 @@ set(LIBRARY_ROOT_DIR ${PROJECT_ROOT_DIR}/lib)
 # Dependencies
 #######################
 # Jemalloc (Optional)
-if(USE_JEMALLOC)
+if (USE_JEMALLOC)
     include("cmake/FindJemalloc.cmake" OPTIONAL)
-    if(JEMALLOC_FOUND)
+    if (JEMALLOC_FOUND)
         add_definitions(-DUSE_JEMALLOC)
         include_directories(SYSTEM ${JEMALLOC_INCLUDE_DIRS})
         message(STATUS "jemalloc found and enabled")
-    else()
+    else ()
         message(STATUS "jemalloc not found, building without it")
-    endif()
-endif()
+    endif ()
+endif ()
 
 # TBB
 find_package(TBB REQUIRED)
-if(TBB_FOUND)
+if (TBB_FOUND)
     message(STATUS "TBB found")
     add_compile_definitions(TBB_FOUND)
-endif()
+endif ()
 
 #######################
 # Third Party Libraries
 #######################
 # GoogleTest
-if(TEST)
+if (TEST)
     enable_testing()
     message(STATUS "Enabling GoogleTest")
     set(BUILD_GMOCK ON CACHE BOOL "Build gmock" FORCE)
     set(INSTALL_GTEST OFF CACHE BOOL "Don't install gtest" FORCE)
     add_subdirectory("${THIRD_PARTY_ROOT}/googletest" EXCLUDE_FROM_ALL)
-    include_directories(SYSTEM 
-        ${gtest_SOURCE_DIR}/include 
-        ${gmock_SOURCE_DIR}/include
-    )
-endif()
+    include_directories(SYSTEM
+            ${gtest_SOURCE_DIR}/include
+            ${gmock_SOURCE_DIR}/include
+            )
+endif ()
 
 # Gflags
-#add_subdirectory("${THIRD_PARTY_ROOT}/gflags")
+add_subdirectory("${THIRD_PARTY_ROOT}/gflags")
 
 # YAML-CPP
 add_subdirectory("${THIRD_PARTY_ROOT}/yaml-cpp" EXCLUDE_FROM_ALL)
-#include_directories(SYSTEM ${THIRD_PARTY_ROOT}/yaml-cpp/include/)
-
-# RapidCSV (header-only)
-#include_directories(SYSTEM ${THIRD_PARTY_ROOT}/rapidcsv/src)
-
-# CUTLASS (header-only)
-#include_directories(SYSTEM ${THIRD_PARTY_ROOT}/cutlass/include)
 
 #######################
 # Project Components
 #######################
-#include_directories(${PROJECT_ROOT_DIR})
-
 add_subdirectory(core)
 #add_subdirectory(tools)
 add_subdirectory(apps)
