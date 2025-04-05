@@ -5,6 +5,8 @@
 #include <random>
 #include <thread>
 
+#include <yaml-cpp/yaml.h>
+
 #include "core/common/consts.h"
 #include "core/common/types.h"
 #include "core/data_structures/edgelist.h"

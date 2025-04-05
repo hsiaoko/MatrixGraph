@@ -1,7 +1,6 @@
 #ifndef SICS_MATRIXGRAPH_CORE_DATA_STRUCTURES_EDGELIST_H_
 #define SICS_MATRIXGRAPH_CORE_DATA_STRUCTURES_EDGELIST_H_
 
-#include <yaml-cpp/yaml.h>
 
 #include <cstring>
 #include <execution>

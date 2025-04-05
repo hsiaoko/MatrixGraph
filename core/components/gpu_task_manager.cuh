@@ -62,4 +62,5 @@ class GPUTaskManager {
 }  // namespace core
 }  // namespace matrixgraph
 }  // namespace sics
+
 #endif  // MATRIXGRAPH_CORE_COMPONENTS_GPU_TASK_MANAGER_CUH_

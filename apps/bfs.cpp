@@ -7,7 +7,6 @@
 #include <utility>
 
 #include "core/common/types.h"
-#include "core/common/yaml_config.h"
 #include "core/components/scheduler/scheduler.h"
 #include "core/matrixgraph.cuh"
 #include "core/task/gpu_task/bfs.cuh"
@@ -77,7 +76,7 @@ int main(int argc, char* argv[]) {
 
     auto* task = new BFS(FLAGS_g, FLAGS_src);
     system.Run(sics::matrixgraph::core::common::kBFS, task);
-    delete task;
+    //delete task;
 
   } catch (const std::exception& e) {
     std::cerr << "Error: " << e.what() << std::endl;

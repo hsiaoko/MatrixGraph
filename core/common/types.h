@@ -1,9 +1,8 @@
 #ifndef HYPERBLOCKER_CORE_COMMON_TYPES_H_
 #define HYPERBLOCKER_CORE_COMMON_TYPES_H_
 
-#include <stdint.h>
-
 #include <climits>
+#include <stdint.h>
 
 #define EQUALITIES 'e'
 #define SIM 's'
@@ -52,7 +51,8 @@ enum TaskType {
   kWCC,
   kSSSP,
   kBFS,
-  kPageRank
+  kPageRank,
+  kGEMV,
   // Other types.
 };
 

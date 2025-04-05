@@ -1,9 +1,14 @@
 #ifndef HYPERBLOCKER_CORE_HYPER_BLOCKER_CUH_
 #define HYPERBLOCKER_CORE_HYPER_BLOCKER_CUH_
 
-//#include <cuda_runtime.h>
-//#include <device_launch_parameters.h>
-
+#include "core/components/gpu_task_manager.cuh"
+#include "core/components/scheduler/CHBL_scheduler.h"
+#include "core/components/scheduler/even_split_scheduler.h"
+#include "core/components/scheduler/round_robin_scheduler.h"
+#include "core/components/scheduler/scheduler.h"
+#include "core/task/cpu_task/cpu_task_base.h"
+#include "core/task/gpu_task/task_base.cuh"
+#include "core/util/cuda_check.cuh"
 #include <condition_variable>
 #include <iostream>
 #include <memory>
@@ -12,15 +17,6 @@
 #include <thread>
 #include <unordered_map>
 #include <vector>
-
-#include "core/components/gpu_task_manager.cuh"
-#include "core/components/scheduler/CHBL_scheduler.h"
-#include "core/components/scheduler/even_split_scheduler.h"
-#include "core/components/scheduler/round_robin_scheduler.h"
-#include "core/components/scheduler/scheduler.h"
-#include "core/task/cpu_task/cpu_task_base.h"
-#include "core/task/gpu_task/task_base.cuh"
-//#include "core/util/cuda_check.cuh"
 
 namespace sics {
 namespace matrixgraph {

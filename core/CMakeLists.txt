@@ -18,9 +18,10 @@ set(CMAKE_CUDA_FLAGS_DEBUG "${CMAKE_CUDA_FLAGS_DEBUG} -g -G")
 #######################
 # Directory Structure
 #######################
-set(LIBRARY_OUTPUT_PATH ${PROJECT_ROOT_DIR}/lib)
-set(TOOLS_SRC_PATH ${PROJECT_ROOT_DIR}/tools)
-include_directories(${CMAKE_CURRENT_SOURCE_DIR})
+#set(LIBRARY_OUTPUT_PATH ${PROJECT_ROOT_DIR}/lib)
+#include_directories(${CMAKE_CURRENT_SOURCE_DIR})
+#include_directories(${PROJECT_ROOT_DIR})
+message(STATUS ${PROJECT_ROOT_DIR})
 
 #######################
 # Source Files
@@ -41,30 +42,30 @@ file(GLOB_RECURSE CORE_SOURCES
         )
 
 # Header files
-file(GLOB_RECURSE CORE_HEADERS
-        "*.h"
-        "*.cuh"
-        "components/*.h"
-        "components/*.cuh"
-        "io/*.cuh"
-        "components/scheduler/*.h"
-        "components/scheduler/*.cuh"
-        "data_structures/*.h"
-        "data_structures/*.cuh"
-        "util/*.h"
-        "util/*.cuh"
-        "task/*.cuh"
-        "task/gpu_task/kernel/*.cuh"
-        "task/gpu_task/kernel/data_structures/*.cuh"
-        "task/gpu_task/kernel/algorithms/*.cuh"
-        "task/gpu_task/*.cu"
-        "task/cpu_task/*.h"
-        )
+#file(GLOB_RECURSE CORE_HEADERS
+#        "*.h"
+#        "*.cuh"
+#        "components/*.h"
+#        "components/*.cuh"
+#        "io/*.cuh"
+#        "components/scheduler/*.h"
+#        "components/scheduler/*.cuh"
+#        "data_structures/*.h"
+#        "data_structures/*.cuh"
+#        "util/*.h"
+#        "util/*.cuh"
+#        "task/*.cuh"
+#        "task/gpu_task/kernel/*.cuh"
+#        "task/gpu_task/kernel/data_structures/*.cuh"
+#        "task/gpu_task/kernel/algorithms/*.cuh"
+#        "task/gpu_task/*.cu"
+#        "task/cpu_task/*.h"
+#        )
 
 #######################
 # Tests Configuration
 #######################
-list(FILTER CORE_SOURCES EXCLUDE REGEX ".*_test\\.cpp$")
+#list(FILTER CORE_SOURCES EXCLUDE REGEX ".*_test\\.cpp$")
 if (TEST)
     add_subdirectory(tests)
 endif ()
@@ -72,21 +73,29 @@ endif ()
 #######################
 # Library Target
 #######################
-add_library(${PROJECT_NAME} STATIC ${CORE_SOURCES} ${CORE_HEADERS})
+add_library(${PROJECT_NAME} STATIC ${CORE_SOURCES})
+
+# Dependencies
+target_link_libraries(${PROJECT_NAME}
+        PRIVATE
+        yaml-cpp
+        cublas
+	#matrixgraph_core
+	#TBB::tbb
+	${TBB_LIBRARIES}
+	#-static-libstdc++
+        )
+
+target_include_directories(${PROJECT_NAME}
+	PRIVATE
+	${THIRD_PARTY_ROOT}/yaml-cpp/include/
+	${THIRD_PARTY_ROOT}/cutlass/include
+	${PROJECT_ROOT_DIR}
+	)
 
 # Library properties
 set_target_properties(${PROJECT_NAME} PROPERTIES
         CUDA_SEPARABLE_COMPILATION ON
         POSITION_INDEPENDENT_CODE ON
         CUDA_RESOLVE_DEVICE_SYMBOLS ON
-        )
-
-# Dependencies
-target_link_libraries(${PROJECT_NAME}
-        PUBLIC
-        yaml-cpp
-        cublas
-        TBB::tbb
-        PRIVATE
-        -static-libstdc++
         )

@@ -17,9 +17,9 @@ endif()
 
 # Compiler flags
 if(CMAKE_BUILD_TYPE STREQUAL "Release")
-    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -O3")
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3")
-    set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -O3")
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -O3 -gdwarf-4")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3 -gdwarf-4")
+    set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -O3 -gdwarf-4")
 endif()
 
 # Status messages
@@ -52,7 +52,7 @@ if(USE_JEMALLOC)
 endif()
 
 # TBB
-find_package(TBB)
+find_package(TBB REQUIRED)
 if(TBB_FOUND)
     message(STATUS "TBB found")
     add_compile_definitions(TBB_FOUND)
@@ -75,23 +75,23 @@ if(TEST)
 endif()
 
 # Gflags
-add_subdirectory("${THIRD_PARTY_ROOT}/gflags")
+#add_subdirectory("${THIRD_PARTY_ROOT}/gflags")
 
 # YAML-CPP
 add_subdirectory("${THIRD_PARTY_ROOT}/yaml-cpp" EXCLUDE_FROM_ALL)
-include_directories(SYSTEM ${THIRD_PARTY_ROOT}/yaml-cpp/include/)
+#include_directories(SYSTEM ${THIRD_PARTY_ROOT}/yaml-cpp/include/)
 
 # RapidCSV (header-only)
-include_directories(SYSTEM ${THIRD_PARTY_ROOT}/rapidcsv/src)
+#include_directories(SYSTEM ${THIRD_PARTY_ROOT}/rapidcsv/src)
 
 # CUTLASS (header-only)
-include_directories(SYSTEM ${THIRD_PARTY_ROOT}/cutlass/include)
+#include_directories(SYSTEM ${THIRD_PARTY_ROOT}/cutlass/include)
 
 #######################
 # Project Components
 #######################
-include_directories(${PROJECT_ROOT_DIR})
+#include_directories(${PROJECT_ROOT_DIR})
 
 add_subdirectory(core)
-add_subdirectory(tools)
+#add_subdirectory(tools)
 add_subdirectory(apps)

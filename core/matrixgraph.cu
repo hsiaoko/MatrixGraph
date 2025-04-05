@@ -1,14 +1,14 @@
-#include <chrono>
-#include <ctime>
-
 #include "core/matrixgraph.cuh"
 #include "core/task/cpu_task/cpu_subiso.cuh"
 #include "core/task/gpu_task/bfs.cuh"
 #include "core/task/gpu_task/gemm.cuh"
+#include "core/task/gpu_task/gemv.cuh"
 #include "core/task/gpu_task/pagerank.cuh"
 #include "core/task/gpu_task/ppr_query.cuh"
 #include "core/task/gpu_task/subiso.cuh"
 #include "core/task/gpu_task/wcc.cuh"
+#include <chrono>
+#include <ctime>
 
 namespace sics {
 namespace matrixgraph {
@@ -64,6 +64,12 @@ void MatrixGraph::Run(TaskType task_type, TaskBase* task_ptr) {
     case common::kBFS: {
       std::cout << "[BFS Traverse]" << std::endl;
       auto task = reinterpret_cast<task::BFS*>(task_ptr);
+      task->Run();
+      break;
+    }
+    case common::kGEMV: {
+      std::cout << "[GEMV Traverse]" << std::endl;
+      auto task = reinterpret_cast<task::GEMV*>(task_ptr);
       task->Run();
       break;
     }
