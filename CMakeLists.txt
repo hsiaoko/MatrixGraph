@@ -37,14 +37,13 @@ set(CMAKE_MODULE_PATH ${PROJECT_ROOT_DIR}/cmake)
 set(LIBRARY_ROOT_DIR ${PROJECT_ROOT_DIR}/lib)
 
 # Third party roor dir.
-#set(TBB_ROOT_DIR "/hdd_data/local/oneTBB/")
-set(TBB_ROOT_DIR "${THIRD_PARTY_ROOT}/oneTBB/")
 set(GFLAGS_ROOT_DIR "${THIRD_PARTY_ROOT}/gflags")
+set(TBB_ROOT_DIR "${THIRD_PARTY_ROOT}/oneTBB/")
 set(YAML_ROOT_DIR "${THIRD_PARTY_ROOT}/yaml-cpp")
 
-list(APPEND CMAKE_PREFIX_PATH "${TBB_ROOT_DIR}")
-list(APPEND CMAKE_PREFIX_PATH "${GFLASG_ROOT_DIR}")
-list(APPEND CMAKE_PREFIX_PATH "${YAML_ROOT_DIR}")
+list(PREPEND CMAKE_PREFIX_PATH "${GFLASG_ROOT_DIR}")
+list(PREPEND CMAKE_PREFIX_PATH "${TBB_ROOT_DIR}")
+list(PREPEND CMAKE_PREFIX_PATH "${YAML_ROOT_DIR}")
 
 #######################
 # Dependencies
@@ -65,12 +64,11 @@ endif ()
 #######################
 # Third Party Libraries
 #######################
+# Gflags
+add_subdirectory("${GFLAGS_ROOT_DIR}" EXCLUDE_FROM_ALL)
+
 # TBB
 add_subdirectory("${TBB_ROOT_DIR}" EXCLUDE_FROM_ALL)
-if (TBB_FOUND)
-    message(STATUS "TBB found")
-    add_compile_definitions(TBB_FOUND)
-endif ()
 
 # GoogleTest
 if (TEST)
@@ -85,8 +83,6 @@ if (TEST)
             )
 endif ()
 
-# Gflags
-add_subdirectory("${GFLAGS_ROOT_DIR}" EXCLUDE_FROM_ALL)
 
 # YAML-CPP
 add_subdirectory("${YAML_ROOT_DIR}" EXCLUDE_FROM_ALL)
@@ -95,5 +91,5 @@ add_subdirectory("${YAML_ROOT_DIR}" EXCLUDE_FROM_ALL)
 # Project Components
 #######################
 add_subdirectory(core)
-add_subdirectory(tools)
-add_subdirectory(apps)
+#add_subdirectory(tools)
+#add_subdirectory(apps)

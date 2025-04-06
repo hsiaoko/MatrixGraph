@@ -11,7 +11,7 @@ set(CMAKE_CUDA_STANDARD 20)
 set(CMAKE_CUDA_STANDARD_REQUIRED ON)
 
 # CUDA Configuration
-set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -arch=sm_60")  # Set minimum compute capability
+#set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -arch=sm_60")  # Set minimum compute capability
 set(CMAKE_CUDA_FLAGS_RELEASE "${CMAKE_CUDA_FLAGS_RELEASE} -O3")
 set(CMAKE_CUDA_FLAGS_DEBUG "${CMAKE_CUDA_FLAGS_DEBUG} -g -G")
 
@@ -55,17 +55,14 @@ add_library(${PROJECT_NAME} STATIC ${CORE_SOURCES})
 target_link_libraries(${PROJECT_NAME}
 	PUBLIC
         yaml-cpp
-        cublas
-	gflags
 	TBB::tbb
-        gflags
-        ${TBB_LIBRARIES}
         )
 
 target_include_directories(${PROJECT_NAME}
-        PRIVATE
+	PUBLIC
         ${THIRD_PARTY_ROOT}/yaml-cpp/include/
 	${PROJECT_ROOT_DIR}
+	${CMAKE_CUDA_TOOLKIT_INCLUDE_DIRECTORIES}
         )
 
 # Library properties

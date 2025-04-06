@@ -28,19 +28,19 @@ foreach (app_source ${CONVERTER_APPS})
             ${TOOLS_SOURCES}
             )
 
-    # Set target properties
-    set_target_properties("${app_name}" PROPERTIES
-            CUDA_SEPARABLE_COMPILATION ON
-            POSITION_INDEPENDENT_CODE ON
-            )
-
     # Link dependencies
     target_link_libraries("${app_name}"
             PRIVATE
             matrixgraph_core
             yaml-cpp
-            gflags
-            TBB::tbb
+            gflags::gflags
+	    TBB::tbb
             stdc++fs
+            )
+
+    # Set target properties
+    set_target_properties("${app_name}" PROPERTIES
+            CUDA_SEPARABLE_COMPILATION ON
+            POSITION_INDEPENDENT_CODE ON
             )
 endforeach ()

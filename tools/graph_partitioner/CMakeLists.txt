@@ -40,7 +40,7 @@ foreach (app_source ${PARTITIONER_APPS})
             PRIVATE
             matrixgraph_core
             yaml-cpp
-            gflags
-            TBB::tbb
+            gflags::gflags
+	    TBB::tbb
             )
 endforeach ()
