@@ -53,19 +53,19 @@ add_library(${PROJECT_NAME} STATIC ${CORE_SOURCES})
 
 # Dependencies
 target_link_libraries(${PROJECT_NAME}
-        PRIVATE
+	PUBLIC
         yaml-cpp
         cublas
+	gflags
+	TBB::tbb
         gflags
-        TBB::tbb
         ${TBB_LIBRARIES}
         )
 
 target_include_directories(${PROJECT_NAME}
         PRIVATE
         ${THIRD_PARTY_ROOT}/yaml-cpp/include/
-        ${THIRD_PARTY_ROOT}/cutlass/include
-        ${PROJECT_ROOT_DIR}
+	${PROJECT_ROOT_DIR}
         )
 
 # Library properties

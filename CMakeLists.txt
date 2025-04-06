@@ -36,6 +36,16 @@ set(LIBRARY_OUTPUT_PATH ${PROJECT_ROOT_DIR}/lib)
 set(CMAKE_MODULE_PATH ${PROJECT_ROOT_DIR}/cmake)
 set(LIBRARY_ROOT_DIR ${PROJECT_ROOT_DIR}/lib)
 
+# Third party roor dir.
+#set(TBB_ROOT_DIR "/hdd_data/local/oneTBB/")
+set(TBB_ROOT_DIR "${THIRD_PARTY_ROOT}/oneTBB/")
+set(GFLAGS_ROOT_DIR "${THIRD_PARTY_ROOT}/gflags")
+set(YAML_ROOT_DIR "${THIRD_PARTY_ROOT}/yaml-cpp")
+
+list(APPEND CMAKE_PREFIX_PATH "${TBB_ROOT_DIR}")
+list(APPEND CMAKE_PREFIX_PATH "${GFLASG_ROOT_DIR}")
+list(APPEND CMAKE_PREFIX_PATH "${YAML_ROOT_DIR}")
+
 #######################
 # Dependencies
 #######################
@@ -51,16 +61,17 @@ if (USE_JEMALLOC)
     endif ()
 endif ()
 
+
+#######################
+# Third Party Libraries
+#######################
 # TBB
-find_package(TBB REQUIRED)
+add_subdirectory("${TBB_ROOT_DIR}" EXCLUDE_FROM_ALL)
 if (TBB_FOUND)
     message(STATUS "TBB found")
     add_compile_definitions(TBB_FOUND)
 endif ()
 
-#######################
-# Third Party Libraries
-#######################
 # GoogleTest
 if (TEST)
     enable_testing()
@@ -75,14 +86,14 @@ if (TEST)
 endif ()
 
 # Gflags
-add_subdirectory("${THIRD_PARTY_ROOT}/gflags")
+add_subdirectory("${GFLAGS_ROOT_DIR}" EXCLUDE_FROM_ALL)
 
 # YAML-CPP
-add_subdirectory("${THIRD_PARTY_ROOT}/yaml-cpp" EXCLUDE_FROM_ALL)
+add_subdirectory("${YAML_ROOT_DIR}" EXCLUDE_FROM_ALL)
 
 #######################
 # Project Components
 #######################
 add_subdirectory(core)
-#add_subdirectory(tools)
+add_subdirectory(tools)
 add_subdirectory(apps)

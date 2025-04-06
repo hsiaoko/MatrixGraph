@@ -4,3 +4,6 @@
 [submodule "third_party/gflags"]
 	path = third_party/gflags
 	url = https://github.com/gflags/gflags.git
+[submodule "third_party/oneTBB"]
+	path = third_party/oneTBB
+	url = https://github.com/uxlfoundation/oneTBB.git
