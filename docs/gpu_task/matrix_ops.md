@@ -46,7 +46,7 @@ Optimized matrix multiplication kernel using shared memory tiling for GPU accele
 
 ### Usage
 ```c++
-
+// ...
 #include "core/data_structures/unified_buffer.cuh"
 #include "core/data_structures/host_buffer.cuh"
 #include "core/task/gpu_task/matrix_ops.cuh"
@@ -58,8 +58,8 @@ using BufferFloat = sics::matrixgraph::core::data_structures::Buffer<float>;
 
 int main(int argc, char* argv[]) {
     // ...
+    
     // Data preparing
-
     int m = 4;
     int k = 2;
     int n = 1;
@@ -101,10 +101,12 @@ int main(int argc, char* argv[]) {
     unified_buf_B.Init(buf_B);
     unified_buf_C.Init(sizeof(float) * m * n);
     
+    // Create task
     auto* task = new MatrixOps();     
     task->Matmult(unified_buf_A.GetPtr(), unified_buf_B.GetPtr(),
                   unified_buf_C.GetPtr(), m, k, n);
 
+    // Print output
     std::cout << "C" << m << ", " << n << std::endl;
     for (int i = 0; i < m; i++) {
       for (int j = 0; j < n; j++) {
