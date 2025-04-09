@@ -53,16 +53,17 @@ add_library(${PROJECT_NAME} STATIC ${CORE_SOURCES})
 
 # Dependencies
 target_link_libraries(${PROJECT_NAME}
-	PUBLIC
+        PUBLIC
         yaml-cpp
-	TBB::tbb
+        TBB::tbb
+        cublas
         )
 
 target_include_directories(${PROJECT_NAME}
-	PUBLIC
+        PUBLIC
         ${THIRD_PARTY_ROOT}/yaml-cpp/include/
-	${PROJECT_ROOT_DIR}
-	${CMAKE_CUDA_TOOLKIT_INCLUDE_DIRECTORIES}
+        ${PROJECT_ROOT_DIR}
+        ${CMAKE_CUDA_TOOLKIT_INCLUDE_DIRECTORIES}
         )
 
 # Library properties

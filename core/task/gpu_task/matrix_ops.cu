@@ -5,7 +5,8 @@
 #include "core/data_structures/host_buffer.cuh"
 #include "core/data_structures/metadata.h"
 #include "core/data_structures/unified_buffer.cuh"
-#include "core/task/gpu_task/gemv.cuh"
+#include "core/task/gpu_task/kernel/kernel_matrix_ops.cuh"
+#include "core/task/gpu_task/matrix_ops.cuh"
 #include "core/util/atomic.h"
 #include "core/util/bitmap_no_ownership.h"
 #include "core/util/bitmap_ownership.h"
@@ -58,31 +59,37 @@ using sics::matrixgraph::core::common::kDefalutNumEdgesPerTile;
 using sics::matrixgraph::core::common::kMaxNumEdges;
 using sics::matrixgraph::core::common::kMaxNumEdgesPerBlock;
 
-// CUDA kernel to add elements of two arrays
-__host__ void GEMV::LoadData() {
-  std::cout << "[GEMV] LoadData()" << std::endl;
+__host__ void MatrixOps::Run() {}
+
+void MatrixOps::cuBLASMatmult(float* A, float* B, float* C, int m, int k, int n,
+                              bool transa_tag, bool transb_tag) {
+  cublasHandle_t handle;
+  cublasCreate(&handle);
+  cublasOperation_t transa = transa_tag ? CUBLAS_OP_N : CUBLAS_OP_T;
+  cublasOperation_t transb = transb_tag ? CUBLAS_OP_N : CUBLAS_OP_T;
+
+  float alpha = 1.0f, beta = 0.0f;
+  cublasSgeam(handle, transa, transb, m, n, &alpha, A, m, &beta, B, n, C, m);
+
+  cublasDestroy(handle);
 }
 
-__host__ void GEMV::Run() {
-  auto start_time_0 = std::chrono::system_clock::now();
-  LoadData();
-  auto start_time_1 = std::chrono::system_clock::now();
+void MatrixOps::Matmult(float* A, float* B, float* C, int m, int k, int n) {
+  cudaStream_t stream;
+  cudaStreamCreate(&stream);
+  kernel::MatrixOpsKernelWrapper::Matmult(stream, A, B, C, m, k, n);
 
-  auto start_time_2 = std::chrono::system_clock::now();
+  cudaStreamSynchronize(stream);
+  cudaStreamDestroy(stream);
+}
 
-  std::cout << "[GEMV] LoadData() elapsed: "
-            << std::chrono::duration_cast<std::chrono::microseconds>(
-                   start_time_1 - start_time_0)
-                       .count() /
-                   (double)CLOCKS_PER_SEC
-            << std::endl;
+void MatrixOps::Activate(float* A, int n) {
+  cudaStream_t stream;
+  cudaStreamCreate(&stream);
 
-  std::cout << "[GEMV] Run() elapsed: "
-            << std::chrono::duration_cast<std::chrono::microseconds>(
-                   start_time_2 - start_time_1)
-                       .count() /
-                   (double)CLOCKS_PER_SEC
-            << std::endl;
+  kernel::MatrixOpsKernelWrapper::Activate(stream, A, n);
+  cudaStreamSynchronize(stream);
+  cudaStreamDestroy(stream);
 }
 
 }  // namespace task

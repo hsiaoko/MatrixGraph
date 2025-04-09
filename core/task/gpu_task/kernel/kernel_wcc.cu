@@ -1,8 +1,3 @@
-#include <cuda_runtime.h>
-
-#include <chrono>
-#include <iostream>
-
 #include "core/common/consts.h"
 #include "core/common/types.h"
 #include "core/data_structures/kernel_bitmap.cuh"
@@ -10,6 +5,9 @@
 #include "core/data_structures/mini_kernel_bitmap.cuh"
 #include "core/task/gpu_task/kernel/kernel_wcc.cuh"
 #include "core/util/bitmap_no_ownership.h"
+#include <chrono>
+#include <cuda_runtime.h>
+#include <iostream>
 
 namespace sics {
 namespace matrixgraph {
@@ -344,7 +342,7 @@ void WCCKernelWrapper::WCC(
     std::cout << "Round " << round++
               << " Active vertices: " << *(in_active_vertices_offset)
               << std::endl;
-    HashMinKernel<<<dimGrid, dimBlock, 0, stream>>>(params);
+    HashMinKernel<<<dimGrid, dimBlock, 65536, stream>>>(params);
     // HashMinRangeKernel<<<dimGrid, dimBlock, 0, stream>>>(params);
     //    HashMinKernelActiveVertices<<<dimGrid, dimBlock, 0, stream>>>(params);
     cudaStreamSynchronize(stream);

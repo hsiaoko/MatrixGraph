@@ -2,7 +2,7 @@
 #include "core/task/cpu_task/cpu_subiso.cuh"
 #include "core/task/gpu_task/bfs.cuh"
 #include "core/task/gpu_task/gemm.cuh"
-#include "core/task/gpu_task/gemv.cuh"
+#include "core/task/gpu_task/matrix_ops.cuh"
 #include "core/task/gpu_task/pagerank.cuh"
 #include "core/task/gpu_task/ppr_query.cuh"
 #include "core/task/gpu_task/subiso.cuh"
@@ -69,8 +69,8 @@ void MatrixGraph::Run(TaskType task_type, TaskBase* task_ptr) {
     }
     case common::kGEMV: {
       std::cout << "[GEMV Traverse]" << std::endl;
-      auto task = reinterpret_cast<task::GEMV*>(task_ptr);
-      task->Run();
+      auto task = reinterpret_cast<task::MatrixOps*>(task_ptr);
+      // TODO(hsiaoko): added a task runner.
       break;
     }
     default:
