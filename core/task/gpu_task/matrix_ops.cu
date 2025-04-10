@@ -101,6 +101,16 @@ void MatrixOps::MatAdd(float* A, float* B, int m, int n) {
   cudaStreamDestroy(stream);
 }
 
+void MatrixOps::Transpose(float* A, float* B, int m, int n) {
+  cudaStream_t stream;
+  cudaStreamCreate(&stream);
+
+  kernel::MatrixOpsKernelWrapper::Transpose(stream, A, B, m, n);
+
+  cudaStreamSynchronize(stream);
+  cudaStreamDestroy(stream);
+}
+
 }  // namespace task
 }  // namespace core
 }  // namespace matrixgraph

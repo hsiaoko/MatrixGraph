@@ -80,7 +80,7 @@ class MatrixOps : public TaskBase {
    *    - m: number of row of A
    *    - n: number of column of A
    */
-  void Activate(float* A, int m,int n);
+  void Activate(float* A, int m, int n);
 
   /**
    * @brif: Performs element-wise matrix addition on GPU.
@@ -108,6 +108,8 @@ class MatrixOps : public TaskBase {
    *    7.5, 9.5, 11.5] (stored in B)
    */
   void MatAdd(float* A, float* B, int m, int n);
+
+  void Transpose(float* A, float* B, int m, int n);
 
   void cuBLASRelu(float* A, size_t n);
 };

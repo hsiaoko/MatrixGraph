@@ -39,6 +39,9 @@ class MatrixOpsKernelWrapper {
   static void MatAdd(const cudaStream_t& stream, float* A, float* B, int m,
                      int n);
 
+  static void Transpose(const cudaStream_t& stream, float* A, float* B, int m,
+                        int n);
+
  private:
   MatrixOpsKernelWrapper() = default;
   inline static MatrixOpsKernelWrapper* ptr_ = nullptr;

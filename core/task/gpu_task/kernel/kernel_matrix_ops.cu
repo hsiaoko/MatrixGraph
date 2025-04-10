@@ -93,42 +93,14 @@ static __global__ void MatrixMulSharedKernel(ParametersMatrix params) {
   }
 }
 
-static __global__ void TransposedMatrixMulSharedKernel(
-    ParametersMatrix params) {
-  __shared__ float s_A[16][16];  // the size of Tile = 16 x 16
-  __shared__ float s_B[16][16];
-
+static __global__ void InplaceRectangularTransposeKernel(float* input,
+                                                         float* output,
+                                                         int rows, int cols) {
   int row = blockIdx.y * blockDim.y + threadIdx.y;
   int col = blockIdx.x * blockDim.x + threadIdx.x;
-  float sum = 0.0f;
 
-  for (int tile = 0; tile < (params.k + 15) / 16; ++tile) {
-    //  load the matrix from global memory to shared memory.
-    int loadRow = row;
-    int loadCol = tile * 16 + threadIdx.x;
-    if (loadRow < params.m && loadCol < params.k) {
-      s_A[threadIdx.y][threadIdx.x] = params.A[loadRow * params.k + loadCol];
-    } else {
-      s_A[threadIdx.y][threadIdx.x] = 0.0f;
-    }
-
-    loadRow = tile * 16 + threadIdx.y;
-    loadCol = col;
-    if (loadRow < params.k && loadCol < params.n) {
-      s_B[threadIdx.y][threadIdx.x] = params.B[loadRow + params.n * loadCol];
-    } else {
-      s_B[threadIdx.y][threadIdx.x] = 0.0f;
-    }
-    __syncthreads();
-
-    for (int k = 0; k < 16; ++k) {
-      sum += s_A[threadIdx.y][k] * s_B[k][threadIdx.x];
-    }
-    __syncthreads();
-  }
-
-  if (row < params.m && col < params.n) {
-    params.C[row * params.n + col] = sum;
+  if (row < rows && col < cols) {
+    output[col * rows + row] = input[row * cols + col];  // 行主序→列主序
   }
 }
 
@@ -148,7 +120,9 @@ void MatrixOpsKernelWrapper::MatMult(const cudaStream_t& stream, float* A,
   dim3 dimGrid((n + 15) / 16, (m + 15) / 16);
 
   if (transposed) {
-    TransposedMatrixMulSharedKernel<<<dimGrid, dimBlock, 0, stream>>>(params);
+    // TransposedMatrixMulSharedKernel<<<dimGrid, dimBlock, 0,
+    // stream>>>(params);
+    MatrixMulSharedKernel<<<dimGrid, dimBlock, 0, stream>>>(params);
   } else {
     MatrixMulSharedKernel<<<dimGrid, dimBlock, 0, stream>>>(params);
   }
@@ -165,6 +139,15 @@ void MatrixOpsKernelWrapper::Activate(const cudaStream_t& stream, float* A,
   dim3 dimBlock(kBlockDim);
   dim3 dimGrid(kGridDim);
   ReluKernel<<<dimGrid, dimBlock, 0, stream>>>(A, m * n);
+}
+
+void MatrixOpsKernelWrapper::Transpose(const cudaStream_t& stream, float* input,
+                                       float* output, int rows, int cols) {
+  dim3 dimBlock(kBlockDim);
+  dim3 dimGrid(kGridDim);
+
+  InplaceRectangularTransposeKernel<<<dimGrid, dimBlock, 0, stream>>>(
+      input, output, rows, cols);
 }
 
 }  // namespace kernel
