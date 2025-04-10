@@ -93,6 +93,45 @@ static __global__ void MatrixMulSharedKernel(ParametersMatrix params) {
   }
 }
 
+static __global__ void TransposedMatrixMulSharedKernel(
+    ParametersMatrix params) {
+  __shared__ float s_A[16][16];  // the size of Tile = 16 x 16
+  __shared__ float s_B[16][16];
+
+  int row = blockIdx.y * blockDim.y + threadIdx.y;
+  int col = blockIdx.x * blockDim.x + threadIdx.x;
+  float sum = 0.0f;
+
+  for (int tile = 0; tile < (params.k + 15) / 16; ++tile) {
+    //  load the matrix from global memory to shared memory.
+    int loadRow = row;
+    int loadCol = tile * 16 + threadIdx.x;
+    if (loadRow < params.m && loadCol < params.k) {
+      s_A[threadIdx.y][threadIdx.x] = params.A[loadRow * params.k + loadCol];
+    } else {
+      s_A[threadIdx.y][threadIdx.x] = 0.0f;
+    }
+
+    loadRow = tile * 16 + threadIdx.y;
+    loadCol = col;
+    if (loadRow < params.k && loadCol < params.n) {
+      s_B[threadIdx.y][threadIdx.x] = params.B[loadRow + params.n * loadCol];
+    } else {
+      s_B[threadIdx.y][threadIdx.x] = 0.0f;
+    }
+    __syncthreads();
+
+    for (int k = 0; k < 16; ++k) {
+      sum += s_A[threadIdx.y][k] * s_B[k][threadIdx.x];
+    }
+    __syncthreads();
+  }
+
+  if (row < params.m && col < params.n) {
+    params.C[row * params.n + col] = sum;
+  }
+}
+
 static __global__ void MatrixAddKernel(float* A, float* B, int m, int n) {
   const unsigned int tid = blockIdx.x * blockDim.x + threadIdx.x;
   const unsigned int step = blockDim.x * gridDim.x;
@@ -100,19 +139,22 @@ static __global__ void MatrixAddKernel(float* A, float* B, int m, int n) {
   for (VertexID idx = tid; idx < m * n; idx += step) B[idx] += A[idx];
 }
 
-void MatrixOpsKernelWrapper::Matmult(const cudaStream_t& stream, float* A,
-                                     float* B, float* C, int m, int k, int n) {
+void MatrixOpsKernelWrapper::MatMult(const cudaStream_t& stream, float* A,
+                                     float* B, float* C, int m, int k, int n,
+                                     bool transposed) {
   ParametersMatrix params{.A = A, .B = B, .C = C, .m = m, .k = k, .n = n};
 
-  // dim3 dimBlock(kBlockDim);
-  // dim3 dimGrid(kGridDim);
   dim3 dimBlock(16, 16);
   dim3 dimGrid((n + 15) / 16, (m + 15) / 16);
 
-  MatrixMulSharedKernel<<<dimGrid, dimBlock, 0, stream>>>(params);
+  if (transposed) {
+    TransposedMatrixMulSharedKernel<<<dimGrid, dimBlock, 0, stream>>>(params);
+  } else {
+    MatrixMulSharedKernel<<<dimGrid, dimBlock, 0, stream>>>(params);
+  }
 }
 
-void MatrixOpsKernelWrapper::Matadd(const cudaStream_t& stream, float* A,
+void MatrixOpsKernelWrapper::MatAdd(const cudaStream_t& stream, float* A,
                                     float* B, int m, int n) {
   dim3 dimBlock(kBlockDim);
   dim3 dimGrid(kGridDim);

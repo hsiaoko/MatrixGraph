@@ -31,12 +31,12 @@ class MatrixOpsKernelWrapper {
 
   static MatrixOpsKernelWrapper* GetInstance();
 
-  static void Matmult(const cudaStream_t& stream, float* A, float* B, float* C,
-                      int m, int k, int n);
+  static void MatMult(const cudaStream_t& stream, float* A, float* B, float* C,
+                      int m, int k, int n, bool transposed = true);
 
   static void Activate(const cudaStream_t& stream, float* A, int m, int n);
 
-  static void Matadd(const cudaStream_t& stream, float* A, float* B, int m,
+  static void MatAdd(const cudaStream_t& stream, float* A, float* B, int m,
                      int n);
 
  private:

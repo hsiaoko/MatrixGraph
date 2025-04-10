@@ -77,7 +77,7 @@ void MatrixOps::cuBLASMatmult(float* A, float* B, float* C, int m, int k, int n,
 void MatrixOps::MatMult(float* A, float* B, float* C, int m, int k, int n) {
   cudaStream_t stream;
   cudaStreamCreate(&stream);
-  kernel::MatrixOpsKernelWrapper::Matmult(stream, A, B, C, m, k, n);
+  kernel::MatrixOpsKernelWrapper::MatMult(stream, A, B, C, m, k, n);
 
   cudaStreamSynchronize(stream);
   cudaStreamDestroy(stream);
@@ -96,7 +96,7 @@ void MatrixOps::MatAdd(float* A, float* B, int m, int n) {
   cudaStream_t stream;
   cudaStreamCreate(&stream);
 
-  kernel::MatrixOpsKernelWrapper::Matadd(stream, A, B, m, n);
+  kernel::MatrixOpsKernelWrapper::MatAdd(stream, A, B, m, n);
   cudaStreamSynchronize(stream);
   cudaStreamDestroy(stream);
 }
