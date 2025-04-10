@@ -71,14 +71,43 @@ class MatrixOps : public TaskBase {
    *  -9.0,
    *  -13.0]
    */
-  void Matmult(float* A, float* B, float* C, int m, int n, int k);
+  void MatMult(float* A, float* B, float* C, int m, int n, int k);
 
-  // @Description: Applies ReLU activation in-place on a GPU array
-  // @Parameters:
-  //   - A: pointer to matrix A (row-major).
-  //   - n: number of elements of A
-  // @Notes: formula: A[i] = max(0, A[i])
-  void Activate(float* A, int n);
+  /**
+   * @brif: Applies ReLU activation in-place on a GPU array.
+   * @pram:
+   *    - A: pointer to matrix A (row-major).
+   *    - m: number of row of A
+   *    - n: number of column of A
+   */
+  void Activate(float* A, int m,int n);
+
+  /**
+   * @brif: Performs element-wise matrix addition on GPU.
+   *        Computes `C = A + B` where `A` and `B` are matrices of shape `(m ×
+   * n)`. The result is stored in-place in matrix `B`.
+   *
+   * @pram:
+   *    - A:    Pointer to input matrix A (row-major, size `m×n`).
+   *    - B:    Pointer to input/output matrix B (row-major, size `m×n`).
+   *            After execution, contains `A + B`.
+   *    - m:    Number of rows in matrices A and B.
+   *    - n:    Number of columns in matrices A and B.
+   *
+   * @note: Input/Output Example
+   *  **Matrix A (2×3):**
+   *   [1.0, 2.0, 3.0,
+   *    4.0, 5.0, 6.0]
+   *
+   *  **Matrix B (2×3):**
+   *   [0.5, 1.5, 2.5,
+   *    3.5, 4.5, 5.5]
+   *
+   *  **After Matadd(A, B, 2, 3):**
+   *   [1.5, 3.5, 5.5,
+   *    7.5, 9.5, 11.5] (stored in B)
+   */
+  void MatAdd(float* A, float* B, int m, int n);
 
   void cuBLASRelu(float* A, size_t n);
 };

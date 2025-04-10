@@ -93,6 +93,13 @@ static __global__ void MatrixMulSharedKernel(ParametersMatrix params) {
   }
 }
 
+static __global__ void MatrixAddKernel(float* A, float* B, int m, int n) {
+  const unsigned int tid = blockIdx.x * blockDim.x + threadIdx.x;
+  const unsigned int step = blockDim.x * gridDim.x;
+
+  for (VertexID idx = tid; idx < m * n; idx += step) B[idx] += A[idx];
+}
+
 void MatrixOpsKernelWrapper::Matmult(const cudaStream_t& stream, float* A,
                                      float* B, float* C, int m, int k, int n) {
   ParametersMatrix params{.A = A, .B = B, .C = C, .m = m, .k = k, .n = n};
@@ -102,14 +109,20 @@ void MatrixOpsKernelWrapper::Matmult(const cudaStream_t& stream, float* A,
   dim3 dimBlock(16, 16);
   dim3 dimGrid((n + 15) / 16, (m + 15) / 16);
 
-  MatrixMulSharedKernel<<<dimGrid, dimBlock, 8192, stream>>>(params);
+  MatrixMulSharedKernel<<<dimGrid, dimBlock, 0, stream>>>(params);
 }
 
-void MatrixOpsKernelWrapper::Activate(const cudaStream_t& stream, float* A,
-                                      int n) {
+void MatrixOpsKernelWrapper::Matadd(const cudaStream_t& stream, float* A,
+                                    float* B, int m, int n) {
   dim3 dimBlock(kBlockDim);
   dim3 dimGrid(kGridDim);
-  ReluKernel<<<dimGrid, dimBlock, 8192, stream>>>(A, n);
+  MatrixAddKernel<<<dimGrid, dimBlock, 0, stream>>>(A, B, m, n);
+}
+void MatrixOpsKernelWrapper::Activate(const cudaStream_t& stream, float* A,
+                                      int m, int n) {
+  dim3 dimBlock(kBlockDim);
+  dim3 dimGrid(kGridDim);
+  ReluKernel<<<dimGrid, dimBlock, 0, stream>>>(A, m * n);
 }
 
 }  // namespace kernel
