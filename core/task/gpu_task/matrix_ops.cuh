@@ -71,7 +71,7 @@ class MatrixOps : public TaskBase {
    *  -9.0,
    *  -13.0]
    */
-  void MatMult(float* A, float* B, float* C, int m, int n, int k);
+  void MatMult(float* A, float* B, float* C, int m, int k, int n);
 
   /**
    * @brif: Applies ReLU activation in-place on a GPU array.
