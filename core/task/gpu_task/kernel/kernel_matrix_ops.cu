@@ -96,11 +96,15 @@ static __global__ void MatrixMulSharedKernel(ParametersMatrix params) {
 static __global__ void InplaceRectangularTransposeKernel(float* input,
                                                          float* output,
                                                          int rows, int cols) {
-  int row = blockIdx.y * blockDim.y + threadIdx.y;
-  int col = blockIdx.x * blockDim.x + threadIdx.x;
+  int idx_x = blockIdx.x * blockDim.x + threadIdx.x;
+  int idx_y = blockIdx.y * blockDim.y + threadIdx.y;
+  const unsigned int col_step = blockDim.y * gridDim.y;
+  const unsigned int row_step = blockDim.x * gridDim.x;
 
-  if (row < rows && col < cols) {
-    output[col * rows + row] = input[row * cols + col];  // 行主序→列主序
+  for (int row = idx_x; row < rows; row += row_step) {
+    for (int col = idx_y; col < cols; col += col_step) {
+      output[row + rows * col] = input[row * cols + col];
+    }
   }
 }
 
@@ -143,8 +147,8 @@ void MatrixOpsKernelWrapper::Activate(const cudaStream_t& stream, float* A,
 
 void MatrixOpsKernelWrapper::Transpose(const cudaStream_t& stream, float* input,
                                        float* output, int rows, int cols) {
-  dim3 dimBlock(kBlockDim);
-  dim3 dimGrid(kGridDim);
+  dim3 dimBlock(32, 32);
+  dim3 dimGrid(32, 32);
 
   InplaceRectangularTransposeKernel<<<dimGrid, dimBlock, 0, stream>>>(
       input, output, rows, cols);

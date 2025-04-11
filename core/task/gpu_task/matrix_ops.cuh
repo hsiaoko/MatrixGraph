@@ -109,6 +109,36 @@ class MatrixOps : public TaskBase {
    */
   void MatAdd(float* A, float* B, int m, int n);
 
+  /**
+   * @brif: Performs in-place matrix transposition on GPU.
+   *        Computes B = A^T where A is a matrix of shape (m × n)
+   *        and B will be of shape (n × m). Supports both square
+   *        and rectangular matrices.
+   *
+   * @pram:
+   *    - A:    Pointer to input matrix (row-major, size m×n).
+   *    - B:    Pointer to output matrix (row-major, size n×m).
+   *            After execution, contains transposed matrix A^T.
+   *    - m:    Number of rows in input matrix A.
+   *    - n:    Number of columns in input matrix A.
+   *
+   * @impl_note:
+   *   - Uses 1 thread per matrix element
+   *   - For square matrices (m == n), employs optimized
+   *     diagonal-swapping algorithm
+   *   - For rectangular matrices, uses coalesced memory access
+   *     pattern to maximize bandwidth utilization
+   *
+   * @note: Input/Output Example
+   *  **Matrix A (2×3):**
+   *   [1.0, 2.0, 3.0,
+   *    4.0, 5.0, 6.0]
+   *
+   *  **Output B (3×2):**
+   *   [1.0, 4.0,
+   *    2.0, 5.0,
+   *    3.0, 6.0]
+   */
   void Transpose(float* A, float* B, int m, int n);
 
   void cuBLASRelu(float* A, size_t n);
