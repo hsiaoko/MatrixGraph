@@ -327,7 +327,7 @@ void Edges::Compacted() {
                     localid_to_globalid_[e.dst] = e.dst;
                   }
                 });
-  edgelist_metadata_.mav_vid = edgelist_metadata_.num_vertices - 1;
+  edgelist_metadata_.max_vid = edgelist_metadata_.num_vertices - 1;
 }
 
 void Edges::Transpose() {

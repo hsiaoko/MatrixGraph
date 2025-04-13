@@ -35,15 +35,16 @@ class CPUSubIso : public CPUTaskBase {
 
  private:
   void LoadData();
-  void InitLabel(VertexLabel* label_p, VertexLabel* label_g);
-  void InitLabel();
-  void AllocMappingBuf();
-  void Matching(const ImmutableCSR& p, const ImmutableCSR& g);
-  void WOJMatching(const ImmutableCSR& p, const ImmutableCSR& g);
 
-  // Thread pool for parallel processing
-  void ParallelMatching(const ImmutableCSR& p, const ImmutableCSR& g,
-                        size_t thread_id, size_t total_threads);
+  void InitLabel(VertexLabel* label_p, VertexLabel* label_g);
+
+  void InitLabel();
+
+  void AllocMappingBuf();
+
+  void RecursiveMatching(const ImmutableCSR& p, const ImmutableCSR& g);
+
+  void WOJMatching(const ImmutableCSR& p, const ImmutableCSR& g);
 
   ImmutableCSR p_;
   ImmutableCSR g_;

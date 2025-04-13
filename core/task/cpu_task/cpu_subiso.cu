@@ -318,10 +318,16 @@ void CPUSubIso::LoadData() {
   g_.PrintGraph(3);
 }
 
-void CPUSubIso::Matching(const ImmutableCSR& p, const ImmutableCSR& g) {}
+void CPUSubIso::RecursiveMatching(const ImmutableCSR& p,
+                                  const ImmutableCSR& g) {
+  std::cout << "Matching ..." << std::endl;
+  auto parallelism = std::thread::hardware_concurrency();
+  std::vector<size_t> worker(parallelism);
+  std::mutex mtx;
 
-void CPUSubIso::ParallelMatching(const ImmutableCSR& p, const ImmutableCSR& g,
-                                 size_t thread_id, size_t total_threads) {}
+  std::iota(worker.begin(), worker.end(), 0);
+  auto step = worker.size();
+}
 
 void CPUSubIso::WOJMatching(const ImmutableCSR& p, const ImmutableCSR& g) {
   WOJExecutionPlan exec_plan;
