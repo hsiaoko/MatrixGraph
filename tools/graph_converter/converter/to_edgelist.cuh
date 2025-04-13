@@ -101,6 +101,7 @@ static void ConvertEGSMGraph2EdgelistBin(const std::string& input_path,
     exit(-1);
   }
 
+  std::cout << "ConvertEGSMGraph2EdgelistBin" << std::endl;
   // true for the query graph, false for the data graph
 
   sics::matrixgraph::core::data_structures::EdgelistMetadata edgelist_metadata;
@@ -111,12 +112,17 @@ static void ConvertEGSMGraph2EdgelistBin(const std::string& input_path,
   char type;
   ifs >> type >> edgelist_metadata.num_vertices >> edgelist_metadata.num_edges;
 
+  std::cout << " - num_vertices: " << edgelist_metadata.num_vertices
+            << " num_edges: " << edgelist_metadata.num_edges << std::endl;
+
   auto buffer_edges =
       new sics::matrixgraph::core::data_structures::Edge[edgelist_metadata
                                                              .num_edges]();
 
   VertexID* localid2globalid = new VertexID[edgelist_metadata.num_vertices]();
-  VertexLabel* v_label = new VertexLabel[edgelist_metadata.max_vid]();
+
+  // assume that vertex id are compacted in Rapids Graph format.
+  VertexLabel* v_label = new VertexLabel[edgelist_metadata.num_vertices]();
 
   EdgeIndex eid = 0;
   while (ifs >> type) {
@@ -139,6 +145,9 @@ static void ConvertEGSMGraph2EdgelistBin(const std::string& input_path,
 
   sics::matrixgraph::core::data_structures::Edges edgelist(
       edgelist_metadata, buffer_edges, localid2globalid, v_label);
+
+  edgelist.GenerateLocalID2GlobalID();
+  edgelist.Compacted();
 
   edgelist.ShowGraph();
 

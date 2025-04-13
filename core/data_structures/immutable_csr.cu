@@ -228,11 +228,6 @@ void ImmutableCSR::Read(const std::string& root_path) {
   SetLocalIDBuffer(reinterpret_cast<VertexID*>(
       edges_globalid_by_localid_base_pointer_ + metadata_.max_vid + 1));
 
-  for (int i = 0; i < get_num_vertices(); i++) {
-    std::cout << localid_by_globalid_base_pointer_[i] << " ";
-  }
-  std::cout << std::endl;
-
   auto ptr = GetEdgesGloablIDBasePointer();
 
   label_file.seekg(0, std::ios::end);

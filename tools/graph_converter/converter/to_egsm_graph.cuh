@@ -13,15 +13,14 @@ using Vertex = sics::matrixgraph::core::data_structures::ImmutableCSRVertex;
 using GraphID = sics::matrixgraph::core::common::GraphID;
 using VertexID = sics::matrixgraph::core::common::VertexID;
 
-static void ConvertCSRBin2EGSMGraph(const std::string &input_path,
-                                    const std::string &output_path) {
-
+static void ConvertCSRBin2EGSMGraph(const std::string& input_path,
+                                    const std::string& output_path) {
   ImmutableCSR csr;
   csr.Read(input_path);
 
-  csr.PrintGraph();
+  csr.PrintGraph(3120);
 
-  csr.GenerateVLabel(6);
+  // csr.GenerateVLabel(sics::matrixgraph::core::common::kLabelRange);
   std::ofstream file(output_path);
   if (!file.is_open()) {
     std::cerr << "Read error: " << output_path << std::endl;
@@ -38,7 +37,6 @@ static void ConvertCSRBin2EGSMGraph(const std::string &input_path,
   }
 
   for (VertexID v_idx = 0; v_idx < csr.get_num_vertices(); v_idx++) {
-
     auto u = csr.GetVertexByLocalID(v_idx);
 
     for (EdgeIndex e_idx = 0; e_idx < u.outdegree; e_idx++) {
@@ -49,9 +47,9 @@ static void ConvertCSRBin2EGSMGraph(const std::string &input_path,
   file.close();
 }
 
-} // namespace converter
-} // namespace tools
-} // namespace matrixgraph
-} // namespace sics
+}  // namespace converter
+}  // namespace tools
+}  // namespace matrixgraph
+}  // namespace sics
 
-#endif // MATRIXGRAPH_TOOLS_GRAPH_CONVERTER_CONVERTER_TO_IMMUTABLE_CSR_CUH_
+#endif  // MATRIXGRAPH_TOOLS_GRAPH_CONVERTER_CONVERTER_TO_IMMUTABLE_CSR_CUH_

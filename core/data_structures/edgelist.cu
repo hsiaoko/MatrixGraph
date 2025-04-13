@@ -5,8 +5,6 @@
 #include <random>
 #include <thread>
 
-#include <yaml-cpp/yaml.h>
-
 #include "core/common/consts.h"
 #include "core/common/types.h"
 #include "core/data_structures/edgelist.h"
@@ -288,6 +286,7 @@ void Edges::GenerateLocalID2GlobalID() {
     }
   }
 
+  edgelist_metadata_.num_vertices = bitmap.Count();
   std::for_each(std::execution::par, worker.begin(), worker.end(),
                 [this, step, &vid_map, &new_localid_to_globalid](auto w) {
                   for (auto i = w; i < get_metadata().num_edges; i += step) {
@@ -328,6 +327,7 @@ void Edges::Compacted() {
                     localid_to_globalid_[e.dst] = e.dst;
                   }
                 });
+  edgelist_metadata_.mav_vid = edgelist_metadata_.num_vertices - 1;
 }
 
 void Edges::Transpose() {

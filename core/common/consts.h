@@ -9,6 +9,8 @@ namespace matrixgraph {
 namespace core {
 namespace common {
 
+static const uint32_t kLabelRange = 5;
+
 static const uint32_t kDefaultTileSize = 64;
 static const uint32_t kMaxVertexID = std::numeric_limits<uint32_t>::max();
 static const uint32_t kDefaultTileNum = 1024;

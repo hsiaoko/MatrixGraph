@@ -69,6 +69,7 @@ add_subdirectory("${GFLAGS_ROOT_DIR}" EXCLUDE_FROM_ALL)
 
 # TBB
 add_subdirectory("${TBB_ROOT_DIR}" EXCLUDE_FROM_ALL)
+#find_package(TBB)
 
 # GoogleTest
 if (TEST)
@@ -91,5 +92,5 @@ add_subdirectory("${YAML_ROOT_DIR}" EXCLUDE_FROM_ALL)
 # Project Components
 #######################
 add_subdirectory(core)
-#add_subdirectory(tools)
-#add_subdirectory(apps)
+add_subdirectory(tools)
+add_subdirectory(apps)
