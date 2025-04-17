@@ -69,7 +69,7 @@ class BitmapOwnership : public Bitmap {
     size_ = 0;
   }
 
-  void Init(size_t size) {
+  void Init(size_t size) override {
     delete[] data_;
     size_ = size;
     data_ = new uint64_t[WORD_OFFSET(size) + 1]();

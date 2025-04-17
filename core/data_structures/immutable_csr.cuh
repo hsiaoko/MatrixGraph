@@ -225,7 +225,7 @@ class ImmutableCSR {
     return outdegree_base_pointer_[i];
   }
 
-  inline ImmutableCSRVertex GetVertexByLocalID(VertexID i) const;
+  ImmutableCSRVertex GetVertexByLocalID(VertexID i) const;
 
  protected:
   // Metadata to build the CSR.

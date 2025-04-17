@@ -26,7 +26,7 @@ class Bitmap {
 
   virtual ~Bitmap() {}
 
-  void Init(size_t size) {
+  virtual void Init(size_t size) {
     delete[] data_;
     size_ = size;
     data_ = new uint64_t[WORD_OFFSET(size) + 1]();

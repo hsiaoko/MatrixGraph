@@ -576,7 +576,7 @@ void CPUSubIso::Run() {
   auto end_time = std::chrono::system_clock::now();
   std::cout << "Total execution time: "
             << std::chrono::duration_cast<std::chrono::milliseconds>(
-                   end_time - start_time_0)
+                   end_time - start_time_1)
                        .count() /
                    (double)CLOCKS_PER_SEC
             << " sec" << std::endl;
