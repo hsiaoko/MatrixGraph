@@ -45,6 +45,7 @@ class ExecutionPlan {
                    const ImmutableCSR& g, std::vector<VertexID>& output,
                    std::vector<VertexID>& output_in_edges, VertexID depth,
                    VertexID& max_depth) {
+    if (visited.GetBit(vid)) return;
     auto u = g.GetVertexByLocalID(vid);
 
     auto globalid = g.GetGlobalIDByLocalID(vid);
@@ -71,6 +72,7 @@ class ExecutionPlan {
     // BitmapOwnership visited(p.get_max_vid());
     uint64_t* visited_data = new uint64_t[WORD_OFFSET(p.get_max_vid())]();
     BitmapNoOwnerShip visited(p.get_max_vid(), visited_data);
+    visited.Clear();
 
     auto global_vid = p.GetGlobalIDByLocalID(0);
     std::vector<VertexID> output;
@@ -78,21 +80,26 @@ class ExecutionPlan {
     output.reserve(p.get_max_vid());
     output_in_edges.reserve(p.get_max_vid());
 
-    DFSTraverse(0, visited, p, output, output_in_edges, 0, depth_);
+    int root = 0;
+    while (1) {
+      DFSTraverse(0, visited, p, output, output_in_edges, root++, depth_);
+      if (visited.Count() >= p.get_num_vertices() - 1) break;
+    }
 
     sequential_exec_path_in_edges_ = new UnifiedOwnedBufferVertexID();
     sequential_exec_path_ = new UnifiedOwnedBufferVertexID();
     inverted_index_of_sequential_exec_path_ = new UnifiedOwnedBufferVertexID();
 
+    // n_edges_ = output_in_edges.size() / 2 + 1;
+
     sequential_exec_path_->Init(sizeof(VertexID) * p.get_num_vertices());
     sequential_exec_path_in_edges_->Init(sizeof(VertexID) *
-                                         p.get_num_vertices() * 2);
+                                         ((output_in_edges.size() + 1) * 2));
     inverted_index_of_sequential_exec_path_->Init(sizeof(VertexID) *
                                                   p.get_num_vertices());
 
     cudaMemcpy(sequential_exec_path_->GetPtr(), output.data(),
-               sizeof(VertexID) * p.get_num_vertices(), cudaMemcpyHostToHost);
-
+               sizeof(VertexID) * output.size(), cudaMemcpyHostToHost);
     cudaMemcpy(sequential_exec_path_in_edges_->GetPtr() + 2,
                output_in_edges.data(),
                sizeof(VertexID) * output_in_edges.size(), cudaMemcpyHostToHost);
@@ -107,11 +114,11 @@ class ExecutionPlan {
     }
 
     exec_path_ = new VertexID[p.get_num_vertices()]();
-    exec_path_in_edges_ = new VertexID[output_in_edges.size() + 2]();
+    exec_path_in_edges_ = new VertexID[(output_in_edges.size() + 1) * 2]();
 
     memcpy(exec_path_, output.data(), sizeof(VertexID) * p.get_num_vertices());
     memcpy(exec_path_in_edges_ + 2, output_in_edges.data(),
-           sizeof(VertexID) * output_in_edges.size());
+           sizeof(VertexID) * output_in_edges.size() * 2);
     exec_path_in_edges_[0] = kMaxVertexID;
     exec_path_in_edges_[1] = sequential_exec_path_->GetPtr()[0];
     delete[] visited_data;
@@ -138,6 +145,15 @@ class ExecutionPlan {
 
   inline VertexID get_n_vertices() const { return n_vertices_; }
 
+  void Print() const {
+    std::cout << "Print ExecPlan - n_vertices: " << n_vertices_ << std::endl;
+    std::cout << "\t sequential_exec_path_in_edges:" << std::endl;
+    for (int i = 0; i < n_vertices_; i++) {
+      auto ptr = get_sequential_exec_path_in_edges_ptr()->GetPtr();
+      std::cout << "\t* " << ptr[i * 2] << "->" << ptr[i * 2 + 1] << std::endl;
+    }
+  }
+
  public:
   UnifiedOwnedBufferVertexID* sequential_exec_path_ = nullptr;
   UnifiedOwnedBufferVertexID* sequential_exec_path_in_edges_ = nullptr;
@@ -148,6 +164,7 @@ class ExecutionPlan {
 
   VertexID n_vertices_ = 0;
   VertexID depth_ = 0;
+  VertexID n_edges_ = 0;
 };
 
 }  // namespace data_structures

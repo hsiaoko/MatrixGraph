@@ -80,4 +80,5 @@ class BitmapOwnership : public Bitmap {
 }  // namespace core
 }  // namespace matrixgraph
 }  // namespace sics
+
 #endif  // CORE_UTIL_BITMAP_H_

@@ -246,6 +246,7 @@ ImmutableCSRVertex ImmutableCSR::GetVertexByLocalID(VertexID i) const {
   ImmutableCSRVertex v;
   v.vid = globalid_by_localid_base_pointer_[i];
   v.vlabel = vertex_label_base_pointer_.get()[i];
+  // v.vlabel = 123;
   if (get_num_incoming_edges() > 0) {
     v.indegree = GetInDegreeByLocalID(i);
     v.incoming_edges = incoming_edges_base_pointer_ + GetInOffsetByLocalID(i);
@@ -268,6 +269,7 @@ void ImmutableCSR::GenerateVLabel(VertexID range) {
   std::mt19937 gen(rd());
 
   std::uniform_int_distribution<> dis(0, 65536);
+  std::cout << range << std::endl;
 
   std::for_each(std::execution::par, worker.begin(), worker.end(),
                 [this, step, &dis, &gen, &range](auto w) {

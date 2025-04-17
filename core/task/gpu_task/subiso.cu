@@ -102,9 +102,10 @@ __host__ void SubIso::LoadData() {
   std::cout << "[SubIso] LoadData() ..." << std::endl;
 
   p_.Read(pattern_path_);
-  p_.PrintGraph(10);
 
   g_.Read(data_graph_path_);
+
+  p_.PrintGraph(10);
   g_.PrintGraph(1);
 }
 

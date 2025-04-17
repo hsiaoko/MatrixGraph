@@ -45,6 +45,7 @@ DEFINE_string(convert_mode, "",
 DEFINE_string(sep, ",", "Separator for CSV files (default: comma)");
 DEFINE_bool(compressed, false, "Use compressed vertex IDs");
 DEFINE_uint32(tile_size, 64, "Size of a single tile");
+DEFINE_uint32(label_range, 1, "label range for initialization");
 
 // Conversion modes
 enum class ConvertMode {
@@ -175,11 +176,11 @@ int main(int argc, char** argv) {
         break;
       case ConvertMode::kEdgelistCSV2CSRBin:
         sics::matrixgraph::tools::converter::ConvertEdgelistCSV2ImmutableCSR(
-            FLAGS_i, FLAGS_o, FLAGS_sep);
+            FLAGS_i, FLAGS_o, FLAGS_sep, FLAGS_compressed, FLAGS_label_range);
         break;
       case ConvertMode::kEdgelistCSV2EdgelistBin:
         sics::matrixgraph::tools::converter::ConvertEdgelistCSV2EdgelistBin(
-            FLAGS_i, FLAGS_o, FLAGS_sep, FLAGS_compressed);
+            FLAGS_i, FLAGS_o, FLAGS_sep, FLAGS_compressed, FLAGS_label_range);
         break;
       case ConvertMode::kCSRBin2EdgelistBin:
         sics::matrixgraph::tools::converter::ConvertImmutableCSR2EdgelistBin(

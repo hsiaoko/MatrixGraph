@@ -9,6 +9,7 @@
 #include "core/common/consts.h"
 #include "core/common/types.h"
 #include "core/data_structures/exec_plan.cuh"
+#include "core/data_structures/matches.cuh"
 #include "core/data_structures/metadata.h"
 #include "core/data_structures/woj_exec_plan.cuh"
 #include "core/data_structures/woj_matches.cuh"
@@ -30,12 +31,13 @@ using Edges = sics::matrixgraph::core::data_structures::Edges;
 using Edge = sics::matrixgraph::core::data_structures::Edge;
 using GraphMetadata = sics::matrixgraph::core::data_structures::GraphMetadata;
 using WOJMatches = sics::matrixgraph::core::data_structures::WOJMatches;
+using Matches = sics::matrixgraph::core::data_structures::Matches;
 using WOJExecutionPlan =
     sics::matrixgraph::core::data_structures::WOJExecutionPlan;
 using ExecutionPlan = sics::matrixgraph::core::data_structures::ExecutionPlan;
 using BitmapOwnership = sics::matrixgraph::core::util::BitmapOwnership;
 using sics::matrixgraph::core::common::kLogWarpSize;
-using sics::matrixgraph::core::common::kMaxNumCandidatesPerThread;
+using sics::matrixgraph::core::common::kMaxNumLocalWeft;
 using sics::matrixgraph::core::common::kMaxNumWeft;
 using sics::matrixgraph::core::common::kMaxVertexID;
 using sics::matrixgraph::core::common::kNCUDACoresPerSM;
@@ -44,13 +46,18 @@ using sics::matrixgraph::core::common::kNWarpPerCUDACore;
 using sics::matrixgraph::core::common::kSharedMemoryCapacity;
 using sics::matrixgraph::core::common::kSharedMemorySize;
 using sics::matrixgraph::core::common::kWarpSize;
+using BitmapOwnership = sics::matrixgraph::core::util::BitmapOwnership;
+
+struct LocalMatches {
+  VertexID* data = nullptr;
+  VertexID* size = nullptr;
+};
 
 static inline bool LabelDegreeFilter(VertexID u_idx, VertexID v_idx,
                                      const ImmutableCSR& p,
                                      const ImmutableCSR& g) {
   auto u_label = p.GetVLabelBasePointer()[u_idx];
   auto v_label = g.GetVLabelBasePointer()[v_idx];
-  // printf("check %d(%d), %d(%d)\n", u_idx, u_label, v_idx, v_label);
   if (u_label == v_label)
     return true;
   else
@@ -67,8 +74,8 @@ static inline bool LabelFilter(VertexID u_idx, VertexID v_idx,
   return u_label == v_label;
 }
 
-static inline bool FilterCore(VertexID u_idx, VertexID v_idx,
-                              const ImmutableCSR& p, const ImmutableCSR& g) {
+static inline bool Filter(VertexID u_idx, VertexID v_idx, const ImmutableCSR& p,
+                          const ImmutableCSR& g) {
   // return LabelFilter(u_idx, v_idx, p, g);
   return LabelDegreeFilter(u_idx, v_idx, p, g);
 }
@@ -102,8 +109,6 @@ static std::vector<WOJMatches*> WOJFilter(const WOJExecutionPlan& exec_plan,
     VertexID src_idx = p.GetLocalIDByGlobalID(u_src);
     VertexID dst_idx = p.GetLocalIDByGlobalID(u_dst);
 
-    // std::cout << u_src << "(" << src_idx << ")"
-    //           << "=>" << u_dst << "(" << dst_idx << ")" << std::endl;
     std::for_each(
         // std::execution::par,
         worker.begin(), worker.end(),
@@ -115,18 +120,11 @@ static std::vector<WOJMatches*> WOJFilter(const WOJExecutionPlan& exec_plan,
             auto degree = g.GetOutDegreeByLocalID(v_idx);
             auto* out_edges = g.GetOutgoingEdgesByLocalID(v_idx);
             VertexID global_id = g.GetGlobalIDByLocalID(v_idx);
-            // std::cout << global_id << ", degree: " << degree
-            //           << ", label: " << std::endl;
-            if (FilterCore(src_idx, v_idx, p, g)) {
+            if (Filter(src_idx, v_idx, p, g)) {
               for (VertexID nbr_v_idx = 0; nbr_v_idx < degree; nbr_v_idx++) {
                 VertexID nbr_v = out_edges[nbr_v_idx];
                 VertexID nbr_localid = g.GetLocalIDByGlobalID(nbr_v);
-                // std::cout << global_id << "->" << nbr_v << ": " << nbr_v_idx
-                //           << "/" << degree << std::endl;
-                if (FilterCore(dst_idx, nbr_localid, p, g)) {
-                  //                 std::cout << global_id << "->" << nbr_v <<
-                  //                 " #" << std::endl;
-
+                if (Filter(dst_idx, nbr_localid, p, g)) {
                   auto local_offset = __sync_fetch_and_add(
                       woj_matches_vec[eid]->get_y_offset_ptr(), 1);
                   woj_matches_vec[eid]->get_data_ptr()[local_offset * 2] =
@@ -143,13 +141,12 @@ static std::vector<WOJMatches*> WOJFilter(const WOJExecutionPlan& exec_plan,
   return woj_matches_vec;
 }
 
-static inline void JoinCore(VertexID n_vertices_g,
-                            const WOJMatches& left_woj_matches,
-                            const WOJMatches& right_woj_matches,
-                            WOJMatches* output_woj_matches,
-                            VertexID left_hash_idx, VertexID right_hash_idx,
-                            BitmapOwnership& right_visited,
-                            BitmapOwnership& jump_visited) {
+static inline void Join(VertexID n_vertices_g,
+                        const WOJMatches& left_woj_matches,
+                        const WOJMatches& right_woj_matches,
+                        WOJMatches* output_woj_matches, VertexID left_hash_idx,
+                        VertexID right_hash_idx, BitmapOwnership& right_visited,
+                        BitmapOwnership& jump_visited) {
   auto parallelism = std::thread::hardware_concurrency();
   std::vector<size_t> worker(parallelism);
   std::iota(worker.begin(), worker.end(), 0);
@@ -241,7 +238,7 @@ static inline void JoinCore(VertexID n_vertices_g,
       });
 }
 
-static WOJMatches* WOJJoin(
+static WOJMatches* WOJEnumerating(
     const WOJExecutionPlan& exec_plan,
     const std::vector<WOJMatches*>& input_woj_matches_vec) {
   auto parallelism = std::thread::hardware_concurrency();
@@ -287,9 +284,9 @@ static WOJMatches* WOJJoin(
                                   right_woj_matches->get_header_ptr(),
                                   right_woj_matches->get_x_offset(), join_keys);
 
-    JoinCore(exec_plan.get_n_vertices_g(), *left_woj_matches,
-             *right_woj_matches, output_woj_matches, join_keys.first,
-             join_keys.second, visited, jump_visited);
+    Join(exec_plan.get_n_vertices_g(), *left_woj_matches, *right_woj_matches,
+         output_woj_matches, join_keys.first, join_keys.second, visited,
+         jump_visited);
     if (output_woj_matches->get_y_offset() == 0) {
       break;
     }
@@ -308,14 +305,175 @@ static WOJMatches* WOJJoin(
   }
 }
 
-void CPUSubIso::LoadData() {
-  std::cout << "[CPUSubIso] LoadData() ..." << std::endl;
+static inline void DFSExtend(const ImmutableCSR& p, const ImmutableCSR& g,
+                             const ExecutionPlan& exec_plan, VertexID level,
+                             VertexID pre_v_idx, VertexID v_idx,
+                             BitmapOwnership& global_visited,
+                             BitmapOwnership local_visited,
+                             BitmapOwnership* level_visited_ptr_array,
+                             LocalMatches* local_matches, bool match) {
+  if (level > exec_plan.get_depth()) {
+    return;
+  }
 
-  p_.Read(pattern_path_);
-  p_.PrintGraph(10);
+  unsigned exec_plan_idx = local_visited.Count();
+  unsigned global_exec_plan_idx = global_visited.Count();
 
-  g_.Read(data_graph_path_);
-  g_.PrintGraph(3);
+  if (global_exec_plan_idx == p.get_num_vertices()) {
+    return;
+  }
+  if (local_matches->size[exec_plan_idx] >= kMaxNumLocalWeft) {
+    return;
+  }
+  if (local_matches->size[global_exec_plan_idx] >= kMaxNumLocalWeft) {
+    return;
+  }
+
+  VertexID u = exec_plan.get_exec_path_ptr()[exec_plan_idx];
+
+  VertexLabel u_label = p.GetVLabelBasePointer()[exec_plan_idx];
+
+  VertexID global_u = exec_plan.get_exec_path_ptr()[global_exec_plan_idx];
+  VertexLabel global_u_label = p.GetVLabelBasePointer()[global_exec_plan_idx];
+
+  VertexLabel v_label = g.GetVLabelBasePointer()[v_idx];
+
+  VertexID global_pre_u = exec_plan.get_sequential_exec_path_in_edges_ptr()
+                              ->GetPtr()[2 * global_exec_plan_idx];
+  VertexID local_pre_u = exec_plan.get_sequential_exec_path_in_edges_ptr()
+                             ->GetPtr()[2 * exec_plan_idx];
+
+  bool local_match_tag = false;
+  bool global_match_tag = false;
+  bool extend_tag = false;
+
+  // If true, we need Check both global u and local u. it false we only need to
+  // Check local u.
+  local_match_tag = Filter(u, v_idx, p, g);
+  global_match_tag = Filter(global_u, v_idx, p, g);
+
+  if (global_u == u) {
+    if (local_match_tag) {
+      local_visited.SetBit(u);
+      global_visited.SetBit(u);
+      VertexID offset = local_matches->size[exec_plan_idx];
+      local_matches->size[exec_plan_idx]++;
+      if (pre_v_idx != kMaxVertexID) {
+        local_matches->data[kMaxNumWeft * 2 * exec_plan_idx + 2 * offset] =
+            g.GetGloablIDBasePointer()[pre_v_idx];
+      }
+      local_matches->data[kMaxNumWeft * 2 * exec_plan_idx + 2 * offset + 1] =
+          g.GetGloablIDBasePointer()[v_idx];
+
+      if (!level_visited_ptr_array[exec_plan_idx].GetBit(v_idx)) {
+        level_visited_ptr_array[exec_plan_idx].SetBit(v_idx);
+        extend_tag = true;
+      }
+    }
+  } else {
+    if (local_match_tag) {
+      local_visited.SetBit(u);
+      VertexID offset = local_matches->size[exec_plan_idx];
+      local_matches->size[exec_plan_idx]++;
+      if (pre_v_idx != kMaxVertexID) {
+        local_matches->data[kMaxNumWeft * 2 * exec_plan_idx + 2 * offset] =
+            g.GetGloablIDBasePointer()[pre_v_idx];
+      }
+      local_matches->data[kMaxNumWeft * 2 * exec_plan_idx + 2 * offset + 1] =
+          g.GetGloablIDBasePointer()[v_idx];
+
+      if (!level_visited_ptr_array[exec_plan_idx].GetBit(v_idx)) {
+        level_visited_ptr_array[exec_plan_idx].SetBit(v_idx);
+        extend_tag = true;
+      }
+    }
+
+    if (global_match_tag) {
+      local_visited.SetBit(global_u);
+      VertexID offset = local_matches->size[global_exec_plan_idx];
+      if (pre_v_idx != kMaxVertexID) {
+        local_matches
+            ->data[kMaxNumWeft * 2 * global_exec_plan_idx + 2 * offset] =
+            g.GetGloablIDBasePointer()[pre_v_idx];
+      }
+      local_matches
+          ->data[kMaxNumWeft * 2 * global_exec_plan_idx + 2 * offset + 1] =
+          g.GetGloablIDBasePointer()[v_idx];
+      local_matches->size[global_exec_plan_idx]++;
+      if (!level_visited_ptr_array[global_exec_plan_idx].GetBit(v_idx)) {
+        level_visited_ptr_array[global_exec_plan_idx].SetBit(v_idx);
+        extend_tag = true;
+      }
+    }
+  }
+
+  if (extend_tag) {
+    auto v = g.GetVertexByLocalID(v_idx);
+    for (VertexID nbr_idx = 0; nbr_idx < g.GetOutDegreeByLocalID(v_idx);
+         nbr_idx++) {
+      DFSExtend(p, g, exec_plan, level + 1, v_idx, v.outgoing_edges[nbr_idx],
+                global_visited, local_visited, level_visited_ptr_array,
+                local_matches, match);
+    };
+  }
+}
+
+static inline void Enumerating(const ImmutableCSR& p, const ImmutableCSR& g,
+                               const ExecutionPlan& exec_plan,
+                               Matches* matches) {
+  auto parallelism = std::thread::hardware_concurrency();
+  std::vector<size_t> worker(parallelism);
+  std::mutex mtx;
+  std::iota(worker.begin(), worker.end(), 0);
+  auto step = worker.size();
+
+  std::for_each(
+      // std::execution::par,
+      worker.begin(), worker.end(),
+      [step, &p, &g, &exec_plan, &matches](auto w) {
+        BitmapOwnership visited(p.get_num_vertices());
+
+        auto level_visited_ptr_array =
+            new BitmapOwnership[p.get_num_vertices()](1 << 15);
+
+        LocalMatches local_matches;
+        local_matches.data =
+            new VertexID[p.get_num_vertices() * 2 * kMaxNumLocalWeft]();
+        local_matches.size = new VertexID[p.get_num_vertices()]();
+
+        for (VertexID v_idx = w; v_idx < g.get_num_vertices(); v_idx += step) {
+          visited.Clear();
+          bool match = false;
+
+          DFSExtend(p, g, exec_plan, 0, kMaxVertexID, v_idx, visited, visited,
+                    level_visited_ptr_array, &local_matches, match);
+          if (local_matches.size[p.get_num_vertices() - 1] != 0) {
+            auto weft_idx = __sync_fetch_and_add(matches->GetWeftCountPtr(), 1);
+
+            int weft_size = 0;
+            for (int _ = 0; _ < p.get_num_vertices(); _++) {
+              weft_size += local_matches.size[_];
+              matches->GetVCandidateOffsetPtr()[weft_idx *
+                                                    (p.get_num_vertices() + 1) +
+                                                _ + 1] =
+                  matches->GetVCandidateOffsetPtr()
+                      [weft_idx * (p.get_num_vertices() + 1) + _] +
+                  local_matches.size[_];
+            }
+            memcpy(
+                matches->GetDataPtr() +
+                    weft_idx * p.get_num_vertices() * 2 * kMaxNumLocalWeft,
+                local_matches.data,
+                p.get_num_vertices() * 2 * kMaxNumLocalWeft * sizeof(VertexID));
+          }
+          memset(local_matches.data, 0,
+                 sizeof(VertexID) * p.get_num_vertices() * kMaxNumLocalWeft);
+          memset(local_matches.size, 0,
+                 sizeof(VertexID) * p.get_num_vertices());
+        }
+      });
+
+  matches->Print();
 }
 
 void CPUSubIso::RecursiveMatching(const ImmutableCSR& p,
@@ -327,6 +485,17 @@ void CPUSubIso::RecursiveMatching(const ImmutableCSR& p,
 
   std::iota(worker.begin(), worker.end(), 0);
   auto step = worker.size();
+
+  Matches matches(p.get_num_vertices(), kMaxNumWeft, kMaxNumLocalWeft);
+
+  // Generate Execution Plan...
+  ExecutionPlan exec_plan;
+  exec_plan.GenerateDFSExecutionPlan(p, g);
+
+  exec_plan.Print();
+
+  // Enumerating...
+  Enumerating(p, g, exec_plan, &matches);
 }
 
 void CPUSubIso::WOJMatching(const ImmutableCSR& p, const ImmutableCSR& g) {
@@ -341,7 +510,7 @@ void CPUSubIso::WOJMatching(const ImmutableCSR& p, const ImmutableCSR& g) {
   // }
   auto start_time_1 = std::chrono::system_clock::now();
 
-  auto output = WOJJoin(exec_plan, woj_matches);
+  auto output = WOJEnumerating(exec_plan, woj_matches);
   auto start_time_2 = std::chrono::system_clock::now();
 
   output->Print(10);
@@ -359,6 +528,36 @@ void CPUSubIso::WOJMatching(const ImmutableCSR& p, const ImmutableCSR& g) {
             << " sec" << std::endl;
 }
 
+void CPUSubIso::LoadData() {
+  std::cout << "[CPUSubIso] LoadData() ..." << std::endl;
+
+  p_.Read(pattern_path_);
+
+  g_.Read(data_graph_path_);
+
+  auto* g_vlabel = g_.GetVLabelBasePointer();
+  auto* p_vlabel = p_.GetVLabelBasePointer();
+
+  p_vlabel[0] = 0;
+  p_vlabel[1] = 1;
+  p_vlabel[2] = 2;
+  p_vlabel[3] = 3;
+  p_vlabel[4] = 4;
+  p_vlabel[5] = 3;
+  g_vlabel[0] = 0;
+  g_vlabel[1] = 1;
+  g_vlabel[2] = 2;
+  g_vlabel[3] = 3;
+  g_vlabel[4] = 3;
+  g_vlabel[4] = 3;
+  g_vlabel[5] = 4;
+  g_vlabel[6] = 4;
+  g_vlabel[7] = 1;
+  g_vlabel[8] = 0;
+  p_.PrintGraph(10);
+  g_.PrintGraph();
+}
+
 void CPUSubIso::Run() {
   auto start_time_0 = std::chrono::system_clock::now();
   LoadData();
@@ -371,7 +570,8 @@ void CPUSubIso::Run() {
                    (double)CLOCKS_PER_SEC
             << " sec" << std::endl;
 
-  WOJMatching(p_, g_);
+  // WOJMatching(p_, g_);
+  RecursiveMatching(p_, g_);
 
   auto end_time = std::chrono::system_clock::now();
   std::cout << "Total execution time: "

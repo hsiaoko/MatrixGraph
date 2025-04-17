@@ -20,18 +20,22 @@ using VertexID = sics::matrixgraph::core::common::VertexID;
 // indicates whether to read head.
 static void ConvertEdgelistCSV2ImmutableCSR(const std::string& input_path,
                                             const std::string& output_path,
-                                            const std::string& sep) {
+                                            const std::string& sep,
+                                            bool compressed = false,
+                                            unsigned label_range = 1) {
   if (!std::filesystem::exists(output_path))
     std::filesystem::create_directory(output_path);
 
   sics::matrixgraph::core::data_structures::Edges edgelist;
-  edgelist.ReadFromCSV(input_path, sep);
+  edgelist.ReadFromCSV(input_path, sep, compressed);
   edgelist.ShowGraph(5);
   auto p_immutable_csr =
       sics::matrixgraph::core::util::format_converter::Edgelist2ImmutableCSR(
           edgelist);
   // p_immutable_csr->SortByDegree();
-  //  p_immutable_csr->GenerateVLabel(5);
+  p_immutable_csr->GenerateVLabel(label_range);
+  auto vlabel = p_immutable_csr->GetVLabelBasePointer();
+
   p_immutable_csr->PrintGraph(1);
   p_immutable_csr->Write(output_path);
   delete p_immutable_csr;
@@ -57,12 +61,14 @@ static void ConvertEdgelistBin2CSRBin(const std::string& input_path,
 
 static void ConvertEdgelistCSV2CGGraphCSR(const std::string& input_path,
                                           const std::string& output_path,
-                                          const std::string& sep) {
+                                          const std::string& sep,
+                                          unsigned label_range = 1) {
   if (!std::filesystem::exists(output_path))
     std::filesystem::create_directory(output_path);
 
   sics::matrixgraph::core::data_structures::Edges edgelist;
   edgelist.ReadFromCSV(input_path, sep);
+  edgelist.GenerateVLabel(1);
   auto p_immutable_csr =
       sics::matrixgraph::core::util::format_converter::Edgelist2ImmutableCSR(
           edgelist);
