@@ -113,6 +113,14 @@ class Matches {
     return v_candidate_offset_for_each_weft_.GetPtr();
   }
 
+  VertexID get_weft_count() const { return *weft_count_.GetPtr(); }
+
+  VertexID get_n_vertices() const { return n_vertices_; }
+
+  VertexID get_max_n_weft() const { return max_n_weft_; }
+
+  VertexID get_max_n_local_weft() const { return max_n_local_weft_; }
+
   UnifiedOwnedBufferVertexID weft_count_;
   UnifiedOwnedBufferVertexID v_candidate_offset_for_each_weft_;
   UnifiedOwnedBufferVertexID weft_size_;
