@@ -422,10 +422,11 @@ static void DFSExtend(const ImmutableCSR& p, const ImmutableCSR& g,
       VertexID offset = local_matches->size[exec_plan_idx];
       local_matches->size[exec_plan_idx]++;
       if (pre_v_idx != kMaxVertexID) {
-        local_matches->data[kMaxNumWeft * 2 * exec_plan_idx + 2 * offset] =
+        local_matches->data[kMaxNumLocalWeft * 2 * exec_plan_idx + 2 * offset] =
             g.GetGloablIDBasePointer()[pre_v_idx];
       }
-      local_matches->data[kMaxNumWeft * 2 * exec_plan_idx + 2 * offset + 1] =
+      local_matches
+          ->data[kMaxNumLocalWeft * 2 * exec_plan_idx + 2 * offset + 1] =
           g.GetGloablIDBasePointer()[v_idx];
 
       extend_tag = true;
@@ -436,10 +437,11 @@ static void DFSExtend(const ImmutableCSR& p, const ImmutableCSR& g,
       VertexID offset = local_matches->size[exec_plan_idx];
       local_matches->size[exec_plan_idx]++;
       if (pre_v_idx != kMaxVertexID) {
-        local_matches->data[kMaxNumWeft * 2 * exec_plan_idx + 2 * offset] =
+        local_matches->data[kMaxNumLocalWeft * 2 * exec_plan_idx + 2 * offset] =
             g.GetGloablIDBasePointer()[pre_v_idx];
       }
-      local_matches->data[kMaxNumWeft * 2 * exec_plan_idx + 2 * offset + 1] =
+      local_matches
+          ->data[kMaxNumLocalWeft * 2 * exec_plan_idx + 2 * offset + 1] =
           g.GetGloablIDBasePointer()[v_idx];
       extend_tag = true;
     }
@@ -449,11 +451,11 @@ static void DFSExtend(const ImmutableCSR& p, const ImmutableCSR& g,
       VertexID offset = local_matches->size[global_exec_plan_idx];
       if (pre_v_idx != kMaxVertexID) {
         local_matches
-            ->data[kMaxNumWeft * 2 * global_exec_plan_idx + 2 * offset] =
+            ->data[kMaxNumLocalWeft * 2 * global_exec_plan_idx + 2 * offset] =
             g.GetGloablIDBasePointer()[pre_v_idx];
       }
       local_matches
-          ->data[kMaxNumWeft * 2 * global_exec_plan_idx + 2 * offset + 1] =
+          ->data[kMaxNumLocalWeft * 2 * global_exec_plan_idx + 2 * offset + 1] =
           g.GetGloablIDBasePointer()[v_idx];
       local_matches->size[global_exec_plan_idx]++;
       extend_tag = true;
@@ -483,7 +485,8 @@ static inline void Enumerating(const ImmutableCSR& p, const ImmutableCSR& g,
 
   std::cout << "Enumerating" << std::endl;
   std::for_each(
-      std::execution::par, worker.begin(), worker.end(),
+      // std::execution::par,
+      worker.begin(), worker.end(),
       [step, &mtx, &p, &g, &exec_plan, &m_vec, &matches](auto w) {
         LocalMatches local_matches;
         local_matches.data =
@@ -498,7 +501,7 @@ static inline void Enumerating(const ImmutableCSR& p, const ImmutableCSR& g,
           if (local_matches.size[p.get_num_vertices() - 1] != 0) {
             auto weft_idx = __sync_fetch_and_add(matches->GetWeftCountPtr(), 1);
 
-            if (weft_idx >= kMaxNumWeft) return;
+            // if (weft_idx >= kMaxNumWeft) return;
             int weft_size = 0;
             for (int _ = 0; _ < p.get_num_vertices(); _++) {
               weft_size += local_matches.size[_];
@@ -563,7 +566,7 @@ static void Refining(const ImmutableCSR& p, const ImmutableCSR& g,
               bm[i].SetBit(*(matches->GetDataPtr() +
                              weft_id * matches->get_n_vertices() * 2 *
                                  matches->get_max_n_local_weft() +
-                             i * 2 * matches->get_max_n_weft() +
+                             i * 2 * matches->get_max_n_local_weft() +
                              2 * candidate_id + 1));
             }
           }
@@ -599,15 +602,15 @@ static void Refining(const ImmutableCSR& p, const ImmutableCSR& g,
                   if (!bm[j].GetBit(*(matches->GetDataPtr() +
                                       weft_id * matches->get_n_vertices() * 2 *
                                           matches->get_max_n_local_weft() +
-                                      i * 2 * matches->get_max_n_weft() +
+                                      i * 2 * matches->get_max_n_local_weft() +
                                       2 * candidate_id)
 
                                         )) {
                     *(matches->GetDataPtr() +
                       weft_id * matches->get_n_vertices() * 2 *
                           matches->get_max_n_local_weft() +
-                      i * 2 * matches->get_max_n_weft() + 2 * candidate_id) =
-                        kMaxVertexID;
+                      i * 2 * matches->get_max_n_local_weft() +
+                      2 * candidate_id) = kMaxVertexID;
                   }
                 }
               }
@@ -702,11 +705,12 @@ static void Checking(const ImmutableCSR& p, const ImmutableCSR& g,
 
             for (VertexID candidate_idx_src = 0;
                  candidate_idx_src < src_candidate_size; candidate_idx_src++) {
-              auto candidate_src = *(matches->GetDataPtr() +
-                                     weft_id * matches->get_n_vertices() * 2 *
-                                         matches->get_max_n_local_weft() +
-                                     h_src_idx * 2 * matches->get_max_n_weft() +
-                                     2 * candidate_idx_src + src_bias);
+              auto candidate_src =
+                  *(matches->GetDataPtr() +
+                    weft_id * matches->get_n_vertices() * 2 *
+                        matches->get_max_n_local_weft() +
+                    h_src_idx * 2 * matches->get_max_n_local_weft() +
+                    2 * candidate_idx_src + src_bias);
               if (candidate_src == kMaxVertexID) continue;
               auto src_connect_count = 0;
 
@@ -717,7 +721,7 @@ static void Checking(const ImmutableCSR& p, const ImmutableCSR& g,
                     *(matches->GetDataPtr() +
                       weft_id * matches->get_n_vertices() * 2 *
                           matches->get_max_n_local_weft() +
-                      h_dst_idx * 2 * matches->get_max_n_weft() +
+                      h_dst_idx * 2 * matches->get_max_n_local_weft() +
                       2 * candidate_idx_dst + dst_bias);
 
                 if (g.IsConnected(candidate_src, candidate_dst)) {
@@ -729,18 +733,19 @@ static void Checking(const ImmutableCSR& p, const ImmutableCSR& g,
                 *(matches->GetDataPtr() +
                   weft_id * matches->get_n_vertices() * 2 *
                       matches->get_max_n_local_weft() +
-                  h_src_idx * 2 * matches->get_max_n_weft() +
+                  h_src_idx * 2 * matches->get_max_n_local_weft() +
                   2 * candidate_idx_src + src_bias) = kMaxVertexID;
               }
             }
 
             for (VertexID candidate_idx_dst = 0;
                  candidate_idx_dst < dst_candidate_size; candidate_idx_dst++) {
-              auto candidate_dst = *(matches->GetDataPtr() +
-                                     weft_id * matches->get_n_vertices() * 2 *
-                                         matches->get_max_n_local_weft() +
-                                     h_dst_idx * 2 * matches->get_max_n_weft() +
-                                     2 * candidate_idx_dst + dst_bias);
+              auto candidate_dst =
+                  *(matches->GetDataPtr() +
+                    weft_id * matches->get_n_vertices() * 2 *
+                        matches->get_max_n_local_weft() +
+                    h_dst_idx * 2 * matches->get_max_n_local_weft() +
+                    2 * candidate_idx_dst + dst_bias);
               if (candidate_dst == kMaxVertexID) continue;
               auto dst_connect_count = 0;
               for (VertexID candidate_idx_src = 0;
@@ -750,7 +755,7 @@ static void Checking(const ImmutableCSR& p, const ImmutableCSR& g,
                     *(matches->GetDataPtr() +
                       weft_id * matches->get_n_vertices() * 2 *
                           matches->get_max_n_local_weft() +
-                      h_src_idx * 2 * matches->get_max_n_weft() +
+                      h_src_idx * 2 * matches->get_max_n_local_weft() +
                       2 * candidate_idx_src + src_bias);
 
                 if (candidate_src == kMaxVertexID) continue;
@@ -765,7 +770,7 @@ static void Checking(const ImmutableCSR& p, const ImmutableCSR& g,
                 *(matches->GetDataPtr() +
                   weft_id * matches->get_n_vertices() * 2 *
                       matches->get_max_n_local_weft() +
-                  h_src_idx * 2 * matches->get_max_n_weft() +
+                  h_src_idx * 2 * matches->get_max_n_local_weft() +
                   2 * candidate_idx_dst + dst_bias) = kMaxVertexID;
               }
             }

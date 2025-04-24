@@ -68,7 +68,7 @@ class Matches {
     weft_size_.Init(sizeof(VertexID) * max_n_weft_);
     weft_count_.Init(sizeof(VertexID));
 
-    matches_data_.Init(sizeof(VertexID) * 2 * n_vertices * max_n_weft_ *
+    matches_data_.Init(sizeof(VertexID) * 2 * n_vertices * max_n_local_weft *
                        max_n_weft);
     invalid_match_ = new BitmapOwnership(max_n_weft);
     header_.resize(n_vertices_);
@@ -97,11 +97,11 @@ class Matches {
              candidate_id++) {
           std::cout << *(matches_data_.GetPtr() +
                          weft_id * n_vertices_ * 2 * max_n_local_weft_ +
-                         i * 2 * max_n_weft_ + 2 * candidate_id)
+                         i * 2 * max_n_local_weft_ + 2 * candidate_id)
                     << "->"
                     << *(matches_data_.GetPtr() +
                          weft_id * n_vertices_ * 2 * max_n_local_weft_ +
-                         i * 2 * max_n_weft_ + 2 * candidate_id + 1)
+                         i * 2 * max_n_local_weft_ + 2 * candidate_id + 1)
                     << ",";
         }
         std::cout << std::endl;
