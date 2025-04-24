@@ -137,6 +137,82 @@ static void ConvertEdgelistBin2CGGraphCSR(const std::string& input_path,
   delete p_immutable_csr;
 }
 
+static void ConvertEGSMGraph2CSRBin(const std::string& input_path,
+                                    const std::string& output_path) {
+  auto parallelism = std::thread::hardware_concurrency();
+  std::vector<size_t> worker(parallelism);
+  std::iota(worker.begin(), worker.end(), 0);
+  auto step = worker.size();
+
+  std::ifstream ifs(input_path);
+  if (ifs.fail()) {
+    std::cout << "File not exist!\n";
+    exit(-1);
+  }
+
+  std::cout << "ConvertEGSMGraph2EdgelistBin" << std::endl;
+  // true for the query graph, false for the data graph
+
+  sics::matrixgraph::core::data_structures::EdgelistMetadata edgelist_metadata;
+
+  edgelist_metadata.num_edges;
+  edgelist_metadata.num_vertices;
+
+  char type;
+  ifs >> type >> edgelist_metadata.num_vertices >> edgelist_metadata.num_edges;
+
+  std::cout << " - num_vertices: " << edgelist_metadata.num_vertices
+            << " num_edges: " << edgelist_metadata.num_edges << std::endl;
+
+  auto buffer_edges =
+      new sics::matrixgraph::core::data_structures::Edge[edgelist_metadata
+                                                             .num_edges]();
+
+  VertexID* localid2globalid = new VertexID[edgelist_metadata.num_vertices]();
+
+  // assume that vertex id are compacted in Rapids Graph format.
+  VertexLabel* v_label = new VertexLabel[edgelist_metadata.num_vertices]();
+
+  EdgeIndex eid = 0;
+  while (ifs >> type) {
+    if (type == 'v') {
+      VertexID vid, degree;
+      VertexLabel label;
+      ifs >> vid >> label >> degree;
+      sics::matrixgraph::core::util::atomic::WriteMax(
+          &edgelist_metadata.max_vid, vid);
+      sics::matrixgraph::core::util::atomic::WriteMin(
+          &edgelist_metadata.min_vid, vid);
+      v_label[vid] = label;
+      localid2globalid[vid] = vid;
+    } else {
+      VertexID src, dst;
+      ifs >> buffer_edges[eid].src >> buffer_edges[eid].dst;
+      eid++;
+    }
+  }
+
+  sics::matrixgraph::core::data_structures::Edges edgelist(
+      edgelist_metadata, buffer_edges, localid2globalid, v_label);
+
+  edgelist.GenerateLocalID2GlobalID();
+  edgelist.Compacted();
+
+  edgelist.ShowGraph();
+
+  auto p_immutable_csr =
+      sics::matrixgraph::core::util::format_converter::Edgelist2ImmutableCSR(
+          edgelist);
+  // p_immutable_csr->SortByDegree();
+  //  p_immutable_csr->GenerateVLabel(15);
+  p_immutable_csr->PrintGraph(1);
+  p_immutable_csr->Write(output_path);
+  delete p_immutable_csr;
+
+  std::cout << "[ConvertEGSMGraph2CSRBin] Done!" << std::endl;
+  ifs.close();
+}
+
 }  // namespace converter
 }  // namespace tools
 }  // namespace matrixgraph

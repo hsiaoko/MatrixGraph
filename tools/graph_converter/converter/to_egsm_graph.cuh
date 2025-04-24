@@ -18,7 +18,7 @@ static void ConvertCSRBin2EGSMGraph(const std::string& input_path,
   ImmutableCSR csr;
   csr.Read(input_path);
 
-  csr.PrintGraph(3120);
+  csr.PrintGraph();
 
   // csr.GenerateVLabel(sics::matrixgraph::core::common::kLabelRange);
   std::ofstream file(output_path);

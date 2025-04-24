@@ -129,25 +129,27 @@ class ImmutableCSR {
 
   void ReOrder(VertexID tile_size);
 
-  SubGraphMetadata GetMetadata() const { return metadata_; }
+  bool IsConnected(VertexID src, VertexID dst) const;
 
-  GraphID get_gid() const { return metadata_.gid; }
+  inline SubGraphMetadata GetMetadata() const { return metadata_; }
 
-  VertexID get_num_vertices() const { return metadata_.num_vertices; }
+  inline GraphID get_gid() const { return metadata_.gid; }
 
-  EdgeIndex get_num_incoming_edges() const {
+  inline VertexID get_num_vertices() const { return metadata_.num_vertices; }
+
+  inline EdgeIndex get_num_incoming_edges() const {
     return metadata_.num_incoming_edges;
   }
 
-  EdgeIndex get_num_outgoing_edges() const {
+  inline EdgeIndex get_num_outgoing_edges() const {
     return metadata_.num_outgoing_edges;
   }
 
-  VertexID get_max_vid() const { return metadata_.max_vid; }
+  inline VertexID get_max_vid() const { return metadata_.max_vid; }
 
-  VertexID get_min_vid() const { return metadata_.min_vid; }
+  inline VertexID get_min_vid() const { return metadata_.min_vid; }
 
-  uint8_t* GetGraphBuffer() const { return graph_base_pointer_.get(); }
+  inline uint8_t* GetGraphBuffer() const { return graph_base_pointer_.get(); }
 
   inline VertexID* GetGloablIDBasePointer() const {
     return globalid_by_localid_base_pointer_;

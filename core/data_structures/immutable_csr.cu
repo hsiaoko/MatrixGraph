@@ -246,7 +246,6 @@ ImmutableCSRVertex ImmutableCSR::GetVertexByLocalID(VertexID i) const {
   ImmutableCSRVertex v;
   v.vid = globalid_by_localid_base_pointer_[i];
   v.vlabel = vertex_label_base_pointer_.get()[i];
-  // v.vlabel = 123;
   if (get_num_incoming_edges() > 0) {
     v.indegree = GetInDegreeByLocalID(i);
     v.incoming_edges = incoming_edges_base_pointer_ + GetInOffsetByLocalID(i);
@@ -381,6 +380,16 @@ void ImmutableCSR::SortByDegree() {
   SetOutOffsetBuffer(new_buffer_out_offset);
   delete[] new_id_by_old_id;
   std::cout << "[SortByDegree] Done!" << std::endl;
+}
+
+bool ImmutableCSR::IsConnected(VertexID src, VertexID dst) const {
+  auto u = GetVertexByLocalID(src);
+  for (VertexID nbr_idx = 0; nbr_idx < u.outdegree; nbr_idx++) {
+    if (u.outgoing_edges[nbr_idx] == dst) {
+      return true;
+    }
+  }
+  return false;
 }
 
 }  // namespace data_structures

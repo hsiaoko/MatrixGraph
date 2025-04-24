@@ -45,13 +45,14 @@ class ExecutionPlan {
                    const ImmutableCSR& g, std::vector<VertexID>& output,
                    std::vector<VertexID>& output_in_edges, VertexID depth,
                    VertexID& max_depth) {
-    if (visited.GetBit(vid)) return;
+    if (visited.GetBit(vid)) {
+      return;
+    }
+    visited.SetBit(vid);
     auto u = g.GetVertexByLocalID(vid);
 
     auto globalid = g.GetGlobalIDByLocalID(vid);
     output.emplace_back(globalid);
-
-    visited.SetBit(vid);
 
     max_depth = std::max(depth, max_depth);
 
@@ -59,6 +60,8 @@ class ExecutionPlan {
       if (!visited.GetBit(u.outgoing_edges[_])) {
         output_in_edges.emplace_back(globalid);
         output_in_edges.emplace_back(u.outgoing_edges[_]);
+        std::cout << "push: " << globalid << "->" << u.outgoing_edges[_]
+                  << std::endl;
         DFSTraverse(u.outgoing_edges[_], visited, g, output, output_in_edges,
                     depth + 1, max_depth);
       }
@@ -82,15 +85,14 @@ class ExecutionPlan {
 
     int root = 0;
     while (1) {
-      DFSTraverse(0, visited, p, output, output_in_edges, root++, depth_);
-      if (visited.Count() >= p.get_num_vertices() - 1) break;
+      DFSTraverse(root++, visited, p, output, output_in_edges, 0, depth_);
+      std::cout << visited.Count() << "/" << p.get_num_vertices() << std::endl;
+      if (visited.Count() == p.get_num_vertices()) break;
     }
 
     sequential_exec_path_in_edges_ = new UnifiedOwnedBufferVertexID();
     sequential_exec_path_ = new UnifiedOwnedBufferVertexID();
     inverted_index_of_sequential_exec_path_ = new UnifiedOwnedBufferVertexID();
-
-    // n_edges_ = output_in_edges.size() / 2 + 1;
 
     sequential_exec_path_->Init(sizeof(VertexID) * p.get_num_vertices());
     sequential_exec_path_in_edges_->Init(sizeof(VertexID) *

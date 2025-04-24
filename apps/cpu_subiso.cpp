@@ -1,3 +1,5 @@
+#include "core/task/cpu_task/cpu_subiso.cuh"
+
 #include <gflags/gflags.h>
 
 #include <fstream>
@@ -9,13 +11,13 @@
 #include "core/common/yaml_config.h"
 #include "core/components/scheduler/scheduler.h"
 #include "core/matrixgraph.cuh"
-#include "core/task/cpu_task/cpu_subiso.cuh"
 #include "core/task/cpu_task/cpu_task_base.h"
 
 // Input/Output flags
 DEFINE_string(p, "", "Path to the pattern graph file (required)");
 DEFINE_string(g, "", "Path to the data graph file (required)");
-DEFINE_string(e, "", "Path to the edge list file of data graph (required)");
+DEFINE_string(m1, "", "Path to the matrix of pattern graph embedding");
+DEFINE_string(m2, "", "Path to the matrix of data graph embedding");
 DEFINE_string(o, "", "Path for output results (required)");
 DEFINE_int32(t, 72, "Number of CPU threads to use (default: 1)");
 
@@ -62,7 +64,8 @@ void PrintConfig() {
   std::cout << "\n=== CPU SubIso Configuration ===" << std::endl;
   std::cout << "Pattern Graph: " << FLAGS_p << std::endl;
   std::cout << "Data Graph: " << FLAGS_g << std::endl;
-  std::cout << "Edge List: " << FLAGS_e << std::endl;
+  std::cout << "Matrix 1: " << FLAGS_m1 << std::endl;
+  std::cout << "Matrix 2: " << FLAGS_m2 << std::endl;
   std::cout << "Output Path: " << FLAGS_o << std::endl;
   std::cout << "Num Threads: " << FLAGS_t << std::endl;
   std::cout << "Scheduler: " << FLAGS_scheduler << std::endl;
@@ -90,7 +93,8 @@ int main(int argc, char* argv[]) {
     auto scheduler_type = Scheduler2Enum(FLAGS_scheduler);
     sics::matrixgraph::core::MatrixGraph system(scheduler_type);
 
-    auto* task = new CPUSubIso(FLAGS_p, FLAGS_g, FLAGS_o, FLAGS_t);
+    auto* task =
+        new CPUSubIso(FLAGS_p, FLAGS_g, FLAGS_o, FLAGS_t, FLAGS_m1, FLAGS_m2);
     system.Run(sics::matrixgraph::core::common::kCPUSubIso, task);
     delete task;
 

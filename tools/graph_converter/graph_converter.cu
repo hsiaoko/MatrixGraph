@@ -68,6 +68,7 @@ enum class ConvertMode {
   kEdgelistBin2CGGraphCSR,   // Convert binary edge list to CG graph CSR
   kCSRBin2EGSM,              // Convert binary CSR to EGSM format
   kEGSM2EdgelistBin,         // Convert EGSM format to binary edge list
+  kEGSM2CSRBin,              // Convert EGSM format to binary csr
   kUndefined                 // Undefined conversion mode
 };
 
@@ -92,7 +93,8 @@ ConvertMode ConvertMode2Enum(const std::string& mode) {
       {"edgelistcsv2cggraphcsr", ConvertMode::kEdgelistCSV2CGGraphCSR},
       {"edgelistbin2cggraphcsr", ConvertMode::kEdgelistBin2CGGraphCSR},
       {"csrbin2egsm", ConvertMode::kCSRBin2EGSM},
-      {"egsm2edgelistbin", ConvertMode::kEGSM2EdgelistBin}};
+      {"egsm2edgelistbin", ConvertMode::kEGSM2EdgelistBin},
+      {"egsm2csrbin", ConvertMode::kEGSM2CSRBin}};
 
   auto it = mode_map.find(mode);
   return it != mode_map.end() ? it->second : ConvertMode::kUndefined;
@@ -121,6 +123,7 @@ void PrintUsage() {
       << "  csrbin2egsm                - Convert binary CSR to EGSM format\n"
       << "  egsm2edgelistbin           - Convert EGSM format to binary edge "
          "list\n"
+      << "  egsm2csrbin                - Convert EGSM format to binary csr\n "
       << "\nOptions:\n"
       << "  --sep=<separator>           - Separator for CSV files (default: "
          "comma)\n"
@@ -209,6 +212,10 @@ int main(int argc, char** argv) {
       case ConvertMode::kEGSM2EdgelistBin:
         sics::matrixgraph::tools::converter::ConvertEGSMGraph2EdgelistBin(
             FLAGS_i, FLAGS_o);
+        break;
+      case ConvertMode::kEGSM2CSRBin:
+        sics::matrixgraph::tools::converter::ConvertEGSMGraph2CSRBin(FLAGS_i,
+                                                                     FLAGS_o);
         break;
       default:
         std::cerr << "Error: Unsupported conversion mode" << std::endl;

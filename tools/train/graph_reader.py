@@ -9,6 +9,10 @@ e <edge-id-1> <edge-id-2>
 
 from typing import Dict, List, Set, Tuple
 import networkx as nx
+import torch
+import numpy as np
+from sklearn.preprocessing import OneHotEncoder
+from torch_geometric.data import Dataset, Data
 
 
 class GraphReader:
@@ -16,12 +20,15 @@ class GraphReader:
         self.graph = nx.Graph()
         self.vertex_labels: Dict[int, int] = {}  # vertex_id -> label
         self.vertex_degrees: Dict[int, int] = {}  # vertex_id -> degree
+        self.edges_index = torch.tensor([])
 
     def read_graph(self, filepath: str) -> nx.Graph:
         """Read a graph from the specified file path."""
         with open(filepath, 'r') as f:
             lines = f.readlines()
 
+        src_idx = []
+        dst_idx = []
         # Process each line
         for line in lines:
             line = line.strip()
@@ -54,7 +61,10 @@ class GraphReader:
                 # Edge definition
                 src = int(parts[1])
                 dst = int(parts[2])
+                src_idx.append(src)
+                dst_idx.append(dst)
                 self.graph.add_edge(src, dst)
+        self.edges_index = torch.tensor([src_idx, dst_idx], dtype=torch.int64)
 
         return self.graph
 
@@ -66,7 +76,7 @@ class GraphReader:
         """Get the vertex degrees dictionary."""
         return self.vertex_degrees
 
-    def print_graph_info(self, k = 3):
+    def print_graph_info(self, k=3):
         """Print information about the loaded graph."""
         print(f"Graph Information:")
         print(f"Number of vertices: {self.graph.number_of_nodes()}")
@@ -75,28 +85,44 @@ class GraphReader:
         k = min(3, len(self.vertex_labels))
         c = 0
         for vertex, label in self.vertex_labels.items():
-            if(c > k):break
+            if (c > k): break
             print(f"Vertex {vertex}: Label={label}, Degree={self.vertex_degrees[vertex]}")
             c = c + 1
         print("\nEdges:")
         k = min(3, len(self.graph.edges()))
         c = 0
         for edge in self.graph.edges():
-            if(c > k):break
+            if (c > k): break
             print(f"Edge: {edge[0]} -> {edge[1]}")
             c = c + 1
+
+    def save_as_torch(self, data_path):
+        print("vertex label: ", self.vertex_labels)
+
+        labels = np.array(list(self.vertex_labels.values())).reshape(-1)
+
+        labels = torch.tensor(labels)
+        num_classes = 15
+        one_hot = torch.nn.functional.one_hot(labels, num_classes=num_classes)
+        one_hot = one_hot.to(torch.float32)
+
+        data = Data(x=one_hot, edge_index=self.edges_index)
+        print(data)
+        torch.save(data, data_path)
 
 
 def main():
     """Example usage of the GraphReader class."""
     import sys
-    if len(sys.argv) != 2:
-        print(f"Usage: {sys.argv[0]} <graph_file>")
+    if len(sys.argv) < 2:
+        print(f"Usage: {sys.argv[0]} <graph_file> [output_path]")
         sys.exit(1)
 
     reader = GraphReader()
     graph = reader.read_graph(sys.argv[1])
     reader.print_graph_info()
+
+    reader.save_as_torch(sys.argv[2])
 
     # Example of using the graph object
     print("\nGraph Analysis:")
