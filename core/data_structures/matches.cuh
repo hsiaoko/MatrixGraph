@@ -95,14 +95,22 @@ class Matches {
                   << " size: " << v_candidate_size << ": ";
         for (VertexID candidate_id = 0; candidate_id < v_candidate_size;
              candidate_id++) {
-          std::cout << *(matches_data_.GetPtr() +
-                         weft_id * n_vertices_ * 2 * max_n_local_weft_ +
-                         i * 2 * max_n_local_weft_ + 2 * candidate_id)
-                    << "->"
-                    << *(matches_data_.GetPtr() +
-                         weft_id * n_vertices_ * 2 * max_n_local_weft_ +
-                         i * 2 * max_n_local_weft_ + 2 * candidate_id + 1)
-                    << ",";
+          if (*(matches_data_.GetPtr() +
+                weft_id * n_vertices_ * 2 * max_n_local_weft_ +
+                i * 2 * max_n_local_weft_ + 2 * candidate_id) != kMaxVertexID &&
+              *(matches_data_.GetPtr() +
+                weft_id * n_vertices_ * 2 * max_n_local_weft_ +
+                i * 2 * max_n_local_weft_ + 2 * candidate_id + 1) !=
+                  kMaxVertexID) {
+            std::cout << *(matches_data_.GetPtr() +
+                           weft_id * n_vertices_ * 2 * max_n_local_weft_ +
+                           i * 2 * max_n_local_weft_ + 2 * candidate_id)
+                      << "->"
+                      << *(matches_data_.GetPtr() +
+                           weft_id * n_vertices_ * 2 * max_n_local_weft_ +
+                           i * 2 * max_n_local_weft_ + 2 * candidate_id + 1)
+                      << ",";
+          }
         }
         std::cout << std::endl;
       }
@@ -122,12 +130,18 @@ class Matches {
              candidate_id++) {
           if (*(matches_data_.GetPtr() +
                 weft_id * n_vertices_ * 2 * max_n_local_weft_ +
-                i * 2 * max_n_local_weft_ + 2 * candidate_id) == kMaxVertexID) {
+                i * 2 * max_n_local_weft_ + 2 * candidate_id) == kMaxVertexID ||
+              *(matches_data_.GetPtr() +
+                weft_id * n_vertices_ * 2 * max_n_local_weft_ +
+                i * 2 * max_n_local_weft_ + 2 * candidate_id + 1) ==
+                  kMaxVertexID) {
             invalid_count++;
           }
         }
+
         if (invalid_count == v_candidate_size) {
           invalid_match_->SetBit(weft_id);
+          break;
         }
       }
     }

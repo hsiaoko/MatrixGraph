@@ -86,7 +86,7 @@ static bool Filter(VertexID u_idx, VertexID v_idx, const ImmutableCSR& p,
                    const ImmutableCSR& g) {
   if (u_idx == kMaxVertexID) return false;
   if (v_idx == kMaxVertexID) return false;
-  return LabelFilter(u_idx, v_idx, p, g);
+  return LabelDegreeFilter(u_idx, v_idx, p, g);
 }
 
 static bool MatrixFilter(VertexID u_idx, VertexID v_idx, const ImmutableCSR& p,
@@ -97,15 +97,15 @@ static bool MatrixFilter(VertexID u_idx, VertexID v_idx, const ImmutableCSR& p,
   if (!LabelDegreeFilter(u_idx, v_idx, p, g)) {
     return false;
   } else {
-    // auto m1_ptr = m_vec[0].GetPtr();
-    // auto m2_ptr = m_vec[1].GetPtr();
-    // for (int _ = 0; _ < m_vec[0].get_y(); _++) {
-    //   if (m1_ptr[u_idx * m_vec[0].get_y() + _]) {
-    //     if (!m2_ptr[v_idx * m_vec[1].get_y() + _]) {
-    //       return false;
-    //     }
-    //   }
-    // }
+    auto m1_ptr = m_vec[0].GetPtr();
+    auto m2_ptr = m_vec[1].GetPtr();
+    for (int _ = 0; _ < m_vec[0].get_y(); _++) {
+      if (m1_ptr[u_idx * m_vec[0].get_y() + _]) {
+        if (!m2_ptr[v_idx * m_vec[1].get_y() + _]) {
+          return false;
+        }
+      }
+    }
   }
 
   return true;
@@ -340,7 +340,7 @@ static void DFSExtend(const ImmutableCSR& p, const ImmutableCSR& g,
                       const ExecutionPlan& exec_plan,
                       const std::vector<Matrix>& m_vec, VertexID level,
                       VertexID pre_v_idx, VertexID v_idx,
-                      BitmapOwnership& global_visited,
+                      std::vector<BitmapOwnership>& global_visited_vec,
                       BitmapOwnership local_visited,
                       LocalMatches* local_matches, bool match) {
   if (level > exec_plan.get_depth()) {
@@ -348,34 +348,16 @@ static void DFSExtend(const ImmutableCSR& p, const ImmutableCSR& g,
   }
 
   unsigned exec_plan_idx = local_visited.Count();
-  unsigned global_exec_plan_idx = global_visited.Count();
+  // unsigned global_exec_plan_idx = global_visited.Count();
 
-  if (global_exec_plan_idx == p.get_num_vertices()) {
-    return;
-  }
   if (exec_plan_idx == p.get_num_vertices()) {
     return;
   }
   if (local_matches->size[exec_plan_idx] >= kMaxNumLocalWeft - 1) {
     return;
   }
-  if (local_matches->size[global_exec_plan_idx] >= kMaxNumLocalWeft - 1) {
-    return;
-  }
 
   VertexID u = exec_plan.get_exec_path_ptr()[exec_plan_idx];
-
-  VertexLabel u_label = p.GetVLabelBasePointer()[exec_plan_idx];
-
-  VertexID global_u = exec_plan.get_exec_path_ptr()[global_exec_plan_idx];
-  VertexLabel global_u_label = p.GetVLabelBasePointer()[global_exec_plan_idx];
-
-  VertexLabel v_label = g.GetVLabelBasePointer()[v_idx];
-
-  VertexID global_pre_u = exec_plan.get_sequential_exec_path_in_edges_ptr()
-                              ->GetPtr()[2 * global_exec_plan_idx];
-  VertexID local_pre_u = exec_plan.get_sequential_exec_path_in_edges_ptr()
-                             ->GetPtr()[2 * exec_plan_idx];
 
   bool local_match_tag = false;
   bool global_match_tag = false;
@@ -383,87 +365,39 @@ static void DFSExtend(const ImmutableCSR& p, const ImmutableCSR& g,
 
   // If true, we need Check both global u and local u. it false we only need to
   // Check local u.
-  if (u == global_u) {
-    local_match_tag = Filter(u, v_idx, p, g);
-    global_match_tag = local_match_tag;
-  } else {
-    local_match_tag = Filter(u, v_idx, p, g);
-    global_match_tag = Filter(global_u, v_idx, p, g);
+  local_match_tag = Filter(u, v_idx, p, g);
+  if (local_match_tag) {
+    local_match_tag = MatrixFilter(u, v_idx, p, g, m_vec);
   }
 
-  if (!local_match_tag) {
-    __sync_fetch_and_add(&label_filter_count, 1);
-  }
-  if (!global_match_tag) {
-    __sync_fetch_and_add(&label_filter_count, 1);
-  }
-
-  // Filter vid Matrix Filter
-  // if (u == global_u) {
-  //   if (local_match_tag) {
-  //     local_match_tag = MatrixFilter(u, v_idx, p, g, m_vec);
-  //   }
-  //   global_match_tag = local_match_tag;
-
-  // } else {
-  //   if (local_match_tag) {
-  //     local_match_tag = MatrixFilter(u, v_idx, p, g, m_vec);
-  //   }
-  //   if (global_match_tag) {
-  //     global_match_tag = Filter(global_u, v_idx, p, g);
-  //   }
-  // }
-
-  if (!local_match_tag) {
-    __sync_fetch_and_add(&filter_count, 1);
-  }
-  if (!global_match_tag) {
-    __sync_fetch_and_add(&filter_count, 1);
-  }
-
-  if (global_u == u) {
-    if (local_match_tag) {
-      local_visited.SetBit(u);
-      global_visited.SetBit(u);
-      VertexID offset = local_matches->size[exec_plan_idx];
-      local_matches->size[exec_plan_idx]++;
-      if (pre_v_idx != kMaxVertexID) {
-        local_matches->data[kMaxNumLocalWeft * 2 * exec_plan_idx + 2 * offset] =
-            g.GetGloablIDBasePointer()[pre_v_idx];
-      }
-      local_matches
-          ->data[kMaxNumLocalWeft * 2 * exec_plan_idx + 2 * offset + 1] =
-          g.GetGloablIDBasePointer()[v_idx];
-
-      extend_tag = true;
+  if (local_match_tag) {
+    local_visited.SetBit(u);
+    VertexID offset = local_matches->size[exec_plan_idx];
+    local_matches->size[exec_plan_idx]++;
+    if (pre_v_idx != kMaxVertexID) {
+      local_matches->data[kMaxNumLocalWeft * 2 * exec_plan_idx + 2 * offset] =
+          g.GetGloablIDBasePointer()[pre_v_idx];
     }
-  } else {
-    if (local_match_tag) {
-      local_visited.SetBit(u);
-      VertexID offset = local_matches->size[exec_plan_idx];
-      local_matches->size[exec_plan_idx]++;
-      if (pre_v_idx != kMaxVertexID) {
-        local_matches->data[kMaxNumLocalWeft * 2 * exec_plan_idx + 2 * offset] =
-            g.GetGloablIDBasePointer()[pre_v_idx];
-      }
-      local_matches
-          ->data[kMaxNumLocalWeft * 2 * exec_plan_idx + 2 * offset + 1] =
-          g.GetGloablIDBasePointer()[v_idx];
-      extend_tag = true;
-    }
+    local_matches->data[kMaxNumLocalWeft * 2 * exec_plan_idx + 2 * offset + 1] =
+        g.GetGloablIDBasePointer()[v_idx];
+    global_visited_vec[exec_plan_idx].SetBit(v_idx);
 
-    if (global_match_tag) {
-      local_visited.SetBit(global_u);
-      VertexID offset = local_matches->size[global_exec_plan_idx];
-      if (pre_v_idx != kMaxVertexID) {
-        local_matches
-            ->data[kMaxNumLocalWeft * 2 * global_exec_plan_idx + 2 * offset] =
-            g.GetGloablIDBasePointer()[pre_v_idx];
-      }
-      local_matches
-          ->data[kMaxNumLocalWeft * 2 * global_exec_plan_idx + 2 * offset + 1] =
+    extend_tag = true;
+  }
+
+  for (auto _ = 1; _ < exec_plan.get_n_vertices(); _++) {
+    if (pre_v_idx == kMaxVertexID) continue;
+    if (exec_plan_idx == _) continue;
+    if (!global_visited_vec[_].GetBit(pre_v_idx)) continue;
+
+    if (Filter(exec_plan.get_exec_path_in_edges_ptr()[2 * _ + 1], v_idx, p,
+               g)) {
+      VertexID offset = local_matches->size[_];
+      local_matches->data[kMaxNumLocalWeft * 2 * _ + 2 * offset] =
+          g.GetGloablIDBasePointer()[pre_v_idx];
+      local_matches->data[kMaxNumLocalWeft * 2 * _ + 2 * offset + 1] =
           g.GetGloablIDBasePointer()[v_idx];
-      local_matches->size[global_exec_plan_idx]++;
+      local_matches->size[_]++;
       extend_tag = true;
     }
   }
@@ -473,7 +407,7 @@ static void DFSExtend(const ImmutableCSR& p, const ImmutableCSR& g,
     for (VertexID nbr_idx = 0; nbr_idx < g.GetOutDegreeByLocalID(v_idx);
          nbr_idx++) {
       DFSExtend(p, g, exec_plan, m_vec, level + 1, v_idx,
-                v.outgoing_edges[nbr_idx], global_visited, local_visited,
+                v.outgoing_edges[nbr_idx], global_visited_vec, local_visited,
                 local_matches, match);
     };
   }
@@ -491,18 +425,22 @@ static inline void Enumerating(const ImmutableCSR& p, const ImmutableCSR& g,
 
   std::cout << "Enumerating" << std::endl;
   std::for_each(
-      std::execution::par, worker.begin(), worker.end(),
+      // std::execution::par,
+      worker.begin(), worker.end(),
       [step, &mtx, &p, &g, &exec_plan, &m_vec, &matches](auto w) {
         LocalMatches local_matches;
         local_matches.data =
             new VertexID[p.get_num_vertices() * 2 * kMaxNumLocalWeft]();
         local_matches.size = new VertexID[p.get_num_vertices()]();
         BitmapOwnership visited(p.get_num_vertices());
+        std::vector<BitmapOwnership> global_visited_vec;
+        global_visited_vec.resize(p.get_num_vertices(), g.get_num_vertices());
+
         for (VertexID v_idx = w; v_idx < g.get_num_vertices(); v_idx += step) {
           visited.Clear();
           bool match = false;
-          DFSExtend(p, g, exec_plan, m_vec, 0, kMaxVertexID, v_idx, visited,
-                    visited, &local_matches, match);
+          DFSExtend(p, g, exec_plan, m_vec, 0, kMaxVertexID, v_idx,
+                    global_visited_vec, visited, &local_matches, match);
 
           if (local_matches.size[p.get_num_vertices() - 1] != 0) {
             auto weft_idx = __sync_fetch_and_add(matches->GetWeftCountPtr(), 1);
@@ -825,7 +763,7 @@ void CPUSubIso::RecursiveMatching(const ImmutableCSR& p, const ImmutableCSR& g,
   // Checking ...
   Checking(p, g, exec_plan, &matches);
   matches.UpdateInvalidMatches();
-  matches.Print(3);
+  matches.Print(100);
 }
 
 void CPUSubIso::WOJMatching(const ImmutableCSR& p, const ImmutableCSR& g) {
@@ -869,7 +807,7 @@ void CPUSubIso::LoadData() {
   auto* p_vlabel = p_.GetVLabelBasePointer();
 
   p_.PrintGraph(10);
-  g_.PrintGraph();
+  g_.PrintGraph(1);
 
   if (matrix_path1_ != "" && matrix_path2_ != "") {
     m_vec_.resize(2);
@@ -896,9 +834,16 @@ void CPUSubIso::Run() {
   RecursiveMatching(p_, g_, m_vec_);
 
   auto end_time = std::chrono::system_clock::now();
-  std::cout << "Total execution time: "
+  std::cout << "Matching time: "
             << std::chrono::duration_cast<std::chrono::milliseconds>(
                    end_time - start_time_1)
+                       .count() /
+                   (double)CLOCKS_PER_SEC
+            << " sec" << std::endl;
+
+  std::cout << "Total execution time: "
+            << std::chrono::duration_cast<std::chrono::milliseconds>(
+                   end_time - start_time_0)
                        .count() /
                    (double)CLOCKS_PER_SEC
             << " sec" << std::endl;
