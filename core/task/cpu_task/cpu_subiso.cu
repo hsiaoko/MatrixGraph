@@ -813,14 +813,16 @@ void CPUSubIso::RecursiveMatching(const ImmutableCSR& p, const ImmutableCSR& g,
     matches.SetHeader(_, std::make_pair(src, dst));
   }
 
-  // Enumerating...
+  // Enumerating ...
   Enumerating(p, g, exec_plan, m_vec, &matches);
   matches.Print(3);
+
   // Refining ...
   Refining(p, g, exec_plan, &matches);
   matches.UpdateInvalidMatches();
   matches.Print(3);
 
+  // Checking ...
   Checking(p, g, exec_plan, &matches);
   matches.UpdateInvalidMatches();
   matches.Print(3);

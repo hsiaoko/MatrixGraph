@@ -110,11 +110,7 @@ class Matches {
   }
 
   void UpdateInvalidMatches() {
-    VertexID min_n_matches = *weft_count_.GetPtr();
-
-    for (VertexID weft_id = 0; weft_id < min_n_matches; weft_id++) {
-      if (weft_id > max_n_weft_) break;
-
+    for (VertexID weft_id = 0; weft_id < *weft_count_.GetPtr(); weft_id++) {
       for (auto i = 0; i < n_vertices_; i++) {
         auto v_candidate_offset =
             GetVCandidateOffsetPtr()[weft_id * (n_vertices_ + 1) + i];
@@ -126,7 +122,7 @@ class Matches {
              candidate_id++) {
           if (*(matches_data_.GetPtr() +
                 weft_id * n_vertices_ * 2 * max_n_local_weft_ +
-                i * 2 * max_n_weft_ + 2 * candidate_id) == kMaxVertexID) {
+                i * 2 * max_n_local_weft_ + 2 * candidate_id) == kMaxVertexID) {
             invalid_count++;
           }
         }
