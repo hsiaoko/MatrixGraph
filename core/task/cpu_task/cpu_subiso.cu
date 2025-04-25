@@ -84,13 +84,16 @@ static inline bool LabelFilter(VertexID u_idx, VertexID v_idx,
 
 static bool Filter(VertexID u_idx, VertexID v_idx, const ImmutableCSR& p,
                    const ImmutableCSR& g) {
+  if (u_idx == kMaxVertexID) return false;
+  if (v_idx == kMaxVertexID) return false;
   return LabelFilter(u_idx, v_idx, p, g);
-  // return LabelDegreeFilter(u_idx, v_idx, p, g);
 }
 
 static bool MatrixFilter(VertexID u_idx, VertexID v_idx, const ImmutableCSR& p,
                          const ImmutableCSR& g,
                          const std::vector<Matrix>& m_vec) {
+  if (u_idx == kMaxVertexID) return false;
+  if (v_idx == kMaxVertexID) return false;
   if (!LabelDegreeFilter(u_idx, v_idx, p, g)) {
     return false;
   } else {
@@ -350,6 +353,9 @@ static void DFSExtend(const ImmutableCSR& p, const ImmutableCSR& g,
   if (global_exec_plan_idx == p.get_num_vertices()) {
     return;
   }
+  if (exec_plan_idx == p.get_num_vertices()) {
+    return;
+  }
   if (local_matches->size[exec_plan_idx] >= kMaxNumLocalWeft - 1) {
     return;
   }
@@ -485,8 +491,7 @@ static inline void Enumerating(const ImmutableCSR& p, const ImmutableCSR& g,
 
   std::cout << "Enumerating" << std::endl;
   std::for_each(
-      // std::execution::par,
-      worker.begin(), worker.end(),
+      std::execution::par, worker.begin(), worker.end(),
       [step, &mtx, &p, &g, &exec_plan, &m_vec, &matches](auto w) {
         LocalMatches local_matches;
         local_matches.data =
@@ -494,6 +499,7 @@ static inline void Enumerating(const ImmutableCSR& p, const ImmutableCSR& g,
         local_matches.size = new VertexID[p.get_num_vertices()]();
         BitmapOwnership visited(p.get_num_vertices());
         for (VertexID v_idx = w; v_idx < g.get_num_vertices(); v_idx += step) {
+          visited.Clear();
           bool match = false;
           DFSExtend(p, g, exec_plan, m_vec, 0, kMaxVertexID, v_idx, visited,
                     visited, &local_matches, match);
@@ -501,7 +507,7 @@ static inline void Enumerating(const ImmutableCSR& p, const ImmutableCSR& g,
           if (local_matches.size[p.get_num_vertices() - 1] != 0) {
             auto weft_idx = __sync_fetch_and_add(matches->GetWeftCountPtr(), 1);
 
-            // if (weft_idx >= kMaxNumWeft) return;
+            if (weft_idx >= kMaxNumWeft) return;
             int weft_size = 0;
             for (int _ = 0; _ < p.get_num_vertices(); _++) {
               weft_size += local_matches.size[_];
@@ -525,7 +531,6 @@ static inline void Enumerating(const ImmutableCSR& p, const ImmutableCSR& g,
                  sizeof(VertexID) * p.get_num_vertices() * kMaxNumLocalWeft);
           memset(local_matches.size, 0,
                  sizeof(VertexID) * p.get_num_vertices());
-          visited.Clear();
         }
       });
 
@@ -813,10 +818,11 @@ void CPUSubIso::RecursiveMatching(const ImmutableCSR& p, const ImmutableCSR& g,
   matches.Print(3);
   // Refining ...
   Refining(p, g, exec_plan, &matches);
-  matches.Print(3);
   matches.UpdateInvalidMatches();
+  matches.Print(3);
 
   Checking(p, g, exec_plan, &matches);
+  matches.UpdateInvalidMatches();
   matches.Print(3);
 }
 

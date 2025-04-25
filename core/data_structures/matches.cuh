@@ -80,8 +80,8 @@ class Matches {
               << " invalid: " << GetInvalidMatchesCount() << std::endl;
     VertexID count = 0;
     for (VertexID weft_id = 0; weft_id < *weft_count_.GetPtr(); weft_id++) {
-      if (count++ > n_matches) break;
       if (invalid_match_->GetBit(weft_id)) continue;
+      if (count++ > n_matches) break;
       std::cout << "Weft " << weft_id << std::endl;
 
       for (auto i = 0; i < n_vertices_; i++) {

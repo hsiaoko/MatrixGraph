@@ -149,6 +149,14 @@ class ExecutionPlan {
 
   void Print() const {
     std::cout << "Print ExecPlan - n_vertices: " << n_vertices_ << std::endl;
+    std::cout << "\t sequential_exec_path" << std::endl;
+    std::cout << "\t";
+    for (int i = 0; i < n_vertices_; i++) {
+      auto ptr = get_sequential_exec_path_ptr()->GetPtr();
+      std::cout << ptr[i] << " ";
+    }
+    std::cout << std::endl;
+
     std::cout << "\t sequential_exec_path_in_edges:" << std::endl;
     for (int i = 0; i < n_vertices_; i++) {
       auto ptr = get_sequential_exec_path_in_edges_ptr()->GetPtr();
