@@ -134,7 +134,8 @@ void ImmutableCSR::Write(const std::string& root_path, GraphID gid) {
   out_data_file.write(reinterpret_cast<char*>(GetLocalIDBasePointer()),
                       sizeof(VertexID) * (get_max_vid() + 1));
 
-  // Write label data with all 0.
+  // PrintGraph(185622);
+  //  Write label data with all 0.
   std::ofstream out_label_file(root_path + "label/" + std::to_string(gid) +
                                ".bin");
   auto buffer_label = GetVLabelBasePointer();
@@ -268,12 +269,14 @@ void ImmutableCSR::GenerateVLabel(VertexID range) {
   std::mt19937 gen(rd());
 
   std::uniform_int_distribution<> dis(0, 65536);
-  std::cout << range << std::endl;
+  std::cout << " Label Range: " << range << std::endl;
+
+  auto vlabel_ptr = GetVLabelBasePointer();
+  memset(vlabel_ptr, 0, sizeof(VertexLabel) * get_num_vertices());
 
   std::for_each(std::execution::par, worker.begin(), worker.end(),
-                [this, step, &dis, &gen, &range](auto w) {
+                [this, step, &dis, &gen, &range, &vlabel_ptr](auto w) {
                   for (auto vid = w; vid < get_num_vertices(); vid += step) {
-                    auto vlabel_ptr = GetVLabelBasePointer();
                     vlabel_ptr[vid] = (dis(gen) + vid) % range;
                   }
                 });
@@ -384,6 +387,7 @@ void ImmutableCSR::SortByDegree() {
 
 bool ImmutableCSR::IsConnected(VertexID src, VertexID dst) const {
   auto u = GetVertexByLocalID(src);
+
   for (VertexID nbr_idx = 0; nbr_idx < u.outdegree; nbr_idx++) {
     if (u.outgoing_edges[nbr_idx] == dst) {
       return true;

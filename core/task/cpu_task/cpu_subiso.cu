@@ -86,12 +86,36 @@ static bool Filter(VertexID u_idx, VertexID v_idx, const ImmutableCSR& p,
                    const ImmutableCSR& g) {
   if (u_idx == kMaxVertexID) return false;
   if (v_idx == kMaxVertexID) return false;
-  return LabelDegreeFilter(u_idx, v_idx, p, g);
+  return LabelFilter(u_idx, v_idx, p, g);
 }
 
 static bool MatrixFilter(VertexID u_idx, VertexID v_idx, const ImmutableCSR& p,
                          const ImmutableCSR& g,
                          const std::vector<Matrix>& m_vec) {
+  // return true;
+  // if (u_idx == 1 && v_idx == 125) {
+  //   std::cout << "u idx:" << u_idx << " v idx: " << v_idx << std::endl;
+  //   auto m1_ptr = m_vec[0].GetPtr();
+  //   auto m2_ptr = m_vec[1].GetPtr();
+  //   for (int _ = 0; _ < m_vec[0].get_y(); _++) {
+  //     std::cout << m1_ptr[u_idx * m_vec[0].get_y() + _] << " ";
+  //   }
+  //   std::cout << std::endl;
+  //   for (int _ = 0; _ < m_vec[0].get_y(); _++) {
+  //     std::cout << m2_ptr[v_idx * m_vec[1].get_y() + _] << " ";
+  //   }
+  //   std::cout << std::endl;
+
+  //  for (int _ = 0; _ < m_vec[0].get_y(); _++) {
+  //    if (m1_ptr[u_idx * m_vec[0].get_y() + _]) {
+  //      if (!m2_ptr[v_idx * m_vec[1].get_y() + _]) {
+  //        std::cout << "_ " << _ << "false" << std::endl;
+  //        return false;
+  //      }
+  //    }
+  //  }
+  //  std::cout << "return true" << std::endl;
+  //}
   if (u_idx == kMaxVertexID) return false;
   if (v_idx == kMaxVertexID) return false;
   if (!LabelDegreeFilter(u_idx, v_idx, p, g)) {
@@ -102,6 +126,7 @@ static bool MatrixFilter(VertexID u_idx, VertexID v_idx, const ImmutableCSR& p,
     for (int _ = 0; _ < m_vec[0].get_y(); _++) {
       if (m1_ptr[u_idx * m_vec[0].get_y() + _]) {
         if (!m2_ptr[v_idx * m_vec[1].get_y() + _]) {
+          __sync_fetch_and_add(&filter_count, 1);
           return false;
         }
       }
@@ -602,6 +627,8 @@ static void Checking(const ImmutableCSR& p, const ImmutableCSR& g,
 
       for (VertexID weft_id = 0; weft_id < matches->get_weft_count();
            weft_id++) {
+        // if (weft_id == 39)
+        //   std::cout << "\t !!!Weft_if: " << weft_id << std::endl;
         for (auto h_src_idx = 0; h_src_idx < header.size(); h_src_idx++) {
           auto src_bias = 0;
           auto head_src = kMaxVertexID;
@@ -613,6 +640,9 @@ static void Checking(const ImmutableCSR& p, const ImmutableCSR& g,
           } else {
             continue;
           }
+          // if (weft_id == 39)
+          //   std::cout << "\t h_src_idx" << h_src_idx << ", u_vid: " << u_vid
+          //             << std::endl;
 
           auto src_candidate_offset =
               matches->GetVCandidateOffsetPtr()
@@ -635,6 +665,9 @@ static void Checking(const ImmutableCSR& p, const ImmutableCSR& g,
             } else {
               continue;
             }
+            // if (weft_id == 39)
+            //   std::cout << "\t h_dst_idx" << h_dst_idx
+            //             << ", nbr_vid: " << nbr_vid << std::endl;
 
             auto dst_candidate_offset =
                 matches->GetVCandidateOffsetPtr()
@@ -667,6 +700,9 @@ static void Checking(const ImmutableCSR& p, const ImmutableCSR& g,
                       h_dst_idx * 2 * matches->get_max_n_local_weft() +
                       2 * candidate_idx_dst + dst_bias);
 
+                // if (weft_id == 39)
+                //   std::cout << " found src dst " << candidate_src << ", "
+                //             << candidate_dst << std::endl;
                 if (g.IsConnected(candidate_src, candidate_dst)) {
                   src_connect_count++;
                 }
@@ -702,6 +738,10 @@ static void Checking(const ImmutableCSR& p, const ImmutableCSR& g,
                       2 * candidate_idx_src + src_bias);
 
                 if (candidate_src == kMaxVertexID) continue;
+
+                // if (candidate_src == 8183 && candidate_dst == 126) {
+                //   std::cout << " found src dst" << std::endl;
+                // }
 
                 if (g.IsConnected(candidate_src, candidate_dst)) {
                   dst_connect_count++;
@@ -753,17 +793,17 @@ void CPUSubIso::RecursiveMatching(const ImmutableCSR& p, const ImmutableCSR& g,
 
   // Enumerating ...
   Enumerating(p, g, exec_plan, m_vec, &matches);
-  matches.Print(3);
+  // matches.Print(3);
 
   // Refining ...
   Refining(p, g, exec_plan, &matches);
   matches.UpdateInvalidMatches();
-  matches.Print(3);
+  // matches.Print(3);
 
   // Checking ...
   Checking(p, g, exec_plan, &matches);
   matches.UpdateInvalidMatches();
-  matches.Print(100);
+  matches.Print(3);
 }
 
 void CPUSubIso::WOJMatching(const ImmutableCSR& p, const ImmutableCSR& g) {

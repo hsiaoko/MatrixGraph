@@ -101,8 +101,10 @@ class GraphReader:
 
         labels = np.array(list(self.vertex_labels.values())).reshape(-1)
 
+        print(labels)
         labels = torch.tensor(labels)
-        num_classes = 15
+        num_classes = 16
+        print(max(labels), num_classes)
         one_hot = torch.nn.functional.one_hot(labels, num_classes=num_classes)
         one_hot = one_hot.to(torch.float32)
 
@@ -124,12 +126,13 @@ def main():
 
     reader.save_as_torch(sys.argv[2])
 
+    print("save at: ", sys.argv[2])
     # Example of using the graph object
     print("\nGraph Analysis:")
     print(f"Is connected: {nx.is_connected(graph)}")
-    if nx.is_connected(graph):
-        print(f"Average shortest path length: {nx.average_shortest_path_length(graph)}")
-    print(f"Average clustering coefficient: {nx.average_clustering(graph)}")
+    # if nx.is_connected(graph):
+    #    print(f"Average shortest path length: {nx.average_shortest_path_length(graph)}")
+    # print(f"Average clustering coefficient: {nx.average_clustering(graph)}")
 
 
 if __name__ == "__main__":

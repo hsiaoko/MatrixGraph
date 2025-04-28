@@ -170,8 +170,8 @@ int main(int argc, char** argv) {
   try {
     switch (ConvertMode2Enum(FLAGS_convert_mode)) {
       case ConvertMode::kEdgelistBin2CSRBin:
-        sics::matrixgraph::tools::converter::ConvertEdgelistBin2CSRBin(FLAGS_i,
-                                                                       FLAGS_o);
+        sics::matrixgraph::tools::converter::ConvertEdgelistBin2CSRBin(
+            FLAGS_i, FLAGS_o, FLAGS_compressed, FLAGS_label_range);
         break;
       case ConvertMode::kEdgelistBin2TransposedEdgelistBin:
         sics::matrixgraph::tools::converter::

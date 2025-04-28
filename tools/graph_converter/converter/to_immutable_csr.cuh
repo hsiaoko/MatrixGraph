@@ -28,13 +28,19 @@ static void ConvertEdgelistCSV2ImmutableCSR(const std::string& input_path,
 
   sics::matrixgraph::core::data_structures::Edges edgelist;
   edgelist.ReadFromCSV(input_path, sep, compressed);
-  edgelist.ShowGraph(5);
+
+  edgelist.GenerateLocalID2GlobalID();
+  if (compressed) {
+    edgelist.Compacted();
+  }
+
+  edgelist.ShowGraph(10);
+
   auto p_immutable_csr =
       sics::matrixgraph::core::util::format_converter::Edgelist2ImmutableCSR(
           edgelist);
   // p_immutable_csr->SortByDegree();
   p_immutable_csr->GenerateVLabel(label_range);
-  auto vlabel = p_immutable_csr->GetVLabelBasePointer();
 
   p_immutable_csr->PrintGraph(1);
   p_immutable_csr->Write(output_path);
@@ -42,18 +48,25 @@ static void ConvertEdgelistCSV2ImmutableCSR(const std::string& input_path,
 }
 
 static void ConvertEdgelistBin2CSRBin(const std::string& input_path,
-                                      const std::string& output_path) {
+                                      const std::string& output_path,
+                                      bool compressed = false,
+                                      unsigned label_range = 1) {
   std::cout << "ConvertEdgelistBin2CSRBin" << std::endl;
 
   sics::matrixgraph::core::data_structures::Edges edgelist;
   edgelist.ReadFromBin(input_path);
+
+  edgelist.GenerateLocalID2GlobalID();
+  if (compressed) {
+    edgelist.Compacted();
+  }
   edgelist.ShowGraph(10);
 
   auto p_immutable_csr =
       sics::matrixgraph::core::util::format_converter::Edgelist2ImmutableCSR(
           edgelist);
   // p_immutable_csr->SortByDegree();
-  //  p_immutable_csr->GenerateVLabel(15);
+  p_immutable_csr->GenerateVLabel(label_range);
   p_immutable_csr->PrintGraph(1);
   p_immutable_csr->Write(output_path);
   delete p_immutable_csr;
