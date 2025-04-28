@@ -92,6 +92,7 @@ static bool Filter(VertexID u_idx, VertexID v_idx, const ImmutableCSR& p,
 static bool MatrixFilter(VertexID u_idx, VertexID v_idx, const ImmutableCSR& p,
                          const ImmutableCSR& g,
                          const std::vector<Matrix>& m_vec) {
+  return true;
   // return true;
   // if (u_idx == 1 && v_idx == 125) {
   //   std::cout << "u idx:" << u_idx << " v idx: " << v_idx << std::endl;
@@ -373,7 +374,6 @@ static void DFSExtend(const ImmutableCSR& p, const ImmutableCSR& g,
   }
 
   unsigned exec_plan_idx = local_visited.Count();
-  // unsigned global_exec_plan_idx = global_visited.Count();
 
   if (exec_plan_idx == p.get_num_vertices()) {
     return;
@@ -448,53 +448,76 @@ static inline void Enumerating(const ImmutableCSR& p, const ImmutableCSR& g,
   std::iota(worker.begin(), worker.end(), 0);
   auto step = worker.size();
 
-  std::cout << "Enumerating" << std::endl;
-  std::for_each(
-      // std::execution::par,
-      worker.begin(), worker.end(),
-      [step, &mtx, &p, &g, &exec_plan, &m_vec, &matches](auto w) {
-        LocalMatches local_matches;
-        local_matches.data =
-            new VertexID[p.get_num_vertices() * 2 * kMaxNumLocalWeft]();
-        local_matches.size = new VertexID[p.get_num_vertices()]();
-        BitmapOwnership visited(p.get_num_vertices());
+  std::vector<LocalMatches> local_matches_vec;
+  local_matches_vec.resize(parallelism);
+  std::generate(local_matches_vec.begin(), local_matches_vec.end(), [&p]() {
+    LocalMatches local_matches;
+    local_matches.data =
+        new VertexID[p.get_num_vertices() * 2 * kMaxNumLocalWeft]();
+    local_matches.size = new VertexID[p.get_num_vertices()]();
+    return local_matches;
+  });
+
+  std::vector<BitmapOwnership> visited_vec;
+  visited_vec.resize(parallelism);
+  std::generate(visited_vec.begin(), visited_vec.end(),
+                [&p]() { return BitmapOwnership(p.get_num_vertices()); });
+
+  std::vector<std::vector<BitmapOwnership>> global_visited_vec_vec;
+  global_visited_vec_vec.resize(parallelism);
+  std::generate(
+      global_visited_vec_vec.begin(), global_visited_vec_vec.end(), [&p, &g]() {
         std::vector<BitmapOwnership> global_visited_vec;
         global_visited_vec.resize(p.get_num_vertices(), g.get_num_vertices());
+        return global_visited_vec;
+      });
+
+  std::cout << "Enumerating" << std::endl;
+  std::for_each(
+      std::execution::par, worker.begin(), worker.end(),
+      [step, &mtx, &p, &g, &exec_plan, &m_vec, &matches, &local_matches_vec,
+       &visited_vec, &global_visited_vec_vec](auto w) {
+        auto visited = visited_vec[w];
+        auto global_visited_vec = global_visited_vec_vec[w];
+        auto local_matches = local_matches_vec[w];
 
         for (VertexID v_idx = w; v_idx < g.get_num_vertices(); v_idx += step) {
           visited.Clear();
+
           bool match = false;
           DFSExtend(p, g, exec_plan, m_vec, 0, kMaxVertexID, v_idx,
                     global_visited_vec, visited, &local_matches, match);
+          {
+            std::lock_guard<std::mutex> lock(mtx);
+            if (local_matches.size[p.get_num_vertices() - 1] != 0) {
+              auto weft_idx =
+                  __sync_fetch_and_add(matches->GetWeftCountPtr(), 1);
 
-          if (local_matches.size[p.get_num_vertices() - 1] != 0) {
-            auto weft_idx = __sync_fetch_and_add(matches->GetWeftCountPtr(), 1);
+              std::cout << "weft_idx: " << weft_idx << std::endl;
+              if (weft_idx >= kMaxNumWeft) return;
+              int weft_size = 0;
+              for (int _ = 0; _ < p.get_num_vertices(); _++) {
+                weft_size += local_matches.size[_];
+                matches->GetVCandidateOffsetPtr()
+                    [weft_idx * (p.get_num_vertices() + 1) + _ + 1] =
+                    matches->GetVCandidateOffsetPtr()
+                        [weft_idx * (p.get_num_vertices() + 1) + _] +
+                    local_matches.size[_];
 
-            if (weft_idx >= kMaxNumWeft) return;
-            int weft_size = 0;
-            for (int _ = 0; _ < p.get_num_vertices(); _++) {
-              weft_size += local_matches.size[_];
-              matches->GetVCandidateOffsetPtr()[weft_idx *
-                                                    (p.get_num_vertices() + 1) +
-                                                _ + 1] =
-                  matches->GetVCandidateOffsetPtr()
-                      [weft_idx * (p.get_num_vertices() + 1) + _] +
-                  local_matches.size[_];
+                memcpy(matches->GetDataPtr() + weft_idx * p.get_num_vertices() *
+                                                   2 * kMaxNumLocalWeft,
+                       local_matches.data,
+                       p.get_num_vertices() * 2 * kMaxNumLocalWeft *
+                           sizeof(VertexID));
+              }
             }
-            {
-              std::lock_guard<std::mutex> lock(mtx);
-              memcpy(matches->GetDataPtr() +
-                         weft_idx * p.get_num_vertices() * 2 * kMaxNumLocalWeft,
-                     local_matches.data,
-                     p.get_num_vertices() * 2 * kMaxNumLocalWeft *
-                         sizeof(VertexID));
-            }
+            memset(local_matches.data, 0,
+                   sizeof(VertexID) * p.get_num_vertices() * kMaxNumLocalWeft);
+            memset(local_matches.size, 0,
+                   sizeof(VertexID) * p.get_num_vertices());
           }
-          memset(local_matches.data, 0,
-                 sizeof(VertexID) * p.get_num_vertices() * kMaxNumLocalWeft);
-          memset(local_matches.size, 0,
-                 sizeof(VertexID) * p.get_num_vertices());
         }
+        std::cout << "w: " << w << std::endl;
       });
 
   std::cout << "Filter Count: " << filter_count << std::endl;
@@ -665,9 +688,6 @@ static void Checking(const ImmutableCSR& p, const ImmutableCSR& g,
             } else {
               continue;
             }
-            // if (weft_id == 39)
-            //   std::cout << "\t h_dst_idx" << h_dst_idx
-            //             << ", nbr_vid: " << nbr_vid << std::endl;
 
             auto dst_candidate_offset =
                 matches->GetVCandidateOffsetPtr()
@@ -700,9 +720,6 @@ static void Checking(const ImmutableCSR& p, const ImmutableCSR& g,
                       h_dst_idx * 2 * matches->get_max_n_local_weft() +
                       2 * candidate_idx_dst + dst_bias);
 
-                // if (weft_id == 39)
-                //   std::cout << " found src dst " << candidate_src << ", "
-                //             << candidate_dst << std::endl;
                 if (g.IsConnected(candidate_src, candidate_dst)) {
                   src_connect_count++;
                 }
@@ -738,10 +755,6 @@ static void Checking(const ImmutableCSR& p, const ImmutableCSR& g,
                       2 * candidate_idx_src + src_bias);
 
                 if (candidate_src == kMaxVertexID) continue;
-
-                // if (candidate_src == 8183 && candidate_dst == 126) {
-                //   std::cout << " found src dst" << std::endl;
-                // }
 
                 if (g.IsConnected(candidate_src, candidate_dst)) {
                   dst_connect_count++;

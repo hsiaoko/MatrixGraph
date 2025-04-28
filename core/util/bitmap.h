@@ -24,7 +24,7 @@ class Bitmap {
  protected:
   Bitmap() = default;
 
-  virtual ~Bitmap() {}
+  virtual ~Bitmap(){};
 
   virtual void Init(size_t size) {
     delete[] data_;
