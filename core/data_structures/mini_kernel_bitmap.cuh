@@ -12,44 +12,44 @@ namespace task {
 namespace kernel {
 
 class MiniKernelBitmap {
-public:
-  __forceinline__ __device__ MiniKernelBitmap(unsigned size) { Init(size); }
+ public:
+  __forceinline__ __host__ __device__ MiniKernelBitmap(unsigned size) {
+    Init(size);
+  }
 
-  __forceinline__ __device__ MiniKernelBitmap(const MiniKernelBitmap &other) {
+  __forceinline__ __host__ __device__
+  MiniKernelBitmap(const MiniKernelBitmap& other) {
     Init(other.GetSize());
     data_ = other.GetData();
   }
 
-  __forceinline__ __device__ ~MiniKernelBitmap() = default;
+  __forceinline__ __host__ __device__ ~MiniKernelBitmap() = default;
 
-  __forceinline__ __device__ void Init(unsigned size) {
+  __forceinline__ __host__ __device__ void Init(unsigned size) {
     size_ = size;
     data_ = 0;
   }
 
-  __forceinline__ __device__ void Clear() { data_ = 0; }
+  __forceinline__ __host__ __device__ void Clear() { data_ = 0; }
 
-  __forceinline__ __device__ void Fill() { data_ = 0xffffffff; }
+  __forceinline__ __host__ __device__ void Fill() { data_ = 0xffffffff; }
 
-  __forceinline__ __device__ bool GetBit(unsigned i) const {
-    if (i > size_)
-      return 0;
+  __forceinline__ __host__ __device__ bool GetBit(unsigned i) const {
+    if (i > size_) return 0;
     return data_ & (1u << i);
   }
 
-  __forceinline__ __device__ void SetBit(unsigned i) {
-    if (i > size_)
-      return;
+  __forceinline__ __host__ __device__ void SetBit(unsigned i) {
+    if (i > size_) return;
     data_ |= (unsigned)(1u << i);
   }
 
-  __forceinline__ __device__ void ClearBit(const unsigned i) {
-    if (i > size_)
-      return;
+  __forceinline__ __host__ __device__ void ClearBit(const unsigned i) {
+    if (i > size_) return;
     data_ &= ~(unsigned)(1u << i);
   }
 
-  __forceinline__ __device__ unsigned Count() const {
+  __forceinline__ __host__ __device__ unsigned Count() const {
     unsigned count = 0;
     unsigned x = data_;
     x = (x & (0x55555555)) + ((x >> 1) & (0x5555555));
@@ -61,19 +61,19 @@ public:
     return count;
   }
 
-  __forceinline__ __device__ unsigned GetSize() const { return size_; }
+  __forceinline__ __host__ __device__ unsigned GetSize() const { return size_; }
 
-  __forceinline__ __device__ unsigned GetData() const { return data_; }
+  __forceinline__ __host__ __device__ unsigned GetData() const { return data_; }
 
   unsigned size_ = 0;
   unsigned data_ = 0;
 };
 
 class HostMiniKernelBitmap {
-public:
+ public:
   HostMiniKernelBitmap(unsigned size) { Init(size); }
 
-  HostMiniKernelBitmap(const HostMiniKernelBitmap &other) {
+  HostMiniKernelBitmap(const HostMiniKernelBitmap& other) {
     Init(other.GetSize());
     data_ = other.GetData();
   }
@@ -90,25 +90,21 @@ public:
   void Fill() { data_ = 0xffffffff; }
 
   bool GetBit(unsigned i) const {
-    if (i > size_ || i > 31)
-      return 0;
+    if (i > size_ || i > 31) return 0;
     return data_ & (1u << i);
   }
 
   void SetBit(unsigned i) {
-    if (i > size_ || i > 31)
-      return;
+    if (i > size_ || i > 31) return;
     data_ |= (unsigned)(1u << i);
   }
 
   void ClearBit(const unsigned i) {
-    if (i > size_ || i > 31)
-      return;
+    if (i > size_ || i > 31) return;
     data_ &= ~(unsigned)(1u << (i));
   }
 
   unsigned Count() const {
-
     unsigned x = data_;
     x = (x & (0x55555555)) + ((x >> 1) & (0x5555555));
     x = (x & (0x33333333)) + ((x >> 2) & (0x3333333));
@@ -126,10 +122,10 @@ public:
   unsigned data_ = 0;
 };
 
-} // namespace kernel
-} // namespace task
-} // namespace core
-} // namespace matrixgraph
-} // namespace sics
+}  // namespace kernel
+}  // namespace task
+}  // namespace core
+}  // namespace matrixgraph
+}  // namespace sics
 
-#endif // MATRIXGRAPH_CORE_TASK_KERNEL_KERNEL_BITMAP_CUH_
+#endif  // MATRIXGRAPH_CORE_TASK_KERNEL_KERNEL_BITMAP_CUH_

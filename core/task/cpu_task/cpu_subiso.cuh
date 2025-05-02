@@ -51,7 +51,8 @@ class CPUSubIso : public CPUTaskBase {
   void RecursiveMatching(const ImmutableCSR& p, const ImmutableCSR& g,
                          const std::vector<Matrix>& m_vec);
 
-  void WOJMatching(const ImmutableCSR& p, const ImmutableCSR& g);
+  void WOJMatching(const ImmutableCSR& p, const ImmutableCSR& g,
+                   const std::vector<Matrix>& m_vec);
 
   ImmutableCSR p_;
   ImmutableCSR g_;

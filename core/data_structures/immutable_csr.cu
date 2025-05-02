@@ -386,6 +386,7 @@ void ImmutableCSR::SortByDegree() {
 }
 
 bool ImmutableCSR::IsConnected(VertexID src, VertexID dst) const {
+  if (src > get_max_vid() || dst > get_max_vid()) return false;
   auto u = GetVertexByLocalID(src);
 
   for (VertexID nbr_idx = 0; nbr_idx < u.outdegree; nbr_idx++) {

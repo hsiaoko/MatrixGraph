@@ -13,6 +13,7 @@
 #include "core/data_structures/matches.cuh"
 #include "core/data_structures/matrix.cuh"
 #include "core/data_structures/metadata.h"
+#include "core/data_structures/mini_kernel_bitmap.cuh"
 #include "core/data_structures/woj_exec_plan.cuh"
 #include "core/data_structures/woj_matches.cuh"
 #include "core/task/cpu_task/cpu_subiso.cuh"
@@ -36,6 +37,8 @@ using Edge = sics::matrixgraph::core::data_structures::Edge;
 using GraphMetadata = sics::matrixgraph::core::data_structures::GraphMetadata;
 using WOJMatches = sics::matrixgraph::core::data_structures::WOJMatches;
 using Matches = sics::matrixgraph::core::data_structures::Matches;
+using MiniKernelBitmap =
+    sics::matrixgraph::core::task::kernel::MiniKernelBitmap;
 using WOJExecutionPlan =
     sics::matrixgraph::core::data_structures::WOJExecutionPlan;
 using ExecutionPlan = sics::matrixgraph::core::data_structures::ExecutionPlan;
@@ -55,6 +58,10 @@ using BitmapNoOwnerShip = sics::matrixgraph::core::util::BitmapNoOwnerShip;
 
 static int filter_count = 0;
 static int label_filter_count = 0;
+static int label_degree_filter_count = 0;
+static int gnn_filter_count = 0;
+static int nlc_filter_count = 0;
+static int index_filter_count = 0;
 
 struct LocalMatches {
   VertexID* data = nullptr;
@@ -82,52 +89,90 @@ static inline bool LabelFilter(VertexID u_idx, VertexID v_idx,
   return u_label == v_label;
 }
 
+static bool NeighborLabelCounterFilter(VertexID u_idx, VertexID v_idx,
+                                       const ImmutableCSR& p,
+                                       const ImmutableCSR& g) {
+  auto u_label = p.GetVLabelBasePointer()[u_idx];
+  auto v_label = g.GetVLabelBasePointer()[v_idx];
+  if (u_label != v_label) return false;
+
+  MiniKernelBitmap u_label_visited(32);
+  MiniKernelBitmap v_label_visited(32);
+
+  auto u = p.GetVertexByLocalID(u_idx);
+  auto v = g.GetVertexByLocalID(v_idx);
+
+  auto u_label_ptr = p.GetVLabelBasePointer();
+  auto v_label_ptr = g.GetVLabelBasePointer();
+
+  for (VertexID nbr_u_idx = 0; nbr_u_idx < u.outdegree; nbr_u_idx++) {
+    VertexID nbr_u = u.incoming_edges[nbr_u_idx];
+    VertexLabel u_label = v_label_ptr[nbr_u];
+    u_label_visited.SetBit(u_label);
+  }
+
+  for (VertexID nbr_v_idx = 0; nbr_v_idx < v.outdegree; nbr_v_idx++) {
+    VertexID nbr_v = v.incoming_edges[nbr_v_idx];
+    VertexLabel v_label = v_label_ptr[nbr_v];
+    v_label_visited.SetBit(v_label);
+  }
+
+  return v_label_visited.Count() >= u_label_visited.Count();
+}
+
 static bool Filter(VertexID u_idx, VertexID v_idx, const ImmutableCSR& p,
                    const ImmutableCSR& g) {
   if (u_idx == kMaxVertexID) return false;
   if (v_idx == kMaxVertexID) return false;
-  return LabelFilter(u_idx, v_idx, p, g);
+  if (!LabelFilter(u_idx, v_idx, p, g)) {
+    __sync_fetch_and_add(&label_filter_count, 1);
+    __sync_fetch_and_add(&filter_count, 1);
+    return false;
+  }
+  if (!LabelDegreeFilter(u_idx, v_idx, p, g)) {
+    __sync_fetch_and_add(&label_degree_filter_count, 1);
+    __sync_fetch_and_add(&filter_count, 1);
+    return false;
+  }
+  if (!NeighborLabelCounterFilter(u_idx, v_idx, p, g)) {
+    __sync_fetch_and_add(&nlc_filter_count, 1);
+    __sync_fetch_and_add(&filter_count, 1);
+    return false;
+  }
+
+  return true;
 }
 
 static bool MatrixFilter(VertexID u_idx, VertexID v_idx, const ImmutableCSR& p,
                          const ImmutableCSR& g,
                          const std::vector<Matrix>& m_vec) {
   return true;
-  // return true;
-  // if (u_idx == 1 && v_idx == 125) {
-  //   std::cout << "u idx:" << u_idx << " v idx: " << v_idx << std::endl;
-  //   auto m1_ptr = m_vec[0].GetPtr();
-  //   auto m2_ptr = m_vec[1].GetPtr();
-  //   for (int _ = 0; _ < m_vec[0].get_y(); _++) {
-  //     std::cout << m1_ptr[u_idx * m_vec[0].get_y() + _] << " ";
-  //   }
-  //   std::cout << std::endl;
-  //   for (int _ = 0; _ < m_vec[0].get_y(); _++) {
-  //     std::cout << m2_ptr[v_idx * m_vec[1].get_y() + _] << " ";
-  //   }
-  //   std::cout << std::endl;
-
-  //  for (int _ = 0; _ < m_vec[0].get_y(); _++) {
-  //    if (m1_ptr[u_idx * m_vec[0].get_y() + _]) {
-  //      if (!m2_ptr[v_idx * m_vec[1].get_y() + _]) {
-  //        std::cout << "_ " << _ << "false" << std::endl;
-  //        return false;
-  //      }
-  //    }
-  //  }
-  //  std::cout << "return true" << std::endl;
-  //}
   if (u_idx == kMaxVertexID) return false;
   if (v_idx == kMaxVertexID) return false;
-  if (!LabelDegreeFilter(u_idx, v_idx, p, g)) {
+  if (!LabelFilter(u_idx, v_idx, p, g)) {
+    __sync_fetch_and_add(&label_filter_count, 1);
+    __sync_fetch_and_add(&filter_count, 1);
     return false;
-  } else {
+  }
+  // if (!LabelDegreeFilter(u_idx, v_idx, p, g)) {
+  //   __sync_fetch_and_add(&label_degree_filter_count, 1);
+  //   __sync_fetch_and_add(&filter_count, 1);
+  //   return false;
+  // }
+  // if (!NeighborLabelCounterFilter(u_idx, v_idx, p, g)) {
+  //   __sync_fetch_and_add(&nlc_filter_count, 1);
+  //   __sync_fetch_and_add(&filter_count, 1);
+  //   return false;
+  // }
+  {
     auto m1_ptr = m_vec[0].GetPtr();
     auto m2_ptr = m_vec[1].GetPtr();
-    for (int _ = 0; _ < m_vec[0].get_y(); _++) {
+    auto vec_len = m_vec[0].get_y();
+    for (int _ = 0; _ < vec_len; _++) {
       if (m1_ptr[u_idx * m_vec[0].get_y() + _]) {
         if (!m2_ptr[v_idx * m_vec[1].get_y() + _]) {
           __sync_fetch_and_add(&filter_count, 1);
+          __sync_fetch_and_add(&gnn_filter_count, 1);
           return false;
         }
       }
@@ -139,7 +184,8 @@ static bool MatrixFilter(VertexID u_idx, VertexID v_idx, const ImmutableCSR& p,
 
 static std::vector<WOJMatches*> WOJFilter(const WOJExecutionPlan& exec_plan,
                                           const ImmutableCSR& p,
-                                          const ImmutableCSR& g) {
+                                          const ImmutableCSR& g,
+                                          const std::vector<Matrix>& m_vec) {
   auto parallelism = std::thread::hardware_concurrency();
   std::vector<size_t> worker(parallelism);
   std::iota(worker.begin(), worker.end(), 0);
@@ -170,18 +216,18 @@ static std::vector<WOJMatches*> WOJFilter(const WOJExecutionPlan& exec_plan,
         // std::execution::par,
         worker.begin(), worker.end(),
         [step, &p, &g, eid, u_src, u_dst, src_idx, dst_idx, &exec_plan,
-         &woj_matches_vec](auto w) {
+         &woj_matches_vec, &m_vec](auto w) {
           for (VertexID v_idx = w; v_idx < g.get_num_vertices();
                v_idx += step) {
             auto offset = g.GetOutOffsetByLocalID(v_idx);
             auto degree = g.GetOutDegreeByLocalID(v_idx);
             auto* out_edges = g.GetOutgoingEdgesByLocalID(v_idx);
             VertexID global_id = g.GetGlobalIDByLocalID(v_idx);
-            if (Filter(src_idx, v_idx, p, g)) {
+            if (MatrixFilter(src_idx, v_idx, p, g, m_vec)) {
               for (VertexID nbr_v_idx = 0; nbr_v_idx < degree; nbr_v_idx++) {
                 VertexID nbr_v = out_edges[nbr_v_idx];
                 VertexID nbr_localid = g.GetLocalIDByGlobalID(nbr_v);
-                if (Filter(dst_idx, nbr_localid, p, g)) {
+                if (MatrixFilter(dst_idx, nbr_localid, p, g, m_vec)) {
                   auto local_offset = __sync_fetch_and_add(
                       woj_matches_vec[eid]->get_y_offset_ptr(), 1);
                   woj_matches_vec[eid]->get_data_ptr()[local_offset * 2] =
@@ -362,67 +408,59 @@ static WOJMatches* WOJEnumerating(
   }
 }
 
+static bool IsFeasible(const ImmutableCSR& p, const ImmutableCSR& g,
+                       VertexID u_src, VertexID u_dst, VertexID v_src,
+                       VertexID v_dst, LocalMatches* localMatches) {
+  bool src_tag = false;
+
+  if (u_src == kMaxVertexID && v_src == kMaxVertexID) {
+    src_tag = true;
+  } else if (u_src != kMaxVertexID && v_src != kMaxVertexID) {
+    src_tag = Filter(u_src, v_src, p, g);
+  }
+
+  if (!src_tag) return false;
+
+  if (!Filter(u_dst, v_dst, p, g)) return false;
+
+  return true;
+}
+
 static void DFSExtend(const ImmutableCSR& p, const ImmutableCSR& g,
                       const ExecutionPlan& exec_plan,
                       const std::vector<Matrix>& m_vec, VertexID level,
                       VertexID pre_v_idx, VertexID v_idx,
-                      std::vector<BitmapOwnership>& global_visited_vec,
-                      BitmapOwnership local_visited,
+                      std::vector<BitmapOwnership>& matches_visited_vec,
                       LocalMatches* local_matches, bool match) {
   if (level > exec_plan.get_depth()) {
     return;
   }
 
-  unsigned exec_plan_idx = local_visited.Count();
-
-  if (exec_plan_idx == p.get_num_vertices()) {
-    return;
-  }
-  if (local_matches->size[exec_plan_idx] >= kMaxNumLocalWeft - 1) {
-    return;
-  }
-
-  VertexID u = exec_plan.get_exec_path_ptr()[exec_plan_idx];
-
-  bool local_match_tag = false;
-  bool global_match_tag = false;
   bool extend_tag = false;
 
-  // If true, we need Check both global u and local u. it false we only need to
-  // Check local u.
-  local_match_tag = Filter(u, v_idx, p, g);
-  if (local_match_tag) {
-    local_match_tag = MatrixFilter(u, v_idx, p, g, m_vec);
-  }
+  for (auto _ = 0; _ < exec_plan.get_n_vertices(); _++) {
+    auto u_src = exec_plan.get_exec_path_in_edges_ptr()[2 * _];
+    auto u_dst = exec_plan.get_exec_path_in_edges_ptr()[2 * _ + 1];
 
-  if (local_match_tag) {
-    local_visited.SetBit(u);
-    VertexID offset = local_matches->size[exec_plan_idx];
-    local_matches->size[exec_plan_idx]++;
-    if (pre_v_idx != kMaxVertexID) {
-      local_matches->data[kMaxNumLocalWeft * 2 * exec_plan_idx + 2 * offset] =
-          g.GetGloablIDBasePointer()[pre_v_idx];
-    }
-    local_matches->data[kMaxNumLocalWeft * 2 * exec_plan_idx + 2 * offset + 1] =
-        g.GetGloablIDBasePointer()[v_idx];
-    global_visited_vec[exec_plan_idx].SetBit(v_idx);
+    if ((pre_v_idx == kMaxVertexID) ^ (u_src == kMaxVertexID)) continue;
+    // if (u_src != kMaxVertexID)
+    //   if (!matches_visited_vec[u_src].GetBit(pre_v_idx)) {
+    //     __sync_fetch_and_add(&index_filter_count, 1);
+    //     continue;
+    //   }
 
-    extend_tag = true;
-  }
-
-  for (auto _ = 1; _ < exec_plan.get_n_vertices(); _++) {
-    if (pre_v_idx == kMaxVertexID) continue;
-    if (exec_plan_idx == _) continue;
-    if (!global_visited_vec[_].GetBit(pre_v_idx)) continue;
-
-    if (Filter(exec_plan.get_exec_path_in_edges_ptr()[2 * _ + 1], v_idx, p,
-               g)) {
+    if (IsFeasible(p, g, u_src, u_dst, pre_v_idx, v_idx, local_matches)) {
       VertexID offset = local_matches->size[_];
-      local_matches->data[kMaxNumLocalWeft * 2 * _ + 2 * offset] =
-          g.GetGloablIDBasePointer()[pre_v_idx];
+      if (offset > kMaxNumLocalWeft) return;
       local_matches->data[kMaxNumLocalWeft * 2 * _ + 2 * offset + 1] =
           g.GetGloablIDBasePointer()[v_idx];
       local_matches->size[_]++;
+      if (pre_v_idx != kMaxVertexID) {
+        local_matches->data[kMaxNumLocalWeft * 2 * _ + 2 * offset] =
+            g.GetGloablIDBasePointer()[pre_v_idx];
+      }
+      // matches_visited_vec[u_dst].SetBit(v_idx);
+
       extend_tag = true;
     }
   }
@@ -432,8 +470,8 @@ static void DFSExtend(const ImmutableCSR& p, const ImmutableCSR& g,
     for (VertexID nbr_idx = 0; nbr_idx < g.GetOutDegreeByLocalID(v_idx);
          nbr_idx++) {
       DFSExtend(p, g, exec_plan, m_vec, level + 1, v_idx,
-                v.outgoing_edges[nbr_idx], global_visited_vec, local_visited,
-                local_matches, match);
+                v.outgoing_edges[nbr_idx], matches_visited_vec, local_matches,
+                match);
     };
   }
 }
@@ -458,42 +496,36 @@ static inline void Enumerating(const ImmutableCSR& p, const ImmutableCSR& g,
     return local_matches;
   });
 
-  std::vector<BitmapOwnership> visited_vec;
-  visited_vec.resize(parallelism);
-  std::generate(visited_vec.begin(), visited_vec.end(),
-                [&p]() { return BitmapOwnership(p.get_num_vertices()); });
-
-  std::vector<std::vector<BitmapOwnership>> global_visited_vec_vec;
-  global_visited_vec_vec.resize(parallelism);
-  std::generate(
-      global_visited_vec_vec.begin(), global_visited_vec_vec.end(), [&p, &g]() {
-        std::vector<BitmapOwnership> global_visited_vec;
-        global_visited_vec.resize(p.get_num_vertices(), g.get_num_vertices());
-        return global_visited_vec;
-      });
+  std::vector<std::vector<BitmapOwnership>> matches_visited_vec_vec;
+  matches_visited_vec_vec.resize(parallelism);
+  // std::generate(matches_visited_vec_vec.begin(),
+  // matches_visited_vec_vec.end(),
+  //               [&p, &g]() {
+  //                 std::vector<BitmapOwnership> visited_vec;
+  //                 visited_vec.resize(p.get_num_vertices(),
+  //                                    g.get_num_vertices());
+  //                 return visited_vec;
+  //               });
 
   std::cout << "Enumerating" << std::endl;
   std::for_each(
-      std::execution::par, worker.begin(), worker.end(),
+      // std::execution::par,
+      worker.begin(), worker.end(),
       [step, &mtx, &p, &g, &exec_plan, &m_vec, &matches, &local_matches_vec,
-       &visited_vec, &global_visited_vec_vec](auto w) {
-        auto visited = visited_vec[w];
-        auto global_visited_vec = global_visited_vec_vec[w];
+       matches_visited_vec_vec](auto w) {
+        auto matches_visited_vec = matches_visited_vec_vec[w];
         auto local_matches = local_matches_vec[w];
 
         for (VertexID v_idx = w; v_idx < g.get_num_vertices(); v_idx += step) {
-          visited.Clear();
-
           bool match = false;
           DFSExtend(p, g, exec_plan, m_vec, 0, kMaxVertexID, v_idx,
-                    global_visited_vec, visited, &local_matches, match);
+                    matches_visited_vec, &local_matches, match);
           {
             std::lock_guard<std::mutex> lock(mtx);
             if (local_matches.size[p.get_num_vertices() - 1] != 0) {
               auto weft_idx =
                   __sync_fetch_and_add(matches->GetWeftCountPtr(), 1);
 
-              std::cout << "weft_idx: " << weft_idx << std::endl;
               if (weft_idx >= kMaxNumWeft) return;
               int weft_size = 0;
               for (int _ = 0; _ < p.get_num_vertices(); _++) {
@@ -515,13 +547,12 @@ static inline void Enumerating(const ImmutableCSR& p, const ImmutableCSR& g,
                    sizeof(VertexID) * p.get_num_vertices() * kMaxNumLocalWeft);
             memset(local_matches.size, 0,
                    sizeof(VertexID) * p.get_num_vertices());
+            // for (auto _ = 0; _ < matches_visited_vec.size(); _++) {
+            //   matches_visited_vec[_].Clear();
+            // }
           }
         }
-        std::cout << "w: " << w << std::endl;
       });
-
-  std::cout << "Filter Count: " << filter_count << std::endl;
-  std::cout << "Label Filter Count: " << label_filter_count << std::endl;
 }
 
 static void Refining(const ImmutableCSR& p, const ImmutableCSR& g,
@@ -602,6 +633,11 @@ static void Refining(const ImmutableCSR& p, const ImmutableCSR& g,
                           matches->get_max_n_local_weft() +
                       i * 2 * matches->get_max_n_local_weft() +
                       2 * candidate_id) = kMaxVertexID;
+                    *(matches->GetDataPtr() +
+                      weft_id * matches->get_n_vertices() * 2 *
+                          matches->get_max_n_local_weft() +
+                      i * 2 * matches->get_max_n_local_weft() +
+                      2 * candidate_id + 1) = kMaxVertexID;
                   }
                 }
               }
@@ -648,126 +684,100 @@ static void Checking(const ImmutableCSR& p, const ImmutableCSR& g,
 
       frontier.push(nbr_vid);
 
-      for (VertexID weft_id = 0; weft_id < matches->get_weft_count();
-           weft_id++) {
-        // if (weft_id == 39)
-        //   std::cout << "\t !!!Weft_if: " << weft_id << std::endl;
-        for (auto h_src_idx = 0; h_src_idx < header.size(); h_src_idx++) {
-          auto src_bias = 0;
-          auto head_src = kMaxVertexID;
-          if (header[h_src_idx].first == u_vid) {
-            head_src = header[h_src_idx].first;
-          } else if (header[h_src_idx].second == u_vid) {
-            head_src = header[h_src_idx].second;
-            src_bias = 1;
-          } else {
+      if (exec_plan.IsInExecPathInEdges(u_vid, nbr_vid)) {
+        continue;
+      }
+
+      for (auto h_src_idx = 0; h_src_idx < header.size(); h_src_idx++) {
+        if (header[h_src_idx].first == u_vid &&
+            header[h_src_idx].second == nbr_vid)
+          continue;
+        auto bias_src = 0;
+        auto head_src = kMaxVertexID;
+        if (header[h_src_idx].first == u_vid) {
+          head_src = h_src_idx;
+        } else if (header[h_src_idx].second == u_vid) {
+          head_src = h_src_idx;
+          bias_src = 1;
+        }
+        if (head_src == kMaxVertexID) continue;
+
+        for (auto h_dst_idx = 0; h_dst_idx < header.size(); h_dst_idx++) {
+          if (header[h_dst_idx].first == u_vid &&
+              header[h_dst_idx].second == nbr_vid)
             continue;
+          auto bias_dst = 0;
+          auto head_dst = kMaxVertexID;
+          if (header[h_dst_idx].first == nbr_vid) {
+            head_dst = h_dst_idx;
+          } else if (header[h_dst_idx].second == nbr_vid) {
+            head_dst = h_dst_idx;
+            bias_dst = 1;
           }
-          // if (weft_id == 39)
-          //   std::cout << "\t h_src_idx" << h_src_idx << ", u_vid: " << u_vid
-          //             << std::endl;
+          if (head_dst == kMaxVertexID) continue;
 
-          auto src_candidate_offset =
-              matches->GetVCandidateOffsetPtr()
-                  [weft_id * (matches->get_n_vertices() + 1) + h_src_idx];
+          /// Check whether candidates at head_src and candidates at head_dst
+          /// have an edge in graph g.
+          for (VertexID weft_id = 0; weft_id < matches->get_weft_count();
+               weft_id++) {
+            auto src_candidate_offset =
+                matches->GetVCandidateOffsetPtr()
+                    [weft_id * (matches->get_n_vertices() + 1) + head_src];
 
-          auto src_candidate_size =
-              matches->GetVCandidateOffsetPtr()
-                  [weft_id * (matches->get_n_vertices() + 1) + h_src_idx + 1] -
-              matches->GetVCandidateOffsetPtr()
-                  [weft_id * (matches->get_n_vertices() + 1) + h_src_idx];
-
-          for (auto h_dst_idx = 0; h_dst_idx < header.size(); h_dst_idx++) {
-            auto head_dst = kMaxVertexID;
-            auto dst_bias = 0;
-            if (header[h_dst_idx].first == nbr_vid) {
-              head_dst = header[h_dst_idx].first;
-            } else if (header[h_dst_idx].second == nbr_vid) {
-              head_dst = header[h_dst_idx].second;
-              dst_bias = 1;
-            } else {
-              continue;
-            }
+            auto src_candidate_size =
+                matches->GetVCandidateOffsetPtr()
+                    [weft_id * (matches->get_n_vertices() + 1) + head_src + 1] -
+                matches->GetVCandidateOffsetPtr()
+                    [weft_id * (matches->get_n_vertices() + 1) + head_src];
 
             auto dst_candidate_offset =
                 matches->GetVCandidateOffsetPtr()
-                    [weft_id * (matches->get_n_vertices() + 1) + h_dst_idx];
+                    [weft_id * (matches->get_n_vertices() + 1) + head_dst];
             auto dst_candidate_size =
                 matches->GetVCandidateOffsetPtr()
-                    [weft_id * (matches->get_n_vertices() + 1) + h_dst_idx +
-                     1] -
+                    [weft_id * (matches->get_n_vertices() + 1) + head_dst + 1] -
                 matches->GetVCandidateOffsetPtr()
-                    [weft_id * (matches->get_n_vertices() + 1) + h_dst_idx];
+                    [weft_id * (matches->get_n_vertices() + 1) + head_dst];
 
-            for (VertexID candidate_idx_src = 0;
-                 candidate_idx_src < src_candidate_size; candidate_idx_src++) {
+            for (auto candidates_idx_src = 0;
+                 candidates_idx_src < src_candidate_size;
+                 candidates_idx_src++) {
               auto candidate_src =
                   *(matches->GetDataPtr() +
                     weft_id * matches->get_n_vertices() * 2 *
                         matches->get_max_n_local_weft() +
                     h_src_idx * 2 * matches->get_max_n_local_weft() +
-                    2 * candidate_idx_src + src_bias);
-              if (candidate_src == kMaxVertexID) continue;
+                    2 * candidates_idx_src + bias_src);
               auto src_connect_count = 0;
-
-              for (VertexID candidate_idx_dst = 0;
-                   candidate_idx_dst < dst_candidate_size;
-                   candidate_idx_dst++) {
+              if (candidate_src == kMaxVertexID) continue;
+              for (auto candidates_idx_dst = 0;
+                   candidates_idx_dst < dst_candidate_size;
+                   candidates_idx_dst++) {
                 auto candidate_dst =
                     *(matches->GetDataPtr() +
                       weft_id * matches->get_n_vertices() * 2 *
                           matches->get_max_n_local_weft() +
                       h_dst_idx * 2 * matches->get_max_n_local_weft() +
-                      2 * candidate_idx_dst + dst_bias);
+                      2 * candidates_idx_dst + bias_dst);
+                if (candidate_dst == kMaxVertexID) continue;
 
                 if (g.IsConnected(candidate_src, candidate_dst)) {
                   src_connect_count++;
+                  break;
                 }
               }
-              // the candidate of src should be removed.
+
               if (src_connect_count == 0) {
                 *(matches->GetDataPtr() +
                   weft_id * matches->get_n_vertices() * 2 *
                       matches->get_max_n_local_weft() +
                   h_src_idx * 2 * matches->get_max_n_local_weft() +
-                  2 * candidate_idx_src + src_bias) = kMaxVertexID;
-              }
-            }
-
-            for (VertexID candidate_idx_dst = 0;
-                 candidate_idx_dst < dst_candidate_size; candidate_idx_dst++) {
-              auto candidate_dst =
-                  *(matches->GetDataPtr() +
-                    weft_id * matches->get_n_vertices() * 2 *
-                        matches->get_max_n_local_weft() +
-                    h_dst_idx * 2 * matches->get_max_n_local_weft() +
-                    2 * candidate_idx_dst + dst_bias);
-              if (candidate_dst == kMaxVertexID) continue;
-              auto dst_connect_count = 0;
-              for (VertexID candidate_idx_src = 0;
-                   candidate_idx_src < src_candidate_size;
-                   candidate_idx_src++) {
-                auto candidate_src =
-                    *(matches->GetDataPtr() +
-                      weft_id * matches->get_n_vertices() * 2 *
-                          matches->get_max_n_local_weft() +
-                      h_src_idx * 2 * matches->get_max_n_local_weft() +
-                      2 * candidate_idx_src + src_bias);
-
-                if (candidate_src == kMaxVertexID) continue;
-
-                if (g.IsConnected(candidate_src, candidate_dst)) {
-                  dst_connect_count++;
-                }
-              }
-
-              // the candidate of dst should be removed.
-              if (dst_connect_count == 0) {
+                  2 * candidates_idx_src) = kMaxVertexID;
                 *(matches->GetDataPtr() +
                   weft_id * matches->get_n_vertices() * 2 *
                       matches->get_max_n_local_weft() +
                   h_src_idx * 2 * matches->get_max_n_local_weft() +
-                  2 * candidate_idx_dst + dst_bias) = kMaxVertexID;
+                  2 * candidates_idx_src + 1) = kMaxVertexID;
               }
             }
           }
@@ -787,7 +797,8 @@ void CPUSubIso::RecursiveMatching(const ImmutableCSR& p, const ImmutableCSR& g,
   std::iota(worker.begin(), worker.end(), 0);
   auto step = worker.size();
 
-  Matches matches(p.get_num_vertices(), kMaxNumWeft, kMaxNumLocalWeft);
+  Matches matches(p.get_num_vertices(), kMaxNumWeft, kMaxNumLocalWeft,
+                  g.get_num_vertices());
 
   // Generate Execution Plan...
   ExecutionPlan exec_plan;
@@ -804,27 +815,54 @@ void CPUSubIso::RecursiveMatching(const ImmutableCSR& p, const ImmutableCSR& g,
     matches.SetHeader(_, std::make_pair(src, dst));
   }
 
+  auto start_time_0 = std::chrono::system_clock::now();
   // Enumerating ...
   Enumerating(p, g, exec_plan, m_vec, &matches);
-  // matches.Print(3);
+  std::cout << "\t weft count: " << matches.get_weft_count() << std::endl;
 
+  auto start_time_1 = std::chrono::system_clock::now();
   // Refining ...
   Refining(p, g, exec_plan, &matches);
   matches.UpdateInvalidMatches();
-  // matches.Print(3);
+  auto start_time_2 = std::chrono::system_clock::now();
 
   // Checking ...
   Checking(p, g, exec_plan, &matches);
   matches.UpdateInvalidMatches();
+  auto start_time_3 = std::chrono::system_clock::now();
   matches.Print(3);
+  std::cout << " N Matches: " << matches.ComputeNMatches() << std::endl;
+
+  std::cout << "[RecursiveMatching] Enumerating() elapsed: "
+            << std::chrono::duration_cast<std::chrono::microseconds>(
+                   start_time_1 - start_time_0)
+                       .count() /
+                   (double)CLOCKS_PER_SEC
+            << " sec" << std::endl;
+
+  std::cout << "[RecursiveMatching] Refining() elapsed: "
+            << std::chrono::duration_cast<std::chrono::microseconds>(
+                   start_time_2 - start_time_1)
+                       .count() /
+                   (double)CLOCKS_PER_SEC
+            << " sec" << std::endl;
+
+  std::cout << "[RecursiveMatching] Checking() elapsed: "
+            << std::chrono::duration_cast<std::chrono::microseconds>(
+                   start_time_3 - start_time_2)
+                       .count() /
+                   (double)CLOCKS_PER_SEC
+            << " sec" << std::endl;
+  matches.Write("/data/zhuxiaoke/workspace/Torch/gt/dblp_clique.gt");
 }
 
-void CPUSubIso::WOJMatching(const ImmutableCSR& p, const ImmutableCSR& g) {
+void CPUSubIso::WOJMatching(const ImmutableCSR& p, const ImmutableCSR& g,
+                            const std::vector<Matrix>& m_vec) {
   WOJExecutionPlan exec_plan;
   exec_plan.GenerateWOJExecutionPlan(p, g);
 
   auto start_time_0 = std::chrono::system_clock::now();
-  auto woj_matches = WOJFilter(exec_plan, p, g);
+  auto woj_matches = WOJFilter(exec_plan, p, g, m_vec);
 
   // for (auto iter : woj_matches) {
   //   iter->Print();
@@ -860,7 +898,7 @@ void CPUSubIso::LoadData() {
   auto* p_vlabel = p_.GetVLabelBasePointer();
 
   p_.PrintGraph(10);
-  g_.PrintGraph(1);
+  g_.PrintGraph(0);
 
   if (matrix_path1_ != "" && matrix_path2_ != "") {
     m_vec_.resize(2);
@@ -876,6 +914,16 @@ void CPUSubIso::Run() {
   LoadData();
   auto start_time_1 = std::chrono::system_clock::now();
 
+  // WOJMatching(p_, g_, m_vec_);
+  RecursiveMatching(p_, g_, m_vec_);
+  std::cout << "=== Filter Counts ===" << std::endl;
+  std::cout << "Total Filters:      " << filter_count << std::endl;
+  std::cout << "Label Filters:      " << label_filter_count << std::endl;
+  std::cout << "NLC Filters:        " << nlc_filter_count << std::endl;
+  std::cout << "GNN Filters:        " << gnn_filter_count << std::endl;
+  std::cout << "Index Filters:        " << index_filter_count << std::endl;
+  auto end_time = std::chrono::system_clock::now();
+
   std::cout << "Data loading time: "
             << std::chrono::duration_cast<std::chrono::milliseconds>(
                    start_time_1 - start_time_0)
@@ -883,10 +931,6 @@ void CPUSubIso::Run() {
                    (double)CLOCKS_PER_SEC
             << " sec" << std::endl;
 
-  // WOJMatching(p_, g_);
-  RecursiveMatching(p_, g_, m_vec_);
-
-  auto end_time = std::chrono::system_clock::now();
   std::cout << "Matching time: "
             << std::chrono::duration_cast<std::chrono::milliseconds>(
                    end_time - start_time_1)

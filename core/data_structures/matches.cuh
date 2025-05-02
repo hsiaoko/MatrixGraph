@@ -57,7 +57,8 @@ class Matches {
   Matches(VertexID n_vertices,
           VertexID max_n_weft = sics::matrixgraph::core::common::kMaxNumWeft,
           VertexID max_n_local_weft =
-              sics::matrixgraph::core::common::kMaxNumLocalWeft)
+              sics::matrixgraph::core::common::kMaxNumLocalWeft,
+          VertexID g_n_vertices = 65536)
       : n_vertices_(n_vertices),
         max_n_weft_(max_n_weft),
         max_n_local_weft_(max_n_local_weft) {
@@ -72,6 +73,9 @@ class Matches {
                        max_n_weft);
     invalid_match_ = new BitmapOwnership(max_n_weft);
     header_.resize(n_vertices_);
+
+    src_visited_vec_.resize(n_vertices, g_n_vertices);
+    dst_visited_vec_.resize(n_vertices, g_n_vertices);
   }
 
   void Print(VertexID n_matches = 3) const {
@@ -117,6 +121,42 @@ class Matches {
     }
   }
 
+  size_t ComputeNMatches() const {
+    size_t count = 0;
+    for (VertexID weft_id = 0; weft_id < *weft_count_.GetPtr(); weft_id++) {
+      if (invalid_match_->GetBit(weft_id)) continue;
+
+      auto tag = false;
+      size_t weft_matches_count = 1;
+      for (auto i = 0; i < n_vertices_; i++) {
+        auto v_candidate_offset =
+            GetVCandidateOffsetPtr()[weft_id * (n_vertices_ + 1) + i];
+        auto v_candidate_size =
+            GetVCandidateOffsetPtr()[weft_id * (n_vertices_ + 1) + i + 1] -
+            GetVCandidateOffsetPtr()[weft_id * (n_vertices_ + 1) + i];
+        size_t tmp_count = 0;
+        for (VertexID candidate_id = 0; candidate_id < v_candidate_size;
+             candidate_id++) {
+          if (*(matches_data_.GetPtr() +
+                weft_id * n_vertices_ * 2 * max_n_local_weft_ +
+                i * 2 * max_n_local_weft_ + 2 * candidate_id) != kMaxVertexID &&
+              *(matches_data_.GetPtr() +
+                weft_id * n_vertices_ * 2 * max_n_local_weft_ +
+                i * 2 * max_n_local_weft_ + 2 * candidate_id + 1) !=
+                  kMaxVertexID) {
+            tmp_count++;
+          }
+        }
+        if (tmp_count != 0) {
+          tag = true;
+          weft_matches_count *= tmp_count;
+        }
+      }
+      if (tag) count += weft_matches_count;
+    }
+    return count;
+  }
+
   void UpdateInvalidMatches() {
     for (VertexID weft_id = 0; weft_id < *weft_count_.GetPtr(); weft_id++) {
       for (auto i = 0; i < n_vertices_; i++) {
@@ -145,6 +185,40 @@ class Matches {
         }
       }
     }
+  }
+
+  void Write(const std::string& path) const {
+    uint64_t* weft_root_buf =
+        new uint64_t[get_weft_count() - GetInvalidMatchesCount()]();
+    for (auto _ = 0; _ < get_weft_count(); _++) {
+      if (invalid_match_->GetBit(_)) continue;
+      weft_root_buf[_] = *(matches_data_.GetPtr() +
+                           _ * n_vertices_ * 2 * max_n_local_weft_ + 1);
+    }
+    std::ofstream out_file(path);
+    out_file.write(reinterpret_cast<char*>(weft_root_buf),
+                   sizeof(uint64_t) * get_weft_count());
+    out_file.close();
+
+    delete[] weft_root_buf;
+  }
+
+  void Read(const std::string& path) const {
+    std::ifstream data_file(path);
+    if (!data_file) throw std::runtime_error("Read matches error.");
+
+    data_file.seekg(0, std::ios::end);
+    size_t file_size = data_file.tellg();
+    data_file.seekg(0, std::ios::beg);
+
+    uint64_t* weft_root_buf = new uint64_t[file_size / sizeof(uint64_t)]();
+    data_file.read(reinterpret_cast<char*>(weft_root_buf), file_size);
+    data_file.close();
+    for (auto _ = 0; _ < get_weft_count(); _++) {
+      std::cout << "weft_root_buf: " << weft_root_buf[_] << std::endl;
+    }
+
+    delete[] weft_root_buf;
   }
 
   size_t GetInvalidMatchesCount() const { return invalid_match_->Count(); }
@@ -187,6 +261,9 @@ class Matches {
   UnifiedOwnedBufferEdgeIndex weft_offset_;
 
   UnifiedOwnedBufferVertexID matches_data_;
+
+  std::vector<BitmapOwnership> src_visited_vec_;
+  std::vector<BitmapOwnership> dst_visited_vec_;
 
   VertexID n_vertices_ = 0;
   VertexID max_n_weft_ = sics::matrixgraph::core::common::kMaxNumWeft;
