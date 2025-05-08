@@ -1,3 +1,8 @@
+#include <cuda_runtime.h>
+
+#include <chrono>
+#include <iostream>
+
 #include "core/common/consts.h"
 #include "core/common/types.h"
 #include "core/data_structures/kernel_bitmap.cuh"
@@ -5,9 +10,6 @@
 #include "core/data_structures/mini_kernel_bitmap.cuh"
 #include "core/task/gpu_task/kernel/kernel_matrix_ops.cuh"
 #include "core/util/bitmap_no_ownership.h"
-#include <chrono>
-#include <cuda_runtime.h>
-#include <iostream>
 
 namespace sics {
 namespace matrixgraph {
@@ -24,10 +26,11 @@ using sics::matrixgraph::core::common::kMaxVertexID;
 using sics::matrixgraph::core::task::kernel::KernelBitmapNoOwnership;
 using BitmapNoOwnerShip = sics::matrixgraph::core::util::BitmapNoOwnerShip;
 
+template <typename T>
 struct ParametersMatrix {
-  float* A;
-  float* B;
-  float* C;
+  T* A;
+  T* B;
+  T* C;
   int m;
   int k;
   int n;
@@ -53,7 +56,20 @@ static __global__ void ReluKernel(float* input, int n) {
   }
 }
 
-static __global__ void MatrixMulSharedKernel(ParametersMatrix params) {
+/**
+ * @brief CUDA Kernel for Sigmoid activation function
+ * @param input  Input array (device pointer)
+ * @param n      Number of elements in the array
+ */
+static __global__ void SigmoidKernel(float* input, int n) {
+  const unsigned int tid = blockIdx.x * blockDim.x + threadIdx.x;
+  const unsigned int step = blockDim.x * gridDim.x;
+  for (unsigned int idx = tid; idx < n; idx += step) {
+    input[idx] = 1.0f / (1.0f + __expf(-input[idx]));
+  }
+}
+
+static __global__ void MatrixMulSharedKernel(ParametersMatrix<float> params) {
   __shared__ float s_A[16][16];  // the size of Tile = 16 x 16
   __shared__ float s_B[16][16];
 
@@ -91,7 +107,8 @@ static __global__ void MatrixMulSharedKernel(ParametersMatrix params) {
   }
 }
 
-static __global__ void MatrixMulKernel(ParametersMatrix params) {
+template <typename T>
+static __global__ void MatrixMulKernel(ParametersMatrix<T> params) {
   const unsigned int tid = blockIdx.x * blockDim.x + threadIdx.x;
   const unsigned int step = blockDim.x * gridDim.x;
 
@@ -106,16 +123,33 @@ static __global__ void MatrixMulKernel(ParametersMatrix params) {
   }
 }
 
-static __global__ void MatrixMulTransposedBKernel(ParametersMatrix params) {
+template <typename T>
+static __global__ void MatrixMulTransposedBKernel(ParametersMatrix<T> params) {
   const unsigned int tid = blockIdx.x * blockDim.x + threadIdx.x;
   const unsigned int step = blockDim.x * gridDim.x;
 
   for (unsigned k_idx = tid; k_idx < params.k; k_idx += step) {
     for (unsigned m_idx = 0; m_idx < params.m; m_idx++) {
       for (unsigned n_idx = 0; n_idx < params.n; n_idx++) {
-        params.C[m_idx * params.n + n_idx] +=
-            params.A[m_idx * params.k + k_idx] *
-            params.B[n_idx * params.k + k_idx];
+        atomicAdd(params.C + m_idx * params.n + n_idx,
+                  params.A[m_idx * params.k + k_idx] *
+                      params.B[k_idx * params.n + n_idx]);
+      }
+    }
+  }
+}
+
+template <typename T>
+static __global__ void MatrixMulTransposedAKernel(ParametersMatrix<T> params) {
+  const unsigned int tid = blockIdx.x * blockDim.x + threadIdx.x;
+  const unsigned int step = blockDim.x * gridDim.x;
+
+  for (unsigned k_idx = tid; k_idx < params.k; k_idx += step) {
+    for (unsigned m_idx = 0; m_idx < params.m; m_idx++) {
+      for (unsigned n_idx = 0; n_idx < params.n; n_idx++) {
+        atomicAdd(params.C + m_idx * params.n + n_idx,
+                  params.A[k_idx * params.m + m_idx] *
+                      params.B[n_idx * params.k + k_idx]);
       }
     }
   }
@@ -140,13 +174,14 @@ static __global__ void MatrixAddKernel(float* A, float* B, int m, int n) {
   const unsigned int tid = blockIdx.x * blockDim.x + threadIdx.x;
   const unsigned int step = blockDim.x * gridDim.x;
 
-  for (VertexID idx = tid; idx < m * n; idx += step) atomicAdd(B + idx, A[idx]);
+  for (VertexID idx = tid; idx < m * n; idx += step) atomicAdd(A + idx, B[idx]);
 }
 
 void MatrixOpsKernelWrapper::MatMult(const cudaStream_t& stream, float* A,
                                      float* B, float* C, int m, int k, int n,
-                                     bool transposed) {
-  ParametersMatrix params{.A = A, .B = B, .C = C, .m = m, .k = k, .n = n};
+                                     bool transposed_a, bool transposed_b) {
+  ParametersMatrix<float> params{
+      .A = A, .B = B, .C = C, .m = m, .k = k, .n = n};
 
   // For MatrixMulSharedKernel();
   // dim3 dimBlock(16, 16);
@@ -154,7 +189,11 @@ void MatrixOpsKernelWrapper::MatMult(const cudaStream_t& stream, float* A,
 
   dim3 dimBlock(kBlockDim);
   dim3 dimGrid(kGridDim);
-  MatrixMulKernel<<<dimGrid, dimBlock, 0, stream>>>(params);
+  if (transposed_b) {
+    MatrixMulTransposedBKernel<<<dimGrid, dimBlock, 0, stream>>>(params);
+  } else {
+    MatrixMulKernel<<<dimGrid, dimBlock, 0, stream>>>(params);
+  }
 }
 
 void MatrixOpsKernelWrapper::MatAdd(const cudaStream_t& stream, float* A,
@@ -163,11 +202,19 @@ void MatrixOpsKernelWrapper::MatAdd(const cudaStream_t& stream, float* A,
   dim3 dimGrid(kGridDim);
   MatrixAddKernel<<<dimGrid, dimBlock, 0, stream>>>(A, B, m, n);
 }
-void MatrixOpsKernelWrapper::Activate(const cudaStream_t& stream, float* A,
-                                      int m, int n) {
+
+void MatrixOpsKernelWrapper::Relu(const cudaStream_t& stream, float* A, int m,
+                                  int n) {
   dim3 dimBlock(kBlockDim);
   dim3 dimGrid(kGridDim);
   ReluKernel<<<dimGrid, dimBlock, 0, stream>>>(A, m * n);
+}
+
+void MatrixOpsKernelWrapper::Sigmoid(const cudaStream_t& stream, float* A,
+                                     int m, int n) {
+  dim3 dimBlock(kBlockDim);
+  dim3 dimGrid(kGridDim);
+  SigmoidKernel<<<dimGrid, dimBlock, 0, stream>>>(A, m * n);
 }
 
 void MatrixOpsKernelWrapper::Transpose(const cudaStream_t& stream, float* input,

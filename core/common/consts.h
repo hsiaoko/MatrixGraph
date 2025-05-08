@@ -25,10 +25,10 @@ static const uint64_t kMaxNumCandidates = 65536;
 
 // Recursive-based
 static const uint64_t kMaxNumCandidatesPerThread = 1024;
-static const uint64_t kMaxNumLocalWeft = 1 << 8;
+static const uint64_t kMaxNumLocalWeft = 1 << 4;
 
 // WOJ SubIso
-static const uint64_t kMaxNumWeft = 1 << 12;
+static const uint64_t kMaxNumWeft = 1 << 10;
 
 // GPU configure.
 static const uint32_t kSharedMemoryCapacity = 65536;  // 64kb per SM for V100

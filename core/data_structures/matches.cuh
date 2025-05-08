@@ -188,16 +188,21 @@ class Matches {
   }
 
   void Write(const std::string& path) const {
+    std::cout << "[Matches::Write]" << get_weft_count() << " save at" << path
+              << std::endl;
+
     uint64_t* weft_root_buf =
         new uint64_t[get_weft_count() - GetInvalidMatchesCount()]();
+    auto count = 0;
     for (auto _ = 0; _ < get_weft_count(); _++) {
       if (invalid_match_->GetBit(_)) continue;
-      weft_root_buf[_] = *(matches_data_.GetPtr() +
-                           _ * n_vertices_ * 2 * max_n_local_weft_ + 1);
+      weft_root_buf[count++] = *(matches_data_.GetPtr() +
+                                 _ * n_vertices_ * 2 * max_n_local_weft_ + 1);
     }
     std::ofstream out_file(path);
-    out_file.write(reinterpret_cast<char*>(weft_root_buf),
-                   sizeof(uint64_t) * get_weft_count());
+    out_file.write(
+        reinterpret_cast<char*>(weft_root_buf),
+        sizeof(uint64_t) * (get_weft_count() - GetInvalidMatchesCount()));
     out_file.close();
 
     delete[] weft_root_buf;

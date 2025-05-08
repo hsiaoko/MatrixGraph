@@ -1,13 +1,15 @@
 #ifndef MATRIXGRAPH_KERNEL_MatrixOps_CUH
 #define MATRIXGRAPH_KERNEL_MatrixOps_CUH
 
+#include <cuda_runtime.h>
+
+#include <vector>
+
 #include "core/common/types.h"
 #include "core/data_structures/device_buffer.cuh"
 #include "core/data_structures/edgelist.h"
 #include "core/data_structures/immutable_csr.cuh"
 #include "core/data_structures/unified_buffer.cuh"
-#include <cuda_runtime.h>
-#include <vector>
 
 namespace sics {
 namespace matrixgraph {
@@ -32,9 +34,12 @@ class MatrixOpsKernelWrapper {
   static MatrixOpsKernelWrapper* GetInstance();
 
   static void MatMult(const cudaStream_t& stream, float* A, float* B, float* C,
-                      int m, int k, int n, bool transposed = true);
+                      int m, int k, int n, bool transposed_a = false,
+                      bool transposed_b = false);
 
-  static void Activate(const cudaStream_t& stream, float* A, int m, int n);
+  static void Relu(const cudaStream_t& stream, float* A, int m, int n);
+
+  static void Sigmoid(const cudaStream_t& stream, float* A, int m, int n);
 
   static void MatAdd(const cudaStream_t& stream, float* A, float* B, int m,
                      int n);

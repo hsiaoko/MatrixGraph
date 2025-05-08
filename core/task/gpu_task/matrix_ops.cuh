@@ -1,14 +1,16 @@
 #ifndef MATRIXGRAPH_CORE_TASK_MatrixOps_CUH_
 #define MATRIXGRAPH_CORE_TASK_MatrixOps_CUH_
 
+#include <cublas_v2.h>
+
+#include <string>
+
 #include "core/common/types.h"
 #include "core/data_structures/edgelist.h"
 #include "core/data_structures/immutable_csr.cuh"
 #include "core/data_structures/unified_buffer.cuh"
 #include "core/task/gpu_task/kernel/kernel_matrix_ops.cuh"
 #include "core/task/gpu_task/task_base.cuh"
-#include <cublas_v2.h>
-#include <string>
 
 namespace sics {
 namespace matrixgraph {
@@ -71,7 +73,8 @@ class MatrixOps : public TaskBase {
    *  -9.0,
    *  -13.0]
    */
-  void MatMult(float* A, float* B, float* C, int m, int k, int n);
+  void MatMult(float* A, float* B, float* C, int m, int k, int n,
+               bool transposed_a = false, bool transposed_b = false);
 
   /**
    * @brif: Applies ReLU activation in-place on a GPU array.
@@ -80,7 +83,7 @@ class MatrixOps : public TaskBase {
    *    - m: number of row of A
    *    - n: number of column of A
    */
-  void Activate(float* A, int m, int n);
+  void Activate(float* A, int m, int n, char active_type = 'r');
 
   /**
    * @brif: Performs element-wise matrix addition on GPU.
@@ -93,6 +96,7 @@ class MatrixOps : public TaskBase {
    *            After execution, contains `A + B`.
    *    - m:    Number of rows in matrices A and B.
    *    - n:    Number of columns in matrices A and B.
+   *    - active_type:    Type of activate function: 'r' for Relu 's' for sigmoid.
    *
    * @note: Input/Output Example
    *  **Matrix A (2×3):**

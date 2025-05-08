@@ -12,8 +12,12 @@ class Matrix {
  public:
   Matrix() = default;
 
-  Matrix(uint32_t x, uint32_t y) : x_(x), y_(y) { data_ = new float[x_ * y]; }
+  Matrix(uint32_t x, uint32_t y) : x_(x), y_(y) { data_ = new float[x_ * y_]; }
 
+  void Init(size_t n) {
+    if (data_ != nullptr) delete[] data_;
+    data_ = new float[n]();
+  }
   void Read(const std::string& root_path);
 
   void Print(uint32_t k = 3) const;

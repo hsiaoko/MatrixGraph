@@ -12,13 +12,14 @@ namespace data_structures {
 void Matrix::Read(const std::string& root_path) {
   std::string meta_path = root_path + "meta.yaml";
   std::string data_path = root_path + "embedding.bin";
+  std::cout << "[Matrix Read]: " << root_path << std::endl;
   try {
     YAML::Node config = YAML::LoadFile(meta_path);
 
     x_ = config["x"].as<uint32_t>();
     y_ = config["y"].as<uint32_t>();
 
-    data_ = new float[x_ * y_]();
+    Init(65536);
 
   } catch (const YAML::Exception& e) {
     std::cerr << "YAML Error: " << e.what() << std::endl;

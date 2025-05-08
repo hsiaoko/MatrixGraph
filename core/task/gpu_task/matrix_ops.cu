@@ -1,3 +1,12 @@
+#include <cuda_runtime.h>
+
+#include <ctime>
+#include <execution>
+#include <iostream>
+#include <mutex>
+#include <thread>
+#include <unordered_map>
+
 #include "core/common/consts.h"
 #include "core/common/host_algorithms.cuh"
 #include "core/common/types.h"
@@ -10,13 +19,6 @@
 #include "core/util/atomic.h"
 #include "core/util/bitmap_no_ownership.h"
 #include "core/util/bitmap_ownership.h"
-#include <ctime>
-#include <cuda_runtime.h>
-#include <execution>
-#include <iostream>
-#include <mutex>
-#include <thread>
-#include <unordered_map>
 
 namespace sics {
 namespace matrixgraph {
@@ -74,20 +76,32 @@ void MatrixOps::cuBLASMatmult(float* A, float* B, float* C, int m, int k, int n,
   cublasDestroy(handle);
 }
 
-void MatrixOps::MatMult(float* A, float* B, float* C, int m, int k, int n) {
+void MatrixOps::MatMult(float* A, float* B, float* C, int m, int k, int n,
+                        bool transposed_a, bool transposed_b) {
   cudaStream_t stream;
   cudaStreamCreate(&stream);
-  kernel::MatrixOpsKernelWrapper::MatMult(stream, A, B, C, m, k, n);
+  kernel::MatrixOpsKernelWrapper::MatMult(stream, A, B, C, m, k, n,
+                                          transposed_a, transposed_b);
 
   cudaStreamSynchronize(stream);
   cudaStreamDestroy(stream);
 }
 
-void MatrixOps::Activate(float* A, int m, int n) {
+void MatrixOps::Activate(float* A, int m, int n, char active_type) {
   cudaStream_t stream;
   cudaStreamCreate(&stream);
 
-  kernel::MatrixOpsKernelWrapper::Activate(stream, A, m, n);
+  switch (active_type) {
+    case 'r':
+      kernel::MatrixOpsKernelWrapper::Relu(stream, A, m, n);
+      break;
+    case 's':
+      kernel::MatrixOpsKernelWrapper::Sigmoid(stream, A, m, n);
+      break;
+    default:
+      kernel::MatrixOpsKernelWrapper::Relu(stream, A, m, n);
+  }
+
   cudaStreamSynchronize(stream);
   cudaStreamDestroy(stream);
 }
