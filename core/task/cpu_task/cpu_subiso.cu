@@ -141,7 +141,6 @@ static bool NeighborLabelCounterFilter(VertexID u_idx, VertexID v_idx,
 
 static bool KMinWiseIPFilter(VertexID u_idx, VertexID v_idx,
                              const ImmutableCSR& p, const ImmutableCSR& g) {
-  return true;
   VertexID max_v_ip_val = 0;
   VertexID min_v_ip_val = kMaxVertexID;
   VertexID max_u_ip_val = 0;
@@ -239,7 +238,6 @@ static bool MatrixFilter(
     VertexID u_idx, VertexID v_idx, const ImmutableCSR& p,
     const ImmutableCSR& g, const std::vector<Matrix>& m_vec,
     const std::vector<UnifiedOwnedBufferFloat*> m_unified_buffer_vec) {
-  return true;
   BufferFloat buffer_m1;
   BufferFloat buffer_m2;
 
@@ -266,6 +264,10 @@ static bool MatrixFilter(
   // }
   // std::cout << std::endl;
   // for (auto _ = 0; _ < vec_len; _++) {
+  //   unified_sim_vec.GetPtr()[_] = 0;
+  // }
+  // unified_sim_vec.GetPtr()[0] = 1;
+  // for (auto _ = 0; _ < vec_len; _++) {
   //   std::cout << unified_sim_vec.GetPtr()[_] << " ";
   // }
   // std::cout << std::endl;
@@ -282,7 +284,12 @@ static bool MatrixFilter(
                      false, true);
 
   matrix_ops.MatAdd(z1.GetPtr(), m_unified_buffer_vec[3]->GetPtr(), 1, 16);
-
+  // for (auto _ = 0; _ < 16; _++) {
+  //   for (auto __ = 0; __ < 16; __++) {
+  //     std::cout << z1.GetPtr()[_ * 16 + __] << " ";
+  //   }
+  //   std::cout << std::endl;
+  // }
   matrix_ops.Activate(z1.GetPtr(), 1, 16);
 
   matrix_ops.MatMult(z1.GetPtr(), m_unified_buffer_vec[4]->GetPtr(),
@@ -626,8 +633,8 @@ static inline void Enumerating(
     const ExecutionPlan& exec_plan, const std::vector<Matrix>& m_vec,
     const std::vector<UnifiedOwnedBufferFloat*>& m_unified_buffer_vec,
     Matches* matches) {
-  //  auto parallelism = std::thread::hardware_concurrency();
-  auto parallelism = 1;
+  auto parallelism = std::thread::hardware_concurrency();
+  // auto parallelism = 1;
   std::vector<size_t> worker(parallelism);
   std::mutex mtx;
   std::iota(worker.begin(), worker.end(), 0);
@@ -854,6 +861,7 @@ void CPUSubIso::RecursiveMatching(
   std::iota(worker.begin(), worker.end(), 0);
   auto step = worker.size();
 
+  std::cout << p.get_num_vertices() << " " << g.get_num_vertices() << std::endl;
   Matches matches(p.get_num_vertices(), kMaxNumWeft, kMaxNumLocalWeft,
                   g.get_num_vertices());
 
@@ -972,10 +980,10 @@ void CPUSubIso::LoadData() {
     m_vec_[3].Read(matrix_path4_);
     m_vec_[4].Read(matrix_path5_);
     m_vec_[5].Read(matrix_path6_);
-    // m_vec_[2].Print(99);
-    // m_vec_[3].Print(99);
-    // m_vec_[4].Print(99);
-    // m_vec_[5].Print(99);
+    m_vec_[2].Print(99);
+    m_vec_[3].Print(99);
+    m_vec_[4].Print(99);
+    m_vec_[5].Print(99);
 
     BufferFloat buffer_m1;
     BufferFloat buffer_m2;

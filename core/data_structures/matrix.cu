@@ -19,7 +19,7 @@ void Matrix::Read(const std::string& root_path) {
     x_ = config["x"].as<uint32_t>();
     y_ = config["y"].as<uint32_t>();
 
-    Init(65536);
+    Init(x_ * y_);
 
   } catch (const YAML::Exception& e) {
     std::cerr << "YAML Error: " << e.what() << std::endl;

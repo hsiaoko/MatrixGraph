@@ -65,17 +65,25 @@ class Matches {
     v_candidate_offset_for_each_weft_.Init(sizeof(VertexID) * (n_vertices + 1) *
                                            max_n_weft);
 
+    std::cout << "asd" << std::endl;
     weft_offset_.Init(sizeof(EdgeIndex) * max_n_weft_);
     weft_size_.Init(sizeof(VertexID) * max_n_weft_);
     weft_count_.Init(sizeof(VertexID));
+    std::cout << "asd" << std::endl;
 
     matches_data_.Init(sizeof(VertexID) * 2 * n_vertices * max_n_local_weft *
                        max_n_weft);
+    std::cout << "asd" << std::endl;
     invalid_match_ = new BitmapOwnership(max_n_weft);
+    std::cout << "asd" << std::endl;
     header_.resize(n_vertices_);
+    std::cout << "asd" << std::endl;
 
-    src_visited_vec_.resize(n_vertices, g_n_vertices);
-    dst_visited_vec_.resize(n_vertices, g_n_vertices);
+    std::cout << n_vertices << " " << g_n_vertices << std::endl;
+    // src_visited_vec_.resize(n_vertices, g_n_vertices);
+    std::cout << "asd" << std::endl;
+    // dst_visited_vec_.resize(n_vertices, g_n_vertices);
+    std::cout << "asd" << std::endl;
   }
 
   void Print(VertexID n_matches = 3) const {
