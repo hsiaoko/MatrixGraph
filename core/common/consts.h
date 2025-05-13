@@ -25,7 +25,7 @@ static const uint64_t kMaxNumCandidates = 65536;
 
 // Recursive-based
 static const uint64_t kMaxNumCandidatesPerThread = 1024;
-static const uint64_t kMaxNumLocalWeft = 1 << 10;
+static const uint64_t kMaxNumLocalWeft = 1 << 8;
 
 // WOJ SubIso
 static const uint64_t kMaxNumWeft = 1 << 16;

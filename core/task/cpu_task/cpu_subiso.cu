@@ -32,6 +32,7 @@ namespace matrixgraph {
 namespace core {
 namespace task {
 
+using sics::matrixgraph::core::task::kernel::MatrixOpsKernelWrapper;
 using MinHeap = sics::matrixgraph::core::task::kernel::MinHeap;
 using UnifiedOwnedBufferFloat =
     sics::matrixgraph::core::data_structures::UnifiedOwnedBuffer<float>;
@@ -223,12 +224,12 @@ static bool Filter(VertexID u_idx, VertexID v_idx, const ImmutableCSR& p,
   if (!LabelDegreeFilter(u_idx, v_idx, p, g)) {
     __sync_fetch_and_add(&label_degree_filter_count, 1);
     __sync_fetch_and_add(&filter_count, 1);
-    // return false;
+    return false;
   }
   if (!NeighborLabelCounterFilter(u_idx, v_idx, p, g)) {
     __sync_fetch_and_add(&nlc_filter_count, 1);
     __sync_fetch_and_add(&filter_count, 1);
-    // return false;
+    return false;
   }
 
   return true;
@@ -237,17 +238,84 @@ static bool Filter(VertexID u_idx, VertexID v_idx, const ImmutableCSR& p,
 static bool MatrixFilter(
     VertexID u_idx, VertexID v_idx, const ImmutableCSR& p,
     const ImmutableCSR& g, const std::vector<Matrix>& m_vec,
-    const std::vector<UnifiedOwnedBufferFloat*> m_unified_buffer_vec) {
+    const std::vector<UnifiedOwnedBufferFloat*>& m_unified_buffer_vec) {
+  auto vec_len = m_vec[0].get_y();
+
+  /// Init similarity vector.
+
+  float sim_vec[vec_len] = {0};
+
+  // MatrixOpsKernelWrapper::CPUSimdSquaredDifference(
+  //     m_vec[0].GetPtr() + u_idx * vec_len, m_vec[1].GetPtr() + v_idx *
+  //     vec_len, sim_vec, vec_len);
+  sim_vec[0] = 1;
+  // sim_vec[1] = 2;
+  // sim_vec[2] = 3;
+
+  float z1[8] = {0};
+  float z2[1] = {0};
+
+  for (int i = 0; i < vec_len; i++) {
+    std::cout << sim_vec[i] << " ";
+  }
+  std::cout << std::endl;
+
+  MatrixOpsKernelWrapper::CPUMatMult(sim_vec, m_vec[2].GetPtr(), z1, 1,
+                                     m_vec[2].get_x(), m_vec[2].get_y(), false,
+                                     true);
+  for (int i = 0; i < 8; i++) {
+    std::cout << z1[i] << " ";
+  }
+  std::cout << std::endl;
+
+  MatrixOpsKernelWrapper::CPUMatAdd(z1, m_vec[3].GetPtr(), m_vec[3].get_x(),
+                                    m_vec[3].get_y());
+
+  for (int i = 0; i < 8; i++) {
+    std::cout << z1[i] << " ";
+  }
+  std::cout << std::endl;
+
+  while (1)
+    ;
+  MatrixOpsKernelWrapper::CPURelu(z1, m_vec[3].get_x(), m_vec[3].get_y());
+
+  MatrixOpsKernelWrapper::CPUMatMult(z1, m_vec[4].GetPtr(), z2, 1,
+                                     m_vec[4].get_x(), m_vec[4].get_y(), false,
+                                     true);
+
+  MatrixOpsKernelWrapper::CPUMatAdd(z2, m_vec[5].GetPtr(), m_vec[5].get_x(),
+                                    m_vec[5].get_y());
+
+  MatrixOpsKernelWrapper::CPUSigmoid(z2, 1, 1);
+
+  if (z2[0] < 0.5) {
+    std::cout << "v: " << v_idx << " sigmoid: " << z2[0] << std::endl;
+    for (int _ = 0; _ < vec_len; _++) {
+      std::cout << sim_vec[_] << " ";
+    }
+
+    return false;
+  }
+
+  return true;
+}
+
+static bool GPUMatrixFilter(
+    VertexID u_idx, VertexID v_idx, const ImmutableCSR& p,
+    const ImmutableCSR& g, const std::vector<Matrix>& m_vec,
+    const std::vector<UnifiedOwnedBufferFloat*>& m_unified_buffer_vec) {
+  // return true;
   BufferFloat buffer_m1;
   BufferFloat buffer_m2;
 
-  buffer_m1.data = m_vec[0].GetPtr() + u_idx * 16;
-  buffer_m2.data = m_vec[1].GetPtr() + v_idx * 16;
-
-  buffer_m1.size = sizeof(uint64_t) * 16;
-  buffer_m2.size = sizeof(uint64_t) * 16;
-
   auto vec_len = m_vec[0].get_y();
+
+  buffer_m1.data = m_vec[0].GetPtr() + u_idx * vec_len;
+  buffer_m2.data = m_vec[1].GetPtr() + v_idx * vec_len;
+
+  buffer_m1.size = sizeof(uint64_t) * vec_len;
+  buffer_m2.size = sizeof(uint64_t) * vec_len;
 
   /// Init similarity vector.
   UnifiedOwnedBufferFloat unified_sim_vec;
@@ -255,46 +323,27 @@ static bool MatrixFilter(
 
   SimdSquaredDifference(buffer_m1.GetPtr(), buffer_m2.GetPtr(),
                         unified_sim_vec.GetPtr(), vec_len);
-  // for (auto _ = 0; _ < vec_len; _++) {
-  //   std::cout << buffer_m1.GetPtr()[_] << " ";
-  // }
-  // std::cout << std::endl;
-  // for (auto _ = 0; _ < vec_len; _++) {
-  //   std::cout << buffer_m2.GetPtr()[_] << " ";
-  // }
-  // std::cout << std::endl;
-  // for (auto _ = 0; _ < vec_len; _++) {
-  //   unified_sim_vec.GetPtr()[_] = 0;
-  // }
-  // unified_sim_vec.GetPtr()[0] = 1;
-  // for (auto _ = 0; _ < vec_len; _++) {
-  //   std::cout << unified_sim_vec.GetPtr()[_] << " ";
-  // }
-  // std::cout << std::endl;
 
   UnifiedOwnedBufferFloat z1;
-  z1.Init(sizeof(float) * 16);
+  z1.Init(sizeof(float) * 8);
 
   UnifiedOwnedBufferFloat z2;
   z2.Init(sizeof(float) * 1);
 
   MatrixOps matrix_ops;
   matrix_ops.MatMult(unified_sim_vec.GetPtr(),
-                     m_unified_buffer_vec[2]->GetPtr(), z1.GetPtr(), 1, 16, 16,
+                     m_unified_buffer_vec[2]->GetPtr(), z1.GetPtr(), 1, 64, 8,
                      false, true);
 
-  matrix_ops.MatAdd(z1.GetPtr(), m_unified_buffer_vec[3]->GetPtr(), 1, 16);
-  // for (auto _ = 0; _ < 16; _++) {
-  //   for (auto __ = 0; __ < 16; __++) {
-  //     std::cout << z1.GetPtr()[_ * 16 + __] << " ";
-  //   }
-  //   std::cout << std::endl;
-  // }
-  matrix_ops.Activate(z1.GetPtr(), 1, 16);
+  matrix_ops.MatAdd(z1.GetPtr(), m_unified_buffer_vec[3]->GetPtr(), 1, 8);
+
+  matrix_ops.Activate(z1.GetPtr(), 1, 8);
 
   matrix_ops.MatMult(z1.GetPtr(), m_unified_buffer_vec[4]->GetPtr(),
-                     z2.GetPtr(), 1, 16, 1, false, true);
+                     z2.GetPtr(), 1, 8, 1, false, true);
+
   matrix_ops.MatAdd(z2.GetPtr(), m_unified_buffer_vec[5]->GetPtr(), 1, 1);
+
   matrix_ops.Activate(z2.GetPtr(), 1, 1, 's');
 
   if (*z2.GetPtr() < 0.5) return false;
@@ -584,11 +633,11 @@ static void DFSExtend(
 
     if ((pre_v_idx == kMaxVertexID) ^ (u_src == kMaxVertexID)) continue;
 
-    if (u_src != kMaxVertexID) {
-      if (!matches_visited_vec[u_src].GetBit(pre_v_idx)) {
-        continue;
-      }
-    }
+    // if (u_src != kMaxVertexID) {
+    // if (!matches_visited_vec[u_src].GetBit(pre_v_idx)) {
+    //   continue;
+    // }
+    // }
 
     if (IsFeasible(p, g, m_vec, m_unified_buffer_vec, u_src, u_dst, pre_v_idx,
                    v_idx, local_matches)) {
@@ -608,10 +657,10 @@ static void DFSExtend(
         local_matches->data[kMaxNumLocalWeft * 2 * _ + 2 * offset] =
             g.GetGloablIDBasePointer()[pre_v_idx];
       }
-      if (u_src != kMaxVertexID) {
-        matches_visited_vec[u_src].SetBit(pre_v_idx);
-      }
-      matches_visited_vec[u_dst].SetBit(v_idx);
+      // if (u_src != kMaxVertexID) {
+      //   matches_visited_vec[u_src].SetBit(pre_v_idx);
+      // }
+      // matches_visited_vec[u_dst].SetBit(v_idx);
 
       extend_tag = true;
     }
@@ -633,8 +682,8 @@ static inline void Enumerating(
     const ExecutionPlan& exec_plan, const std::vector<Matrix>& m_vec,
     const std::vector<UnifiedOwnedBufferFloat*>& m_unified_buffer_vec,
     Matches* matches) {
-  auto parallelism = std::thread::hardware_concurrency();
-  // auto parallelism = 1;
+  // auto parallelism = std::thread::hardware_concurrency();
+  auto parallelism = 1;
   std::vector<size_t> worker(parallelism);
   std::mutex mtx;
   std::iota(worker.begin(), worker.end(), 0);
@@ -701,9 +750,9 @@ static inline void Enumerating(
                    sizeof(VertexID) * p.get_num_vertices() * kMaxNumLocalWeft);
             memset(local_matches.size, 0,
                    sizeof(VertexID) * p.get_num_vertices());
-            for (auto _ = 0; _ < matches_visited_vec.size(); _++) {
-              matches_visited_vec[_].Clear();
-            }
+            // for (auto _ = 0; _ < matches_visited_vec.size(); _++) {
+            //   matches_visited_vec[_].Clear();
+            // }
           }
         }
       });
@@ -904,13 +953,6 @@ void CPUSubIso::RecursiveMatching(
                    (float)CLOCKS_PER_SEC
             << " sec" << std::endl;
 
-  std::cout << "[RecursiveMatching] Refining() elapsed: "
-            << std::chrono::duration_cast<std::chrono::microseconds>(
-                   start_time_2 - start_time_1)
-                       .count() /
-                   (float)CLOCKS_PER_SEC
-            << " sec" << std::endl;
-
   std::cout << "[RecursiveMatching] Checking() elapsed: "
             << std::chrono::duration_cast<std::chrono::microseconds>(
                    start_time_3 - start_time_2)
@@ -997,12 +1039,12 @@ void CPUSubIso::LoadData() {
     buffer_m4.data = m_vec_[3].GetPtr();
     buffer_m5.data = m_vec_[4].GetPtr();
     buffer_m6.data = m_vec_[5].GetPtr();
-    buffer_m1.size = sizeof(uint64_t) * 16;
-    buffer_m2.size = sizeof(uint64_t) * 16;
-    buffer_m3.size = sizeof(float) * 16 * 16;
-    buffer_m4.size = sizeof(float) * 16 * 1;
-    buffer_m5.size = sizeof(float) * 16 * 1;
-    buffer_m6.size = sizeof(float) * 1;
+    buffer_m1.size = sizeof(float) * m_vec_[0].get_x() * m_vec_[0].get_y();
+    buffer_m2.size = sizeof(float) * m_vec_[1].get_x() * m_vec_[1].get_y();
+    buffer_m3.size = sizeof(float) * m_vec_[2].get_x() * m_vec_[2].get_y();
+    buffer_m4.size = sizeof(float) * m_vec_[3].get_x() * m_vec_[3].get_y();
+    buffer_m5.size = sizeof(float) * m_vec_[4].get_x() * m_vec_[4].get_y();
+    buffer_m6.size = sizeof(float) * m_vec_[5].get_x() * m_vec_[5].get_y();
 
     m_unified_buffer_vec_[0]->Init(buffer_m1);
     m_unified_buffer_vec_[1]->Init(buffer_m2);
@@ -1023,6 +1065,8 @@ void CPUSubIso::Run() {
   std::cout << "=== Filter Counts ===" << std::endl;
   std::cout << "Total Filters:      " << filter_count << std::endl;
   std::cout << "Label Filters:      " << label_filter_count << std::endl;
+  std::cout << "Label Degree Filters:      " << label_degree_filter_count
+            << std::endl;
   std::cout << "NLC Filters:        " << nlc_filter_count << std::endl;
   std::cout << "IP Filters:        " << ip_filter_count << std::endl;
   std::cout << "GNN Filters:        " << gnn_filter_count << std::endl;

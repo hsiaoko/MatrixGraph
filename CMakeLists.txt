@@ -9,6 +9,7 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CUDA_STANDARD 20)
 set(CMAKE_CUDA_STANDARD_REQUIRED ON)
+set(CUDA_ARCHITECTURES "sm_70")
 
 # Build Type
 if (NOT CMAKE_BUILD_TYPE)
@@ -68,8 +69,8 @@ endif ()
 add_subdirectory("${GFLAGS_ROOT_DIR}" EXCLUDE_FROM_ALL)
 
 # TBB
-add_subdirectory("${TBB_ROOT_DIR}" EXCLUDE_FROM_ALL)
-#find_package(TBB)
+#add_subdirectory("${TBB_ROOT_DIR}" EXCLUDE_FROM_ALL)
+find_package(TBB)
 
 # GoogleTest
 if (TEST)

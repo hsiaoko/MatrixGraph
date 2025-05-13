@@ -38,6 +38,37 @@ file(GLOB_RECURSE CORE_SOURCES
         "task/cpu_task/*.cpp"
         )
 
+# 检测 CPU 指令集支持
+include(CheckCXXCompilerFlag)
+
+# 检测并启用 AVX/AVX2
+option(ENABLE_AVX "Enable AVX instructions" ON)
+
+if (ENABLE_AVX)
+    include(CheckCXXCompilerFlag)
+
+    # 首先尝试 AVX2 + FMA
+    check_cxx_compiler_flag("-mavx2" HAS_AVX2)
+    check_cxx_compiler_flag("-mfma" HAS_FMA)
+
+    if (HAS_AVX2 AND HAS_FMA)
+        add_compile_options(-mavx2 -mfma)
+        add_definitions(-DUSE_AVX2)
+        message(STATUS "Enabled AVX2 and FMA instructions")
+
+        # 回退到 AVX
+    else ()
+        check_cxx_compiler_flag("-mavx" HAS_AVX)
+        if (HAS_AVX)
+            add_compile_options(-mavx)
+            add_definitions(-DUSE_AVX)
+            message(STATUS "Enabled AVX instructions")
+        else ()
+            message(WARNING "AVX not available - falling back to scalar code")
+        endif ()
+    endif ()
+endif ()
+
 
 #######################
 # Tests Configuration
@@ -57,6 +88,8 @@ target_link_libraries(${PROJECT_NAME}
         yaml-cpp
         TBB::tbb
         cublas
+        -ffast-math
+        -funroll-loops
         )
 
 target_include_directories(${PROJECT_NAME}

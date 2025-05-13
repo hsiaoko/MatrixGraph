@@ -96,7 +96,8 @@ class MatrixOps : public TaskBase {
    *            After execution, contains `A + B`.
    *    - m:    Number of rows in matrices A and B.
    *    - n:    Number of columns in matrices A and B.
-   *    - active_type:    Type of activate function: 'r' for Relu 's' for sigmoid.
+   *    - active_type:    Type of activate function: 'r' for Relu 's' for
+   * sigmoid.
    *
    * @note: Input/Output Example
    *  **Matrix A (2×3):**

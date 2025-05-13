@@ -37,15 +37,30 @@ class MatrixOpsKernelWrapper {
                       int m, int k, int n, bool transposed_a = false,
                       bool transposed_b = false);
 
+  static void CPUMatMult(const float* A, const float* B, float* C, int m, int k,
+                         int n, bool transposed_a = false,
+                         bool transposed_b = false);
+
   static void Relu(const cudaStream_t& stream, float* A, int m, int n);
 
+  static void CPURelu(float* A, int m, int n);
+
   static void Sigmoid(const cudaStream_t& stream, float* A, int m, int n);
+
+  static void CPUSigmoid(float* A, int m, int n);
 
   static void MatAdd(const cudaStream_t& stream, float* A, float* B, int m,
                      int n);
 
+  static void CPUMatAdd(float* A, float* B, int m, int n);
+
   static void Transpose(const cudaStream_t& stream, float* A, float* B, int m,
                         int n);
+
+  static void CPUTranspose(const float* A, const float* B, int m, int n);
+
+  static void CPUSimdSquaredDifference(const float* v_a, const float* v_b,
+                                       float* v_c, size_t n);
 
  private:
   MatrixOpsKernelWrapper() = default;
