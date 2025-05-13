@@ -59,8 +59,11 @@ class GraphReader:
 
             elif parts[0] == 'e':
                 # Edge definition
-                src = int(parts[1])
-                dst = int(parts[2])
+                # src = int(parts[1])
+                # dst = int(parts[2])
+                # reverse edges
+                dst = int(parts[1])
+                src = int(parts[2])
                 src_idx.append(src)
                 dst_idx.append(dst)
                 self.graph.add_edge(src, dst)
@@ -103,7 +106,7 @@ class GraphReader:
 
         print(labels)
         labels = torch.tensor(labels)
-        num_classes = 16
+        num_classes = 64
         print(max(labels), num_classes)
         one_hot = torch.nn.functional.one_hot(labels, num_classes=num_classes)
         one_hot = one_hot.to(torch.float32)
