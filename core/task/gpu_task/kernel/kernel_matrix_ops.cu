@@ -270,29 +270,13 @@ static __global__ void MatrixMulTransposedBKernel(ParametersMatrix<T> params) {
 
 template <typename T>
 static void MatrixTransposedBMulSIMD(ParametersMatrix<T> params) {
-  for (int i = 0; i < params.m; i++) {
-    for (int j = 0; j < params.n; j++) {
-      __m256 sum = _mm256_setzero_ps();
-
-      // 主计算部分 - 每次处理8个元素
-      int k = 0;
-      for (; k <= params.k - 8; k += 8) {
-        __m256 a = _mm256_loadu_ps(&params.A[i * params.k + k]);
-        __m256 b = _mm256_loadu_ps(&params.B[k * params.n + j]);
-        sum = _mm256_fmadd_ps(a, b, sum);
+  for (unsigned k_idx = 0; k_idx < params.k; k_idx++) {
+    for (unsigned m_idx = 0; m_idx < params.m; m_idx++) {
+      for (unsigned n_idx = 0; n_idx < params.n; n_idx++) {
+        *(params.C + m_idx * params.n + n_idx) +=
+            params.A[m_idx * params.k + k_idx] *
+            params.B[k_idx * params.n + n_idx];
       }
-
-      // 处理剩余元素
-      float s = 0.0f;
-      for (; k < params.k; k++) {
-        s += params.A[i * params.k + k] * params.B[k * params.n + j];
-      }
-
-      // 合并SIMD和标量结果
-      alignas(32) float temp[8];
-      _mm256_store_ps(temp, sum);
-      params.C[i * params.n + j] = temp[0] + temp[1] + temp[2] + temp[3] +
-                                   temp[4] + temp[5] + temp[6] + temp[7] + s;
     }
   }
 }

@@ -239,62 +239,39 @@ static bool MatrixFilter(
     VertexID u_idx, VertexID v_idx, const ImmutableCSR& p,
     const ImmutableCSR& g, const std::vector<Matrix>& m_vec,
     const std::vector<UnifiedOwnedBufferFloat*>& m_unified_buffer_vec) {
+  return true;
   auto vec_len = m_vec[0].get_y();
 
   /// Init similarity vector.
 
   float sim_vec[vec_len] = {0};
 
-  // MatrixOpsKernelWrapper::CPUSimdSquaredDifference(
-  //     m_vec[0].GetPtr() + u_idx * vec_len, m_vec[1].GetPtr() + v_idx *
-  //     vec_len, sim_vec, vec_len);
-  sim_vec[0] = 1;
-  // sim_vec[1] = 2;
-  // sim_vec[2] = 3;
+  MatrixOpsKernelWrapper::CPUSimdSquaredDifference(
+      m_vec[0].GetPtr() + u_idx * vec_len, m_vec[1].GetPtr() + v_idx * vec_len,
+      sim_vec, vec_len);
 
   float z1[8] = {0};
   float z2[1] = {0};
 
-  for (int i = 0; i < vec_len; i++) {
-    std::cout << sim_vec[i] << " ";
-  }
-  std::cout << std::endl;
-
   MatrixOpsKernelWrapper::CPUMatMult(sim_vec, m_vec[2].GetPtr(), z1, 1,
                                      m_vec[2].get_x(), m_vec[2].get_y(), false,
                                      true);
-  for (int i = 0; i < 8; i++) {
-    std::cout << z1[i] << " ";
-  }
-  std::cout << std::endl;
 
   MatrixOpsKernelWrapper::CPUMatAdd(z1, m_vec[3].GetPtr(), m_vec[3].get_x(),
                                     m_vec[3].get_y());
 
-  for (int i = 0; i < 8; i++) {
-    std::cout << z1[i] << " ";
-  }
-  std::cout << std::endl;
-
-  while (1)
-    ;
   MatrixOpsKernelWrapper::CPURelu(z1, m_vec[3].get_x(), m_vec[3].get_y());
 
   MatrixOpsKernelWrapper::CPUMatMult(z1, m_vec[4].GetPtr(), z2, 1,
                                      m_vec[4].get_x(), m_vec[4].get_y(), false,
                                      true);
-
   MatrixOpsKernelWrapper::CPUMatAdd(z2, m_vec[5].GetPtr(), m_vec[5].get_x(),
                                     m_vec[5].get_y());
 
   MatrixOpsKernelWrapper::CPUSigmoid(z2, 1, 1);
 
-  if (z2[0] < 0.5) {
-    std::cout << "v: " << v_idx << " sigmoid: " << z2[0] << std::endl;
-    for (int _ = 0; _ < vec_len; _++) {
-      std::cout << sim_vec[_] << " ";
-    }
-
+  // std::cout << z2[0] << std::endl;
+  if (z2[0] < 0.8) {
     return false;
   }
 
@@ -305,6 +282,7 @@ static bool GPUMatrixFilter(
     VertexID u_idx, VertexID v_idx, const ImmutableCSR& p,
     const ImmutableCSR& g, const std::vector<Matrix>& m_vec,
     const std::vector<UnifiedOwnedBufferFloat*>& m_unified_buffer_vec) {
+  std::cout << "u_idx:" << u_idx << " v_idx: " << v_idx << std::endl;
   // return true;
   BufferFloat buffer_m1;
   BufferFloat buffer_m2;
@@ -594,22 +572,22 @@ static bool IsFeasible(
     src_tag = Filter(u_src, v_src, p, g);
     if (!src_tag) return false;
 
-    src_tag = KMinWiseIPFilter(u_src, v_src, p, g);
-    if (!src_tag) {
-      __sync_fetch_and_add(&ip_filter_count, 1);
-      return false;
-    }
+    // src_tag = KMinWiseIPFilter(u_src, v_src, p, g);
+    // if (!src_tag) {
+    //   __sync_fetch_and_add(&ip_filter_count, 1);
+    //   return false;
+    // }
   }
 
   dst_tag = Filter(u_dst, v_dst, p, g);
   if (!dst_tag) return false;
 
-  dst_tag = KMinWiseIPFilter(u_dst, v_dst, p, g);
-  if (!dst_tag) {
-    __sync_fetch_and_add(&ip_filter_count, 1);
-    return false;
-  }
-  if (!dst_tag) return false;
+  // dst_tag = KMinWiseIPFilter(u_dst, v_dst, p, g);
+  // if (!dst_tag) {
+  //   __sync_fetch_and_add(&ip_filter_count, 1);
+  //   return false;
+  // }
+  // if (!dst_tag) return false;
 
   return true;
 }
