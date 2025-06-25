@@ -8,22 +8,17 @@
 // file path> --sep=[separator]
 
 #include <gflags/gflags.h>
-#include <yaml-cpp/yaml.h>
 
 #include <filesystem>
-#include <fstream>
 #include <iostream>
 #include <string>
 #include <thread>
-#include <type_traits>
 
 #include "core/common/types.h"
-#include "core/data_structures/bit_tiled_matrix.cuh"
 #include "core/data_structures/edgelist.h"
 #include "core/data_structures/immutable_csr.cuh"
 #include "core/util/atomic.h"
 #include "core/util/bitmap.h"
-#include "core/util/cuda_check.cuh"
 #include "core/util/format_converter.cuh"
 #include "tools/graph_converter/converter/to_bit_tiled_matrix.cuh"
 #include "tools/graph_converter/converter/to_edgelist.cuh"
@@ -67,6 +62,9 @@ enum class ConvertMode {
   kEdgelistCSV2CGGraphCSR,   // Convert edge list CSV to CG graph CSR
   kEdgelistBin2CGGraphCSR,   // Convert binary edge list to CG graph CSR
   kCSRBin2EGSM,              // Convert binary CSR to EGSM format
+  kCSRBin2CECI,              // Convert binary CSR to CECI format
+  kCSRBin2GNNPE,             // Convert binary CSR to GNNPE format
+  kCSRBin2VF3,               // Convert binary CSR to VF3 format
   kEGSM2EdgelistBin,         // Convert EGSM format to binary edge list
   kEGSM2CSRBin,              // Convert EGSM format to binary csr
   kUndefined                 // Undefined conversion mode
@@ -93,6 +91,9 @@ ConvertMode ConvertMode2Enum(const std::string& mode) {
       {"edgelistcsv2cggraphcsr", ConvertMode::kEdgelistCSV2CGGraphCSR},
       {"edgelistbin2cggraphcsr", ConvertMode::kEdgelistBin2CGGraphCSR},
       {"csrbin2egsm", ConvertMode::kCSRBin2EGSM},
+      {"csrbin2ceci", ConvertMode::kCSRBin2CECI},
+      {"csrbin2gnnpe", ConvertMode::kCSRBin2GNNPE},
+      {"csrbin2vf3", ConvertMode::kCSRBin2VF3},
       {"egsm2edgelistbin", ConvertMode::kEGSM2EdgelistBin},
       {"egsm2csrbin", ConvertMode::kEGSM2CSRBin}};
 
@@ -121,6 +122,8 @@ void PrintUsage() {
       << "  csrbin2edgelistbin         - Convert binary CSR to binary edge "
          "list\n"
       << "  csrbin2egsm                - Convert binary CSR to EGSM format\n"
+      << "  csrbin2ceci                - Convert binary CSR to CECI format\n"
+      << "  csrbin2gnnpe                - Convert binary CSR to GNNPE format\n"
       << "  egsm2edgelistbin           - Convert EGSM format to binary edge "
          "list\n"
       << "  egsm2csrbin                - Convert EGSM format to binary csr\n "
@@ -208,6 +211,18 @@ int main(int argc, char** argv) {
       case ConvertMode::kCSRBin2EGSM:
         sics::matrixgraph::tools::converter::ConvertCSRBin2EGSMGraph(FLAGS_i,
                                                                      FLAGS_o);
+        break;
+      case ConvertMode::kCSRBin2CECI:
+        sics::matrixgraph::tools::converter::ConvertCSRBin2CECIGraph(FLAGS_i,
+                                                                     FLAGS_o);
+        break;
+      case ConvertMode::kCSRBin2GNNPE:
+        sics::matrixgraph::tools::converter::ConvertCSRBin2GNNPEGraph(FLAGS_i,
+                                                                      FLAGS_o);
+        break;
+      case ConvertMode::kCSRBin2VF3:
+        sics::matrixgraph::tools::converter::ConvertCSRBin2VF3Graph(FLAGS_i,
+                                                                    FLAGS_o);
         break;
       case ConvertMode::kEGSM2EdgelistBin:
         sics::matrixgraph::tools::converter::ConvertEGSMGraph2EdgelistBin(

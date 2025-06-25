@@ -216,8 +216,6 @@ static void ConvertEGSMGraph2CSRBin(const std::string& input_path,
   auto p_immutable_csr =
       sics::matrixgraph::core::util::format_converter::Edgelist2ImmutableCSR(
           edgelist);
-  // p_immutable_csr->SortByDegree();
-  //  p_immutable_csr->GenerateVLabel(15);
   p_immutable_csr->PrintGraph(1);
   p_immutable_csr->Write(output_path);
   delete p_immutable_csr;

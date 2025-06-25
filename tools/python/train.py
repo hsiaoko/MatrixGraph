@@ -3,6 +3,8 @@ from torch_geometric.data import InMemoryDataset, Data, Dataset
 import os
 import sys
 from torch_geometric.nn import SAGEConv
+from torch_geometric.nn import GATConv
+from torch_geometric.nn import GCNConv
 import numpy as np
 import random
 from torch_geometric.nn import MessagePassing
@@ -34,6 +36,50 @@ class CustomGraphDataset(Dataset):
         return data
 
 
+class GATLayer(torch.nn.Module):
+    def __init__(self, in_channels, hidden_channels, out_channels, drop_rate=0.0):
+        super(GATLayer, self).__init__()
+        self.gat1 = GATConv(
+            in_channels=in_channels,
+            out_channels=hidden_channels
+        )
+        # self.fc1 = nn.Linear(hidden_channels, in_channels)
+        self.gat2 = GATConv(
+            in_channels=hidden_channels,
+            out_channels=out_channels
+        )
+        # self.fc2 = nn.Linear(hidden_channels, out_channels)
+        self.gat3 = GATConv(
+            in_channels=out_channels,
+            out_channels=out_channels
+        )
+        self.drop = torch.nn.Dropout(drop_rate)
+
+    def forward(self, x, e):
+        y = self.gat1(x, e)
+        # y = nn.functional.relu(self.fc1(y))
+        y = self.gat2(y, e)
+        # y = nn.functional.relu(self.fc2(y))
+        # y = self.gat3(y, e)
+        y = torch.nn.functional.relu(y)
+        y = self.drop(y)
+        return y
+
+
+class GCN(torch.nn.Module):
+    def __init__(self, in_channels, hidden_channels, out_channels):
+        super(GCN, self).__init__()
+        self.conv1 = GCNConv(in_channels, hidden_channels, bias=False)
+        # self.conv2 = GCNConv(hidden_channels, out_channels)
+
+    def forward(self, x, edge_index):
+        x = self.conv1(x, edge_index)
+
+        # x = F.relu(x)
+        # x = self.conv2(x, edge_index)
+        return x
+
+
 class GraphSAGE(torch.nn.Module):
     def __init__(self, in_channels, hidden_channels, out_channels):
         super(GraphSAGE, self).__init__()
@@ -49,20 +95,22 @@ class GraphSAGE(torch.nn.Module):
 
 
 class IdentitySAGEConv(SAGEConv):
-    def forward(self, x, edge_index):
+    def forward(self, aggregated, edge_index):
         # 原始聚合逻辑
-        aggregated = self.propagate(edge_index, x=x)
+        aggregated = self.propagate(edge_index, x=aggregated)
+        aggregated = aggregated + self.propagate(edge_index, x=aggregated)
+        aggregated = aggregated + self.propagate(edge_index, x=aggregated)
         aggregated = aggregated + self.propagate(edge_index, x=aggregated)
 
-        # 替换权重乘法为恒等操作
-        # if self.root_weight:
-        #    out = torch.cat([x, aggregated], dim=-1)
-        # else:
-        #    out = aggregated
-        out = aggregated
+        # aggregated = self.propagate(edge_index, x=aggregated)
+        # aggregated = aggregated + self.propagate(edge_index, x=aggregated)
 
-        # 模拟 W=1 的效果（若需保持输出维度，需确保 in_channels == out_channels）
-        return out
+        # aggregated = self.propagate(edge_index, x=aggregated)
+        # aggregated = aggregated + self.propagate(edge_index, x=aggregated)
+
+        # aggregated = self.propagate(edge_index, x=aggregated)
+        # aggregated = aggregated + self.propagate(edge_index, x=aggregated)
+        return aggregated
 
 
 def save_tensor_for_cpp(tensor: torch.Tensor, root_path: str):
@@ -72,7 +120,7 @@ def save_tensor_for_cpp(tensor: torch.Tensor, root_path: str):
     bin_path = root_path + "embedding.bin"
     meta_path = root_path + "meta.yaml"
     # 保存二进制
-    np_array = tensor.numpy()
+    np_array = tensor.datch().numpy()
     np_array.tofile(bin_path)
 
     # 保存元数据
@@ -187,46 +235,69 @@ def multi_train_gnn_model():
     pattern_path_2 = "/data/zhuxiaoke/workspace/Torch/pt/queries/5-star.pt"
     pattern_path_3 = "/data/zhuxiaoke/workspace/Torch/pt/queries/tree.pt"
 
-    pattern_path_1 = "/data/zhuxiaoke/workspace/Torch/pt/queries/tree.pt"
-    pattern_path_2 = "/data/zhuxiaoke/workspace/Torch/pt/queries/tree.pt"
-    pattern_path_3 = "/data/zhuxiaoke/workspace/Torch/pt/queries/tree.pt"
-
-    graph_path = "/data/zhuxiaoke/workspace/Torch/pt/yeast.pt"
-    gt_path_1 = "/data/zhuxiaoke/workspace/Torch/gt/yeast/yeast_5-path.gt"
-    gt_path_2 = "/data/zhuxiaoke/workspace/Torch/gt/yeast/yeast_5-star.gt"
-    gt_path_3 = "/data/zhuxiaoke/workspace/Torch/gt/yeast/yeast_tree.gt"
-    W1_path = "/data/zhuxiaoke/workspace/Torch/models/yeast/W1/"
-    W2_path = "/data/zhuxiaoke/workspace/Torch/models/yeast/W2/"
-    b1_path = "/data/zhuxiaoke/workspace/Torch/models/yeast/b1/"
-    b2_path = "/data/zhuxiaoke/workspace/Torch/models/yeast/b2/"
-
-    graph_path = "/data/zhuxiaoke/workspace/Torch/pt/dblp.pt"
-    gt_path_1 = "/data/zhuxiaoke/workspace/Torch/gt/dblp/dblp_5-path.gt"
-    gt_path_2 = "/data/zhuxiaoke/workspace/Torch/gt/dblp/dblp_5-star.gt"
-    gt_path_3 = "/data/zhuxiaoke/workspace/Torch/gt/dblp/dblp_tree.gt"
-    W1_path = "/data/zhuxiaoke/workspace/Torch/models/dblp/W1/"
-    W2_path = "/data/zhuxiaoke/workspace/Torch/models/dblp/W2/"
-    b1_path = "/data/zhuxiaoke/workspace/Torch/models/dblp/b1/"
-    b2_path = "/data/zhuxiaoke/workspace/Torch/models/dblp/b2/"
-
-    graph_path = "/data/zhuxiaoke/workspace/Torch/pt/livejournal.pt"
-    # gt_path_1 = "/data/zhuxiaoke/workspace/Torch/gt/livejournal/livejournal_5-path.gt"
-    gt_path_1 = "/data/zhuxiaoke/workspace/Torch/gt/livejournal/livejournal_tree.gt"
+    graph_path = "/data/zhuxiaoke/workspace/Torch/pt/livejournal_1.0_fix.pt"
+    gt_path_1 = "/data/zhuxiaoke/workspace/Torch/gt/livejournal/livejournal_clique.gt"
     gt_path_2 = "/data/zhuxiaoke/workspace/Torch/gt/livejournal/livejournal_tree.gt"
-    gt_path_3 = "/data/zhuxiaoke/workspace/Torch/gt/livejournal/livejournal_tree.gt"
-    W1_path = "/data/zhuxiaoke/workspace/Torch/models/livejournal/W1/"
-    W2_path = "/data/zhuxiaoke/workspace/Torch/models/livejournal/W2/"
-    b1_path = "/data/zhuxiaoke/workspace/Torch/models/livejournal/b1/"
-    b2_path = "/data/zhuxiaoke/workspace/Torch/models/livejournal/b2/"
+    gt_path_3 = "/data/zhuxiaoke/workspace/Torch/gt/livejournal/livejournal_5-star.gt"
+    W1_path = "/data/zhuxiaoke/workspace/Torch/models/livejournal_npml_fix/W1/"
+    W2_path = "/data/zhuxiaoke/workspace/Torch/models/livejournal_npml_fix/W2/"
+    b1_path = "/data/zhuxiaoke/workspace/Torch/models/livejournal_npml_fix/b1/"
+    b2_path = "/data/zhuxiaoke/workspace/Torch/models/livejournal_npml_fix/b2/"
+    gnn_emb_path = "/data/zhuxiaoke/workspace/Torch/models/livejournal_npml_fix/gnn_emb/"
+    p1_emb_path = "/data/zhuxiaoke/workspace/Torch/models/livejournal_npml_fix/p1_emb/"
+    p2_emb_path = "/data/zhuxiaoke/workspace/Torch/models/livejournal_npml_fix/p2_emb/"
+    p3_emb_path = "/data/zhuxiaoke/workspace/Torch/models/livejournal_npml_fix/p3_emb/"
 
-    # graph_path = "/data/zhuxiaoke/workspace/Torch/pt/twitter.pt"
-    # gt_path_1 = "/data/zhuxiaoke/workspace/Torch/gt/twitter/twitter_5-path.gt"
-    # gt_path_2 = "/data/zhuxiaoke/workspace/Torch/gt/twitter/twitter_5-star.gt"
-    # gt_path_3 = "/data/zhuxiaoke/workspace/Torch/gt/twitter/twitter_tree.gt"
-    # W1_path = "/data/zhuxiaoke/workspace/Torch/models/twitter/W1/"
-    # W2_path = "/data/zhuxiaoke/workspace/Torch/models/twitter/W2/"
-    # b1_path = "/data/zhuxiaoke/workspace/Torch/models/twitter/b1/"
-    # b2_path = "/data/zhuxiaoke/workspace/Torch/models/twitter/b2/"
+    # pattern_path_1 = "/data/zhuxiaoke/workspace/Torch/pt/queries/5-path.pt"
+    # pattern_path_1 = "/data/zhuxiaoke/workspace/Torch/pt/queries/tree.pt"
+    # pattern_path_2 = "/data/zhuxiaoke/workspace/Torch/pt/queries/tree.pt"
+    # pattern_path_3 = "/data/zhuxiaoke/workspace/Torch/pt/queries/tree.pt"
+    ## pattern_path_3 = "/data/zhuxiaoke/workspace/Torch/pt/queries/5-star.pt"
+    # graph_path = "/data/zhuxiaoke/workspace/Torch/pt/pokec.pt"
+    ## gt_path_1 = "/data/zhuxiaoke/workspace/Torch/gt/pokec/pokec_5-path.gt"
+    # gt_path_1 = "/data/zhuxiaoke/workspace/Torch/gt/pokec/pokec_tree.gt"
+    # gt_path_2 = "/data/zhuxiaoke/workspace/Torch/gt/pokec/pokec_tree.gt"
+    # gt_path_3 = "/data/zhuxiaoke/workspace/Torch/gt/pokec/pokec_tree.gt"
+    ## gt_path_3 = "/data/zhuxiaoke/workspace/Torch/gt/pokec/pokec_5-star.gt"
+    # W1_path = "/data/zhuxiaoke/workspace/Torch/models/pokec_epoch1000/W1/"
+    # W2_path = "/data/zhuxiaoke/workspace/Torch/models/pokec_epoch1000/W2/"
+    # b1_path = "/data/zhuxiaoke/workspace/Torch/models/pokec_epoch1000/b1/"
+    # b2_path = "/data/zhuxiaoke/workspace/Torch/models/pokec_epoch1000/b2/"
+    # gnn_emb_path = "/data/zhuxiaoke/workspace/Torch/models/pokec_epoch1000/gnn_emb/"
+    # p1_emb_path = "/data/zhuxiaoke/workspace/Torch/models/pokec_epoch1000/p1_emb/"
+    # p2_emb_path = "/data/zhuxiaoke/workspace/Torch/models/pokec_epoch1000/p2_emb/"
+    # p3_emb_path = "/data/zhuxiaoke/workspace/Torch/models/pokec_epoch1000/p3_emb/"
+
+    # graph_path = "/data/zhuxiaoke/workspace/Torch/pt/dblp.pt"
+    # gt_path_1 = "/data/zhuxiaoke/workspace/Torch/gt/dblp/dblp_5-path.gt"
+    # gt_path_1 = "/data/zhuxiaoke/workspace/Torch/gt/dblp/dblp_tree.gt"
+    # gt_path_2 = "/data/zhuxiaoke/workspace/Torch/gt/dblp/dblp_tree.gt"
+    # gt_path_3 = "/data/zhuxiaoke/workspace/Torch/gt/dblp/dblp_tree.gt"
+    ## gt_path_3 = "/data/zhuxiaoke/workspace/Torch/gt/dblp/dblp_5-star.gt"
+    # W1_path = "/data/zhuxiaoke/workspace/Torch/models/dblp_npml1/W1/"
+    # W2_path = "/data/zhuxiaoke/workspace/Torch/models/dblp_npml1/W2/"
+    # b1_path = "/data/zhuxiaoke/workspace/Torch/models/dblp_npml1/b1/"
+    # b2_path = "/data/zhuxiaoke/workspace/Torch/models/dblp_npml1/b2/"
+    # gnn_emb_path = "/data/zhuxiaoke/workspace/Torch/models/dblp_npml1/gnn_emb/"
+    # p1_emb_path = "/data/zhuxiaoke/workspace/Torch/models/dblp_npml1/p1_emb/"
+    # p2_emb_path = "/data/zhuxiaoke/workspace/Torch/models/dblp_npml1/p2_emb/"
+    # p3_emb_path = "/data/zhuxiaoke/workspace/Torch/models/dblp_npml1/p3_emb/"
+
+    # pattern_path_1 = "/data/zhuxiaoke/workspace/Torch/pt/queries/clique.pt"
+    # pattern_path_2 = "/data/zhuxiaoke/workspace/Torch/pt/queries/tree.pt"
+    # pattern_path_3 = "/data/zhuxiaoke/workspace/Torch/pt/queries/5-star.pt"
+    # graph_path = "/data/zhuxiaoke/workspace/Torch/pt/patents.pt"
+    # gt_path_3 = "/data/zhuxiaoke/workspace/Torch/gt/patents/patents_clique.gt"
+    # gt_path_1 = "/data/zhuxiaoke/workspace/Torch/gt/patents/patents_tree.gt"
+    # gt_path_2 = "/data/zhuxiaoke/workspace/Torch/gt/patents/patents_5-star.gt"
+    # W1_path = "/data/zhuxiaoke/workspace/Torch/models/patents_epoch20000/W1/"
+    # W2_path = "/data/zhuxiaoke/workspace/Torch/models/patents_epoch20000/W2/"
+    # b1_path = "/data/zhuxiaoke/workspace/Torch/models/patents_epoch20000/b1/"
+    # b2_path = "/data/zhuxiaoke/workspace/Torch/models/patents_epoch20000/b2/"
+    # gnn_emb_path = "/data/zhuxiaoke/workspace/Torch/models/patents_epoch20000/gnn_emb/"
+    # p1_emb_path = "/data/zhuxiaoke/workspace/Torch/models/patents_epoch20000/p1_emb/"
+    # p2_emb_path = "/data/zhuxiaoke/workspace/Torch/models/patents_epoch20000/p2_emb/"
+    # p3_emb_path = "/data/zhuxiaoke/workspace/Torch/models/patents_epoch20000/p3_emb/"
 
     graph_dataset = torch.load(graph_path)
     pattern_dataset_1 = torch.load(pattern_path_1)
@@ -237,6 +308,9 @@ def multi_train_gnn_model():
     print("Graph Dataset: ", graph_dataset)
 
     conv = IdentitySAGEConv(64, 64, aggr='mean')
+    # conv = GraphSAGE(64, 64, 64)
+    # conv = GATLayer(64, 64, 64)
+    # conv = GCN(64, 64, 64)
 
     pattern_embedding_1 = conv(pattern_dataset_1.x, pattern_dataset_1.edge_index)
     pattern_embedding_2 = conv(pattern_dataset_2.x, pattern_dataset_2.edge_index)
@@ -247,6 +321,9 @@ def multi_train_gnn_model():
     gt_array_1 = algorithms.read_cpp_binary_array(gt_path_1, 'q')
     gt_array_2 = algorithms.read_cpp_binary_array(gt_path_2, 'q')
     gt_array_3 = algorithms.read_cpp_binary_array(gt_path_3, 'q')
+    # print("gt1:", gt_array_1)
+    # print("gt2:", gt_array_2)
+    # print("gt3:", gt_array_3)
 
     generator = models.SimilarityEmbeddingGenerator(
         embedding_size=64,
@@ -312,15 +389,14 @@ def multi_train_gnn_model():
     y = np.array(y)
 
     x_train, x_test, y_train, y_test = train_test_split(
-        x, y, test_size=0.2
+        x, y, test_size=0.1
     )
 
     input_dim = x.shape[1]
     perceptron = models.Perceptron(input_dim=input_dim)
-    perceptron.train(x_train, y_train, learning_rate=0.1, epochs=10)
+    perceptron.train(x_train, y_train, learning_rate=0.01, epochs=10000)
 
     results = perceptron.predict(x_test)
-    print("X:", x_test.shape)
     print(results)
     print(algorithms.calculate_metrics(y_test, results))
 
@@ -329,25 +405,40 @@ def multi_train_gnn_model():
     algorithms.save_tensor_for_cpp(torch.tensor(perceptron.W2), W2_path)
     algorithms.save_tensor_for_cpp(torch.tensor(perceptron.b2), b2_path)
 
-    print("========TEST=========")
-    test_x = similarity = generator.generate(pattern_embedding_1[0], graph_embedding[217])
-    print("u0 embedding: ", pattern_embedding_1[0])
-    print("v0 embedding: ", graph_embedding[217])
-    print("sim: ", similarity)
-    test_y = perceptron.predict(similarity)
-    print("test_y: ", test_y)
+    gnn_embedding = conv(graph_dataset.x, graph_dataset.edge_index)
+    p1_embedding = conv(pattern_dataset_1.x, pattern_dataset_1.edge_index)
+    p2_embedding = conv(pattern_dataset_3.x, pattern_dataset_2.edge_index)
+    p3_embedding = conv(pattern_dataset_3.x, pattern_dataset_3.edge_index)
 
-    tmp_x = np.zeros(64)
-    tmp_x[0] = 1
-    # tmp_x[1] = 2
+    algorithms.save_tensor_for_cpp(gnn_embedding, gnn_emb_path)
+    algorithms.save_tensor_for_cpp(p1_embedding, p1_emb_path)
+    algorithms.save_tensor_for_cpp(p2_embedding, p1_emb_path)
+    algorithms.save_tensor_for_cpp(p3_embedding, p2_emb_path)
+
+    print("========TEST=========")
+    similarity = generator.generate(pattern_embedding_1[0], graph_embedding[590])
+    print("u0 embedding: ", pattern_embedding_1[0])
+    print("v0 embedding: ", graph_embedding[590])
+    print("sim: ", similarity)
+
+    # tmp_x = np.zeros(64)
+    tmp_x = similarity
+    # tmp_x[1] = 1
     # tmp_x[2] = 3
     print("X", tmp_x)
-    tmp_y = np.dot(tmp_x, perceptron.W1) + perceptron.b1
+    tmp_y = np.dot(tmp_x, perceptron.W1)  # + perceptron.b1
 
-    print("tmp_y: ", tmp_y)
+    print("z1: ", tmp_y)
     tmp_y = tmp_y + perceptron.b1
 
-    print("tmp_y: ", tmp_y)
+    tmp_y = perceptron.relu(tmp_y)  # 隐藏层使用ReLU激活
+
+    # 第二层前向传播
+    z2 = np.dot(tmp_y, perceptron.W2) + perceptron.b2
+    print("z2: ", z2)
+
+    a2 = perceptron.sigmoid(z2)  # 输出层使用Sigmoid激活
+    print("a2: ", a2)
 
     tmp_y = perceptron.predict(tmp_x)
     print('Y', tmp_y)
@@ -360,4 +451,10 @@ if __name__ == "__main__":
     #    sys.exit(1)
 
     # train_gnn_model(sys.argv[1], sys.argv[2], sys.argv[3])
+    import time
+
+    start_time = time.time()
     multi_train_gnn_model()
+    end_time = time.time()
+    elapsed_time = end_time - start_time
+    print(f"耗时: {elapsed_time:.4f} 秒")
