@@ -83,16 +83,30 @@ def generate_and_save_random_graphs(m, num_edges, label_range, save_path):
 
         print(f"已生成图 {i+1}/{m}: {filename}")
 
-def main():
-    # 参数设置
-    m = 10           # 生成图的数量
-    num_edges = 12   # 每条图的边数
-    label_range = (0, 16)  # label范围
-    save_path = "/data/zhuxiaoke/workspace/random_graphs"  # 保存路径
+def parse_arguments():
+    """解析命令行参数"""
+    parser = argparse.ArgumentParser(description='生成随机图')
+    parser.add_argument('-m', '--num_graphs', type=int, required=True, help='生成图的数量')
+    parser.add_argument('-e', '--num_edges', type=int, required=True, help='每条图的边数')
+    parser.add_argument('-l', '--label_range', type=int, nargs=2, required=True,
+                       help='label范围，例如: 0 16')
+    parser.add_argument('-o', '--output', type=str, required=True, help='保存路径')
+    parser.add_argument('-v', '--num_vertices', type=int, default=None,
+                       help='顶点数（可选，默认自动计算）')
 
-    # 生成并保存图
-    generate_and_save_random_graphs(m, num_edges, label_range, save_path)
-    print(f"所有图已保存到: {save_path}")
+    return parser.parse_args()
 
 if __name__ == "__main__":
-    main()
+    args = parse_arguments()
+
+    print(f"开始生成 {args.num_graphs} 个随机图...")
+    print(f"参数: 边数={args.num_edges}, label范围={args.label_range}, 保存路径={args.output}")
+
+    generate_and_save_random_graphs(
+        m=args.num_graphs,
+        num_edges=args.num_edges,
+        label_range=args.label_range,
+        save_path=args.output
+    )
+
+    print("生成完成！")
