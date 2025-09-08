@@ -34,15 +34,15 @@ def load_config(config_path: str) -> Dict[str, Any]:
 def parse_arguments():
     """Parse command line arguments"""
     parser = argparse.ArgumentParser(description="Graph Neural Network Training with Config")
-    parser.add_argument("--config", type=str, required=True,
+    parser.add_argument("--config", type=str, required=True, 
                        help="Path to configuration YAML file")
     return parser.parse_args()
 
 
 class CustomGraphDataset(Dataset):
     """Custom graph dataset class"""
-
-    def __init__(self, root: str, transform: Optional[callable] = None,
+    
+    def __init__(self, root: str, transform: Optional[callable] = None, 
                  pre_transform: Optional[callable] = None):
         super().__init__(root, transform, pre_transform)
 
@@ -52,13 +52,13 @@ class CustomGraphDataset(Dataset):
 
     def get(self, idx: int):
         """Get a specific graph by index"""
-        return data  # This should be implemented properly
+        return None  # This should be implemented properly
 
 
 class GATLayer(torch.nn.Module):
     """Graph Attention Network layer"""
-
-    def __init__(self, in_channels: int, hidden_channels: int, out_channels: int,
+    
+    def __init__(self, in_channels: int, hidden_channels: int, out_channels: int, 
                  drop_rate: float = 0.0):
         super(GATLayer, self).__init__()
         self.gat1 = GATConv(in_channels=in_channels, out_channels=hidden_channels)
@@ -77,7 +77,7 @@ class GATLayer(torch.nn.Module):
 
 class GCN(torch.nn.Module):
     """Graph Convolutional Network"""
-
+    
     def __init__(self, in_channels: int, hidden_channels: int, out_channels: int):
         super(GCN, self).__init__()
         self.conv1 = GCNConv(in_channels, hidden_channels, bias=False)
@@ -90,10 +90,10 @@ class GCN(torch.nn.Module):
 
 class GraphSAGE(torch.nn.Module):
     """GraphSAGE model"""
-
+    
     def __init__(self, in_channels: int, hidden_channels: int, out_channels: int):
         super(GraphSAGE, self).__init__()
-        self.conv1 = SAGEConv(in_channels, hidden_channels, aggr='mean',
+        self.conv1 = SAGEConv(in_channels, hidden_channels, aggr='mean', 
                              bias=False, root_weight=False)
 
     def forward(self, x: torch.Tensor, edge_index: torch.Tensor) -> torch.Tensor:
@@ -104,10 +104,10 @@ class GraphSAGE(torch.nn.Module):
 
 class IdentitySAGEConv(SAGEConv):
     """Identity SAGE convolution with custom aggregation"""
-
-    def forward(self, aggregated: torch.Tensor, edge_index: torch.Tensor) -> torch.Tensor:
+    
+    def forward(self, x: torch.Tensor, edge_index: torch.Tensor) -> torch.Tensor:
         """Custom forward pass with multiple propagation steps"""
-        aggregated = self.propagate(edge_index, x=aggregated)
+        aggregated = self.propagate(edge_index, x=x)
         aggregated = aggregated + self.propagate(edge_index, x=aggregated)
         aggregated = aggregated + self.propagate(edge_index, x=aggregated)
         aggregated = aggregated + self.propagate(edge_index, x=aggregated)
@@ -118,12 +118,12 @@ def save_tensor_for_cpp(tensor: torch.Tensor, root_path: str):
     """Save tensor in C++ readable format"""
     assert tensor.is_contiguous(), "Tensor must be contiguous"
 
-    bin_path = os.path.join(root_path, "/embedding.bin")
-    meta_path = os.path.join(root_path, "/meta.yaml")
-
+    bin_path = os.path.join(root_path, "embedding.bin")
+    meta_path = os.path.join(root_path, "meta.yaml")
+    
     # Create directory if it doesn't exist
     os.makedirs(root_path, exist_ok=True)
-
+    
     # Save binary data
     np_array = tensor.detach().numpy()
     np_array.tofile(bin_path)
@@ -153,7 +153,7 @@ def generate_embedding(input_path: str, output_path: str):
 
     conv = IdentitySAGEConv(15, 15, aggr='mean')
     out2 = conv(dataset.x, dataset.edge_index)
-
+    
     save_tensor_for_cpp(out2, output_path)
     print(f"Output shape: {out2.shape}")
 
@@ -165,93 +165,29 @@ def load_gt(gt_path: str) -> np.ndarray:
     return array
 
 
-def train_gnn_model(pattern_vertices_embedding_path: str, graph_vertices_embedding_path: str,
-                   gt_path: str, output_path: str = ""):
-    """Train a GNN model for vertex matching"""
-    graph_dataset = torch.load(graph_vertices_embedding_path)
-    pattern_dataset = torch.load(pattern_vertices_embedding_path)
-
-    print(f"Pattern Dataset: {pattern_path}")
-    print(f"Graph Dataset: {graph_path}")
-
-    # Get model parameters from config
-    in_channels = config['model']['in_channels']
-    hidden_channels = config['model']['hidden_channels']
-    out_channels = config['model']['out_channels']
-
-    conv = IdentitySAGEConv(in_channels, out_channels, aggr='mean')
-    pattern_embedding = conv(pattern_dataset.x, pattern_dataset.edge_index)
-    graph_embedding = conv(graph_dataset.x, graph_dataset.edge_index)
-
-    gt_array = algorithms.read_cpp_binary_array(gt_path, 'q')
-
-    # Get generator parameters from config
-    generator_config = config['similarity_generator']
-    generator = models.SimilarityEmbeddingGenerator(
-        embedding_size=generator_config['embedding_size'],
-        similarity_method=generator_config['similarity_method'],
-        normalize=generator_config['normalize'],
-        combination_weights=generator_config['combination_weights']
-    )
-
-    x = []
-    y = []
-
-    gt_array = np.array(gt_array, dtype=np.int64)
-
-    # Positive samples
-    for vertex_id in gt_array:
-        similarity = generator.generate(pattern_embedding[0], graph_embedding[vertex_id])
-        x.append(np.array(similarity))
-        y.append(1)
-
-    # Negative samples
-    count = 0
-    for vertex_id in range(len(graph_embedding)):
-        count += 1
-        if count > len(gt_array):
-            break
-        if np.any(gt_array == vertex_id):
-            continue
-        else:
-            similarity = generator.generate(pattern_embedding[0], graph_embedding[vertex_id])
-            x.append(np.array(similarity))
-            y.append(0)
-
-    x = np.array(x)
-    y = np.array(y)
-
-    print(f"Training samples: {len(x)}")
-    input_dim = x.shape[1]
-
-    # Get training parameters from config
-    train_config = config['training']
-    perceptron = models.Perceptron(input_dim=input_dim)
-    perceptron.train(x, y, learning_rate=train_config['learning_rate'],
-                    epochs=train_config['epochs'])
-
-    results = perceptron.predict(x)
-    metrics = algorithms.calculate_metrics(y, results)
-    print(f"Metrics: {metrics}")
-
-    return perceptron, pattern_embedding, graph_embedding
-
-
 def multi_train_gnn_model(config: Dict[str, Any]):
     """Train GNN model with multiple patterns"""
-    pattern_paths = args.pattern_paths
-    graph_path = args.graph_path
-    gt_paths = args.gt_paths
-    output_dir = args.output_dir
-
+    # Get paths from config
+    pattern_paths = config['paths']['pattern_paths']
+    graph_path = config['paths']['graph_path']
+    gt_paths = config['paths']['gt_paths']
+    output_dir = config['paths']['output_dir']
+    
     # Create output directories
-    W1_path = os.path.join(output_dir, "W1/")
-    W2_path = os.path.join(output_dir, "W2/")
-    b1_path = os.path.join(output_dir, "b1/")
-    b2_path = os.path.join(output_dir, "b2/")
-    gnn_emb_path = os.path.join(output_dir, "gnn_emb/")
-    pattern_emb_paths = [os.path.join(output_dir, f"p{i}_emb/") for i in range(len(pattern_paths))]
-
+    model_dirs = {
+        'W1': os.path.join(output_dir, "W1"),
+        'W2': os.path.join(output_dir, "W2"),
+        'b1': os.path.join(output_dir, "b1"),
+        'b2': os.path.join(output_dir, "b2"),
+        'gnn_emb': os.path.join(output_dir, "gnn_emb")
+    }
+    
+    # Create pattern embedding directories
+    pattern_emb_dirs = []
+    for i in range(len(pattern_paths)):
+        pattern_emb_dirs.append(os.path.join(output_dir, f"p{i+1}_emb"))
+    
+    # Create all directories
     os.makedirs(output_dir, exist_ok=True)
     for dir_path in list(model_dirs.values()) + pattern_emb_dirs:
         os.makedirs(dir_path, exist_ok=True)
@@ -265,7 +201,7 @@ def multi_train_gnn_model(config: Dict[str, Any]):
 
     # Initialize model
     model_config = config['model']
-    conv = IdentitySAGEConv(model_config['in_channels'], model_config['out_channels'],
+    conv = IdentitySAGEConv(model_config['in_channels'], model_config['out_channels'], 
                            aggr='mean')
 
     # Generate embeddings
@@ -289,8 +225,9 @@ def multi_train_gnn_model(config: Dict[str, Any]):
 
     # Create training data from all patterns
     for i, (pattern_embedding, gt_array) in enumerate(zip(pattern_embeddings, gt_arrays)):
+        print(f"Processing pattern {i+1} with {len(gt_array)} ground truth entries")
         gt_array = np.array(gt_array, dtype=np.int64)
-
+        
         # Positive samples
         for vertex_id in gt_array:
             similarity = generator.generate(pattern_embedding[0], graph_embedding[vertex_id])
@@ -314,19 +251,23 @@ def multi_train_gnn_model(config: Dict[str, Any]):
     x = np.array(x)
     y = np.array(y)
 
+    print(f"Total training samples: {len(x)}")
+    print(f"Positive samples: {np.sum(y == 1)}")
+    print(f"Negative samples: {np.sum(y == 0)}")
+
     # Split data
-    x_train, x_test, y_train, y_test = train_test_split(x, y, test_size=0.1)
+    x_train, x_test, y_train, y_test = train_test_split(x, y, test_size=0.1, random_state=seed)
 
     # Train model
     input_dim = x.shape[1]
     train_config = config['training']
     perceptron = models.Perceptron(input_dim=input_dim)
-    perceptron.train(x_train, y_train, learning_rate=train_config['learning_rate'],
+    perceptron.train(x_train, y_train, learning_rate=train_config['learning_rate'], 
                     epochs=train_config['epochs'])
 
     # Evaluate model
     results = perceptron.predict(x_test)
-    print("Predictions:", results[:10])  # Show first 10 predictions
+    print("Predictions sample:", results[:10])  # Show first 10 predictions
     metrics = algorithms.calculate_metrics(y_test, results)
     print("Metrics:", metrics)
 
@@ -344,20 +285,24 @@ def multi_train_gnn_model(config: Dict[str, Any]):
     # Test with a sample
     print("========TEST=========")
     test_vertex_id = config.get('test_vertex_id', 590)
-    similarity = generator.generate(pattern_embeddings[0][0], graph_embedding[test_vertex_id])
-    print(f"Pattern embedding shape: {pattern_embeddings[0][0].shape}")
-    print(f"Graph embedding shape: {graph_embedding[test_vertex_id].shape}")
-    print(f"Similarity: {similarity}")
+    if test_vertex_id < len(graph_embedding):
+        similarity = generator.generate(pattern_embeddings[0][0], graph_embedding[test_vertex_id])
+        print(f"Pattern embedding shape: {pattern_embeddings[0][0].shape}")
+        print(f"Graph embedding shape: {graph_embedding[test_vertex_id].shape}")
+        print(f"Similarity: {similarity}")
 
-    prediction = perceptron.predict(similarity)
-    print(f'Prediction: {prediction}')
+        prediction = perceptron.predict(similarity)
+        print(f'Prediction: {prediction}')
+    else:
+        print(f"Test vertex ID {test_vertex_id} is out of range")
 
 
 def main():
     """Main function"""
+    # Parse command line arguments first
     args = parse_arguments()
     config = load_config(args.config)
-
+    
     start_time = time.time()
     multi_train_gnn_model(config)
     end_time = time.time()
