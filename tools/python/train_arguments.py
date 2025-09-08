@@ -29,7 +29,7 @@ if torch.cuda.is_available():
 def parse_arguments():
     """Parse command line arguments for graph neural network training"""
     parser = argparse.ArgumentParser(description="Graph Neural Network Training")
-    
+
     # Data paths
     parser.add_argument("--pattern-paths", type=str, nargs='+', required=True,
                        help="Paths to pattern graph files")
@@ -37,13 +37,13 @@ def parse_arguments():
                        help="Path to main graph file")
     parser.add_argument("--gt-paths", type=str, nargs='+', required=True,
                        help="Paths to ground truth files")
-    
+
     # Output paths
     parser.add_argument("--output-dir", type=str, default="./output",
                        help="Output directory for model and embeddings")
     parser.add_argument("--model-prefix", type=str, default="model",
                        help="Prefix for model files")
-    
+
     # Training parameters
     parser.add_argument("--epochs", type=int, default=10000,
                        help="Number of training epochs")
@@ -51,14 +51,14 @@ def parse_arguments():
                        help="Learning rate")
     parser.add_argument("--embedding-size", type=int, default=64,
                        help="Embedding size")
-    
+
     return parser.parse_args()
 
 
 class CustomGraphDataset(Dataset):
     """Custom graph dataset class"""
-    
-    def __init__(self, root: str, transform: Optional[callable] = None, 
+
+    def __init__(self, root: str, transform: Optional[callable] = None,
                  pre_transform: Optional[callable] = None):
         super().__init__(root, transform, pre_transform)
 
@@ -73,8 +73,8 @@ class CustomGraphDataset(Dataset):
 
 class GATLayer(torch.nn.Module):
     """Graph Attention Network layer"""
-    
-    def __init__(self, in_channels: int, hidden_channels: int, out_channels: int, 
+
+    def __init__(self, in_channels: int, hidden_channels: int, out_channels: int,
                  drop_rate: float = 0.0):
         super(GATLayer, self).__init__()
         self.gat1 = GATConv(
@@ -102,7 +102,7 @@ class GATLayer(torch.nn.Module):
 
 class GCN(torch.nn.Module):
     """Graph Convolutional Network"""
-    
+
     def __init__(self, in_channels: int, hidden_channels: int, out_channels: int):
         super(GCN, self).__init__()
         self.conv1 = GCNConv(in_channels, hidden_channels, bias=False)
@@ -115,10 +115,10 @@ class GCN(torch.nn.Module):
 
 class GraphSAGE(torch.nn.Module):
     """GraphSAGE model"""
-    
+
     def __init__(self, in_channels: int, hidden_channels: int, out_channels: int):
         super(GraphSAGE, self).__init__()
-        self.conv1 = SAGEConv(in_channels, hidden_channels, aggr='mean', 
+        self.conv1 = SAGEConv(in_channels, hidden_channels, aggr='mean',
                              bias=False, root_weight=False)
 
     def forward(self, x: torch.Tensor, edge_index: torch.Tensor) -> torch.Tensor:
@@ -129,7 +129,7 @@ class GraphSAGE(torch.nn.Module):
 
 class IdentitySAGEConv(SAGEConv):
     """Identity SAGE convolution with custom aggregation"""
-    
+
     def forward(self, aggregated: torch.Tensor, edge_index: torch.Tensor) -> torch.Tensor:
         """Custom forward pass with multiple propagation steps"""
         # Original aggregation logic with multiple propagations
@@ -144,12 +144,12 @@ def save_tensor_for_cpp(tensor: torch.Tensor, root_path: str):
     """Save tensor in C++ readable format"""
     assert tensor.is_contiguous(), "Tensor must be contiguous"
 
-    bin_path = os.path.join(root_path, "embedding.bin")
-    meta_path = os.path.join(root_path, "meta.yaml")
-    
+    bin_path = os.path.join(root_path, "/embedding.bin")
+    meta_path = os.path.join(root_path, "/meta.yaml")
+
     # Create directory if it doesn't exist
     os.makedirs(root_path, exist_ok=True)
-    
+
     # Save binary data
     np_array = tensor.detach().numpy()
     np_array.tofile(bin_path)
@@ -179,7 +179,7 @@ def generate_embedding(input_path: str, output_path: str):
 
     conv = IdentitySAGEConv(15, 15, aggr='mean')
     out2 = conv(dataset.x, dataset.edge_index)
-    
+
     save_tensor_for_cpp(out2, output_path)
     print("out2: ", out2)
 
@@ -191,7 +191,7 @@ def load_gt(gt_path: str) -> np.ndarray:
     return array
 
 
-def train_gnn_model(pattern_vertices_embedding_path: str, graph_vertices_embedding_path: str, 
+def train_gnn_model(pattern_vertices_embedding_path: str, graph_vertices_embedding_path: str,
                    gt_path: str, output_path: str = ""):
     """Train a GNN model for vertex matching"""
     graph_dataset = torch.load(graph_vertices_embedding_path)
@@ -258,15 +258,15 @@ def multi_train_gnn_model(args):
     graph_path = args.graph_path
     gt_paths = args.gt_paths
     output_dir = args.output_dir
-    
+
     # Create output directories
-    W1_path = os.path.join(output_dir, "W1")
-    W2_path = os.path.join(output_dir, "W2")
-    b1_path = os.path.join(output_dir, "b1")
-    b2_path = os.path.join(output_dir, "b2")
-    gnn_emb_path = os.path.join(output_dir, "gnn_emb")
-    pattern_emb_paths = [os.path.join(output_dir, f"p{i}_emb") for i in range(len(pattern_paths))]
-    
+    W1_path = os.path.join(output_dir, "W1/")
+    W2_path = os.path.join(output_dir, "W2/")
+    b1_path = os.path.join(output_dir, "b1/")
+    b2_path = os.path.join(output_dir, "b2/")
+    gnn_emb_path = os.path.join(output_dir, "gnn_emb/")
+    pattern_emb_paths = [os.path.join(output_dir, f"p{i}_emb/") for i in range(len(pattern_paths))]
+
     os.makedirs(output_dir, exist_ok=True)
     for path in [W1_path, W2_path, b1_path, b2_path, gnn_emb_path] + pattern_emb_paths:
         os.makedirs(path, exist_ok=True)
@@ -280,7 +280,7 @@ def multi_train_gnn_model(args):
 
     # Initialize model
     conv = IdentitySAGEConv(args.embedding_size, args.embedding_size, aggr='mean')
-    
+
     # Generate embeddings
     pattern_embeddings = [conv(dataset.x, dataset.edge_index) for dataset in pattern_datasets]
     graph_embedding = conv(graph_dataset.x, graph_dataset.edge_index)
@@ -302,7 +302,7 @@ def multi_train_gnn_model(args):
     # Create training data from all patterns
     for i, (pattern_embedding, gt_array) in enumerate(zip(pattern_embeddings, gt_arrays)):
         gt_array = np.array(gt_array, dtype=np.int64)
-        
+
         # Positive samples
         for vertex_id in gt_array:
             similarity = generator.generate(pattern_embedding[0], graph_embedding[vertex_id])
@@ -364,7 +364,7 @@ def multi_train_gnn_model(args):
 if __name__ == "__main__":
     """Main entry point"""
     args = parse_arguments()
-    
+
     start_time = time.time()
     multi_train_gnn_model(args)
     end_time = time.time()
