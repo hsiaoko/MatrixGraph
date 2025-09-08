@@ -32,38 +32,10 @@ def load_config(config_path: str) -> Dict[str, Any]:
 
 
 def parse_arguments():
-<<<<<<< HEAD:tools/python/train_config.py
     """Parse command line arguments"""
     parser = argparse.ArgumentParser(description="Graph Neural Network Training with Config")
     parser.add_argument("--config", type=str, required=True,
                        help="Path to configuration YAML file")
-=======
-    """Parse command line arguments for graph neural network training"""
-    parser = argparse.ArgumentParser(description="Graph Neural Network Training")
-
-    # Data paths
-    parser.add_argument("--pattern-paths", type=str, nargs='+', required=True,
-                       help="Paths to pattern graph files")
-    parser.add_argument("--graph-path", type=str, required=True,
-                       help="Path to main graph file")
-    parser.add_argument("--gt-paths", type=str, nargs='+', required=True,
-                       help="Paths to ground truth files")
-
-    # Output paths
-    parser.add_argument("--output-dir", type=str, default="./output",
-                       help="Output directory for model and embeddings")
-    parser.add_argument("--model-prefix", type=str, default="model",
-                       help="Prefix for model files")
-
-    # Training parameters
-    parser.add_argument("--epochs", type=int, default=10000,
-                       help="Number of training epochs")
-    parser.add_argument("--learning-rate", type=float, default=0.01,
-                       help="Learning rate")
-    parser.add_argument("--embedding-size", type=int, default=64,
-                       help="Embedding size")
-
->>>>>>> 24f77781b5df53c2eb3e6f4d2aef69947f142770:tools/python/train_arguments.py
     return parser.parse_args()
 
 
@@ -146,13 +118,8 @@ def save_tensor_for_cpp(tensor: torch.Tensor, root_path: str):
     """Save tensor in C++ readable format"""
     assert tensor.is_contiguous(), "Tensor must be contiguous"
 
-<<<<<<< HEAD:tools/python/train_config.py
-    bin_path = os.path.join(root_path, "embedding.bin")
-    meta_path = os.path.join(root_path, "meta.yaml")
-=======
     bin_path = os.path.join(root_path, "/embedding.bin")
     meta_path = os.path.join(root_path, "/meta.yaml")
->>>>>>> 24f77781b5df53c2eb3e6f4d2aef69947f142770:tools/python/train_arguments.py
 
     # Create directory if it doesn't exist
     os.makedirs(root_path, exist_ok=True)
@@ -198,19 +165,11 @@ def load_gt(gt_path: str) -> np.ndarray:
     return array
 
 
-<<<<<<< HEAD:tools/python/train_config.py
-def train_gnn_model(pattern_path: str, graph_path: str, gt_path: str,
-                   output_dir: str, config: Dict[str, Any]):
-    """Train a GNN model for a single pattern"""
-    graph_dataset = torch.load(graph_path)
-    pattern_dataset = torch.load(pattern_path)
-=======
 def train_gnn_model(pattern_vertices_embedding_path: str, graph_vertices_embedding_path: str,
                    gt_path: str, output_path: str = ""):
     """Train a GNN model for vertex matching"""
     graph_dataset = torch.load(graph_vertices_embedding_path)
     pattern_dataset = torch.load(pattern_vertices_embedding_path)
->>>>>>> 24f77781b5df53c2eb3e6f4d2aef69947f142770:tools/python/train_arguments.py
 
     print(f"Pattern Dataset: {pattern_path}")
     print(f"Graph Dataset: {graph_path}")
@@ -280,29 +239,6 @@ def train_gnn_model(pattern_vertices_embedding_path: str, graph_vertices_embeddi
 
 def multi_train_gnn_model(config: Dict[str, Any]):
     """Train GNN model with multiple patterns"""
-<<<<<<< HEAD:tools/python/train_config.py
-    # Get paths from config
-    pattern_paths = config['paths']['pattern_paths']
-    graph_path = config['paths']['graph_path']
-    gt_paths = config['paths']['gt_paths']
-    output_dir = config['paths']['output_dir']
-
-    # Create output directories
-    model_dirs = {
-        'W1': os.path.join(output_dir, "W1"),
-        'W2': os.path.join(output_dir, "W2"),
-        'b1': os.path.join(output_dir, "b1"),
-        'b2': os.path.join(output_dir, "b2"),
-        'gnn_emb': os.path.join(output_dir, "gnn_emb")
-    }
-
-    # Create pattern embedding directories
-    pattern_emb_dirs = []
-    for i in range(len(pattern_paths)):
-        pattern_emb_dirs.append(os.path.join(output_dir, f"p{i+1}_emb"))
-
-    # Create all directories
-=======
     pattern_paths = args.pattern_paths
     graph_path = args.graph_path
     gt_paths = args.gt_paths
@@ -316,7 +252,6 @@ def multi_train_gnn_model(config: Dict[str, Any]):
     gnn_emb_path = os.path.join(output_dir, "gnn_emb/")
     pattern_emb_paths = [os.path.join(output_dir, f"p{i}_emb/") for i in range(len(pattern_paths))]
 
->>>>>>> 24f77781b5df53c2eb3e6f4d2aef69947f142770:tools/python/train_arguments.py
     os.makedirs(output_dir, exist_ok=True)
     for dir_path in list(model_dirs.values()) + pattern_emb_dirs:
         os.makedirs(dir_path, exist_ok=True)
@@ -329,13 +264,9 @@ def multi_train_gnn_model(config: Dict[str, Any]):
     print(f"Graph dataset: {graph_path}")
 
     # Initialize model
-<<<<<<< HEAD:tools/python/train_config.py
     model_config = config['model']
     conv = IdentitySAGEConv(model_config['in_channels'], model_config['out_channels'],
                            aggr='mean')
-=======
-    conv = IdentitySAGEConv(args.embedding_size, args.embedding_size, aggr='mean')
->>>>>>> 24f77781b5df53c2eb3e6f4d2aef69947f142770:tools/python/train_arguments.py
 
     # Generate embeddings
     pattern_embeddings = [conv(dataset.x, dataset.edge_index) for dataset in pattern_datasets]
@@ -435,15 +366,4 @@ def main():
 
 
 if __name__ == "__main__":
-<<<<<<< HEAD:tools/python/train_config.py
     main()
-=======
-    """Main entry point"""
-    args = parse_arguments()
-
-    start_time = time.time()
-    multi_train_gnn_model(args)
-    end_time = time.time()
-    elapsed_time = end_time - start_time
-    print(f"Time elapsed: {elapsed_time:.4f} seconds")
->>>>>>> 24f77781b5df53c2eb3e6f4d2aef69947f142770:tools/python/train_arguments.py
