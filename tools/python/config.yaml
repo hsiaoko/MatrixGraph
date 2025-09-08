@@ -1,0 +1,30 @@
+# Configuration file for GNN training
+
+paths:
+  pattern_paths:
+    - "/data/zhuxiaoke/workspace/Torch/pt/queries/5-path.pt"
+    - "/data/zhuxiaoke/workspace/Torch/pt/queries/5-star.pt"
+    - "/data/zhuxiaoke/workspace/Torch/pt/queries/tree.pt"
+  graph_path: "/data/zhuxiaoke/workspace/Torch/pt/livejournal_1.0_fix.pt"
+  gt_paths:
+    - "/data/zhuxiaoke/workspace/Torch/gt/livejournal/livejournal_clique.gt"
+    - "/data/zhuxiaoke/workspace/Torch/gt/livejournal/livejournal_tree.gt"
+    - "/data/zhuxiaoke/workspace/Torch/gt/livejournal/livejournal_5-star.gt"
+  output_dir: "/data/zhuxiaoke/workspace/Torch/models/livejournal_npml_fix/"
+
+model:
+  in_channels: 64
+  hidden_channels: 64
+  out_channels: 64
+
+similarity_generator:
+  embedding_size: 64
+  similarity_method: "euclidean"
+  normalize: true
+  combination_weights: [0.6, 0.2, 0.2]
+
+training:
+  learning_rate: 0.01
+  epochs: 10000
+
+test_vertex_id: 590
