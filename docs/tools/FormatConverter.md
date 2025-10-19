@@ -27,30 +27,31 @@ the following baselines use this format
 * https://github.com/RapidsAtHKUST/RapidMatch
 * https://github.com/RapidsAtHKUST/SubgraphMatching
 ```shell
-./bin/tools/graph_converter_exec -i [path-to-csr-bin] -o [output-path] -convert_mode csrbin2egsm
+./bin/tools/graph_converter -i [path-to-csr-bin] -o [output-path] -convert_mode csrbin2egsm
 ```
 
 ### binary CSR to Rapids format:
 ```shell
-./bin/tools/graph_converter_exec -i [path-to-rapids-format] -o [output-path] -convert_mode egsm2csrbin
+./bin/tools/graph_converter -i [path-to-rapids-format] -o [output-path] -convert_mode egsm2csrbin
 ```
 
 ### binary Rapids format to binary edgelist:
 ```shell
-./bin/tools/graph_converter_exec -i [path-to-rapid-format] -o [output-path] -convert_mode egsm2edgelistbin
+./bin/tools/graph_converter -i [path-to-rapid-format] -o [output-path] -convert_mode egsm2edgelistbin
 ```
 
 ### binary CSR to vf3lib format:
 the following baselines use this format 
 * https://github.com/MiviaLab/vf3lib.git
 ```shell
-./bin/tools/graph_converter_exec -i [path-to-csr-bin] -o [output-path] -convert_mode csrbin2vf3
+./bin/tools/graph_converter -i [path-to-csr-bin] -o [output-path] -convert_mode csrbin2vf3
 ```
 
 ### Convert CSR to GNNPE format:
 the following baselines use this format 
 * https://github.com/JamesWhiteSnow/GNN-PE
 ```shell
-./bin/tools/graph_converter_exec -i [path-to-csr-bin] -o [output-path] -convert_mode csrbin2gnnpe
+./bin/tools/graph_converter -i [path-to-csr-bin] -o [output-path] -convert_mode csrbin2gnnpe
 ```
+
 
