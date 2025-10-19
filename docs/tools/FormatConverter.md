@@ -8,17 +8,17 @@ The binary will be located at ./bin/tools/graph_converter_exec.
 
 ### edge-list CSV to binary edgelist:
 ```shell
-./bin/tools/graph_converter_exec -i [path-to-edgelist.csv] -sep [separator] -o [output-path] -convert_mode edgelistcsv2edgelistbin -sep [seperator]
+./bin/tools/graph_converter -i [path-to-edgelist.csv] -sep [separator] -o [output-path] -convert_mode edgelistcsv2edgelistbin -sep [seperator]
 ```
 
 ### edgelist CSV to binary CSR:
 ```shell
-./bin/tools/graph_converter_exec -i [path-to-edgelist-bin] -o [output-path] -convert_mode edgelistcsv2csrbin -sep [seperator] 
+./bin/tools/graph_converter -i [path-to-edgelist-bin] -o [output-path] -convert_mode edgelistcsv2csrbin -sep [seperator] 
 ```
 
 ### binary edgelist to binary CSR:
 ```shell
-./bin/tools/graph_converter_exec -i [path-to-edgelist-bin] -o [output-path] -convert_mode edgelistbin2csrbin
+./bin/tools/graph_converter -i [path-to-edgelist-bin] -o [output-path] -convert_mode edgelistbin2csrbin
 ```
 
 ### binary CSR to Rapids format:
@@ -53,3 +53,4 @@ the following baselines use this format
 ```shell
 ./bin/tools/graph_converter_exec -i [path-to-csr-bin] -o [output-path] -convert_mode csrbin2gnnpe
 ```
+
