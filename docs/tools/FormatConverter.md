@@ -2,9 +2,8 @@
 -------------
 MatrixGraph represents graphs using a **binary Compressed Sparse Row (CSR) format**. This tool (`graph_converter`) provides conversion between various graph formats and MatrixGraphs binary CSR, as well as reverse conversions for benchmarking against other tools.
 
-
 ## Usage
-The binary will be located at ./bin/tools/graph_converter_exec.
+The binary will be located at ./bin/tools/graph_converter.
 
 ### edge-list CSV to binary edgelist:
 ```shell
@@ -53,5 +52,3 @@ the following baselines use this format
 ```shell
 ./bin/tools/graph_converter -i [path-to-csr-bin] -o [output-path] -convert_mode csrbin2gnnpe
 ```
-
-
