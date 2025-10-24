@@ -1,6 +1,8 @@
 #ifndef MATRIXGRAPH_CORE_TASK_KERNEL_DATA_STRUCTURES_EXEC_PLAN_CUH_
 #define MATRIXGRAPH_CORE_TASK_KERNEL_DATA_STRUCTURES_EXEC_PLAN_CUH_
 
+#include <queue>
+
 #include "core/common/consts.h"
 #include "core/common/types.h"
 #include "core/data_structures/device_buffer.cuh"
@@ -41,30 +43,31 @@ class ExecutionPlan {
     delete[] exec_path_in_edges_;
   };
 
-  void DFSTraverse(VertexID vid, BitmapNoOwnerShip& visited,
+  void DFSTraverse(VertexID vid, BitmapNoOwnerShip& visited_src,
                    const ImmutableCSR& g, std::vector<VertexID>& output,
                    std::vector<VertexID>& output_in_edges, VertexID depth,
                    VertexID& max_depth) {
-    if (visited.GetBit(vid)) {
+    max_depth = std::max(depth, max_depth);
+    if (visited_src.GetBit(vid)) {
       return;
     }
-    visited.SetBit(vid);
-    auto u = g.GetVertexByLocalID(vid);
+    visited_src.SetBit(vid);
 
+    // 处理当前顶点
+    auto u = g.GetVertexByLocalID(vid);
     auto globalid = g.GetGlobalIDByLocalID(vid);
     output.emplace_back(globalid);
 
-    max_depth = std::max(depth, max_depth);
+    // 递归遍历邻居
+    for (VertexID i = 0; i < u.outdegree; i++) {
+      VertexID neighbor = u.outgoing_edges[i];
+      auto neighbor_global = g.GetGlobalIDByLocalID(neighbor);
 
-    for (VertexID _ = 0; _ < u.outdegree; _++) {
-      if (!visited.GetBit(u.outgoing_edges[_])) {
-        output_in_edges.emplace_back(globalid);
-        output_in_edges.emplace_back(u.outgoing_edges[_]);
-        std::cout << "push: " << globalid << "->" << u.outgoing_edges[_]
-                  << std::endl;
-        DFSTraverse(u.outgoing_edges[_], visited, g, output, output_in_edges,
-                    depth + 1, max_depth);
-      }
+      output_in_edges.emplace_back(globalid);
+      output_in_edges.emplace_back(neighbor_global);
+
+      DFSTraverse(neighbor, visited_src, g, output, output_in_edges, depth + 1,
+                  max_depth);
     }
   }
 
@@ -83,32 +86,29 @@ class ExecutionPlan {
     output.reserve(p.get_max_vid());
     output_in_edges.reserve(p.get_max_vid());
 
-    int root = 0;
-    while (1) {
+    for (int root = 0; root < p.get_num_vertices(); root++) {
       DFSTraverse(root++, visited, p, output, output_in_edges, 0, depth_);
-      std::cout << visited.Count() << "/" << p.get_num_vertices() << std::endl;
-      if (visited.Count() == p.get_num_vertices()) break;
     }
 
     sequential_exec_path_in_edges_ = new UnifiedOwnedBufferVertexID();
     sequential_exec_path_ = new UnifiedOwnedBufferVertexID();
     inverted_index_of_sequential_exec_path_ = new UnifiedOwnedBufferVertexID();
 
-    sequential_exec_path_->Init(sizeof(VertexID) * p.get_num_vertices());
-    sequential_exec_path_in_edges_->Init(sizeof(VertexID) *
-                                         ((output_in_edges.size() + 1) * 2));
-    inverted_index_of_sequential_exec_path_->Init(sizeof(VertexID) *
-                                                  p.get_num_vertices());
+    sequential_exec_path_->Init(sizeof(VertexID) * p.get_num_vertices() * 10);
+    n_edges_ = output_in_edges.size() / 2 + 1;
 
+    sequential_exec_path_in_edges_->Init(sizeof(VertexID) * 2 * n_edges_ * 10);
+    inverted_index_of_sequential_exec_path_->Init(sizeof(VertexID) * n_edges_ *
+                                                  2 * 10);
+
+    sequential_exec_path_in_edges_->GetPtr()[0] = kMaxVertexID;
+    sequential_exec_path_in_edges_->GetPtr()[1] =
+        sequential_exec_path_->GetPtr()[0];
     cudaMemcpy(sequential_exec_path_->GetPtr(), output.data(),
                sizeof(VertexID) * output.size(), cudaMemcpyHostToHost);
     cudaMemcpy(sequential_exec_path_in_edges_->GetPtr() + 2,
                output_in_edges.data(),
                sizeof(VertexID) * output_in_edges.size(), cudaMemcpyHostToHost);
-
-    sequential_exec_path_in_edges_->GetPtr()[0] = kMaxVertexID;
-    sequential_exec_path_in_edges_->GetPtr()[1] =
-        sequential_exec_path_->GetPtr()[0];
 
     for (VertexID _ = 0; _ < p.get_num_vertices(); _++) {
       inverted_index_of_sequential_exec_path_
@@ -116,19 +116,29 @@ class ExecutionPlan {
     }
 
     exec_path_ = new VertexID[p.get_num_vertices()]();
-    exec_path_in_edges_ = new VertexID[(output_in_edges.size() + 1) * 2]();
+    exec_path_in_edges_ = new VertexID[n_edges_ * 2]();
 
-    memcpy(exec_path_, output.data(), sizeof(VertexID) * p.get_num_vertices());
-    memcpy(exec_path_in_edges_ + 2, output_in_edges.data(),
-           sizeof(VertexID) * output_in_edges.size() * 2);
     exec_path_in_edges_[0] = kMaxVertexID;
     exec_path_in_edges_[1] = sequential_exec_path_->GetPtr()[0];
+    // for (auto _ = 0; _ < output_in_edges.size(); _++) {
+    //   exec_path_in_edges_[2 + _] = output_in_edges.at(_);
+    // }
+    // for (auto _ = 0; _ < output.size(); _++) {
+    //   exec_path_[_] = output.at(_);
+    // }
+    memcpy(exec_path_, output.data(), sizeof(VertexID) * p.get_num_vertices());
+    memcpy(exec_path_in_edges_ + 2, output_in_edges.data(),
+           sizeof(VertexID) * output_in_edges.size());
     delete[] visited_data;
   }
 
   VertexID* get_exec_path_ptr() const { return exec_path_; }
 
-  VertexID* get_exec_path_in_edges_ptr() const { return exec_path_in_edges_; }
+  VertexID* get_exec_path_in_edges_ptr() { return exec_path_in_edges_; }
+
+  VertexID get_exec_path_in_edges_val(VertexID idx) const {
+    return exec_path_in_edges_[idx];
+  }
 
   UnifiedOwnedBufferVertexID* get_sequential_exec_path_ptr() const {
     return sequential_exec_path_;
@@ -140,15 +150,19 @@ class ExecutionPlan {
 
   UnifiedOwnedBufferVertexID* get_inverted_index_of_sequential_exec_path_ptr()
       const {
-    return sequential_exec_path_in_edges_;
+    return inverted_index_of_sequential_exec_path_;
   }
 
   inline VertexID get_depth() const { return depth_; }
 
   inline VertexID get_n_vertices() const { return n_vertices_; }
 
+  inline VertexID get_n_edges() const { return n_edges_; }
+
   void Print() const {
-    std::cout << "Print ExecPlan - n_vertices: " << n_vertices_ << std::endl;
+    std::cout << "Print ExecPlan - n_vertices: " << n_vertices_
+              << " n_edges_: " << n_edges_ << " depth_ " << get_depth()
+              << std::endl;
     std::cout << "\t sequential_exec_path" << std::endl;
     std::cout << "\t";
     for (int i = 0; i < n_vertices_; i++) {
@@ -158,8 +172,9 @@ class ExecutionPlan {
     std::cout << std::endl;
 
     std::cout << "\t sequential_exec_path_in_edges:" << std::endl;
-    auto ptr = get_sequential_exec_path_in_edges_ptr()->GetPtr();
-    for (int i = 0; i < n_vertices_; i++) {
+    // auto ptr = get_sequential_exec_path_in_edges_ptr()->GetPtr();
+    auto ptr = exec_path_in_edges_;
+    for (int i = 0; i < n_edges_; i++) {
       std::cout << "\t* " << ptr[i * 2] << "->" << ptr[i * 2 + 1] << std::endl;
     }
   }

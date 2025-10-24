@@ -67,12 +67,16 @@ class ImmutableCSR {
 
   void SortByDistance(VertexID sim_granularity);
 
-  void GenerateVLabel(VertexID range = 5);
+  void GenerateVLabel(VertexID range = 5, bool random = false);
 
   void SetGraphBuffer(uint8_t* buffer) { graph_base_pointer_.reset(buffer); }
 
   void SetVertexLabelBuffer(size_t n_vertices) {
-    vertex_label_base_pointer_ = std::make_unique<VertexID[]>(n_vertices);
+    vertex_label_base_pointer_ = new VertexLabel[n_vertices]();
+  }
+
+  void SetVertexLabelBuffer(VertexLabel* buffer) {
+    vertex_label_base_pointer_ = buffer;
   }
 
   void SetGlobalIDBuffer(VertexID* buffer) {
@@ -188,7 +192,8 @@ class ImmutableCSR {
   }
 
   inline VertexLabel* GetVLabelBasePointer() const {
-    return vertex_label_base_pointer_.get();
+    // return vertex_label_base_pointer_.get();
+    return vertex_label_base_pointer_;
   }
 
   inline VertexID GetGlobalIDByLocalID(VertexID i) const {
@@ -250,7 +255,8 @@ class ImmutableCSR {
   EdgeIndex* in_offset_base_pointer_ = nullptr;
   EdgeIndex* out_offset_base_pointer_ = nullptr;
 
-  std::unique_ptr<VertexLabel[]> vertex_label_base_pointer_ = nullptr;
+  // std::unique_ptr<VertexLabel[]> vertex_label_base_pointer_ = nullptr;
+  VertexLabel* vertex_label_base_pointer_ = nullptr;
 };
 
 }  // namespace data_structures

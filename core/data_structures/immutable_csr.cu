@@ -234,7 +234,10 @@ void ImmutableCSR::Read(const std::string& root_path) {
   label_file.seekg(0, std::ios::end);
   file_size = label_file.tellg();
   label_file.seekg(0, std::ios::beg);
-  vertex_label_base_pointer_ = std::make_unique<VertexLabel[]>(file_size);
+  // vertex_label_base_pointer_ = std::make_unique<VertexLabel[]>(file_size);
+  vertex_label_base_pointer_ =
+      new VertexLabel[file_size / sizeof(VertexLabel)]();
+  //      std::make_unique<VertexLabel[]>(file_size);
 
   // Read the label.
   label_file.read(reinterpret_cast<char*>(GetVLabelBasePointer()), file_size);
@@ -246,7 +249,7 @@ void ImmutableCSR::Read(const std::string& root_path) {
 ImmutableCSRVertex ImmutableCSR::GetVertexByLocalID(VertexID i) const {
   ImmutableCSRVertex v;
   v.vid = globalid_by_localid_base_pointer_[i];
-  v.vlabel = vertex_label_base_pointer_.get()[i];
+  v.vlabel = vertex_label_base_pointer_[i];
   if (get_num_incoming_edges() > 0) {
     v.indegree = GetInDegreeByLocalID(i);
     v.incoming_edges = incoming_edges_base_pointer_ + GetInOffsetByLocalID(i);
@@ -258,28 +261,37 @@ ImmutableCSRVertex ImmutableCSR::GetVertexByLocalID(VertexID i) const {
   return v;
 }
 
-void ImmutableCSR::GenerateVLabel(VertexID range) {
+void ImmutableCSR::GenerateVLabel(VertexID range, bool random) {
   auto parallelism = std::thread::hardware_concurrency();
   std::vector<size_t> worker(parallelism);
   std::mutex mtx;
   std::iota(worker.begin(), worker.end(), 0);
   auto step = worker.size();
 
-  std::random_device rd;
-  std::mt19937 gen(rd());
-
-  std::uniform_int_distribution<> dis(0, 65536);
-  std::cout << " Label Range: " << range << std::endl;
-
   auto vlabel_ptr = GetVLabelBasePointer();
   memset(vlabel_ptr, 0, sizeof(VertexLabel) * get_num_vertices());
 
-  std::for_each(std::execution::par, worker.begin(), worker.end(),
-                [this, step, &dis, &gen, &range, &vlabel_ptr](auto w) {
-                  for (auto vid = w; vid < get_num_vertices(); vid += step) {
-                    vlabel_ptr[vid] = (dis(gen) + vid) % range;
-                  }
-                });
+  if (random) {
+    std::random_device rd;
+    std::mt19937 gen(rd());
+
+    std::uniform_int_distribution<> dis(0, 65536);
+    std::cout << " Label Range: " << range << std::endl;
+
+    std::for_each(std::execution::par, worker.begin(), worker.end(),
+                  [this, step, &dis, &gen, &range, &vlabel_ptr](auto w) {
+                    for (auto vid = w; vid < get_num_vertices(); vid += step) {
+                      vlabel_ptr[vid] = (dis(gen) + vid) % range;
+                    }
+                  });
+  } else {
+    std::for_each(std::execution::par, worker.begin(), worker.end(),
+                  [this, step, &range, &vlabel_ptr](auto w) {
+                    for (auto vid = w; vid < get_num_vertices(); vid += step) {
+                      vlabel_ptr[vid] = vid % range;
+                    }
+                  });
+  }
 }
 
 void ImmutableCSR::SortByDegree() {

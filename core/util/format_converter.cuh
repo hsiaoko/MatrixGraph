@@ -256,21 +256,21 @@ static ImmutableCSR* Edgelist2ImmutableCSR(const Edges& edgelist) {
   delete[] buffer_csr_vertices;
   delete[] vid_map;
 
-  VertexID* buffer_localid_by_globalid = new VertexID[max_vid]();
+  VertexID* buffer_localid_by_globalid = new VertexID[max_vid + 1]();
 
-  std::for_each(std::execution::par, worker.begin(), worker.end(),
-                [&buffer_edges_globalid_by_localid, &buffer_localid_by_globalid,
-                 step, max_vid](auto w) {
-                  for (auto j = w; j < max_vid + 1; j += step) {
-                    buffer_edges_globalid_by_localid[j] = j;
-                    buffer_localid_by_globalid[j] = j;
-                  }
-                });
+  std::for_each(  // std::execution::par,
+      worker.begin(), worker.end(),
+      [&buffer_edges_globalid_by_localid, &buffer_localid_by_globalid, step,
+       max_vid](auto w) {
+        for (auto j = w; j < max_vid + 1; j += step) {
+          buffer_edges_globalid_by_localid[j] = j;
+          buffer_localid_by_globalid[j] = j;
+        }
+      });
 
-  // VertexLabel *vlabel = new
-  // VertexLabel[edgelist.get_metadata().num_vertices]();
-
-  immutable_csr->SetVertexLabelBuffer(edgelist.get_metadata().num_vertices);
+  std::cout << edgelist.get_metadata().num_vertices << std::endl;
+  immutable_csr->SetVertexLabelBuffer(
+      new VertexLabel[edgelist.get_metadata().num_vertices]());
 
   memcpy(immutable_csr->GetVLabelBasePointer(), edgelist.get_vertex_label_ptr(),
          sizeof(VertexLabel) * edgelist.get_metadata().num_vertices);

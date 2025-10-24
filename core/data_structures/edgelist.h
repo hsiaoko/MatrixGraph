@@ -188,7 +188,7 @@ class Edges {
 
   void ShowGraph(EdgeIndex n_edges = 3) const;
 
-  void GenerateVLabel(VertexID range = 5);
+  void GenerateVLabel(VertexID range = 5, bool random = false);
 
   Edge* get_base_ptr() const { return edges_ptr_; }
 

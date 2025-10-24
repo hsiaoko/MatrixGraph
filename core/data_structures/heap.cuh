@@ -1,9 +1,9 @@
 #ifndef MATRIXGRAPH_CORE_TASK_KERNEL_ALGORITHMS_HEAP_CUH_
 #define MATRIXGRAPH_CORE_TASK_KERNEL_ALGORITHMS_HEAP_CUH_
 
-#include <cstdint>
-
 #include <cuda_runtime.h>
+
+#include <cstdint>
 
 #include "core/common/consts.h"
 
@@ -14,9 +14,10 @@ namespace task {
 namespace kernel {
 
 using sics::matrixgraph::core::common::kDefaultHeapCapacity;
+
 class MinHeap {
-private:
-public:
+ private:
+ public:
   __host__ __device__ __forceinline__ void Insert(uint32_t val) {
     if (offset_ < capacity_) {
       data_[offset_++] = val;
@@ -48,11 +49,11 @@ public:
     printf("\n");
   }
 
-  __host__ __device__ __forceinline__ void CopyData(uint32_t *other) {
+  __host__ __device__ __forceinline__ void CopyData(uint32_t* other) {
     memcpy(other, data_, sizeof(uint32_t) * capacity_);
   }
 
-  __host__ __device__ __forceinline__ void MoveData(uint32_t **other) {
+  __host__ __device__ __forceinline__ void MoveData(uint32_t** other) {
     *other = data_;
   }
 
@@ -69,7 +70,7 @@ public:
     return data_[0];
   }
 
-private:
+ private:
   __host__ __device__ __forceinline__ void heapify(int i) {
     int largest = i;
     while (1) {
@@ -93,7 +94,7 @@ private:
     }
   }
 
-  __host__ __device__ __forceinline__ void swap(uint32_t *a, uint32_t *b) {
+  __host__ __device__ __forceinline__ void swap(uint32_t* a, uint32_t* b) {
     uint32_t tmp = *a;
     *a = *b;
     *b = tmp;
@@ -106,14 +107,14 @@ private:
   const uint32_t capacity_ = kDefaultHeapCapacity;
 
   // Array to store heap elements.
-public:
+ public:
   uint32_t data_[kDefaultHeapCapacity] = {0};
 };
 
-} // namespace kernel
-} // namespace task
-} // namespace core
-} // namespace matrixgraph
-} // namespace sics
+}  // namespace kernel
+}  // namespace task
+}  // namespace core
+}  // namespace matrixgraph
+}  // namespace sics
 
-#endif // MATRIXGRAPH_CORE_TASK_KERNEL_ALGORITHMS_HEAP_CUH_
+#endif  // MATRIXGRAPH_CORE_TASK_KERNEL_ALGORITHMS_HEAP_CUH_

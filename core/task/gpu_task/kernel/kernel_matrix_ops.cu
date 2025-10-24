@@ -75,33 +75,35 @@ inline __m256 fast_exp_avx(__m256 x) {
 
 static void SimdSquaredDifferenceSIMD(const float* v_a, const float* v_b,
                                       float* v_c, size_t n) {
-  constexpr size_t simd_width = 8;  // AVX 一次处理 8 个 float
-  size_t i = 0;
+  // SIMD
+  // constexpr size_t simd_width = 8;
+  // size_t i = 0;
 
-  // 主 SIMD 循环
-  for (; i + simd_width <= n; i += simd_width) {
-    // 加载向量数据
-    __m256 vec_a = _mm256_loadu_ps(v_a + i);
-    __m256 vec_b = _mm256_loadu_ps(v_b + i);
+  // for (; i + simd_width <= n; i += simd_width) {
+  //   // 加载向量数据
+  //   __m256 vec_a = _mm256_loadu_ps(v_a + i);
+  //   __m256 vec_b = _mm256_loadu_ps(v_b + i);
 
-    // 计算差值 (a - b)
-    __m256 diff = _mm256_sub_ps(vec_a, vec_b);
+  //  // 计算差值 (a - b)
+  //  __m256 diff = _mm256_sub_ps(vec_a, vec_b);
 
-    // 计算平方 (a - b)^2
-    __m256 squared = _mm256_mul_ps(diff, diff);
+  //  // 计算平方 (a - b)^2
+  //  __m256 squared = _mm256_mul_ps(diff, diff);
 
-    // 存储结果
-    _mm256_storeu_ps(v_c + i, squared);
-  }
+  //  // 存储结果
+  //  _mm256_storeu_ps(v_c + i, squared);
+  //}
 
-  // 处理剩余不足 8 的元素（标量处理）
-  for (; i < n; ++i) {
-    float diff = v_a[i] - v_b[i];
-    v_c[i] = diff * diff;
-  }
-  // for (size_t i = 0; i < n; ++i) {
-  //   v_c[i] = (v_a[i] - v_b[i]) * (v_a[i] - v_b[i]);
+  // for (; i < n; ++i) {
+  //   float diff = v_a[i] - v_b[i];
+  //   v_c[i] = diff * diff;
   // }
+
+  /// CPP
+  for (auto _ = 0; _ < n; _++) {
+    float diff = v_a[_] - v_b[_];
+    v_c[_] = diff * diff;
+  }
 }
 
 /**
@@ -118,18 +120,23 @@ static __global__ void ReluKernel(float* input, int n) {
 }
 
 void ReluSIMD(float* input, int n) {
-  constexpr int simd_width = 8;
-  const __m256 zero = _mm256_set1_ps(0.0f);
+  /// SIMD
+  // constexpr int simd_width = 8;
+  // const __m256 zero = _mm256_set1_ps(0.0f);
 
-  int i = 0;
-  for (; i + simd_width <= n; i += simd_width) {
-    __m256 vec = _mm256_loadu_ps(input + i);
-    __m256 result = _mm256_max_ps(vec, zero);  // max(input, 0) 等价于 ReLU
-    _mm256_storeu_ps(input + i, result);
-  }
+  // int i = 0;
+  // for (; i + simd_width <= n; i += simd_width) {
+  //   __m256 vec = _mm256_loadu_ps(input + i);
+  //   __m256 result = _mm256_max_ps(vec, zero);  // max(input, 0) 等价于 ReLU
+  //   _mm256_storeu_ps(input + i, result);
+  // }
 
-  // 剩余元素处理
-  for (; i < n; ++i) {
+  // for (; i < n; ++i) {
+  //   input[i] = input[i] > 0 ? input[i] : 0;
+  // }
+
+  /// CPP
+  for (auto i = 0; i < n; ++i) {
     input[i] = input[i] > 0 ? input[i] : 0;
   }
 }
@@ -148,23 +155,27 @@ static __global__ void SigmoidKernel(float* input, int n) {
 }
 
 void SigmoidSIMD(float* input, int n) {
-  constexpr int simd_width = 8;  // AVX 处理 8 个 float
-  const __m256 one = _mm256_set1_ps(1.0f);
-  const __m256 zero = _mm256_set1_ps(0.0f);
+  /// SIMD
+  // constexpr int simd_width = 8;  // AVX 处理 8 个 float
+  // const __m256 one = _mm256_set1_ps(1.0f);
+  // const __m256 zero = _mm256_set1_ps(0.0f);
 
-  int i = 0;
-  // 主 SIMD 循环
-  for (; i + simd_width <= n; i += simd_width) {
-    __m256 vec = _mm256_loadu_ps(input + i);     // 加载数据
-    __m256 neg_vec = _mm256_sub_ps(zero, vec);   // -input
-    __m256 exp_neg = fast_exp_avx(neg_vec);      // exp(-input)
-    __m256 denom = _mm256_add_ps(one, exp_neg);  // 1 + exp(-input)
-    __m256 result = _mm256_div_ps(one, denom);   // 1 / (1 + exp(-input))
-    _mm256_storeu_ps(input + i, result);         // 存回内存
-  }
+  // int i = 0;
+  // for (; i + simd_width <= n; i += simd_width) {
+  //   __m256 vec = _mm256_loadu_ps(input + i);     // 加载数据
+  //   __m256 neg_vec = _mm256_sub_ps(zero, vec);   // -input
+  //   __m256 exp_neg = fast_exp_avx(neg_vec);      // exp(-input)
+  //   __m256 denom = _mm256_add_ps(one, exp_neg);  // 1 + exp(-input)
+  //   __m256 result = _mm256_div_ps(one, denom);   // 1 / (1 + exp(-input))
+  //   _mm256_storeu_ps(input + i, result);         // 存回内存
+  // }
 
-  // 处理剩余不足 8 的元素 (标量处理)
-  for (; i < n; ++i) {
+  // for (; i < n; ++i) {
+  //   input[i] = 1.0f / (1.0f + expf(-input[i]));
+  // }
+
+  /// CPP
+  for (auto i = 0; i < n; ++i) {
     input[i] = 1.0f / (1.0f + expf(-input[i]));
   }
 }
@@ -321,19 +332,25 @@ static __global__ void MatrixAddKernel(float* A, float* B, int m, int n) {
 
 void MatrixAddSIMD(float* A, const float* B, int m, int n) {
   const int total_elements = m * n;
-  constexpr int simd_width = 8;
+  /// SIMD
+  // constexpr int simd_width = 8;
 
-  for (int i = 0; i < total_elements; i += simd_width) {
-    if (i + simd_width <= total_elements) {
-      __m256 vec_a = _mm256_loadu_ps(A + i);
-      __m256 vec_b = _mm256_loadu_ps(B + i);
-      __m256 result = _mm256_add_ps(vec_a, vec_b);
-      _mm256_storeu_ps(A + i, result);
-    } else {
-      for (int j = i; j < total_elements; ++j) {
-        A[j] += B[j];
-      }
-    }
+  // for (int i = 0; i < total_elements; i += simd_width) {
+  //   if (i + simd_width <= total_elements) {
+  //     __m256 vec_a = _mm256_loadu_ps(A + i);
+  //     __m256 vec_b = _mm256_loadu_ps(B + i);
+  //     __m256 result = _mm256_add_ps(vec_a, vec_b);
+  //     _mm256_storeu_ps(A + i, result);
+  //   } else {
+  //     for (int j = i; j < total_elements; ++j) {
+  //       A[j] += B[j];
+  //     }
+  //   }
+  // }
+
+  /// CPP
+  for (auto _ = 0; _ < total_elements; _++) {
+    A[_] += B[_];
   }
 }
 

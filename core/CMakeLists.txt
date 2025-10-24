@@ -36,7 +36,9 @@ file(GLOB_RECURSE CORE_SOURCES
         "task/gpu_task/kernel/algorithms/*.cu"
         "task/gpu_task/*.cu"
         "task/cpu_task/*.cpp"
-        )
+)
+list(FILTER CORE_SOURCES EXCLUDE REGEX ".*_test\\.cpp$")
+list(FILTER CORE_SOURCES EXCLUDE REGEX ".*_test\\.cu$")
 
 # 检测 CPU 指令集支持
 include(CheckCXXCompilerFlag)
@@ -90,18 +92,18 @@ target_link_libraries(${PROJECT_NAME}
         cublas
         -ffast-math
         -funroll-loops
-        )
+)
 
 target_include_directories(${PROJECT_NAME}
         PUBLIC
         ${THIRD_PARTY_ROOT}/yaml-cpp/include/
         ${PROJECT_ROOT_DIR}
         ${CMAKE_CUDA_TOOLKIT_INCLUDE_DIRECTORIES}
-        )
+)
 
 # Library properties
 set_target_properties(${PROJECT_NAME} PROPERTIES
         CUDA_SEPARABLE_COMPILATION ON
         POSITION_INDEPENDENT_CODE ON
         CUDA_RESOLVE_DEVICE_SYMBOLS ON
-        )
+)

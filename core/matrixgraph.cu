@@ -1,14 +1,14 @@
+#include <chrono>
+#include <ctime>
+
 #include "core/matrixgraph.cuh"
 #include "core/task/cpu_task/cpu_subiso.cuh"
 #include "core/task/gpu_task/bfs.cuh"
 #include "core/task/gpu_task/gemm.cuh"
-#include "core/task/gpu_task/matrix_ops.cuh"
 #include "core/task/gpu_task/pagerank.cuh"
 #include "core/task/gpu_task/ppr_query.cuh"
 #include "core/task/gpu_task/subiso.cuh"
 #include "core/task/gpu_task/wcc.cuh"
-#include <chrono>
-#include <ctime>
 
 namespace sics {
 namespace matrixgraph {
@@ -27,7 +27,7 @@ MatrixGraph::MatrixGraph(SchedulerType scheduler_type) {
 }
 
 void MatrixGraph::Run(TaskType task_type, TaskBase* task_ptr) {
-  PrintDeviceInfo();
+  // PrintDeviceInfo();
   auto start_time = std::chrono::system_clock::now();
 
   auto prepare_end_time = std::chrono::system_clock::now();
@@ -67,12 +67,6 @@ void MatrixGraph::Run(TaskType task_type, TaskBase* task_ptr) {
       task->Run();
       break;
     }
-    case common::kGEMV: {
-      std::cout << "[GEMV Traverse]" << std::endl;
-      auto task = reinterpret_cast<task::MatrixOps*>(task_ptr);
-      // TODO(hsiaoko): added a task runner.
-      break;
-    }
     default:
       break;
   }
@@ -88,7 +82,7 @@ void MatrixGraph::Run(TaskType task_type, TaskBase* task_ptr) {
 }
 
 void MatrixGraph::Run(TaskType task_type, CPUTaskBase* task_ptr) {
-  PrintDeviceInfo();
+  // PrintDeviceInfo();
   auto start_time = std::chrono::system_clock::now();
 
   auto prepare_end_time = std::chrono::system_clock::now();

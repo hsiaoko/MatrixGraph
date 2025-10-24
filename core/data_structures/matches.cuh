@@ -65,6 +65,9 @@ class Matches {
     v_candidate_offset_for_each_weft_.Init(sizeof(VertexID) * (n_vertices + 1) *
                                            max_n_weft);
 
+    v_deleted_candidates_count_.Init(sizeof(VertexID) *
+                                     (n_vertices)*max_n_weft);
+
     weft_offset_.Init(sizeof(EdgeIndex) * max_n_weft_);
     weft_size_.Init(sizeof(VertexID) * max_n_weft_);
     weft_count_.Init(sizeof(VertexID));
@@ -90,10 +93,12 @@ class Matches {
 
       for (auto i = 0; i < n_vertices_; i++) {
         auto v_candidate_offset =
-            GetVCandidateOffsetPtr()[weft_id * (n_vertices_ + 1) + i];
+            GetVCandidateOffsetPtr()[weft_id * (n_vertices_) + i];
+        // auto v_candidate_size = GetWeftSizePtr()[weft_id * (n_vertices_) +
+        // i];
         auto v_candidate_size =
-            GetVCandidateOffsetPtr()[weft_id * (n_vertices_ + 1) + i + 1] -
-            GetVCandidateOffsetPtr()[weft_id * (n_vertices_ + 1) + i];
+            GetVCandidateOffsetPtr()[weft_id * (n_vertices_) + i + 1] -
+            GetVCandidateOffsetPtr()[weft_id * (n_vertices_) + i];
         std::cout << "\t " << header_[i].first << "->" << header_[i].second
                   << " offset:" << v_candidate_offset
                   << " size: " << v_candidate_size << ": ";
@@ -104,8 +109,7 @@ class Matches {
                 i * 2 * max_n_local_weft_ + 2 * candidate_id) != kMaxVertexID &&
               *(matches_data_.GetPtr() +
                 weft_id * n_vertices_ * 2 * max_n_local_weft_ +
-                i * 2 * max_n_local_weft_ + 2 * candidate_id + 1) !=
-                  kMaxVertexID) {
+                i * 2 * max_n_local_weft_ + 2 * candidate_id) != kMaxVertexID) {
             std::cout << *(matches_data_.GetPtr() +
                            weft_id * n_vertices_ * 2 * max_n_local_weft_ +
                            i * 2 * max_n_local_weft_ + 2 * candidate_id)
@@ -121,6 +125,50 @@ class Matches {
     }
   }
 
+  bool IsValidCandidate(VertexID weft_id, VertexID u_idx, VertexID uid,
+                        VertexID vid) {
+    if (uid == kMaxVertexID) return true;
+    if (vid == kMaxVertexID) return true;
+
+    auto v_candidate_offset =
+        GetVCandidateOffsetPtr()[weft_id * (n_vertices_ + 1) + u_idx];
+    auto v_candidate_size =
+        GetVCandidateOffsetPtr()[weft_id * (n_vertices_ + 1) + u_idx + 1] -
+        GetVCandidateOffsetPtr()[weft_id * (n_vertices_ + 1) + u_idx];
+
+    if (header_[u_idx].first == uid) {
+      VertexID count = 0;
+      for (VertexID candidate_id = 0; candidate_id < v_candidate_size;
+           candidate_id++) {
+        if (*(matches_data_.GetPtr() +
+              weft_id * n_vertices_ * 2 * max_n_local_weft_ +
+              u_idx * 2 * max_n_local_weft_ + 2 * candidate_id) == vid) {
+          count++;
+        }
+      }
+      if (count == 0) {
+        return false;
+      }
+    }
+
+    if (header_[u_idx].second == uid) {
+      VertexID count = 0;
+      for (VertexID candidate_id = 0; candidate_id < v_candidate_size;
+           candidate_id++) {
+        if (*(matches_data_.GetPtr() +
+              weft_id * n_vertices_ * 2 * max_n_local_weft_ +
+              u_idx * 2 * max_n_local_weft_ + 2 * candidate_id + 1) == vid) {
+          count++;
+        }
+      }
+      if (count == 0) {
+        return false;
+      }
+    }
+
+    return true;
+  }
+
   size_t ComputeNMatches() const {
     size_t count = 0;
     for (VertexID weft_id = 0; weft_id < *weft_count_.GetPtr(); weft_id++) {
@@ -130,10 +178,11 @@ class Matches {
       size_t weft_matches_count = 1;
       for (auto i = 0; i < n_vertices_; i++) {
         auto v_candidate_offset =
-            GetVCandidateOffsetPtr()[weft_id * (n_vertices_ + 1) + i];
+            GetVCandidateOffsetPtr()[weft_id * (n_vertices_) + i];
         auto v_candidate_size =
-            GetVCandidateOffsetPtr()[weft_id * (n_vertices_ + 1) + i + 1] -
-            GetVCandidateOffsetPtr()[weft_id * (n_vertices_ + 1) + i];
+            GetVCandidateOffsetPtr()[weft_id * (n_vertices_) + i + 1] -
+            GetVCandidateOffsetPtr()[weft_id * (n_vertices_) + i];
+
         size_t tmp_count = 0;
         for (VertexID candidate_id = 0; candidate_id < v_candidate_size;
              candidate_id++) {
@@ -152,7 +201,9 @@ class Matches {
           weft_matches_count *= tmp_count;
         }
       }
-      if (tag) count += weft_matches_count;
+      if (tag) {
+        count += weft_matches_count;
+      }
     }
     return count;
   }
@@ -161,10 +212,18 @@ class Matches {
     for (VertexID weft_id = 0; weft_id < *weft_count_.GetPtr(); weft_id++) {
       for (auto i = 0; i < n_vertices_; i++) {
         auto v_candidate_offset =
-            GetVCandidateOffsetPtr()[weft_id * (n_vertices_ + 1) + i];
+            GetVCandidateOffsetPtr()[weft_id * (n_vertices_) + i];
+        if (v_candidate_offset == 0) {
+          invalid_match_->SetBit(weft_id);
+          return;
+        }
+      }
+      for (auto i = 0; i < n_vertices_; i++) {
+        auto v_candidate_offset =
+            GetVCandidateOffsetPtr()[weft_id * (n_vertices_) + i];
         auto v_candidate_size =
-            GetVCandidateOffsetPtr()[weft_id * (n_vertices_ + 1) + i + 1] -
-            GetVCandidateOffsetPtr()[weft_id * (n_vertices_ + 1) + i];
+            GetVCandidateOffsetPtr()[weft_id * (n_vertices_) + i + 1] -
+            GetVCandidateOffsetPtr()[weft_id * (n_vertices_) + i];
         auto invalid_count = 0;
         for (VertexID candidate_id = 0; candidate_id < v_candidate_size;
              candidate_id++) {
@@ -238,6 +297,10 @@ class Matches {
     return v_candidate_offset_for_each_weft_.GetPtr();
   }
 
+  VertexID* GetVDeletedCandidatesCountPtr() const {
+    return v_deleted_candidates_count_.GetPtr();
+  }
+
   void SetHeader(VertexID pos, std::pair<VertexID, VertexID> e) {
     assert(pos < n_vertices_);
     header_[pos].first = e.first;
@@ -248,6 +311,8 @@ class Matches {
     return header_;
   }
 
+  BitmapOwnership* get_invalid_match_ptr() const { return invalid_match_; }
+
   VertexID get_weft_count() const { return *weft_count_.GetPtr(); }
 
   VertexID get_n_vertices() const { return n_vertices_; }
@@ -256,10 +321,23 @@ class Matches {
 
   VertexID get_max_n_local_weft() const { return max_n_local_weft_; }
 
+  VertexID* get_matches_data_ptr() const { return matches_data_.GetPtr(); }
+
+  VertexID get_header_first_by_idx(VertexID idx) {
+    assert(i < header_.size());
+    return header_[idx].first;
+  }
+
+  VertexID get_header_second_by_idx(VertexID idx) {
+    assert(i < header_.size());
+    return header_[idx].second;
+  }
+
   std::vector<std::pair<VertexID, VertexID>> header_;
 
   UnifiedOwnedBufferVertexID weft_count_;
   UnifiedOwnedBufferVertexID v_candidate_offset_for_each_weft_;
+  UnifiedOwnedBufferVertexID v_deleted_candidates_count_;
   UnifiedOwnedBufferVertexID weft_size_;
   UnifiedOwnedBufferVertexIDPtr matches_weft_ptr_;
 

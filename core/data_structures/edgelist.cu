@@ -366,26 +366,37 @@ void Edges::ShowGraph(EdgeIndex n_edges) const {
   }
 }
 
-void Edges::GenerateVLabel(VertexID range) {
+void Edges::GenerateVLabel(VertexID range, bool random) {
   auto parallelism = std::thread::hardware_concurrency();
   std::vector<size_t> worker(parallelism);
   std::mutex mtx;
   std::iota(worker.begin(), worker.end(), 0);
   auto step = worker.size();
 
-  std::random_device rd;
-  std::mt19937 gen(rd());
+  if (random) {
+    std::random_device rd;
+    std::mt19937 gen(rd());
 
-  std::uniform_int_distribution<> dis(0, range);
+    std::uniform_int_distribution<> dis(0, range);
 
-  std::for_each(std::execution::par, worker.begin(), worker.end(),
-                [this, step, &dis, &gen](auto w) {
-                  for (auto vid = w; vid < edgelist_metadata_.num_vertices;
-                       vid += step) {
-                    auto vlabel_ptr = get_vertex_label_ptr();
-                    vlabel_ptr[vid] = dis(gen);
-                  }
-                });
+    std::for_each(std::execution::par, worker.begin(), worker.end(),
+                  [this, step, &dis, &gen](auto w) {
+                    for (auto vid = w; vid < edgelist_metadata_.num_vertices;
+                         vid += step) {
+                      auto vlabel_ptr = get_vertex_label_ptr();
+                      vlabel_ptr[vid] = dis(gen);
+                    }
+                  });
+  } else {
+    std::for_each(std::execution::par, worker.begin(), worker.end(),
+                  [this, step, range](auto w) {
+                    for (auto vid = w; vid < edgelist_metadata_.num_vertices;
+                         vid += step) {
+                      auto vlabel_ptr = get_vertex_label_ptr();
+                      vlabel_ptr[vid] = vid % range;
+                    }
+                  });
+  }
 }
 
 VertexID Edges::get_globalid_by_localid(VertexID localid) const {
