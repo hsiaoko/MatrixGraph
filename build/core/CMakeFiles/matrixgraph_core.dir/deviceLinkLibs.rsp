@@ -1,1 +1,0 @@
-  -L"/usr/local/cuda-12.4/targets/x86_64-linux/lib/stubs"  -L"/usr/local/cuda-12.4/targets/x86_64-linux/lib"  "/home/zhuxiaoke/project/graph_computing/MatrixGraph/lib/libyaml-cpp.a" -lcublas  -lcudadevrt -lcudart_static -lrt -lpthread -ldl 

@@ -53,12 +53,10 @@ class ExecutionPlan {
     }
     visited_src.SetBit(vid);
 
-    // 处理当前顶点
     auto u = g.GetVertexByLocalID(vid);
     auto globalid = g.GetGlobalIDByLocalID(vid);
     output.emplace_back(globalid);
 
-    // 递归遍历邻居
     for (VertexID i = 0; i < u.outdegree; i++) {
       VertexID neighbor = u.outgoing_edges[i];
       auto neighbor_global = g.GetGlobalIDByLocalID(neighbor);
@@ -94,12 +92,12 @@ class ExecutionPlan {
     sequential_exec_path_ = new UnifiedOwnedBufferVertexID();
     inverted_index_of_sequential_exec_path_ = new UnifiedOwnedBufferVertexID();
 
-    sequential_exec_path_->Init(sizeof(VertexID) * p.get_num_vertices() * 10);
+    sequential_exec_path_->Init(sizeof(VertexID) * p.get_num_vertices());
     n_edges_ = output_in_edges.size() / 2 + 1;
 
-    sequential_exec_path_in_edges_->Init(sizeof(VertexID) * 2 * n_edges_ * 10);
+    sequential_exec_path_in_edges_->Init(sizeof(VertexID) * 2 * n_edges_);
     inverted_index_of_sequential_exec_path_->Init(sizeof(VertexID) * n_edges_ *
-                                                  2 * 10);
+                                                  2);
 
     sequential_exec_path_in_edges_->GetPtr()[0] = kMaxVertexID;
     sequential_exec_path_in_edges_->GetPtr()[1] =
@@ -120,12 +118,7 @@ class ExecutionPlan {
 
     exec_path_in_edges_[0] = kMaxVertexID;
     exec_path_in_edges_[1] = sequential_exec_path_->GetPtr()[0];
-    // for (auto _ = 0; _ < output_in_edges.size(); _++) {
-    //   exec_path_in_edges_[2 + _] = output_in_edges.at(_);
-    // }
-    // for (auto _ = 0; _ < output.size(); _++) {
-    //   exec_path_[_] = output.at(_);
-    // }
+
     memcpy(exec_path_, output.data(), sizeof(VertexID) * p.get_num_vertices());
     memcpy(exec_path_in_edges_ + 2, output_in_edges.data(),
            sizeof(VertexID) * output_in_edges.size());
