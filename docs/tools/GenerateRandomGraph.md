@@ -40,6 +40,7 @@ e 3 4
 | `--edges`       | `-m`  | 200     | Number of edges per graph             |
 | `--label-range` | `-r`  | 5       | Label value range [0, r-1]            |
 | `--output-dir`  | `-o`  | `/root` | Output directory for generated graphs |
+| `--start-graph-id`  | `-i`  | `1` | Start id of graphs |
 
 ### Example
 
