@@ -40,14 +40,14 @@ $PROJECT_ROOT_DIR/bin/cpu_subiso_exec \
 
 ## Parameter Details
 
--p : Pattern graph CSR directory
--g : Data graph CSR directory
--m1 : Pattern embedding directory
--m2 : Data graph embedding directory
--m3 : MLP first layer weights directory
--m4 : MLP first layer bias directory
--m5 : MLP second layer weights directory
--m6 : MLP second layer bias directory
+* -p : Pattern graph CSR directory
+* -g : Data graph CSR directory
+* -m1 : Pattern embedding directory
+* -m2 : Data graph embedding directory
+* -m3 : MLP first layer weights directory
+* -m4 : MLP first layer bias directory
+* -m5 : MLP second layer weights directory
+* -m6 : MLP second layer bias directory
 
 ## Requirements
 
