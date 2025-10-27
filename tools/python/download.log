@@ -1,0 +1,37 @@
+Collecting package metadata (current_repodata.json): ...working... WARNING conda.models.version:get_matcher(546): Using .* with relational operator is superfluous and deprecated and will be removed in a future version of conda. Your spec was 1.7.1.*, but conda is ignoring the .* and treating it as 1.7.1
+done
+Solving environment: ...working... failed with initial frozen solve. Retrying with flexible solve.
+Solving environment: ...working... failed with repodata from current_repodata.json, will retry with next repodata source.
+Collecting package metadata (repodata.json): ...working... WARNING conda.models.version:get_matcher(546): Using .* with relational operator is superfluous and deprecated and will be removed in a future version of conda. Your spec was 1.8.0.*, but conda is ignoring the .* and treating it as 1.8.0
+WARNING conda.models.version:get_matcher(546): Using .* with relational operator is superfluous and deprecated and will be removed in a future version of conda. Your spec was 1.6.0.*, but conda is ignoring the .* and treating it as 1.6.0
+WARNING conda.models.version:get_matcher(546): Using .* with relational operator is superfluous and deprecated and will be removed in a future version of conda. Your spec was 1.9.0.*, but conda is ignoring the .* and treating it as 1.9.0
+done
+Solving environment: ...working... failed with initial frozen solve. Retrying with flexible solve.
+Solving environment: ...working... 
+Found conflicts! Looking for incompatible packages.
+This can take several minutes.  Press CTRL-C to abort.
+Building graph of deps:   0%|          | 0/7 [00:00<?, ?it/s]Examining @/linux-64::__cuda==12.4=0:   0%|          | 0/7 [00:00<?, ?it/s]Examining argparse:  14%|█▍        | 1/7 [00:00<00:00, 9300.01it/s]        Examining @/linux-64::__archspec==1=x86_64:  29%|██▊       | 2/7 [00:00<00:00, 782.74it/s]Examining @/linux-64::__glibc==2.17=0:  43%|████▎     | 3/7 [00:00<00:00, 1131.76it/s]    Examining @/linux-64::__linux==3.10.0=0:  57%|█████▋    | 4/7 [00:00<00:00, 1469.49it/s]Examining python=3.10:  71%|███████▏  | 5/7 [00:00<00:00, 1794.12it/s]                  Examining @/linux-64::__unix==0=0:  86%|████████▌ | 6/7 [00:04<00:00,  1.25it/s]Examining @/linux-64::__unix==0=0: 100%|██████████| 7/7 [00:04<00:00,  1.46it/s]                                                                                Determining conflicts:   0%|          | 0/7 [00:00<?, ?it/s]Examining conflict for argparse python:   0%|          | 0/7 [00:00<?, ?it/s]Examining conflict for __glibc python:  14%|█▍        | 1/7 [00:00<00:00, 4036.87it/s]                                                                                      failed
+
+UnsatisfiableError: The following specifications were found
+to be incompatible with the existing python installation in your environment:
+
+Specifications:
+
+  - argparse -> python=2.6
+
+Your python: python=3.10
+
+If python is on the left-most side of the chain, that's the version you've asked for.
+When python appears to the right, that indicates that the thing on the left is somehow
+not available for the python version you are constrained to. Note that conda will not
+change your python version to a different minor version unless you explicitly specify
+that.
+
+The following specifications were found to be incompatible with your system:
+
+  - feature:/linux-64::__glibc==2.17=0
+  - feature:|@/linux-64::__glibc==2.17=0
+
+Your installed version is: 2.17
+
+

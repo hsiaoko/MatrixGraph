@@ -32,8 +32,8 @@ def parse_arguments():
 
 class CustomGraphDataset(Dataset):
     """Custom graph dataset class for handling graph data"""
-    
-    def __init__(self, root: str, transform: Optional[callable] = None, 
+
+    def __init__(self, root: str, transform: Optional[callable] = None,
                  pre_transform: Optional[callable] = None):
         """
         Initialize custom graph dataset
@@ -57,7 +57,7 @@ class CustomGraphDataset(Dataset):
 
 class GraphSAGE(torch.nn.Module):
     """GraphSAGE model for generating node embeddings"""
-    
+
     def __init__(self, in_channels: int, hidden_channels: int, out_channels: int):
         """
         Initialize GraphSAGE model
@@ -68,8 +68,8 @@ class GraphSAGE(torch.nn.Module):
             out_channels: Number of output features
         """
         super(GraphSAGE, self).__init__()
-        self.conv1 = SAGEConv(in_channels, hidden_channels, aggr='mean', 
-                             bias=False, root_weight=False)
+        self.conv1 = SAGEConv(in_channels, hidden_channels, aggr='mean',
+                              bias=False, root_weight=False)
 
     def forward(self, x: torch.Tensor, edge_index: torch.Tensor) -> torch.Tensor:
         """
@@ -87,27 +87,25 @@ class GraphSAGE(torch.nn.Module):
 
 
 class IdentitySAGEConv(SAGEConv):
-    """Custom SAGE convolution with identity transformation"""
-    
+    """Identity SAGE convolution with custom aggregation"""
+
+    def __init__(self, in_channels: int, out_channels: int, **kwargs):
+        super(IdentitySAGEConv, self).__init__(in_channels, out_channels, **kwargs)
+
     def forward(self, x: torch.Tensor, edge_index: torch.Tensor) -> torch.Tensor:
-        """
-        Forward pass with custom aggregation and identity transformation
-        
-        Args:
-            x: Node feature matrix
-            edge_index: Graph connectivity in COO format
-            
-        Returns:
-            Aggregated node features
-        """
-        # Original aggregation logic
+        """Custom forward pass with multiple propagation steps"""
+        # Ensure input data type matches model precision
+        if hasattr(self, 'precision'):
+            if self.precision == 'float16':
+                x = x.half()
+            elif self.precision == 'float64':
+                x = x.double()
+
         aggregated = self.propagate(edge_index, x=x)
         aggregated = aggregated + self.propagate(edge_index, x=aggregated)
-        
-        # Identity transformation (replace weight multiplication)
-        out = aggregated
-        
-        return out
+        aggregated = aggregated + self.propagate(edge_index, x=aggregated)
+        aggregated = aggregated + self.propagate(edge_index, x=aggregated)
+        return aggregated
 
 
 def generate_embedding(input_path: str, output_path: str):
@@ -119,25 +117,25 @@ def generate_embedding(input_path: str, output_path: str):
         output_path: Path to save generated embeddings
     """
     print(f"Loading data from: {input_path}")
-    
+
     # Load dataset
     dataset = torch.load(input_path)
-    
+
     print("Dataset loaded successfully")
     print(f"Node features shape: {dataset.x.shape}")
     print(f"Edge index shape: {dataset.edge_index.shape}")
-    
+
     # Initialize convolution layer
-    conv = IdentitySAGEConv(16, 4, aggr='mean')
-    
+    conv = IdentitySAGEConv(64, 64, aggr='mean')
+
     # Generate embeddings
     embeddings = conv(dataset.x, dataset.edge_index)
-    
+
     print(f"Generated embeddings shape: {embeddings.shape}")
-    
+
     # Save embeddings in C++ compatible format
     algorithms.save_tensor_for_cpp(embeddings, output_path)
-    
+
     print(f"Embeddings saved to: {output_path}")
     print(f"Sample embedding: {embeddings[0] if len(embeddings) > 0 else 'None'}")
 
@@ -161,7 +159,7 @@ def main():
     """Main function to run embedding generation"""
     # Parse command line arguments
     args = parse_arguments()
-    
+
     # Generate embeddings
     generate_embedding(args.input_path, args.output_path)
 

@@ -130,8 +130,8 @@ def save_tensor_for_cpp(tensor: torch.Tensor, root_path: str):
     meta_path = root_path + "meta.yaml"
     # 保存二进制
     tensor = tensor.float()
-    print(tensor)
-    np_array = tensor.detach().numpy().astype(np.float32)
+    # print(tensor)
+    np_array = tensor.detach().cpu().numpy().astype(np.float32)
     np_array.tofile(bin_path)
 
     # 保存元数据

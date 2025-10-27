@@ -1,30 +1,49 @@
 # Configuration file for GNN training
 
+precision: float32  # 或 float16
+
 paths:
   pattern_paths:
-    - "/data/zhuxiaoke/workspace/Torch/pt/queries/5-path.pt"
-    - "/data/zhuxiaoke/workspace/Torch/pt/queries/5-star.pt"
-    - "/data/zhuxiaoke/workspace/Torch/pt/queries/tree.pt"
-  graph_path: "/data/zhuxiaoke/workspace/Torch/pt/livejournal_1.0_fix.pt"
+    - "/data/zhuxiaoke/workspace/Torch/pt/queries/1000_2/q100.pt"
+    - "/data/zhuxiaoke/workspace/Torch/pt/queries/1000_2/q200.pt"
+    - "/data/zhuxiaoke/workspace/Torch/pt/queries/1000_2/q300.pt"
+    - "/data/zhuxiaoke/workspace/Torch/pt/queries/1000_2/q400.pt"
+    - "/data/zhuxiaoke/workspace/Torch/pt/queries/1000_2/q500.pt"
+    - "/data/zhuxiaoke/workspace/Torch/pt/queries/1000_2/q600.pt"
+    - "/data/zhuxiaoke/workspace/Torch/pt/queries/1000_2/q700.pt"
+    - "/data/zhuxiaoke/workspace/Torch/pt/queries/1000_2/q800.pt"
+    - "/data/zhuxiaoke/workspace/Torch/pt/queries/1000_2/q900.pt"
+    - "/data/zhuxiaoke/workspace/Torch/pt/queries/1000/q350.pt"
+  graph_path: "/data/zhuxiaoke/workspace/Torch/pt/livejournal_label_range_50.pt"
   gt_paths:
-    - "/data/zhuxiaoke/workspace/Torch/gt/livejournal/livejournal_clique.gt"
-    - "/data/zhuxiaoke/workspace/Torch/gt/livejournal/livejournal_tree.gt"
-    - "/data/zhuxiaoke/workspace/Torch/gt/livejournal/livejournal_5-star.gt"
-  output_dir: "/data/zhuxiaoke/workspace/Torch/models/livejournal_npml_fix/"
+    - "/data/zhuxiaoke/workspace/Torch/gt/1000_2/livejournal_q100.gt"
+    - "/data/zhuxiaoke/workspace/Torch/gt/1000_2/livejournal_q200.gt"
+    - "/data/zhuxiaoke/workspace/Torch/gt/1000_2/livejournal_q300.gt"
+    - "/data/zhuxiaoke/workspace/Torch/gt/1000_2/livejournal_q400.gt"
+    - "/data/zhuxiaoke/workspace/Torch/gt/1000_2/livejournal_q500.gt"
+    - "/data/zhuxiaoke/workspace/Torch/gt/1000_2/livejournal_q600.gt"
+    - "/data/zhuxiaoke/workspace/Torch/gt/1000_2/livejournal_q700.gt"
+    - "/data/zhuxiaoke/workspace/Torch/gt/1000_2/livejournal_q800.gt"
+    - "/data/zhuxiaoke/workspace/Torch/gt/1000_2/livejournal_q900.gt"
+    - "/data/zhuxiaoke/workspace/Torch/gt/1000/livejournal_q350.gt"
+  output_dir: "/data/zhuxiaoke/workspace/Torch/models/1000_2/livejournal_label_range_50_model4/"
 
 model:
-  in_channels: 64
-  hidden_channels: 64
-  out_channels: 64
+  in_channels: 64 # default 16
+  hidden_channels: 64 # default 64
+  out_channels: 64 # default 64
+
+mlp_model:
+  hidden_channels: 16 # default 8
 
 similarity_generator:
-  embedding_size: 64
+  embedding_size: 64 # default 64
   similarity_method: "euclidean"
   normalize: true
-  combination_weights: [0.6, 0.2, 0.2]
+  combination_weights: [ 0.6, 0.2, 0.2 ]
 
 training:
-  learning_rate: 0.01
-  epochs: 10000
+  learning_rate: 0.0003
+  epochs: 5000
 
 test_vertex_id: 590

@@ -2,6 +2,15 @@ import numpy as np
 from typing import Union, List, Optional
 from enum import Enum
 import torch
+import torch.nn as nn
+from torch.cuda.amp import GradScaler, autocast
+
+# 检查GPU是否可用
+# device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+device = 'cpu'
+print(f"使用设备: {device}")
+
+scaler = GradScaler()
 
 
 class SimilarityMethod(Enum):
@@ -50,33 +59,33 @@ class SimilarityEmbeddingGenerator:
         else:
             self.combination_weights = None
 
-    def _normalize(self, embedding: np.ndarray) -> np.ndarray:
+    def _normalize(self, embedding: torch.Tensor) -> torch.Tensor:
         """归一化embedding"""
-        norm = np.linalg.norm(embedding)
+        norm = torch.norm(embedding)
         return embedding / (norm + 1e-8)  # 添加小常数防止除以0
 
-    def _cosine_similarity(self, emb1: np.ndarray, emb2: np.ndarray) -> float:
+    def _cosine_similarity(self, emb1: torch.Tensor, emb2: torch.Tensor) -> float:
         """计算余弦相似度"""
         if self.normalize:
             emb1 = self._normalize(emb1)
             emb2 = self._normalize(emb2)
-        return float(np.dot(emb1, emb2))
+        return float(torch.dot(emb1, emb2))
 
-    def _dot_product(self, emb1: np.ndarray, emb2: np.ndarray) -> float:
+    def _dot_product(self, emb1: torch.Tensor, emb2: torch.Tensor) -> float:
         """计算点积相似度"""
-        return float(np.dot(emb1, emb2))
+        return float(torch.dot(emb1, emb2))
 
-    def _euclidean_distance(self, emb1: np.ndarray, emb2: np.ndarray) -> float:
+    def _euclidean_distance(self, emb1: torch.Tensor, emb2: torch.Tensor) -> float:
         """计算欧氏距离(转换为相似度)"""
-        distance = np.square(emb1 - emb2)
-        return distance
+        distance = torch.sum((emb1 - emb2) ** 2)
+        return float(distance)
 
-    def _manhattan_distance(self, emb1: np.ndarray, emb2: np.ndarray) -> float:
+    def _manhattan_distance(self, emb1: torch.Tensor, emb2: torch.Tensor) -> float:
         """计算曼哈顿距离(转换为相似度)"""
-        distance = np.sum(np.abs(emb1 - emb2))
+        distance = torch.sum(torch.abs(emb1 - emb2))
         return float(1 / (1 + distance))  # 将距离转换为[0,1]的相似度
 
-    def _combined_similarity(self, emb1: np.ndarray, emb2: np.ndarray) -> List[float]:
+    def _combined_similarity(self, emb1: torch.Tensor, emb2: torch.Tensor) -> List[float]:
         """组合多种相似度方法"""
         cosine = self._cosine_similarity(emb1, emb2)
         dot = self._dot_product(emb1, emb2)
@@ -94,8 +103,8 @@ class SimilarityEmbeddingGenerator:
 
         return combined
 
-    def generate(self, emb1: Union[List[float], np.ndarray],
-                 emb2: Union[List[float], np.ndarray]) -> Union[float, List[float]]:
+    def generate(self, emb1: Union[List[float], np.ndarray, torch.Tensor],
+                 emb2: Union[List[float], np.ndarray, torch.Tensor]) -> Union[float, List[float]]:
         """
         生成相似度embedding
 
@@ -106,13 +115,17 @@ class SimilarityEmbeddingGenerator:
         返回:
             相似度embedding(单个值或列表)
         """
-        # 转换为numpy数组
-        # emb1 = np.array(emb1, dtype=np.float32)
-        # emb2 = np.array(emb2, dtype=np.float32)
-        emb1 = emb1.detach().numpy().astype(np.float32)
-        emb2 = emb2.detach().numpy().astype(np.float32)
-        # emb1 = torch.detach().numpy(emb1, dtype=np.float32)
-        # emb2 = torch.detach().numpy(emb2, dtype=np.float32)
+        # 转换为torch张量并移动到GPU
+        if isinstance(emb1, (list, np.ndarray)):
+            emb1 = torch.tensor(emb1, dtype=torch.float32, device=device)
+        if isinstance(emb2, (list, np.ndarray)):
+            emb2 = torch.tensor(emb2, dtype=torch.float32, device=device)
+
+        # 如果已经是tensor但不在GPU上，移动到GPU
+        if isinstance(emb1, torch.Tensor) and not emb1.is_cuda:
+            emb1 = emb1.to(device)
+        if isinstance(emb2, torch.Tensor) and not emb2.is_cuda:
+            emb2 = emb2.to(device)
 
         # 验证维度
         assert emb1.shape == (self.embedding_size,), f"emb1维度应为({self.embedding_size},)"
@@ -133,8 +146,9 @@ class SimilarityEmbeddingGenerator:
             raise ValueError(f"未知的相似度计算方法: {self.similarity_method}")
 
     def batch_generate(self,
-                       emb_list1: List[Union[List[float], np.ndarray]],
-                       emb_list2: List[Union[List[float], np.ndarray]]) -> List[Union[float, List[float]]]:
+                       emb_list1: List[Union[List[float], np.ndarray, torch.Tensor]],
+                       emb_list2: List[Union[List[float], np.ndarray, torch.Tensor]]) -> List[
+        Union[float, List[float]]]:
         """
         批量生成相似度embedding
 
@@ -149,112 +163,174 @@ class SimilarityEmbeddingGenerator:
         return [self.generate(emb1, emb2) for emb1, emb2 in zip(emb_list1, emb_list2)]
 
 
-np
+class Perceptron(nn.Module):
+    """支持GPU训练和混合精度的多层感知机"""
 
+    def __init__(self, input_dim, hidden_dim=8, dtype=torch.float32):
+        """
+        初始化MLP
 
-class Perceptron:
-
-    def __init__(self, input_dim, hidden_dim=8):
-        # 初始化参数
+        参数:
+            input_dim (int): 输入维度
+            hidden_dim (int): 隐藏层维度
+            dtype: 数据类型，支持 torch.float16, torch.float32, torch.float64
+        """
+        super(Perceptron, self).__init__()
         self.input_dim = input_dim
         self.hidden_dim = hidden_dim
+        self.dtype = dtype
 
-        # 第一层权重和偏置 (输入层 -> 隐藏层)
-        self.W1 = np.random.randn(input_dim, hidden_dim) * 0.01
-        self.b1 = np.zeros(hidden_dim)
+        # 验证数据类型
+        if dtype not in [torch.float16, torch.float32, torch.float64]:
+            raise ValueError(f"不支持的dtype: {dtype}，支持的类型: torch.float16, torch.float32, torch.float64")
 
-        # 第二层权重和偏置 (隐藏层 -> 输出层)
-        self.W2 = np.random.randn(hidden_dim, 1) * 0.01
-        self.b2 = np.zeros(1)
+        print(f"初始化MLP，精度: {dtype}，设备: {device}")
 
-        # def __init__(self, input_dim):
-        #    # 初始化权重和偏置
-        #    self.weights = np.random.randn(input_dim)
-        # self.bias = np.random.randn()
+        # 使用PyTorch的线性层，会自动初始化权重
+        self.fc1 = nn.Linear(input_dim, hidden_dim)
+        self.fc2 = nn.Linear(hidden_dim, 1)
 
-    def sigmoid(self, x):
-        return 1 / (1 + np.exp(-x))
-
-    def relu(self, x):
-        return np.maximum(0, x)
-        # 第一层前向传播
-        self.z1 = np.dot(x, self.W1) + self.b1
-        self.a1 = self.relu(self.z1)  # 隐藏层使用ReLU激活
-
-        # 第二层前向传播
-        self.z2 = np.dot(self.a1, self.W2) + self.b2
-        self.a2 = self.sigmoid(self.z2)  # 输出层使用Sigmoid激活
-
-        return self.a2 > 0.5
-
-    def compute_loss(self, y_pred, y_true):
-        # 使用二元交叉熵损失
-        epsilon = 1e-15
-        y_pred = np.clip(y_pred, epsilon, 1 - epsilon)
-        return -np.mean(y_true * np.log(y_pred) + (1 - y_true) * np.log(1 - y_pred))
+        # 将模型移动到GPU
+        self.to(device)
+        # 设置数据类型
+        self.to(dtype=dtype)
 
     def forward(self, x):
-        # 第一层前向传播
-        self.z1 = np.dot(x, self.W1) + self.b1
+        """前向传播"""
+        # 确保输入在正确的设备和数据类型上
+        if not x.is_cuda:
+            x = x.to(device)
+        if x.dtype != self.dtype:
+            x = x.to(dtype=self.dtype)
 
-        self.a1 = self.relu(self.z1)  # 隐藏层使用ReLU激活
+        x = torch.relu(self.fc1(x))  # 隐藏层使用ReLU激活
+        x = torch.sigmoid(self.fc2(x))  # 输出层使用Sigmoid激活
+        return x
 
-        # 第二层前向传播
-        self.z2 = np.dot(self.a1, self.W2) + self.b2
+    def compute_loss(self, y_pred, y_true):
+        """计算二元交叉熵损失"""
+        epsilon = 1e-15
+        # 根据数据类型调整epsilon
+        if self.dtype == torch.float16:
+            epsilon = 1e-4
+        elif self.dtype == torch.float64:
+            epsilon = 1e-12
 
-        self.a2 = self.sigmoid(self.z2)  # 输出层使用Sigmoid激活
+        loss = (torch.mean(((y_pred) - (y_true)) ** 2))
+        # loss = torch.mean(torch.abs(y_pred - y_true))
 
-        return self.a2
+        return loss
+        # y_pred = torch.clamp(y_pred, epsilon, 1 - epsilon)
+        # return torch.mean(y_true * torch.log(y_pred) + (1 - y_true) * torch.log(1 - y_pred))
 
-    def backward(self, x, y_true, y_pred, learning_rate):
-        m = x.shape[0]  # 样本数量
+    def train_model(self, X, y, learning_rate=0.01, epochs=1000, batch_size=32, verbose=True):
+        """训练模型"""
+        # 转换为PyTorch张量并移动到GPU
+        if not isinstance(X, torch.Tensor):
+            X = torch.tensor(X, dtype=self.dtype, device=device)
+        if not isinstance(y, torch.Tensor):
+            y = torch.tensor(y, dtype=self.dtype, device=device)
 
-        # 输出层梯度
-        dz2 = y_pred - y_true.reshape(-1, 1)
-        dW2 = np.dot(self.a1.T, dz2) / m
-        db2 = np.sum(dz2, axis=0) / m
+        # 确保y是二维的
+        y = y.view(-1, 1)
 
-        # 隐藏层梯度
-        da1 = np.dot(dz2, self.W2.T)
-        dz1 = da1 * (self.z1 > 0)  # ReLU导数
-        dW1 = np.dot(x.T, dz1) / m
-        db1 = np.sum(dz1, axis=0) / m
+        # 使用PyTorch优化器
+        # optimizer = torch.optim.Adam(self.parameters(), lr=learning_rate)
+        optimizer = torch.optim.AdamW(
+            self.parameters(),
+            lr=learning_rate,  # 可以与Adam相同的学习率
+            betas=(0.9, 0.999),  # 动量参数
+            eps=1e-8,  # 数值稳定性
+            weight_decay=1e-4,  # 解耦的权重衰减，比L2更有效
+            amsgrad=False  # 是否使用AMSGrad变体
+        )
 
-        # 更新参数
-        self.W2 -= learning_rate * dW2
-        self.b2 -= learning_rate * db2
-        self.W1 -= learning_rate * dW1
-        self.b1 -= learning_rate * db1
-
-    def train(self, X, y, learning_rate=0.01, epochs=1000, batch_size=32):
         losses = []
         for epoch in range(epochs):
+            epoch_loss = 0
+            batch_count = 0
+
             # 小批量训练
             for i in range(0, len(X), batch_size):
                 X_batch = X[i:i + batch_size]
                 y_batch = y[i:i + batch_size]
 
-                # 前向传播
-                y_pred = self.forward(X_batch)
+                # 使用混合精度训练
+                # optimizer.zero_grad()
+                '''
+                with autocast():
+                    y_pred = self(X_batch)
+                    loss = self.compute_loss(y_pred, y_batch)
 
-                # 计算损失
+                # 使用GradScaler进行梯度缩放
+                scaler.scale(loss).backward()
+                scaler.step(optimizer)
+                scaler.update()
+                '''
+
+                # 不使用autocast
+
+                y_pred = self(X_batch)
                 loss = self.compute_loss(y_pred, y_batch)
-                losses.append(loss)
+                # if not loss.requires_grad:
+                # 如果损失不需要梯度，重新创建并设置requires_grad=True
+                # loss = loss.clone().detach().requires_grad_(True)
+                # print('--------')
 
-                # 反向传播和参数更新
-                self.backward(X_batch, y_batch, y_pred, learning_rate)
+                # 不使用GradScaler
+                loss.backward()
 
-            if epoch % 100 == 0:
-                print(f"Epoch {epoch}, Loss: {loss:.4f}")
+                optimizer.step()
+
+                epoch_loss += loss.item()
+                batch_count += 1
+
+            avg_loss = epoch_loss / batch_count if batch_count > 0 else 0
+            losses.append(avg_loss)
+
+            if verbose and epoch % 10 == 0:
+                print(f"Epoch {epoch}, Loss: {avg_loss:.6f}, dtype: {self.dtype}")
 
         return losses
 
     def predict(self, X, threshold=0.5):
-        # 获取概率预测
-        y_prob = self.forward(X)
-        # 转换为0/1预测
-        y_pred = (y_prob > threshold).astype(int)
-        return y_pred.flatten()
+        """预测"""
+        self.eval()  # 设置为评估模式
+        with torch.no_grad():
+            # 转换为PyTorch张量
+            if not isinstance(X, torch.Tensor):
+                X = torch.tensor(X, dtype=self.dtype, device=device)
+
+            # 获取概率预测
+            y_prob = self(X)
+            # 转换为0/1预测
+            y_pred = torch.tensor(y_prob > threshold).int()
+            return y_pred.cpu().numpy().flatten()
+
+
+def get_parameters(self):
+    """获取模型参数"""
+    return {
+        'fc1_weight': self.fc1.weight.data.cpu().numpy(),
+        'fc1_bias': self.fc1.bias.data.cpu().numpy(),
+        'fc2_weight': self.fc2.weight.data.cpu().numpy(),
+        'fc2_bias': self.fc2.bias.data.cpu().numpy(),
+        'dtype': self.dtype
+    }
+
+
+def set_parameters(self, params):
+    """设置模型参数"""
+    self.fc1.weight.data = torch.tensor(params['fc1_weight'], dtype=self.dtype, device=device)
+    self.fc1.bias.data = torch.tensor(params['fc1_bias'], dtype=self.dtype, device=device)
+    self.fc2.weight.data = torch.tensor(params['fc2_weight'], dtype=self.dtype, device=device)
+    self.fc2.bias.data = torch.tensor(params['fc2_bias'], dtype=self.dtype, device=device)
+
+
+# 兼容性包装器，保持原有接口
+class MLP(Perceptron):
+    """MLP别名，保持向后兼容"""
+    pass
 
 
 if __name__ == "__main__":
@@ -280,20 +356,33 @@ if __name__ == "__main__":
     batch_similarities = generator.batch_generate(batch_emb1, batch_emb2)
     print(f"批量相似度结果: {batch_similarities}")
 
-    print("----perceptro----")
+    print("\n" + "=" * 50)
+    print("测试不同精度的MLP (GPU训练)")
+    print("=" * 50)
 
     # 生成一些非线性可分的数据
     np.random.seed(42)
     X = np.random.randn(200, 2)
     y = ((X[:, 0] > 0) & (X[:, 1] > 0)).astype(int)
 
-    # 创建MLP
-    mlp = MLP(input_dim=2, hidden_dim=16)
+    # 测试不同精度的MLP
+    dtypes = [torch.float16, torch.float32, torch.float64]
 
-    # 训练
-    losses = mlp.train(X, y, learning_rate=0.1, epochs=1000, batch_size=32)
+    for dtype in dtypes:
+        print(f"\n测试 {dtype} 精度:")
 
-    # 测试
-    X_test = np.array([[0.5, 0.5], [-0.5, 0.5], [0.5, -0.5], [-0.5, -0.5]])
-    predictions = mlp.predict(X_test)
-    print("Predictions:", predictions)
+        # 创建MLP
+        mlp = Perceptron(input_dim=2, hidden_dim=16, dtype=dtype)
+
+        # 训练
+        losses = mlp.train_model(X, y, learning_rate=0.1, epochs=500, batch_size=32, verbose=False)
+
+        # 测试
+        X_test = np.array([[0.5, 0.5], [-0.5, 0.5], [0.5, -0.5], [-0.5, -0.5]])
+        predictions = mlp.predict(X_test)
+        final_loss = losses[-1] if losses else 0
+
+        print(f"最终损失: {final_loss:.6f}")
+        print(f"预测结果: {predictions}")
+        print(f"参数数据类型: {mlp.fc1.weight.dtype}")
+        print(f"参数所在设备: {mlp.fc1.weight.device}")

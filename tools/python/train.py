@@ -283,21 +283,24 @@ def multi_train_gnn_model():
     # p2_emb_path = "/data/zhuxiaoke/workspace/Torch/models/dblp_npml1/p2_emb/"
     # p3_emb_path = "/data/zhuxiaoke/workspace/Torch/models/dblp_npml1/p3_emb/"
 
-    # pattern_path_1 = "/data/zhuxiaoke/workspace/Torch/pt/queries/clique.pt"
-    # pattern_path_2 = "/data/zhuxiaoke/workspace/Torch/pt/queries/tree.pt"
-    # pattern_path_3 = "/data/zhuxiaoke/workspace/Torch/pt/queries/5-star.pt"
-    # graph_path = "/data/zhuxiaoke/workspace/Torch/pt/patents.pt"
-    # gt_path_3 = "/data/zhuxiaoke/workspace/Torch/gt/patents/patents_clique.gt"
-    # gt_path_1 = "/data/zhuxiaoke/workspace/Torch/gt/patents/patents_tree.gt"
-    # gt_path_2 = "/data/zhuxiaoke/workspace/Torch/gt/patents/patents_5-star.gt"
-    # W1_path = "/data/zhuxiaoke/workspace/Torch/models/patents_epoch20000/W1/"
-    # W2_path = "/data/zhuxiaoke/workspace/Torch/models/patents_epoch20000/W2/"
-    # b1_path = "/data/zhuxiaoke/workspace/Torch/models/patents_epoch20000/b1/"
-    # b2_path = "/data/zhuxiaoke/workspace/Torch/models/patents_epoch20000/b2/"
-    # gnn_emb_path = "/data/zhuxiaoke/workspace/Torch/models/patents_epoch20000/gnn_emb/"
-    # p1_emb_path = "/data/zhuxiaoke/workspace/Torch/models/patents_epoch20000/p1_emb/"
-    # p2_emb_path = "/data/zhuxiaoke/workspace/Torch/models/patents_epoch20000/p2_emb/"
-    # p3_emb_path = "/data/zhuxiaoke/workspace/Torch/models/patents_epoch20000/p3_emb/"
+    pattern_path_1 = "/data/zhuxiaoke/workspace/Torch/pt/queries/tree.pt"
+    #pattern_path_2 = "/data/zhuxiaoke/workspace/Torch/pt/queries/clique.pt"
+    pattern_path_2 = "/data/zhuxiaoke/workspace/Torch/pt/queries/5-star.pt"
+    #pattern_path_3 = "/data/zhuxiaoke/workspace/Torch/pt/queries/tree.pt"
+    pattern_path_3 = "/data/zhuxiaoke/workspace/Torch/pt/queries/5-star.pt"
+    graph_path = "/data/zhuxiaoke/workspace/Torch/pt/patents.pt"
+    gt_path_1 = "/data/zhuxiaoke/workspace/Torch/gt/patents/patents_tree.gt"
+    #gt_path_2 = "/data/zhuxiaoke/workspace/Torch/gt/patents/patents_clique.gt"
+    gt_path_2 = "/data/zhuxiaoke/workspace/Torch/gt/patents/patents_5-star.gt"
+    gt_path_3 = "/data/zhuxiaoke/workspace/Torch/gt/patents/patents_5-star.gt"
+    W1_path = "/data/zhuxiaoke/workspace/Torch/models/patents_epoch5000/W1/"
+    W2_path = "/data/zhuxiaoke/workspace/Torch/models/patents_epoch5000/W2/"
+    b1_path = "/data/zhuxiaoke/workspace/Torch/models/patents_epoch5000/b1/"
+    b2_path = "/data/zhuxiaoke/workspace/Torch/models/patents_epoch5000/b2/"
+    gnn_emb_path = "/data/zhuxiaoke/workspace/Torch/models/patents_epoch5000/gnn_emb/"
+    p1_emb_path = "/data/zhuxiaoke/workspace/Torch/models/patents_epoch5000/p1_emb/"
+    p2_emb_path = "/data/zhuxiaoke/workspace/Torch/models/patents_epoch5000/p2_emb/"
+    p3_emb_path = "/data/zhuxiaoke/workspace/Torch/models/patents_epoch5000/p3_emb/"
 
     graph_dataset = torch.load(graph_path)
     pattern_dataset_1 = torch.load(pattern_path_1)
@@ -324,6 +327,16 @@ def multi_train_gnn_model():
     # print("gt1:", gt_array_1)
     # print("gt2:", gt_array_2)
     # print("gt3:", gt_array_3)
+    import numpy as np
+
+    print(np.shape(gt_array_3))
+    original_array = gt_array_3
+    copied_arrays = [np.copy(original_array) for _ in range(100)]
+    gt_array_3 = copied_arrays
+    print(np.shape(gt_array_3))
+    gt_array_3 = np.reshape(gt_array_3, (-1))
+    print(np.shape(gt_array_3))
+
 
     generator = models.SimilarityEmbeddingGenerator(
         embedding_size=64,
@@ -394,7 +407,7 @@ def multi_train_gnn_model():
 
     input_dim = x.shape[1]
     perceptron = models.Perceptron(input_dim=input_dim)
-    perceptron.train(x_train, y_train, learning_rate=0.01, epochs=10000)
+    perceptron.train(x_train, y_train, learning_rate=0.01, epochs=2000)
 
     results = perceptron.predict(x_test)
     print(results)
@@ -412,8 +425,8 @@ def multi_train_gnn_model():
 
     algorithms.save_tensor_for_cpp(gnn_embedding, gnn_emb_path)
     algorithms.save_tensor_for_cpp(p1_embedding, p1_emb_path)
-    algorithms.save_tensor_for_cpp(p2_embedding, p1_emb_path)
-    algorithms.save_tensor_for_cpp(p3_embedding, p2_emb_path)
+    algorithms.save_tensor_for_cpp(p2_embedding, p2_emb_path)
+    algorithms.save_tensor_for_cpp(p3_embedding, p3_emb_path)
 
     print("========TEST=========")
     similarity = generator.generate(pattern_embedding_1[0], graph_embedding[590])
