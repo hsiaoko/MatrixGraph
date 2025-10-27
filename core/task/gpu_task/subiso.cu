@@ -105,8 +105,8 @@ __host__ void SubIso::LoadData() {
 
   g_.Read(data_graph_path_);
 
-  p_.PrintGraph(10);
-  g_.PrintGraph(1);
+  //p_.PrintGraph(10);
+  //g_.PrintGraph(1);
 }
 
 __host__ void SubIso::Matching(const ImmutableCSR& p, const ImmutableCSR& g) {
@@ -195,7 +195,7 @@ __host__ void SubIso::Matching(const ImmutableCSR& p, const ImmutableCSR& g) {
 
   cudaDeviceSynchronize();
 
-  matches.Print(3);
+  //matches.Print(3);
 }
 
 __host__ void SubIso::WOJMatching(const ImmutableCSR& p,

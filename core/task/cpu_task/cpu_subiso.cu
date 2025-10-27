@@ -251,25 +251,25 @@ static bool MatrixFilter(
   float z1[64] = {0};
   float z2[1] = {0};
 
-  MatrixOpsKernelWrapper::CPUMatMult(sim_vec, m_vec[2].GetPtr(), z1, 1,
-                                     m_vec[2].get_x(), m_vec[2].get_y(), false,
-                                     true);
+  MatrixOpsKernelWrapper::CPUOnlyMatMult(sim_vec, m_vec[2].GetPtr(), z1, 1,
+                                         m_vec[2].get_y(), m_vec[2].get_x(),
+                                         false, true);
 
-  MatrixOpsKernelWrapper::CPUMatAdd(z1, m_vec[3].GetPtr(), m_vec[3].get_x(),
-                                    m_vec[3].get_y());
+  MatrixOpsKernelWrapper::CPUOnlyMatAdd(z1, m_vec[3].GetPtr(), m_vec[3].get_x(),
+                                        m_vec[3].get_y());
 
   MatrixOpsKernelWrapper::CPURelu(z1, m_vec[3].get_x(), m_vec[3].get_y());
 
-  MatrixOpsKernelWrapper::CPUMatMult(z1, m_vec[4].GetPtr(), z2, 1,
-                                     m_vec[4].get_x(), m_vec[4].get_y(), false,
-                                     true);
+  MatrixOpsKernelWrapper::CPUOnlyMatMult(z1, m_vec[4].GetPtr(), z2, 1,
+                                         m_vec[4].get_x(), m_vec[4].get_y(),
+                                         false, true);
 
-  MatrixOpsKernelWrapper::CPUMatAdd(z2, m_vec[5].GetPtr(), m_vec[5].get_x(),
-                                    m_vec[5].get_y());
+  MatrixOpsKernelWrapper::CPUOnlyMatAdd(z2, m_vec[5].GetPtr(), m_vec[5].get_x(),
+                                        m_vec[5].get_y());
 
   MatrixOpsKernelWrapper::CPUSigmoid(z2, 1, 1);
 
-  if (z2[0] < 0.3) {
+  if (z2[0] < 0.1) {
     return false;
   }
 
@@ -605,6 +605,20 @@ static void DFSExtend(
     auto u_dst =
         exec_plan.get_sequential_exec_path_in_edges_ptr()->GetPtr()[2 * i + 1];
 
+    if ((pre_v_idx == kMaxVertexID) ^ (u_src == kMaxVertexID)) continue;
+
+    if (!LabelFilter(u_dst, v_idx, p, g)) {
+      __sync_fetch_and_add(&label_filter_count, 1);
+      continue;
+    }
+
+    if (level == 1) {
+      if (!MatrixFilter(u_src, pre_v_idx, p, g, m_vec, m_unified_buffer_vec)) {
+        __sync_fetch_and_add(&gnn_filter_count, 1);
+        continue;
+      }
+    }
+
     if (IsFeasible(p, g, m_vec, m_unified_buffer_vec, u_src, u_dst, pre_v_idx,
                    v_idx, local_matches)) {
       VertexID offset = local_matches->size[i];
@@ -712,7 +726,6 @@ static inline void Enumerating(
             bool is_match = true;
             for (int _ = 0; _ < exec_plan.get_n_edges(); _++) {
               if (local_matches.size[_] == 0) {
-                // std::cout << local_matches.size[_] << std::endl;
                 is_match = false;
               }
             }
@@ -964,8 +977,8 @@ void CPUSubIso::LoadData() {
   auto* g_vlabel = g_.GetVLabelBasePointer();
   auto* p_vlabel = p_.GetVLabelBasePointer();
 
-  p_.PrintGraph(100);
-  g_.PrintGraph(100);
+  // p_.PrintGraph(100);
+  // g_.PrintGraph(100);
 
   if (matrix_path1_ != "" && matrix_path2_ != "" && matrix_path3_ != "" &&
       matrix_path4_ != "" && matrix_path5_ != "" && matrix_path6_ != "") {

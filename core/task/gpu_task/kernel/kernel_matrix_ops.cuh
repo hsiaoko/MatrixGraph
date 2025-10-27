@@ -41,6 +41,10 @@ class MatrixOpsKernelWrapper {
                          int n, bool transposed_a = false,
                          bool transposed_b = false);
 
+  static void CPUOnlyMatMult(const float* A, const float* B, float* C, int m,
+                             int k, int n, bool transposed_a = false,
+                             bool transposed_b = false);
+
   static void Relu(const cudaStream_t& stream, float* A, int m, int n);
 
   static void CPURelu(float* A, int m, int n);
@@ -53,6 +57,8 @@ class MatrixOpsKernelWrapper {
                      int n);
 
   static void CPUMatAdd(float* A, float* B, int m, int n);
+
+  static void CPUOnlyMatAdd(float* A, float* B, int m, int n);
 
   static void Transpose(const cudaStream_t& stream, float* A, float* B, int m,
                         int n);

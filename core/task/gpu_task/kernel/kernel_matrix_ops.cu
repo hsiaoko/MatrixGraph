@@ -415,6 +415,51 @@ void MatrixOpsKernelWrapper::CPUMatMult(const float* A, const float* B,
   }
 }
 
+void MatrixOpsKernelWrapper::CPUOnlyMatMult(const float* A, const float* B,
+                                            float* C, int m, int k, int n,
+                                            bool transposed_a,
+                                            bool transposed_b) {
+  ParametersMatrix<float> params{
+      .A = A, .B = B, .C = C, .m = m, .k = k, .n = n};
+
+  if (transposed_b) {
+    // B 是转置的：A(m×k) × B^T(n×k) = C(m×n)
+    for (int i = 0; i < m; i++) {    // m=1
+      for (int j = 0; j < n; j++) {  // n=2
+        float sum = 0.0f;
+        for (int p = 0; p < k; p++) {  // k=64
+          // A[i][p] * B[j][p] 因为B是转置的
+          sum += A[i * k + p] * B[j * k + p];
+        }
+        C[i * n + j] = sum;
+      }
+    }
+  } else if (transposed_a) {
+    // A 是转置的：A^T(k×m) × B(k×n) = C(m×n)
+    for (int i = 0; i < m; i++) {
+      for (int j = 0; j < n; j++) {
+        float sum = 0.0f;
+        for (int p = 0; p < k; p++) {
+          // A[p][i] * B[p][j] 因为A是转置的
+          sum += A[p * m + i] * B[p * n + j];
+        }
+        C[i * n + j] = sum;
+      }
+    }
+  } else {
+    // 都不转置：A(m×k) × B(k×n) = C(m×n)
+    for (int i = 0; i < m; i++) {
+      for (int j = 0; j < n; j++) {
+        float sum = 0.0f;
+        for (int p = 0; p < k; p++) {
+          sum += A[i * k + p] * B[p * n + j];
+        }
+        C[i * n + j] = sum;
+      }
+    }
+  }
+}
+
 void MatrixOpsKernelWrapper::CPUSigmoid(float* A, int m, int n) {
   SigmoidSIMD(A, m * n);
 }
@@ -425,6 +470,27 @@ void MatrixOpsKernelWrapper::CPURelu(float* A, int m, int n) {
 
 void MatrixOpsKernelWrapper::CPUMatAdd(float* A, float* B, int m, int n) {
   MatrixAddSIMD(A, B, m, n);
+}
+
+void MatrixOpsKernelWrapper::CPUOnlyMatAdd(float* A, float* B, int m, int n) {
+  // 参数检查
+  if (A == nullptr || B == nullptr) {
+    std::cerr << "Error: Input matrices cannot be null" << std::endl;
+    return;
+  }
+
+  if (m <= 0 || n <= 0) {
+    std::cerr << "Error: Matrix dimensions must be positive" << std::endl;
+    return;
+  }
+
+  // 矩阵加法：A = A + B
+  for (int i = 0; i < m; i++) {
+    for (int j = 0; j < n; j++) {
+      int index = i * n + j;
+      A[index] += B[index];
+    }
+  }
 }
 
 void MatrixOpsKernelWrapper::CPUSimdSquaredDifference(const float* v_a,
