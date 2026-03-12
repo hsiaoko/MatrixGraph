@@ -324,12 +324,12 @@ class Matches {
   VertexID* get_matches_data_ptr() const { return matches_data_.GetPtr(); }
 
   VertexID get_header_first_by_idx(VertexID idx) {
-    assert(i < header_.size());
+    // assert(i < header_.size());
     return header_[idx].first;
   }
 
   VertexID get_header_second_by_idx(VertexID idx) {
-    assert(i < header_.size());
+    // assert(i < header_.size());
     return header_[idx].second;
   }
 
