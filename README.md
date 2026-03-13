@@ -3,54 +3,51 @@ MatrixGraph is a C++/CUDA library designed to ease parallel programming for grap
 
 # Build Options
 
-所有 CMake 编译选项如下，在配置时通过 `-D` 传入：
+All CMake options are passed via `-D` during configuration:
 
-## 完整选项列表
+## Option Reference
 
-| 选项 | 类型 | 默认值 | 说明 |
-|------|------|--------|------|
-| `CMAKE_BUILD_TYPE` | string | `Debug` | 构建类型：`Debug` 或 `Release` |
-| `ENABLE_AVX` | bool | `ON` | 启用 AVX/AVX2 指令（仅 C++ 代码，CUDA 不启用） |
-| `USE_JEMALLOC` | bool | `OFF` | 启用 jemalloc 内存分配器 |
-| `TEST` | bool | `OFF` | 启用 GoogleTest 单元测试 |
-| `CUDA_ARCHITECTURES` | string | `sm_70` | CUDA 目标架构（如 sm_60, sm_70, sm_80） |
-| `CMAKE_CUDA_HOST_COMPILER` | string | `g++-13` | nvcc 使用的 Host 编译器 |
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `CMAKE_BUILD_TYPE` | string | `Debug` | Build type: `Debug` or `Release` |
+| `ENABLE_AVX` | bool | `ON` | Enable AVX/AVX2 instructions (C++ only; CUDA uses scalar fallback) |
+| `USE_JEMALLOC` | bool | `OFF` | Enable jemalloc memory allocator |
+| `TEST` | bool | `OFF` | Enable GoogleTest unit tests |
+| `CUDA_ARCHITECTURES` | string | `sm_70` | CUDA target architecture (e.g. sm_60, sm_70, sm_80) |
+| `CMAKE_CUDA_HOST_COMPILER` | string | `g++-13` | Host compiler used by nvcc |
 
-## 配置示例
+## Configuration Examples
 
 ```bash
-# 基础配置（Debug）
+# Basic configuration (Debug)
 cmake -B build -S .
 
-# Release 构建
+# Release build
 cmake -B build -S . -DCMAKE_BUILD_TYPE=Release
 
-# 禁用 AVX（兼容老 CPU 或避免与 nvcc 冲突）
+# Disable AVX (for older CPUs or to avoid nvcc conflicts)
 cmake -B build -S . -DENABLE_AVX=OFF
 
-# 启用 jemalloc
+# Enable jemalloc
 cmake -B build -S . -DUSE_JEMALLOC=ON
 
-# 启用单元测试
+# Enable unit tests
 cmake -B build -S . -DTEST=ON
 
-# 指定 CUDA 架构（如 Tesla V100）
+# Specify CUDA architecture (e.g. Tesla V100)
 cmake -B build -S . -DCUDA_ARCHITECTURES=sm_70
 
-# 指定 nvcc Host 编译器（若系统无 g++-13）
-cmake -B build -S . -DCMAKE_CUDA_HOST_COMPILER=g++-11
-
-# 组合示例
+# Combined example
 cmake -B build -S . \
   -DCMAKE_BUILD_TYPE=Release \
   -DENABLE_AVX=ON \
   -DCUDA_ARCHITECTURES=sm_70
 ```
 
-## 依赖说明
+## Dependencies
 
-- **TBB**：优先使用 bundled oneTBB（`third_party/oneTBB`），与项目同编译器构建，避免 libstdc++ 版本不匹配。若子模块未初始化，会回退到系统 TBB。
-- **初始化 oneTBB 子模块**：`git submodule update --init third_party/oneTBB`
+- **TBB**: Prefers bundled oneTBB (`third_party/oneTBB`), built with the same compiler as the project to avoid libstdc++ version mismatch. Falls back to system TBB if the submodule is not initialized.
+- **Initialize oneTBB submodule**: `git submodule update --init third_party/oneTBB`
 
 # Running MatrixGraph Applications
 
