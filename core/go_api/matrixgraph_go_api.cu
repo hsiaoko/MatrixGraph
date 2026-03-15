@@ -24,6 +24,7 @@ int matrixgraph_matmult(const float* A, const float* B, float* C, int m, int k, 
   float* d_A = nullptr;
   float* d_B = nullptr;
   float* d_C = nullptr;
+  cudaStream_t stream = nullptr;
 
   cudaError_t err = cudaMalloc(&d_A, sz_a);
   if (err != cudaSuccess) return cuda_err_to_int(err);
@@ -37,7 +38,6 @@ int matrixgraph_matmult(const float* A, const float* B, float* C, int m, int k, 
   err = cudaMemcpy(d_B, B, sz_b, cudaMemcpyHostToDevice);
   if (err != cudaSuccess) goto matmult_fail;
 
-  cudaStream_t stream = nullptr;
   err = cudaStreamCreate(&stream);
   if (err != cudaSuccess) goto matmult_fail;
 
@@ -45,6 +45,7 @@ int matrixgraph_matmult(const float* A, const float* B, float* C, int m, int k, 
 
   cudaStreamSynchronize(stream);
   cudaStreamDestroy(stream);
+  stream = nullptr;
 
   err = cudaMemcpy(C, d_C, sz_c, cudaMemcpyDeviceToHost);
   if (err != cudaSuccess) goto matmult_fail;
@@ -55,6 +56,7 @@ int matrixgraph_matmult(const float* A, const float* B, float* C, int m, int k, 
   return 0;
 
 matmult_fail:
+  if (stream) cudaStreamDestroy(stream);
   if (d_A) cudaFree(d_A);
   if (d_B) cudaFree(d_B);
   if (d_C) cudaFree(d_C);
@@ -88,6 +90,7 @@ int matrixgraph_matadd(const float* A, float* B, int m, int n) {
   size_t sz = static_cast<size_t>(m) * n * sizeof(float);
   float* d_A = nullptr;
   float* d_B = nullptr;
+  cudaStream_t stream = nullptr;
 
   cudaError_t err = cudaMalloc(&d_A, sz);
   if (err != cudaSuccess) return cuda_err_to_int(err);
@@ -99,17 +102,18 @@ int matrixgraph_matadd(const float* A, float* B, int m, int n) {
   err = cudaMemcpy(d_B, B, sz, cudaMemcpyHostToDevice);
   if (err != cudaSuccess) goto matadd_fail;
 
-  cudaStream_t stream = nullptr;
   err = cudaStreamCreate(&stream);
   if (err != cudaSuccess) goto matadd_fail;
 
   kernel::MatrixOpsKernelWrapper::MatAdd(stream, d_A, d_B, m, n);
   cudaStreamSynchronize(stream);
   cudaStreamDestroy(stream);
+  stream = nullptr;
 
   err = cudaMemcpy(B, d_B, sz, cudaMemcpyDeviceToHost);
 
 matadd_fail:
+  if (stream) cudaStreamDestroy(stream);
   if (d_A) cudaFree(d_A);
   if (d_B) cudaFree(d_B);
   return cuda_err_to_int(err);
@@ -120,6 +124,7 @@ int matrixgraph_transpose(const float* A, float* B, int m, int n) {
   size_t sz_b = static_cast<size_t>(n) * m * sizeof(float);
   float* d_A = nullptr;
   float* d_B = nullptr;
+  cudaStream_t stream = nullptr;
 
   cudaError_t err = cudaMalloc(&d_A, sz_a);
   if (err != cudaSuccess) return cuda_err_to_int(err);
@@ -129,17 +134,18 @@ int matrixgraph_transpose(const float* A, float* B, int m, int n) {
   err = cudaMemcpy(d_A, A, sz_a, cudaMemcpyHostToDevice);
   if (err != cudaSuccess) goto transpose_fail;
 
-  cudaStream_t stream = nullptr;
   err = cudaStreamCreate(&stream);
   if (err != cudaSuccess) goto transpose_fail;
 
   kernel::MatrixOpsKernelWrapper::Transpose(stream, d_A, d_B, m, n);
   cudaStreamSynchronize(stream);
   cudaStreamDestroy(stream);
+  stream = nullptr;
 
   err = cudaMemcpy(B, d_B, sz_b, cudaMemcpyDeviceToHost);
 
 transpose_fail:
+  if (stream) cudaStreamDestroy(stream);
   if (d_A) cudaFree(d_A);
   if (d_B) cudaFree(d_B);
   return cuda_err_to_int(err);

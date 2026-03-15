@@ -49,6 +49,8 @@ file(GLOB_RECURSE CORE_SOURCES
 )
 list(FILTER CORE_SOURCES EXCLUDE REGEX ".*_test\\.cpp$")
 list(FILTER CORE_SOURCES EXCLUDE REGEX ".*_test\\.cu$")
+# go_api/*.cu is built only by matrixgraph_goapi target, not by matrixgraph_core
+list(FILTER CORE_SOURCES EXCLUDE REGEX "go_api/.*")
 
 # AVX：仅对 C++ 启用，CUDA 不启用（避免 nvcc 与 GCC avx512bf16/amxtileintrin 冲突）
 include(CheckCXXCompilerFlag)

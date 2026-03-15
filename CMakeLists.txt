@@ -1,4 +1,25 @@
 cmake_minimum_required(VERSION 3.20)
+
+# CUDA host compiler: prefer g++-14 or newer when not set by caller (e.g. our build script)
+if(NOT DEFINED CMAKE_CUDA_HOST_COMPILER)
+  set(_cuda_host_cxx "")
+  foreach(_ver 16 15 14)
+    find_program(_gxx NAMES g++-${_ver})
+    if(_gxx)
+      set(_cuda_host_cxx "${_gxx}")
+      break()
+    endif()
+  endforeach()
+  if(_cuda_host_cxx)
+    set(CMAKE_CUDA_HOST_COMPILER "${_cuda_host_cxx}" CACHE STRING "CUDA host compiler (g++-14+ preferred)")
+    message(STATUS "[MatrixGraph] Using CUDA host compiler: ${CMAKE_CUDA_HOST_COMPILER}")
+  else()
+    message(STATUS "[MatrixGraph] No g++-14/15/16 found; CUDA host compiler will use default CXX. Install g++-14 or set -DCMAKE_CUDA_HOST_COMPILER=... if nvcc fails.")
+  endif()
+  unset(_cuda_host_cxx)
+  unset(_gxx)
+endif()
+
 project(matrixgraph LANGUAGES CXX CUDA)
 
 #######################
