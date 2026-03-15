@@ -122,3 +122,23 @@ set_target_properties(${PROJECT_NAME} PROPERTIES
         POSITION_INDEPENDENT_CODE ON
         CUDA_RESOLVE_DEVICE_SYMBOLS ON
 )
+
+#######################
+# Go C API shared library (for CGO)
+#######################
+add_library(matrixgraph_goapi SHARED go_api/matrixgraph_go_api.cu)
+target_link_libraries(matrixgraph_goapi PRIVATE matrixgraph_core cudart)
+target_include_directories(matrixgraph_goapi PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}
+        ${PROJECT_ROOT_DIR}
+        ${THIRD_PARTY_ROOT}/yaml-cpp/include
+        ${CMAKE_CUDA_TOOLKIT_INCLUDE_DIRECTORIES}
+)
+set_target_properties(matrixgraph_goapi PROPERTIES
+        LIBRARY_OUTPUT_DIRECTORY ${PROJECT_ROOT_DIR}/lib
+        CUDA_SEPARABLE_COMPILATION ON
+        POSITION_INDEPENDENT_CODE ON
+)
+target_compile_options(matrixgraph_goapi PRIVATE
+        $<$<COMPILE_LANGUAGE:CUDA>:-UUSE_AVX2>
+)
