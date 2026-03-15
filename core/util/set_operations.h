@@ -1,6 +1,7 @@
 #ifndef CORE_UTIL_SET_H_
 #define CORE_UTIL_SET_H_
 
+#include "core/util/execution_policy.h"
 #include <numeric>
 #include <set>
 #include <vector>
@@ -49,9 +50,8 @@ GetIntersection(const VertexID *p_vec_a, VertexID len_a,
 
   if (len_b < len_a) {
     VertexID idx_by_val_b[max_val] = {0};
-    std::for_each(
-        parallel_scope.begin(), parallel_scope.end(),
-        [parallelism, &visited, &p_vec_b, &idx_by_val_b, len_b](auto i) {
+    ParForEach(parallel_scope.begin(), parallel_scope.end(),
+               [parallelism, &visited, &p_vec_b, &idx_by_val_b, len_b](auto i) {
           auto j = i;
           for (j; j < len_b; j += parallelism) {
             idx_by_val_b[p_vec_b[j]] = j;
@@ -59,8 +59,8 @@ GetIntersection(const VertexID *p_vec_a, VertexID len_a,
           }
         });
 
-    std::for_each(parallel_scope.begin(), parallel_scope.end(),
-                  [parallelism, &visited, &intersection, &p_vec_a,
+    ParForEach(parallel_scope.begin(), parallel_scope.end(),
+               [parallelism, &visited, &intersection, &p_vec_a,
                    &idx_by_val_b, len_a](auto i) {
                     auto j = i;
                     for (j; j < len_a; j += parallelism) {
@@ -73,17 +73,16 @@ GetIntersection(const VertexID *p_vec_a, VertexID len_a,
 
   } else {
     VertexID idx_by_val_a[max_val] = {0};
-    std::for_each(
-        parallel_scope.begin(), parallel_scope.end(),
-        [parallelism, &visited, &p_vec_a, &idx_by_val_a, len_a](auto i) {
+    ParForEach(parallel_scope.begin(), parallel_scope.end(),
+               [parallelism, &visited, &p_vec_a, &idx_by_val_a, len_a](auto i) {
           auto j = i;
           for (j; j < len_a; j += parallelism) {
             idx_by_val_a[p_vec_a[j]] = j;
             visited.SetBit(p_vec_a[j]);
           }
         });
-    std::for_each(parallel_scope.begin(), parallel_scope.end(),
-                  [parallelism, &visited, &intersection, &p_vec_b,
+    ParForEach(parallel_scope.begin(), parallel_scope.end(),
+               [parallelism, &visited, &intersection, &p_vec_b,
                    &idx_by_val_a, len_b](auto i) {
                     auto j = i;
                     for (j; j < len_b; j += parallelism) {

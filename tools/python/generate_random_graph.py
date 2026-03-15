@@ -292,7 +292,7 @@ if __name__ == "__main__":
     parser.add_argument("--vertices", "-n", type=int, default=100, help="Number of vertices per graph")
     parser.add_argument("--edges", "-m", type=int, default=200, help="Number of edges per graph")
     parser.add_argument("--label-range", "-r", type=int, default=5, help="Label range [0, r-1]")
-    parser.add_argument("--output-dir", "-o", default="/root", help="Output directory")
+    parser.add_argument("--output-dir", "-o", default=".", help="Output directory (relative or absolute path)")
     parser.add_argument("--with-bfs-tree", action="store_true",
                         help="Also generate BFS tree representation from vertex 0")
 

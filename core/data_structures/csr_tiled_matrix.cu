@@ -3,7 +3,7 @@
 #include <algorithm>
 #include <atomic>
 #include <cmath>
-#include <execution>
+#include "core/util/execution_policy.h"
 #include <mutex>
 #include <numeric>
 #include <thread>

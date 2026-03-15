@@ -1,59 +1,61 @@
-# SubIso Application User Guide
+# SubIso (Subgraph Isomorphism)
 
-**Binary Path**: `bin/cpu_subiso_exec`
+## Overview
 
-**Source**: ` $PROJECT_ROOT_DIR/core/task/cpu_task/cpu_subiso.cu`
+CPU subgraph isomorphism application supporting VF3 and ML-enhanced filtering. Finds all embeddings of a pattern graph in a data graph.
 
-SubIso is a subgraph isomorphism application that supports both traditional VF3 algorithm and ML-enhanced filtering
-approaches.
+## Functionality
 
-## Basic Command Format
+- **VF3 mode**: Classic VF3 algorithm.
+- **ML filter mode**: Uses pre-trained MLP to filter candidate vertices before VF3, reducing search space.
 
-### VF3 SubIso
+## Parameters
 
-Basic VF3 SubIso
+| Parameter | Description |
+|-----------|-------------|
+| `-p` | Pattern graph CSR directory |
+| `-g` | Data graph CSR directory |
+| `-m1` | Pattern embedding directory |
+| `-m2` | Data graph embedding directory |
+| `-m3` | MLP layer 1 weights directory |
+| `-m4` | MLP layer 1 bias directory |
+| `-m5` | MLP layer 2 weights directory |
+| `-m6` | MLP layer 2 bias directory |
+
+## Input Format
+
+**Graphs**: Binary CSR format (see [GraphConverter.md](../tools/GraphConverter.md)). Directory must contain valid CSR files and `meta.yaml`.
+
+**ML model** (optional): Pre-trained MLP weights and biases in separate directories; embeddings from [SubIsoTraining.md](../tools/SubIsoTraining.md) pipeline.
+
+## Output
+
+Subgraph isomorphism matches (format depends on application output configuration).
+
+## Source
+
+`core/task/cpu_task/cpu_subiso.cu`  
+`apps/cpu_subiso.cpp`
+
+## Examples
+
+**VF3 only:**
 
 ```bash
-$PROJECT_ROOT_DIR/bin/cpu_subiso_exec \
-  -p <pattern_graph_csr_directory> \
-  -g <data_graph_csr_directory> 
+./bin/cpu_subiso_exec -p <pattern_csr_dir> -g <data_csr_dir>
 ```
 
-### Using ML model as filter
-
-For ML model usage, refer to:
-
-* Model training: $PROJECT_ROOT_DIR/docs/tools/SubIsoTraining.md
-* Graph format conversion: $PROJECT_ROOT_DIR/docs/tools/GraphConverter.md
+**With ML filter:**
 
 ```bash
-$PROJECT_ROOT_DIR/bin/cpu_subiso_exec \
-  -p <pattern_graph_csr_directory> \
-  -g <data_graph_csr_directory> \
-  -m1 <pattern_embedding_directory> \
-  -m2 <data_graph_embedding_directory> \
-  -m3 <mlp_layer1_weight_directory> \
-  -m4 <mlp_layer1_bias_directory> \
-  -m5 <mlp_layer2_weight_directory> \
-  -m6 <mlp_layer2_bias_directory>
+./bin/cpu_subiso_exec \
+  -p <pattern_csr_dir> -g <data_csr_dir> \
+  -m1 <pattern_embedding_dir> -m2 <data_embedding_dir> \
+  -m3 <mlp_w1_dir> -m4 <mlp_b1_dir> \
+  -m5 <mlp_w2_dir> -m6 <mlp_b2_dir>
 ```
 
-## Parameter Details
+## See Also
 
-* -p : Pattern graph CSR directory
-* -g : Data graph CSR directory
-* -m1 : Pattern embedding directory
-* -m2 : Data graph embedding directory
-* -m3 : MLP first layer weights directory
-* -m4 : MLP first layer bias directory
-* -m5 : MLP second layer weights directory
-* -m6 : MLP second layer bias directory
-
-## Requirements
-
-* All directory paths must exist and contain valid files.
-* Model files should be pre-trained.
-* Ensure sufficient memory for graph processing.
-* Graph data must be in proper CSR format
-
-
+- [SubIsoTraining.md](../tools/SubIsoTraining.md) — ML model training
+- [GraphConverter.md](../tools/GraphConverter.md) — CSR conversion (`csrbin2vf3`, etc.)

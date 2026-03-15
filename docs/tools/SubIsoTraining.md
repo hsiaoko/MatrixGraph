@@ -1,100 +1,71 @@
-# Subgraph Matching Training: Step-by-Step Guide
+# SubIso Training
 
-This document outlines the workflow for generating ground truth data and training a model for subgraph matching.
+## Overview
 
----
+Workflow for training the ML filter used by the CPU subgraph isomorphism (SubIso) application. Produces embeddings and a trained model for filtering candidate vertices.
 
-## Step 1: Generate Ground Truth Data
+## Functionality
 
-Prepare the ground truth data that defines the correct matches for a pattern vertex in the data graph.
+1. Generate ground truth (binary array of candidate vertex IDs)
+2. Convert graphs to PyTorch Geometric (.pt)
+3. Generate embeddings from .pt
+4. Train similarity model and GNN
 
-- **Format:** The data must be a binary array
-- **Structure:** `gt = [v_1, v_2, ...]`
-  - Each value  `v_i` corresponds to a candidate vertex of pattern vertex `u_0` in the data graph
----
+## Input Format (graph_reader.py)
 
-## Step 2: Convert Graphs to PyTorch Geometric Format
+- **Header**: `t N M` (N = vertices, M = edges)
+- **Vertex**: `v <id> <label> <degree>`
+- **Edge**: `e <src> <dst>`
 
-Convert both the pattern and data graph from a custom CSR-like text format into a PyTorch Geometric (PyG) `.pt` file.
+## Tool Chain
 
-### Input Format Specification
+| Step | Script | Input | Output |
+|------|--------|-------|--------|
+| 1 | (custom) | — | Ground truth (uint64 binary) |
+| 2 | `graph_reader.py` | Text graph (above format) | PyTorch .pt |
+| 3 | `data.py` or `embedding.py` | PyTorch .pt | Embedding binary |
+| 4 | `train_config.py` | config.yaml | Trained model |
 
-The input graph file must adhere to the following structure:
+## Config (config.yaml)
 
-- **Header Line:** `t N M`
-  - `N`: Total number of vertices
-  - `M`: Total number of edges
-- **Vertex Lines:** `v <id> <label> <degree>`
-  - All vertex lines must be listed consecutively before any edge lines
-- **Edge Lines:** `e <source_id> <target_id>`
-
-### Usage
-
-Execute the conversion script from the command line:
-
-```bash
-python $PROJECT_ROOT_DIR/tools/python/graph_reader.py [input_path] [output_path]
-```
-
-## Step 3: Generate Graph Embeddings
-Create vertex embeddings for the pattern and data graph from their PyG format files.
-
-### Usage
-Run the embedding script for each graph:
-
-* Output: A binary array A where each element is the embedding vector for a vertex in graph G
-
-```bash
-python $PROJECT_ROOT_DIR/tools/python/data.py [input_path] [embedding_path]
-```
-
-## Step 4: Configure and Run the Training Process
-Configure the experiment parameters and initiate model training.
-
-### Configuration
-Create a config.yaml file specifying the following key parameters:
-* pattern_paths: List of paths to one or more pattern graph embeddings
-* graph_path: Path to the data graph embedding
-* gt_paths: List of ground truth paths (must correspond 1-to-1 with pattern_paths)
-* output_dir: Directory to save training results and model outputs
-* epochs: Number of training epochs
-
-For instance,
-```angular2html
-# Configuration file for GNN training
-
+```yaml
 paths:
-pattern_paths:
-- "path to geometric format of pattern 1"
-- "path to geometric format of pattern 2"
-- "path to geometric format of pattern 3"
-graph_path: "path to geometric format of data graph"
-gt_paths:
-- "path to ground truth of pattern 1"
-- "path to ground truth of pattern 2"
-- "path to ground truth of pattern 2"
-output_dir: "path to output ML model"
+  pattern_paths: ["path/to/pattern1.pt", ...]
+  graph_path: "path/to/data_graph.pt"
+  gt_paths: ["path/to/gt1", ...]
+  output_dir: "path/to/model"
 
 model:
-in_channels: 64
-hidden_channels: 64
-out_channels: 64
-
-similarity_generator:
-embedding_size: 64
-similarity_method: "euclidean"
-normalize: true
-combination_weights: [0.6, 0.2, 0.2]
+  in_channels: 64
+  hidden_channels: 64
+  out_channels: 64
 
 training:
-learning_rate: 0.01
-epochs: 10
-
-test_vertex_id: 590
+  learning_rate: 0.01
+  epochs: 10
 ```
-### Execution
-Start the training process with the configured settings:
+
+## Source
+
+`tools/python/graph_reader.py`  
+`tools/python/data.py`  
+`tools/python/embedding.py`  
+`tools/python/train_config.py`
+
+## Example
 
 ```bash
-python $PROJECT_ROOT_DIR/tools/python/train_config.py --config config.yaml
+# Convert graphs to PyTorch
+python tools/python/graph_reader.py [input_graph] [output.pt]
+
+# Generate embeddings
+python tools/python/data.py [input.pt] [output_embedding]
+
+# Train
+python tools/python/train_config.py --config config.yaml
 ```
+
+## See Also
+
+- [Preprocessing4MatrixFilter.md](Preprocessing4MatrixFilter.md) — preprocessing pipeline
+- [subiso.md](../cpu_task/subiso.md) — SubIso application usage

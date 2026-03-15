@@ -68,9 +68,16 @@ endif ()
 # Gflags
 add_subdirectory("${GFLAGS_ROOT_DIR}" EXCLUDE_FROM_ALL)
 
-# TBB
-#add_subdirectory("${TBB_ROOT_DIR}" EXCLUDE_FROM_ALL)
-find_package(TBB)
+# TBB: 优先使用 bundled oneTBB（与项目同编译器，避免 libtbb 与 libstdc++ 版本不匹配）
+# 系统 libtbb 若由 GCC 13+ 编译会依赖 GLIBCXX_3.4.32，与 g++-11 不兼容
+if (EXISTS "${TBB_ROOT_DIR}/CMakeLists.txt")
+  set(TBB_TEST OFF CACHE BOOL "Disable TBB tests" FORCE)
+  add_subdirectory("${TBB_ROOT_DIR}" EXCLUDE_FROM_ALL)
+  message(STATUS "[MatrixGraph] Using bundled oneTBB")
+else ()
+  find_package(TBB REQUIRED)
+  message(STATUS "[MatrixGraph] Using system TBB")
+endif ()
 
 # GoogleTest
 if (TEST)

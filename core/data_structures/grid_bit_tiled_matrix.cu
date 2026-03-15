@@ -2,7 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
-#include <execution>
+#include "core/util/execution_policy.h"
 
 namespace sics {
 namespace matrixgraph {
@@ -16,7 +16,7 @@ GridBitTiledMatrix::GridBitTiledMatrix(const GridGraphMetadata &metadata) {
   metadata_ = metadata;
   tiled_matrix_vec_.resize(pow(metadata_.n_chunks, 2));
 
-  std::generate(std::execution::par, tiled_matrix_vec_.begin(),
+  std::generate(MATRIXGRAPH_EXEC_POLICY tiled_matrix_vec_.begin(),
                 tiled_matrix_vec_.end(), []() { return new BitTiledMatrix(); });
 }
 

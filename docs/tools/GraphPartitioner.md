@@ -1,32 +1,63 @@
 # Graph Partitioner
 
-**Binary Path**: `bin/tools/graph_partitioner_exec`
+## Overview
 
-**Source**: ` $PROJECT_ROOT_DIR/tools/graph_partitioner/graph_partitioner.cpp`
+Partitions a graph into subgraphs for distributed or tiled processing. Output can be used by `graph_converter` to produce CSR tiled matrices for GEMM, PPR, and similar applications.
 
--------------
+## Functionality
 
-graph_partitioner provides a set of programs for partitioning graphs.
-It take as input the binary edgelist.
+- **GridCut**: Grid-based partitioning; produces subgraphs suitable for tiled matrix operations.
+- Input: binary edge-list (output of `graph_converter` with `edgelistcsv2edgelistbin` or `edgelistbin2csrbin` → `csrbin2edgelistbin`).
 
-### Usage
+## Parameters
 
-You can use graph_partitioner as follows:
+| Parameter | Short | Default | Description |
+|-----------|-------|---------|-------------|
+| `-i` | | (required) | Input path (binary edge-list directory) |
+| `-o` | | (required) | Output path for partitions |
+| `-partitioner` | | (required) | `gridcut` |
+| `-n_partitions` | | `1` | Number of partitions (grid dimension) |
+| `-store_strategy` | | `unconstrained` | Edge storage: `incoming_only`, `outgoing_only`, `unconstrained` |
+| `-biggraph` | | `false` | Enable optimizations for large graphs |
 
-``` Bash
-$ cd ${PROJECT_ROOT_DIR}
-$ ./bin/tools/graph_partitioner -partitioner [options] -i [input path] -o [output path] -n_partitions [number of subgraphs] -store_strategty [options]
+## Input Format
+
+**Binary edge-list** (from `graph_converter`):
+
+- Directory containing `edgelist.bin`, `localid2globalid.bin`, `vlabel.bin`, `meta.yaml`.
+
+## Output Format
+
+**Partitioned subgraphs**:
+
+- `meta.yaml` — graph metadata and partition info
+- `graphs/<gid>.bin` — edge list per partition
+- `local_id_to_global_id/<gid>.bin` — vertex ID mapping per partition
+
+This output is the input for `graph_converter` with `gridedgelistbin2csrtiledmatrix` or `gridedgelistbin2bittiledmatrix`.
+
+## Source
+
+`tools/graph_partitioner/graph_partitioner.cu`  
+`tools/graph_partitioner/partitioner/grid_cut.cu`
+
+## Example
+
+```bash
+# Partition into 4x4 grid
+./bin/tools/graph_partitioner -i edgelist/ -o partitions/ \
+  -partitioner gridcut -n_partitions 4 -store_strategy unconstrained
 ```
 
-General options of partitioner:
+## Tool Chain
 
-* planarvertexcut - Using branch decomposition-based vertexcut partitioner. It is used as the default partitioner of the
-  Planar system. We strongly suggest to used -biggraph command if the graph is too large.
-* hashedgecut - Using hash-based edgecut partitioner.
-* hashvertexcut - Using hash-based vertexcut partitioner.
-
-General options of store strategy:
-
-* incoming_only - store incoming edges for each vertex.
-* outgoing_only - store outgoing edges for each vertex.
-* unconstrained - store both incoming and outgoing edges for each vertex.
+```
+CSV edge-list
+    → graph_converter (edgelistcsv2edgelistbin)
+Binary edge-list
+    → graph_partitioner (gridcut)
+Partitioned subgraphs
+    → graph_converter (gridedgelistbin2csrtiledmatrix)
+CSR tiled matrix
+    → gemm_exec / ppr_query_exec
+```

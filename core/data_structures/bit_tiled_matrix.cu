@@ -6,7 +6,7 @@
 #include <mutex>
 #include <numeric>
 #include <thread>
-#include <execution>
+#include "core/util/execution_policy.h"
 
 #include "core/util/bitmap.h"
 #include "core/util/bitmap_no_ownership.h"

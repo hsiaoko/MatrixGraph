@@ -1,7 +1,7 @@
 #include <cuda_runtime.h>
 
 #include <ctime>
-#include <execution>
+#include "core/util/execution_policy.h"
 #include <iostream>
 #include <mutex>
 #include <thread>

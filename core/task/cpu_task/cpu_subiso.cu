@@ -1,6 +1,6 @@
 #include <algorithm>
 #include <chrono>
-#include <execution>
+#include "core/util/execution_policy.h"
 #include <iostream>
 #include <mutex>
 #include <queue>
@@ -357,9 +357,7 @@ static std::vector<WOJMatches*> WOJFilter(
     VertexID src_idx = p.GetLocalIDByGlobalID(u_src);
     VertexID dst_idx = p.GetLocalIDByGlobalID(u_dst);
 
-    std::for_each(
-        // std::execution::par,
-        worker.begin(), worker.end(),
+    ParForEach(worker.begin(), worker.end(),
         [step, &p, &g, eid, u_src, u_dst, src_idx, dst_idx, &exec_plan,
          &woj_matches_vec, &m_vec, &m_unified_buffer_vec](auto w) {
           for (VertexID v_idx = w; v_idx < g.get_num_vertices();
@@ -414,9 +412,7 @@ static inline void Join(VertexID n_vertices_g,
   VertexID right_y_offset = right_woj_matches.get_y_offset();
   VertexID* output_y_offset_ptr = output_woj_matches->get_y_offset_ptr();
 
-  std::for_each(
-      // std::execution::par,
-      worker.begin(), worker.end(),
+  ParForEach(worker.begin(), worker.end(),
       [step, &left_woj_matches, &right_woj_matches, &left_data, &right_data,
        &output_data, left_x_offset, right_x_offset, output_x_offset,
        left_y_offset, right_y_offset, left_hash_idx, right_hash_idx,
@@ -705,9 +701,7 @@ static inline void Enumerating(
                 });
 
   std::cout << "Enumerating" << std::endl;
-  std::for_each(
-      // std::execution::par,
-      worker.begin(), worker.end(),
+  ParForEach(worker.begin(), worker.end(),
       [step, &mtx, &p, &g, &exec_plan, &m_vec, &m_unified_buffer_vec, &matches,
        &local_matches_vec, matches_visited_vec_vec,
        matches_src_visited_vec_vec](auto w) {

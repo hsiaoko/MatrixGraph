@@ -307,7 +307,7 @@ class Matches {
     header_[pos].second = e.second;
   }
 
-  std::vector<std::pair<VertexID, VertexID>> GetHeader() const {
+  std::vector<std::pair<VertexID, VertexID> > GetHeader() const {
     return header_;
   }
 
@@ -324,16 +324,16 @@ class Matches {
   VertexID* get_matches_data_ptr() const { return matches_data_.GetPtr(); }
 
   VertexID get_header_first_by_idx(VertexID idx) {
-    // assert(i < header_.size());
+    assert((idx < header_.size()));
     return header_[idx].first;
   }
 
   VertexID get_header_second_by_idx(VertexID idx) {
-    // assert(i < header_.size());
+    assert((idx < header_.size()));
     return header_[idx].second;
   }
 
-  std::vector<std::pair<VertexID, VertexID>> header_;
+  std::vector<std::pair<VertexID, VertexID> > header_;
 
   UnifiedOwnedBufferVertexID weft_count_;
   UnifiedOwnedBufferVertexID v_candidate_offset_for_each_weft_;

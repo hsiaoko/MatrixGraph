@@ -3,6 +3,8 @@
 #include <algorithm>
 #include <chrono>
 #include <iostream>
+#include <numeric>
+#include <thread>
 
 #include "core/common/consts.h"
 #include "core/common/host_algorithms.cuh"
@@ -20,6 +22,7 @@
 #include "core/task/gpu_task/kernel/algorithms/sort.cuh"
 #include "core/task/gpu_task/kernel/kernel_woj_subiso.cuh"
 #include "core/util/bitmap_ownership.h"
+#include "core/util/execution_policy.h"
 
 namespace sics {
 namespace matrixgraph {
@@ -733,8 +736,7 @@ std::vector<WOJMatches*> WOJSubIsoKernelWrapper::Filter(
   // Init Streams
   std::vector<cudaStream_t> p_streams_vec;
   p_streams_vec.resize(p.get_num_outgoing_edges());
-  std::for_each(
-      std::execution::par, worker.begin(), worker.end(),
+  ParForEach(worker.begin(), worker.end(),
       [step, &exec_plan, &p_streams_vec, &mtx](auto w) {
         for (VertexID i = w; i < p_streams_vec.size(); i += step) {
           cudaSetDevice(common::hash_function(i) % exec_plan.get_n_devices());
@@ -874,7 +876,7 @@ std::vector<WOJMatches*> WOJSubIsoKernelWrapper::Filter(
     CUDA_CHECK(err);
   }
 
-  std::for_each(std::execution::par, worker.begin(), worker.end(),
+  ParForEach(worker.begin(), worker.end(),
                 [step, &p_streams_vec, &mtx](auto w) {
                   for (VertexID i = w; i < p_streams_vec.size(); i += step) {
                     cudaStreamDestroy(p_streams_vec[i]);
@@ -954,8 +956,7 @@ std::vector<WOJMatches*> WOJSubIsoKernelWrapper::Join(
   }
 
   // Join candidates
-  std::for_each(
-      std::execution::par, worker.begin(), worker.end(),
+  ParForEach(worker.begin(), worker.end(),
       [step, &dimBlock, &dimGrid, &exec_plan, &p_streams_vec, &mtx,
        &src_matches_vec, &input_woj_matches_vec, &output_woj_matches_vec,
        &visited_bm_vec, &jump_visited_bm_vec, &jump_count_ptr](auto w) {
@@ -1054,7 +1055,7 @@ std::vector<WOJMatches*> WOJSubIsoKernelWrapper::Join(
     CUDA_CHECK(err);
   }
 
-  std::for_each(std::execution::par, worker.begin(), worker.end(),
+  ParForEach(worker.begin(), worker.end(),
                 [step, &p_streams_vec, &mtx](auto w) {
                   for (VertexID i = w; i < p_streams_vec.size(); i += step) {
                     cudaStreamDestroy(p_streams_vec[i]);

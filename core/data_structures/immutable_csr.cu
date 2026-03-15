@@ -1,5 +1,5 @@
 #include <algorithm>
-#include <execution>
+#include "core/util/execution_policy.h"
 #include <fstream>
 #include <mutex>
 #include <random>
@@ -278,14 +278,14 @@ void ImmutableCSR::GenerateVLabel(VertexID range, bool random) {
     std::uniform_int_distribution<> dis(0, 65536);
     std::cout << " Label Range: " << range << std::endl;
 
-    std::for_each(std::execution::par, worker.begin(), worker.end(),
+    ParForEach(worker.begin(), worker.end(),
                   [this, step, &dis, &gen, &range, &vlabel_ptr](auto w) {
                     for (auto vid = w; vid < get_num_vertices(); vid += step) {
                       vlabel_ptr[vid] = (dis(gen) + vid) % range;
                     }
                   });
   } else {
-    std::for_each(std::execution::par, worker.begin(), worker.end(),
+    ParForEach(worker.begin(), worker.end(),
                   [this, step, &range, &vlabel_ptr](auto w) {
                     for (auto vid = w; vid < get_num_vertices(); vid += step) {
                       vlabel_ptr[vid] = vid % range;
@@ -305,7 +305,7 @@ void ImmutableCSR::SortByDegree() {
   VidCountPair* vids_and_degrees = new VidCountPair[n_vertices]();
 
   std::cout << "[SortByDegree] Computing degree of each vertex" << std::endl;
-  std::for_each(std::execution::par, worker.begin(), worker.end(),
+  ParForEach(worker.begin(), worker.end(),
                 [this, step, &vids_and_degrees, n_vertices](auto w) {
                   for (auto vid = w; vid < n_vertices; vid += step) {
                     vids_and_degrees[vid].vid = vid;
@@ -314,7 +314,7 @@ void ImmutableCSR::SortByDegree() {
                 });
 
   std::cout << "[SortByDegree] Sorting" << std::endl;
-  std::sort(std::execution::par, vids_and_degrees,
+  std::sort(MATRIXGRAPH_EXEC_POLICY vids_and_degrees,
             vids_and_degrees + n_vertices,
             [](const auto a, const auto b) { return a.count > b.count; });
 
@@ -342,8 +342,7 @@ void ImmutableCSR::SortByDegree() {
   metadata_.min_vid = common::kMaxVertexID;
 
   std::cout << "[SortByDegree] Replacing old val by new val." << std::endl;
-  std::for_each(
-      std::execution::par, worker.begin(), worker.end(),
+   ParForEach(worker.begin(), worker.end(),
       [this, step, n_vertices, &new_id_by_old_id, &vids_and_degrees,
        &new_buffer_globalid, &new_buffer_localid, &new_buffer_indegree,
        &new_buffer_outdegree, &new_buffer_in_offset, &new_buffer_out_offset,
@@ -373,7 +372,7 @@ void ImmutableCSR::SortByDegree() {
   // re-assign id for each vertex.
   // std::cout << "[SortByDegree] Reassigning id for each vertex" << std::endl;
   // std::for_each(
-  //     std::execution::par, worker.begin(), worker.end(),
+  //      worker.begin(), worker.end(),
   //     [this, step, n_vertices, &new_id_by_old_id, &vids_and_degrees,
   //      &new_buffer_globalid, &new_buffer_indegree, &new_buffer_outdegree,
   //      &new_buffer_in_offset, &new_buffer_out_offset, &new_buffer_in_edges,

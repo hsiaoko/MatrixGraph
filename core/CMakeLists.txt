@@ -10,10 +10,20 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CUDA_STANDARD 20)
 set(CMAKE_CUDA_STANDARD_REQUIRED ON)
 
+# Require g++-14 as the CUDA host compiler
+#if (NOT DEFINED CMAKE_CUDA_HOST_COMPILER)
+#  set(CMAKE_CUDA_HOST_COMPILER "g++-14")
+#endif ()
+#if (NOT CMAKE_CUDA_HOST_COMPILER STREQUAL "g++-14")
+#  message(FATAL_ERROR "MatrixGraph requires g++-14. Use -DCMAKE_CUDA_HOST_COMPILER=g++-14")
+#endif ()
+
 # CUDA Configuration
 #set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -arch=sm_60")  # Set minimum compute capability
 set(CMAKE_CUDA_FLAGS_RELEASE "${CMAKE_CUDA_FLAGS_RELEASE} -O3")
 set(CMAKE_CUDA_FLAGS_DEBUG "${CMAKE_CUDA_FLAGS_DEBUG} -g -G")
+# [AVX 暂时注释] 禁用 AVX512 和 AMX
+set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -Xcompiler=-mno-avx512f,-mno-avx512bf16,-mno-amx-tile")
 
 #######################
 # Directory Structure
@@ -40,37 +50,26 @@ file(GLOB_RECURSE CORE_SOURCES
 list(FILTER CORE_SOURCES EXCLUDE REGEX ".*_test\\.cpp$")
 list(FILTER CORE_SOURCES EXCLUDE REGEX ".*_test\\.cu$")
 
-# 检测 CPU 指令集支持
+# AVX：仅对 C++ 启用，CUDA 不启用（避免 nvcc 与 GCC avx512bf16/amxtileintrin 冲突）
 include(CheckCXXCompilerFlag)
-
-# 检测并启用 AVX/AVX2
 option(ENABLE_AVX "Enable AVX instructions" ON)
-
+set(MATRIXGRAPH_AVX_CXX_FLAGS "")
+set(MATRIXGRAPH_AVX_DEFINES "")
 if (ENABLE_AVX)
-    include(CheckCXXCompilerFlag)
-
-    # 首先尝试 AVX2 + FMA
     check_cxx_compiler_flag("-mavx2" HAS_AVX2)
     check_cxx_compiler_flag("-mfma" HAS_FMA)
-
     if (HAS_AVX2 AND HAS_FMA)
-        add_compile_options(-mavx2 -mfma)
-        add_definitions(-DUSE_AVX2)
-        message(STATUS "Enabled AVX2 and FMA instructions")
-
-        # 回退到 AVX
+        set(MATRIXGRAPH_AVX_CXX_FLAGS "-mavx2 -mfma")
+        set(MATRIXGRAPH_AVX_DEFINES "-DUSE_AVX2")
+        message(STATUS "Enabled AVX2 and FMA (CXX only)")
     else ()
         check_cxx_compiler_flag("-mavx" HAS_AVX)
         if (HAS_AVX)
-            add_compile_options(-mavx)
-            add_definitions(-DUSE_AVX)
-            message(STATUS "Enabled AVX instructions")
-        else ()
-            message(WARNING "AVX not available - falling back to scalar code")
+            set(MATRIXGRAPH_AVX_CXX_FLAGS "-mavx")
+            set(MATRIXGRAPH_AVX_DEFINES "-DUSE_AVX")
         endif ()
     endif ()
 endif ()
-
 
 #######################
 # Tests Configuration
@@ -84,6 +83,19 @@ endif ()
 #######################
 add_library(${PROJECT_NAME} STATIC ${CORE_SOURCES})
 
+# AVX 仅对 CXX 生效；CUDA 显式取消 USE_AVX2，防止父项目全局定义
+target_compile_options(${PROJECT_NAME} PRIVATE
+    $<$<COMPILE_LANGUAGE:CUDA>:-UUSE_AVX2>
+)
+if (MATRIXGRAPH_AVX_CXX_FLAGS)
+    target_compile_options(${PROJECT_NAME} PRIVATE
+        $<$<COMPILE_LANGUAGE:CXX>:${MATRIXGRAPH_AVX_CXX_FLAGS}>
+    )
+    target_compile_definitions(${PROJECT_NAME} PRIVATE
+        $<$<COMPILE_LANGUAGE:CXX>:${MATRIXGRAPH_AVX_DEFINES}>
+    )
+endif ()
+
 # Dependencies
 target_link_libraries(${PROJECT_NAME}
         PUBLIC
@@ -94,10 +106,13 @@ target_link_libraries(${PROJECT_NAME}
         -funroll-loops
 )
 
+# Include paths: support both flat (core/util/) and nested (core/core/util/) structure
 target_include_directories(${PROJECT_NAME}
         PUBLIC
         ${THIRD_PARTY_ROOT}/yaml-cpp/include/
         ${PROJECT_ROOT_DIR}
+        ${CMAKE_CURRENT_SOURCE_DIR}
+        $<$<BOOL:${CMAKE_CURRENT_SOURCE_DIR}>:${CMAKE_CURRENT_SOURCE_DIR}/core>
         ${CMAKE_CUDA_TOOLKIT_INCLUDE_DIRECTORIES}
 )
 

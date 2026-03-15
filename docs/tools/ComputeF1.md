@@ -1,27 +1,33 @@
-# Binary Array Metrics Calculator
+# Compute F1
 
-A Python tool for comparing two binary arrays and calculating performance metrics including Precision, Recall, and F1
-Score.
+## Overview
 
-**Binary Path**: ` $PROJECT_ROOT_DIR/tools/python/compute_f1.py`
+Python tool for comparing two binary arrays and computing classification metrics (Precision, Recall, F1). Used to evaluate ML filter predictions against ground truth in SubIso.
 
-## Description
+## Functionality
 
-This script reads two binary arrays from C++ compatible binary files and computes various classification metrics to
-evaluate the similarity between them. It's particularly useful for comparing ground truth data with prediction results
-in graph processing and machine learning applications.
+- Reads two C++-compatible binary array files
+- Computes TP, FP, FN, TN, Precision, Recall, F1 Score
 
-## Features
+## Parameters
 
-- Read C++ binary array files
-- Convert lists to binary arrays
-- Calculate classification metrics:
-    - True Positives (TP), False Positives (FP)
-    - False Negatives (FN), True Negatives (TN)
-    - Precision, Recall, and F1 Score
+| Argument | Description |
+|----------|-------------|
+| `path1` | First binary array (e.g. ground truth) |
+| `path2` | Second binary array (e.g. predictions) |
 
-## Usage
+## Input Format
+
+C++ binary array files (e.g. `uint64_t` arrays).
+
+## Source
+
+`tools/python/compute_f1.py`
+
+## Example
 
 ```bash
-python compute_f1.py <binary_file1> <binary_file2>
+python tools/python/compute_f1.py <ground_truth.bin> <predictions.bin>
 ```
+
+Output: TP, FP, FN, TN, Precision, Recall, F1 Score.

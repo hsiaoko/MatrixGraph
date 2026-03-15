@@ -4,7 +4,7 @@
 #include <yaml-cpp/yaml.h>
 
 #include <cstring>
-#include <execution>
+#include "core/util/execution_policy.h"
 #include <iostream>
 
 #include "core/common/consts.h"

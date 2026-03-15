@@ -3,6 +3,10 @@
 #include <chrono>
 #include <iostream>
 
+#if defined(USE_AVX2) && !defined(__CUDACC__)
+#include <immintrin.h>
+#endif
+
 #include "core/common/consts.h"
 #include "core/common/types.h"
 #include "core/data_structures/kernel_bitmap.cuh"
@@ -43,35 +47,31 @@ MatrixOpsKernelWrapper* MatrixOpsKernelWrapper::GetInstance() {
   return ptr_;
 }
 
+#if defined(USE_AVX2) && !defined(__CUDACC__)
 inline __m256 fast_exp_avx(__m256 x) {
-  // 限制输入范围 [-10, 10] 避免数值问题
   const __m256 max_x = _mm256_set1_ps(10.0f);
   const __m256 min_x = _mm256_set1_ps(-10.0f);
   x = _mm256_min_ps(x, max_x);
   x = _mm256_max_ps(x, min_x);
-
-  // 使用多项式近似 exp(x) (5阶泰勒展开)
   const __m256 c0 = _mm256_set1_ps(1.0f);
   const __m256 c1 = _mm256_set1_ps(1.0f);
   const __m256 c2 = _mm256_set1_ps(0.5f);
-  const __m256 c3 = _mm256_set1_ps(0.166666667f);  // 1/6
-  const __m256 c4 = _mm256_set1_ps(0.041666667f);  // 1/24
-  const __m256 c5 = _mm256_set1_ps(0.008333333f);  // 1/120
-
+  const __m256 c3 = _mm256_set1_ps(0.166666667f);
+  const __m256 c4 = _mm256_set1_ps(0.041666667f);
+  const __m256 c5 = _mm256_set1_ps(0.008333333f);
   __m256 x2 = _mm256_mul_ps(x, x);
   __m256 x3 = _mm256_mul_ps(x2, x);
   __m256 x4 = _mm256_mul_ps(x3, x);
   __m256 x5 = _mm256_mul_ps(x4, x);
-
   __m256 result = c0;
   result = _mm256_add_ps(result, _mm256_mul_ps(c1, x));
   result = _mm256_add_ps(result, _mm256_mul_ps(c2, x2));
   result = _mm256_add_ps(result, _mm256_mul_ps(c3, x3));
   result = _mm256_add_ps(result, _mm256_mul_ps(c4, x4));
   result = _mm256_add_ps(result, _mm256_mul_ps(c5, x5));
-
   return result;
 }
+#endif
 
 static void SimdSquaredDifferenceSIMD(const float* v_a, const float* v_b,
                                       float* v_c, size_t n) {
@@ -234,27 +234,22 @@ static __global__ void MatrixMulKernel(ParametersMatrix<T> params) {
   }
 }
 
+#if defined(USE_AVX2) && !defined(__CUDACC__)
 template <typename T>
 static void MatrixMulSIMD(ParametersMatrix<T> params) {
   for (int i = 0; i < params.m; i++) {
     for (int j = 0; j < params.n; j++) {
       __m256 sum = _mm256_setzero_ps();
-
-      // 主计算部分 - 每次处理8个元素
       int k = 0;
       for (; k <= params.k - 8; k += 8) {
         __m256 a = _mm256_loadu_ps(&params.A[i * params.k + k]);
         __m256 b = _mm256_loadu_ps(&params.B[k * params.n + j]);
         sum = _mm256_fmadd_ps(a, b, sum);
       }
-
-      // 处理剩余元素
       float s = 0.0f;
       for (; k < params.k; k++) {
         s += params.A[i * params.k + k] * params.B[k * params.n + j];
       }
-
-      // 合并SIMD和标量结果
       alignas(32) float temp[8];
       _mm256_store_ps(temp, sum);
       params.C[i * params.n + j] = temp[0] + temp[1] + temp[2] + temp[3] +
@@ -262,6 +257,20 @@ static void MatrixMulSIMD(ParametersMatrix<T> params) {
     }
   }
 }
+#else
+template <typename T>
+static void MatrixMulScalar(ParametersMatrix<T> params) {
+  for (int i = 0; i < params.m; i++) {
+    for (int j = 0; j < params.n; j++) {
+      float sum = 0.0f;
+      for (int k = 0; k < params.k; k++) {
+        sum += params.A[i * params.k + k] * params.B[k * params.n + j];
+      }
+      params.C[i * params.n + j] = sum;
+    }
+  }
+}
+#endif
 
 template <typename T>
 static __global__ void MatrixMulTransposedBKernel(ParametersMatrix<T> params) {
@@ -411,7 +420,11 @@ void MatrixOpsKernelWrapper::CPUMatMult(const float* A, const float* B,
   if (transposed_b) {
     MatrixTransposedBMulSIMD(params);
   } else {
+#if defined(USE_AVX2) && !defined(__CUDACC__)
     MatrixMulSIMD(params);
+#else
+    MatrixMulScalar(params);
+#endif
   }
 }
 

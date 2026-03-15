@@ -1,4 +1,5 @@
-#include <execution>
+#include "core/util/execution_policy.h"
+#include <algorithm>
 #include <filesystem>
 #include <fstream>
 #include <numeric>
@@ -55,7 +56,7 @@ void Edges::Init(EdgeIndex n_edges, VertexID* edges_buf,
   VertexID min_vid = MAX_VERTEX_ID;
 
   // Get Min Max vertex ID.
-  std::for_each(std::execution::par, worker.begin(), worker.end(),
+  ParForEach(worker.begin(), worker.end(),
                 [this, n_edges, step, &edges_buf, &min_vid, &max_vid](auto w) {
                   for (EdgeIndex _ = w; _ < n_edges; _ += step) {
                     edges_ptr_[_].src = edges_buf[_ * 2];
@@ -70,7 +71,7 @@ void Edges::Init(EdgeIndex n_edges, VertexID* edges_buf,
   BitmapOwnership visited(max_vid);
 
   // Get number of vertices.
-  std::for_each(std::execution::par, worker.begin(), worker.end(),
+  ParForEach(worker.begin(), worker.end(),
                 [this, &visited, step, n_edges](auto w) {
                   for (EdgeIndex _ = w; _ < n_edges; _ += step) {
                     visited.SetBit(edges_ptr_[_].src);
@@ -241,7 +242,7 @@ void Edges::ReadFromCSV(const std::string& filename, const std::string& sep,
 
   if (compressed) {
     std::cout << "[Edges] Reading CSV with compressed ..." << std::endl;
-    std::for_each(std::execution::par, worker.begin(), worker.end(),
+    ParForEach(worker.begin(), worker.end(),
                   [this, step](auto w) {
                     for (auto i = w; i < get_metadata().num_vertices;
                          i += step) {
@@ -287,7 +288,7 @@ void Edges::GenerateLocalID2GlobalID() {
   }
 
   edgelist_metadata_.num_vertices = bitmap.Count();
-  std::for_each(std::execution::par, worker.begin(), worker.end(),
+  ParForEach(worker.begin(), worker.end(),
                 [this, step, &vid_map, &new_localid_to_globalid](auto w) {
                   for (auto i = w; i < get_metadata().num_edges; i += step) {
                     auto e = get_edge_by_index(i);
@@ -319,7 +320,7 @@ void Edges::Compacted() {
            sizeof(VertexID) * get_metadata().num_vertices);
   }
 
-  std::for_each(std::execution::par, worker.begin(), worker.end(),
+  ParForEach(worker.begin(), worker.end(),
                 [this, step](auto w) {
                   for (auto i = w; i < get_metadata().num_edges; i += step) {
                     auto e = get_edge_by_index(i);
@@ -335,7 +336,7 @@ void Edges::Transpose() {
   std::vector<size_t> worker(parallelism);
   std::iota(worker.begin(), worker.end(), 0);
   auto step = worker.size();
-  std::for_each(std::execution::par, worker.begin(), worker.end(),
+  ParForEach(worker.begin(), worker.end(),
                 [this, step](auto w) {
                   for (auto i = w; i < get_metadata().num_edges; i += step) {
                     VertexID tmp = edges_ptr_[i].src;
@@ -346,7 +347,7 @@ void Edges::Transpose() {
 }
 
 void Edges::SortBySrc() {
-  std::sort(std::execution::par, edges_ptr_,
+  std::sort(MATRIXGRAPH_EXEC_POLICY edges_ptr_,
             edges_ptr_ + edgelist_metadata_.num_edges);
 }
 
@@ -379,7 +380,7 @@ void Edges::GenerateVLabel(VertexID range, bool random) {
 
     std::uniform_int_distribution<> dis(0, range);
 
-    std::for_each(std::execution::par, worker.begin(), worker.end(),
+    ParForEach(worker.begin(), worker.end(),
                   [this, step, &dis, &gen](auto w) {
                     for (auto vid = w; vid < edgelist_metadata_.num_vertices;
                          vid += step) {
@@ -388,7 +389,7 @@ void Edges::GenerateVLabel(VertexID range, bool random) {
                     }
                   });
   } else {
-    std::for_each(std::execution::par, worker.begin(), worker.end(),
+    ParForEach(worker.begin(), worker.end(),
                   [this, step, range](auto w) {
                     for (auto vid = w; vid < edgelist_metadata_.num_vertices;
                          vid += step) {

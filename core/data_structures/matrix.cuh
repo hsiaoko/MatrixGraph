@@ -2,7 +2,6 @@
 #define MATRIXGRAPH_MATRIX_CUH
 
 #include <string>
-#include <cstdint>
 
 namespace sics {
 namespace matrixgraph {

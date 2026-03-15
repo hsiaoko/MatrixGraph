@@ -2,11 +2,13 @@
 
 #include <algorithm>
 #include <ctime>
-#include <execution>
 #include <iostream>
 #include <mutex>
+#include <numeric>
 #include <thread>
 #include <unordered_map>
+
+#include "core/util/execution_policy.h"
 
 #include "core/common/consts.h"
 #include "core/common/host_algorithms.cuh"
