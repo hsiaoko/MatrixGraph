@@ -2,6 +2,7 @@
 
 #include <cuda_runtime.h>
 #include <cstdio>
+#include <cstdlib>
 
 #include "task/gpu_task/kernel/kernel_matrix_ops.cuh"
 
@@ -20,11 +21,25 @@ inline void log_cuda_error(const char* op) {
   }
 }
 
+// If MATRIXGRAPH_CUDA_DEVICE is set (e.g. to "1"), use that GPU for subsequent CUDA calls.
+inline void set_device_from_env() {
+  const char* s = std::getenv("MATRIXGRAPH_CUDA_DEVICE");
+  if (s == nullptr || s[0] == '\0') return;
+  int device = std::atoi(s);
+  if (device >= 0) {
+    cudaError_t e = cudaSetDevice(device);
+    if (e != cudaSuccess) {
+      std::fprintf(stderr, "[matrixgraph] cudaSetDevice(%d) failed: %s\n", device, cudaGetErrorString(e));
+    }
+  }
+}
+
 }  // namespace
 
 extern "C" {
 
 int matrixgraph_matmult(const float* A, const float* B, float* C, int m, int k, int n) {
+  set_device_from_env();
   size_t sz_a = static_cast<size_t>(m) * k * sizeof(float);
   size_t sz_b = static_cast<size_t>(k) * n * sizeof(float);
   size_t sz_c = static_cast<size_t>(m) * n * sizeof(float);
@@ -77,6 +92,7 @@ matmult_fail:
 }
 
 int matrixgraph_relu(float* A, int m, int n) {
+  set_device_from_env();
   size_t sz = static_cast<size_t>(m) * n * sizeof(float);
   float* d_A = nullptr;
 
@@ -100,6 +116,7 @@ int matrixgraph_relu(float* A, int m, int n) {
 }
 
 int matrixgraph_matadd(const float* A, float* B, int m, int n) {
+  set_device_from_env();
   size_t sz = static_cast<size_t>(m) * n * sizeof(float);
   float* d_A = nullptr;
   float* d_B = nullptr;
@@ -133,6 +150,7 @@ matadd_fail:
 }
 
 int matrixgraph_transpose(const float* A, float* B, int m, int n) {
+  set_device_from_env();
   size_t sz_a = static_cast<size_t>(m) * n * sizeof(float);
   size_t sz_b = static_cast<size_t>(n) * m * sizeof(float);
   float* d_A = nullptr;
