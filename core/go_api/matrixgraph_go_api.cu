@@ -1,6 +1,7 @@
 #include "go_api/matrixgraph_go_api.h"
 
 #include <cuda_runtime.h>
+#include <cstdio>
 
 #include "task/gpu_task/kernel/kernel_matrix_ops.cuh"
 
@@ -10,6 +11,13 @@ namespace {
 
 inline int cuda_err_to_int(cudaError_t e) {
   return (e == cudaSuccess) ? 0 : 1;
+}
+
+inline void log_cuda_error(const char* op) {
+  cudaError_t e = cudaGetLastError();
+  if (e != cudaSuccess) {
+    std::fprintf(stderr, "[matrixgraph] %s CUDA error: %s\n", op, cudaGetErrorString(e));
+  }
 }
 
 }  // namespace
@@ -27,11 +35,14 @@ int matrixgraph_matmult(const float* A, const float* B, float* C, int m, int k, 
   cudaStream_t stream = nullptr;
 
   cudaError_t err = cudaMalloc(&d_A, sz_a);
-  if (err != cudaSuccess) return cuda_err_to_int(err);
+  if (err != cudaSuccess) {
+    log_cuda_error("MatMult cudaMalloc");
+    return cuda_err_to_int(err);
+  }
   err = cudaMalloc(&d_B, sz_b);
-  if (err != cudaSuccess) { cudaFree(d_A); return cuda_err_to_int(err); }
+  if (err != cudaSuccess) { cudaFree(d_A); log_cuda_error("MatMult cudaMalloc"); return cuda_err_to_int(err); }
   err = cudaMalloc(&d_C, sz_c);
-  if (err != cudaSuccess) { cudaFree(d_A); cudaFree(d_B); return cuda_err_to_int(err); }
+  if (err != cudaSuccess) { cudaFree(d_A); cudaFree(d_B); log_cuda_error("MatMult cudaMalloc"); return cuda_err_to_int(err); }
 
   err = cudaMemcpy(d_A, A, sz_a, cudaMemcpyHostToDevice);
   if (err != cudaSuccess) goto matmult_fail;
@@ -43,7 +54,8 @@ int matrixgraph_matmult(const float* A, const float* B, float* C, int m, int k, 
 
   kernel::MatrixOpsKernelWrapper::MatMult(stream, d_A, d_B, d_C, m, k, n, false, false);
 
-  cudaStreamSynchronize(stream);
+  err = cudaStreamSynchronize(stream);
+  if (err != cudaSuccess) goto matmult_fail;
   cudaStreamDestroy(stream);
   stream = nullptr;
 
@@ -56,6 +68,7 @@ int matrixgraph_matmult(const float* A, const float* B, float* C, int m, int k, 
   return 0;
 
 matmult_fail:
+  log_cuda_error("MatMult");
   if (stream) cudaStreamDestroy(stream);
   if (d_A) cudaFree(d_A);
   if (d_B) cudaFree(d_B);
