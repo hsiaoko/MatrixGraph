@@ -42,9 +42,31 @@ list(FILTER CORE_SOURCES EXCLUDE REGEX ".*/go_api/.*")
 list(FILTER CORE_SOURCES EXCLUDE REGEX ".*_test\\.cpp$")
 list(FILTER CORE_SOURCES EXCLUDE REGEX ".*_test\\.cu$")
 
+# Fallback: some CMake/env combinations may not populate absolute-path GLOB_RECURSE.
+if (NOT CORE_SOURCES)
+    file(GLOB_RECURSE _CORE_REL CONFIGURE_DEPENDS
+            RELATIVE "${CMAKE_CURRENT_SOURCE_DIR}"
+            "*.cu"
+            "*.cpp"
+    )
+    set(CORE_SOURCES "")
+    foreach(_s IN LISTS _CORE_REL)
+        if (_s MATCHES "^go_api/")
+            continue()
+        endif()
+        if (_s MATCHES ".*_test\\.cpp$" OR _s MATCHES ".*_test\\.cu$")
+            continue()
+        endif()
+        list(APPEND CORE_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/${_s}")
+    endforeach()
+    unset(_CORE_REL)
+endif ()
+
 if (NOT CORE_SOURCES)
     message(FATAL_ERROR "matrixgraph_core has no source files after filtering. Check core/CMakeLists.txt source globs.")
 endif ()
+list(LENGTH CORE_SOURCES CORE_SOURCES_COUNT)
+message(STATUS "[matrixgraph_core] source files: ${CORE_SOURCES_COUNT}")
 
 # AVX：仅对 C++ 启用，CUDA 不启用（避免 nvcc 与 GCC avx512bf16/amxtileintrin 冲突）
 include(CheckCXXCompilerFlag)
