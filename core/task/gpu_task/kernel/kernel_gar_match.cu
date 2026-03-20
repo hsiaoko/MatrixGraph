@@ -1,21 +1,9 @@
-#include "core/common/consts.h"
-#include "core/common/host_algorithms.cuh"
-#include "core/common/types.h"
-#include "core/data_structures/device_buffer.cuh"
-#include "core/data_structures/heap.cuh"
-#include "core/data_structures/host_buffer.cuh"
-#include "core/data_structures/kernel_bitmap.cuh"
-#include "core/data_structures/kernel_bitmap_no_ownership.cuh"
-#include "core/data_structures/mini_kernel_bitmap.cuh"
-#include "core/data_structures/unified_buffer.cuh"
-#include "core/task/gpu_task/kernel/algorithms/hash.cuh"
-#include "core/task/gpu_task/kernel/algorithms/sort.cuh"
 #include "core/task/gpu_task/kernel/kernel_gar_match.cuh"
-#include "core/task/gpu_task/kernel/kernel_woj_subiso.cuh"
-#include "core/util/bitmap_ownership.h"
-#include "core/util/execution_policy.h"
-#include <cuda_runtime.h>
+#include <algorithm>
+#include <cstdint>
 #include <iostream>
+#include <unordered_set>
+#include <vector>
 
 namespace sics {
 namespace matrixgraph {
@@ -23,15 +11,10 @@ namespace core {
 namespace task {
 namespace kernel {
 
-using EdgeIndex = sics::matrixgraph::core::common::EdgeIndex;
-using VertexLabel = sics::matrixgraph::core::common::VertexLabel;
-using sics::matrixgraph::core::common::kMaxNumCandidatesPerThread;
-using VertexID = sics::matrixgraph::core::common::VertexID;
-using VertexID = sics::matrixgraph::core::common::VertexID;
-using sics::matrixgraph::core::common::kBlockDim;
-using sics::matrixgraph::core::common::kGridDim;
-using sics::matrixgraph::core::common::kMaxNumWeft;
-using sics::matrixgraph::core::common::kMaxVertexID;
+using GARGraphArrays = sics::matrixgraph::core::data_structures::GARGraphArrays;
+using GARPatternArrays =
+    sics::matrixgraph::core::data_structures::GARPatternArrays;
+using GARMatchArrays = sics::matrixgraph::core::data_structures::GARMatchArrays;
 
 GARMatchKernelWrapper* GARMatchKernelWrapper::GetInstance() {
   if (ptr_ == nullptr) {
@@ -40,19 +23,151 @@ GARMatchKernelWrapper* GARMatchKernelWrapper::GetInstance() {
   return ptr_;
 }
 
+static bool LabelDegreeFilter(const GARMatchArrays& m,
+                              const GARPatternArrays& p,
+                              const GARGraphArrays& g, int u_idx,
+                              uint32_t v_id) {
+  (void)m;
+  if (u_idx < 0 || u_idx >= p.n_nodes) return false;
+  int32_t u_label = p.node_label_idx[u_idx];
+  int32_t v_label = -1;
+  for (int i = 0; i < g.n_vertices; ++i) {
+    if (g.v_id[i] == v_id) {
+      v_label = g.v_label_idx[i];
+      break;
+    }
+  }
+  if (v_label < 0) return false;
+  if (u_label != v_label) return false;
+  int p_out = 0, p_in = 0, g_out = 0, g_in = 0;
+  for (int e = 0; e < p.n_edges; ++e) {
+    if (p.edge_src[e] == u_idx) ++p_out;
+    if (p.edge_dst[e] == u_idx) ++p_in;
+  }
+  for (int e = 0; e < g.n_edges; ++e) {
+    if (g.e_src[e] == v_id) ++g_out;
+    if (g.e_dst[e] == v_id) ++g_in;
+  }
+  return g_out >= p_out && g_in >= p_in;
+}
+
+static bool NeighborLabelCounterFilter(const GARMatchArrays& m,
+                                       const GARPatternArrays& p,
+                                       const GARGraphArrays& g, int u_idx,
+                                       uint32_t v_id) {
+  (void)m;
+  if (u_idx < 0 || u_idx >= p.n_nodes) return false;
+  int32_t u_label = p.node_label_idx[u_idx];
+  int32_t v_label = -1;
+  for (int i = 0; i < g.n_vertices; ++i) {
+    if (g.v_id[i] == v_id) {
+      v_label = g.v_label_idx[i];
+      break;
+    }
+  }
+  if (v_label < 0 || u_label != v_label) return false;
+
+  std::unordered_set<int32_t> p_labels;
+  std::unordered_set<int32_t> g_labels;
+  for (int e = 0; e < p.n_edges; ++e) {
+    if (p.edge_src[e] == u_idx)
+      p_labels.insert(p.node_label_idx[p.edge_dst[e]]);
+    if (p.edge_dst[e] == u_idx)
+      p_labels.insert(p.node_label_idx[p.edge_src[e]]);
+  }
+  for (int e = 0; e < g.n_edges; ++e) {
+    if (g.e_src[e] == v_id) {
+      int li = -1;
+      for (int i = 0; i < g.n_vertices; ++i) {
+        if (g.v_id[i] == g.e_dst[e]) {
+          li = i;
+          break;
+        }
+      }
+      if (li >= 0) g_labels.insert(g.v_label_idx[li]);
+    }
+    if (g.e_dst[e] == v_id) {
+      int li = -1;
+      for (int i = 0; i < g.n_vertices; ++i) {
+        if (g.v_id[i] == g.e_src[e]) {
+          li = i;
+          break;
+        }
+      }
+      if (li >= 0) g_labels.insert(g.v_label_idx[li]);
+    }
+  }
+  return g_labels.size() >= p_labels.size();
+}
+
+static bool KMinWiseIPFilter(const GARMatchArrays& m, const GARPatternArrays& p,
+                             const GARGraphArrays& g, int u_idx,
+                             uint32_t v_id) {
+  (void)m;
+  if (u_idx < 0 || u_idx >= p.n_nodes) return false;
+  std::vector<uint32_t> pu;
+  std::vector<uint32_t> gv;
+  auto hasher = std::hash<int32_t>{};
+
+  for (int e = 0; e < p.n_edges; ++e) {
+    if (p.edge_dst[e] == u_idx) {
+      int nbr = p.edge_src[e];
+      pu.push_back(
+          static_cast<uint32_t>((hasher(p.node_label_idx[nbr]) << 3) % 64));
+    }
+  }
+  for (int e = 0; e < g.n_edges; ++e) {
+    if (g.e_dst[e] == v_id) {
+      int li = -1;
+      for (int i = 0; i < g.n_vertices; ++i) {
+        if (g.v_id[i] == g.e_src[e]) {
+          li = i;
+          break;
+        }
+      }
+      if (li >= 0) {
+        gv.push_back(
+            static_cast<uint32_t>((hasher(g.v_label_idx[li]) << 3) % 64));
+      }
+    }
+  }
+
+  std::sort(pu.begin(), pu.end());
+  std::sort(gv.begin(), gv.end());
+  size_t i = 0, j = 0;
+  std::vector<uint32_t> pu_only;
+  std::vector<uint32_t> gv_only;
+  while (i < pu.size() && j < gv.size()) {
+    if (pu[i] == gv[j]) {
+      ++i;
+      ++j;
+    } else if (pu[i] < gv[j]) {
+      pu_only.push_back(pu[i++]);
+    } else {
+      gv_only.push_back(gv[j++]);
+    }
+  }
+  while (i < pu.size()) pu_only.push_back(pu[i++]);
+  while (j < gv.size()) gv_only.push_back(gv[j++]);
+  if (pu_only.empty()) return true;
+  if (gv_only.empty()) return false;
+  uint32_t min_gv = gv_only.front();
+  for (uint32_t x : pu_only) {
+    if (x < min_gv) return false;
+  }
+  return true;
+}
+
 int GARMatchKernelWrapper::GARMatch(const GARGraphArrays& g,
                                     const GARPatternArrays& p,
                                     GARMatchArrays* out) {
-  std::cout << "GARMatchKernelWrapper::GARMatch" << std::endl;
-  dim3 dimBlock(kBlockDim);
-  dim3 dimGrid(kGridDim);
-  (void)g;
-  (void)p;
+  std::cout << "GARMatchKernelWrapper::GARMatch (placeholder, filters exposed)"
+            << std::endl;
   if (out == nullptr) {
     return 1;
   }
   if (out->num_conditions) {
-    *(out->num_conditions) = 0;
+    *(out->num_conditions) = 1;
   }
   if (out->row_size) {
     *(out->row_size) = 0;
@@ -60,6 +175,10 @@ int GARMatchKernelWrapper::GARMatch(const GARGraphArrays& g,
   if (out->match_size) {
     *(out->match_size) = 0;
   }
+  // Keep matching body as placeholder for now; filtering APIs above are ready
+  // to use.
+  (void)g;
+  (void)p;
   return 0;
 }
 

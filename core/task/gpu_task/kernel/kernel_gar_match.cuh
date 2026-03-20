@@ -1,6 +1,8 @@
 #ifndef MATRIXGRAPH_CORE_TASK_KERNEL_KERNEL_GAR_MATCH_CUH_
 #define MATRIXGRAPH_CORE_TASK_KERNEL_KERNEL_GAR_MATCH_CUH_
 
+#include <cstdint>
+
 #include "core/data_structures/gar_graph_arrays.h"
 #include "core/data_structures/gar_match_arrays.h"
 #include "core/data_structures/gar_pattern_arrays.h"
@@ -11,19 +13,17 @@ namespace core {
 namespace task {
 namespace kernel {
 
+using GARGraphArrays = sics::matrixgraph::core::data_structures::GARGraphArrays;
+using GARPatternArrays = sics::matrixgraph::core::data_structures::GARPatternArrays;
+using GARMatchArrays = sics::matrixgraph::core::data_structures::GARMatchArrays;
+
 class GARMatchKernelWrapper {
  public:
-  using GARGraphArrays =
-      sics::matrixgraph::core::data_structures::GARGraphArrays;
-  using GARPatternArrays =
-      sics::matrixgraph::core::data_structures::GARPatternArrays;
-  using GARMatchArrays =
-      sics::matrixgraph::core::data_structures::GARMatchArrays;
-
   GARMatchKernelWrapper(const GARMatchKernelWrapper& obj) = delete;
   void operator=(const GARMatchKernelWrapper&) = delete;
 
   static GARMatchKernelWrapper* GetInstance();
+
 
   // Placeholder: returns 0 and writes empty output.
   static int GARMatch(const GARGraphArrays& g, const GARPatternArrays& p,
