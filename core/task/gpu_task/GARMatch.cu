@@ -10,7 +10,7 @@ namespace task {
 using GARMatchKernelWrapper =
     sics::matrixgraph::core::task::kernel::GARMatchKernelWrapper;
 
-__host__ int GARMatch::SubIso(
+__host__ int GARMatch::Run(
     const uint32_t* g_v_id, const int32_t* g_v_label_idx, int g_n_vertices,
     const uint32_t* g_e_src, const uint32_t* g_e_dst, const uint32_t* g_e_id,
     const int32_t* g_e_label_idx, int g_n_edges,

@@ -16,6 +16,7 @@ GARMatchKernelWrapper* GARMatchKernelWrapper::GetInstance() {
 int GARMatchKernelWrapper::GARMatch(const GARGraphParams& g,
                                     const GARPatternParams& p,
                                     GARMatchOutput* out) {
+  std::cout << "GARMatchKernelWrapper::GARMatch" << std::endl;
   (void)g;
   (void)p;
   if (out == nullptr) {

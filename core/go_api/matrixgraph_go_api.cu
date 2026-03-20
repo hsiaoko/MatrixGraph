@@ -217,7 +217,7 @@ int matrixgraph_gar_match(
     int32_t* out_row_count, int out_row_capacity, int* out_row_size,
     uint32_t* out_matched_v_ids, int out_match_capacity, int* out_match_size) {
   // Route to GARMatch::SubIso.
-  return task::GARMatch::SubIso(
+  return task::GARMatch::Run(
       g_v_id, g_v_label_idx, g_n_vertices, g_e_src, g_e_dst, g_e_id,
       g_e_label_idx, g_n_edges, p_node_label_idx, p_n_nodes, p_edge_src,
       p_edge_dst, p_edge_label_idx, p_n_edges, out_num_conditions,

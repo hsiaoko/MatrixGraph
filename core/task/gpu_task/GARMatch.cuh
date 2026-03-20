@@ -26,7 +26,7 @@ class GARMatch : public TaskBase {
       : g_(g), p_(p), out_(out) {}
 
   // C-style entry for go_api: accepts serialized g/p arrays and writes match arrays.
-  __host__ static int SubIso(
+  __host__ static int Run(
       const uint32_t* g_v_id,
       const int32_t* g_v_label_idx,
       int g_n_vertices,
