@@ -23,6 +23,16 @@ namespace core {
 namespace task {
 namespace kernel {
 
+using EdgeIndex = sics::matrixgraph::core::common::EdgeIndex;
+using VertexLabel = sics::matrixgraph::core::common::VertexLabel;
+using sics::matrixgraph::core::common::kMaxNumCandidatesPerThread;
+using VertexID = sics::matrixgraph::core::common::VertexID;
+using VertexID = sics::matrixgraph::core::common::VertexID;
+using sics::matrixgraph::core::common::kBlockDim;
+using sics::matrixgraph::core::common::kGridDim;
+using sics::matrixgraph::core::common::kMaxNumWeft;
+using sics::matrixgraph::core::common::kMaxVertexID;
+
 GARMatchKernelWrapper* GARMatchKernelWrapper::GetInstance() {
   if (ptr_ == nullptr) {
     ptr_ = new GARMatchKernelWrapper();
