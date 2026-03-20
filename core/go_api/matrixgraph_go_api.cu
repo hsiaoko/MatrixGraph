@@ -1,5 +1,5 @@
 #include "go_api/matrixgraph_go_api.h"
-#include "task/gpu_task/GARMatch.cuh"
+#include "task/gpu_task/gar_match.cuh"
 #include "task/gpu_task/kernel/kernel_matrix_ops.cuh"
 #include <cstdio>
 #include <cstdlib>

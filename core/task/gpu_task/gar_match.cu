@@ -1,4 +1,4 @@
-#include "core/task/gpu_task/GARMatch.cuh"
+#include "core/task/gpu_task/gar_match.cuh"
 #include "core/task/gpu_task/kernel/kernel_gar_match.cuh"
 #include <iostream>
 
@@ -20,8 +20,8 @@ __host__ int GARMatch::Run(
     int32_t* out_row_cond_j, int32_t* out_row_pos, int32_t* out_row_offset,
     int32_t* out_row_count, int out_row_capacity, int* out_row_size,
     uint32_t* out_matched_v_ids, int out_match_capacity, int* out_match_size) {
-  std::cout << "[GARMatch] SubIso() ..." << std::endl;
-  GARGraphParams g{
+  std::cout << "[GARMatch] Run() ..." << std::endl;
+  GARGraphArrays g{
       .v_id = g_v_id,
       .v_label_idx = g_v_label_idx,
       .n_vertices = g_n_vertices,
@@ -31,7 +31,7 @@ __host__ int GARMatch::Run(
       .e_label_idx = g_e_label_idx,
       .n_edges = g_n_edges,
   };
-  GARPatternParams p{
+  GARPatternArrays p{
       .node_label_idx = p_node_label_idx,
       .n_nodes = p_n_nodes,
       .edge_src = p_edge_src,
@@ -39,7 +39,7 @@ __host__ int GARMatch::Run(
       .edge_label_idx = p_edge_label_idx,
       .n_edges = p_n_edges,
   };
-  GARMatchOutput out{
+  GARMatchArrays out{
       .num_conditions = out_num_conditions,
       .row_pivot_id = out_row_pivot_id,
       .row_cond_j = out_row_cond_j,
@@ -52,7 +52,9 @@ __host__ int GARMatch::Run(
       .match_capacity = out_match_capacity,
       .match_size = out_match_size,
   };
-  return GARMatchKernelWrapper::GARMatch(g, p, &out);
+  GARMatchKernelWrapper::GARMatch(g, p, &out);
+
+  return 0;
 }
 
 __host__ void GARMatch::Run() {

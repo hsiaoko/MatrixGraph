@@ -4,6 +4,9 @@
 #include <cstdint>
 
 #include "core/common/types.h"
+#include "core/data_structures/gar_graph_arrays.h"
+#include "core/data_structures/gar_match_arrays.h"
+#include "core/data_structures/gar_pattern_arrays.h"
 #include "core/task/gpu_task/kernel/kernel_gar_match.cuh"
 #include "core/task/gpu_task/task_base.cuh"
 
@@ -15,14 +18,16 @@ namespace task {
 class GARMatch : public TaskBase {
  private:
   using VertexID = sics::matrixgraph::core::common::VertexID;
-  using GARGraphParams = sics::matrixgraph::core::task::kernel::GARGraphParams;
-  using GARPatternParams =
-      sics::matrixgraph::core::task::kernel::GARPatternParams;
-  using GARMatchOutput = sics::matrixgraph::core::task::kernel::GARMatchOutput;
+  using GARGraphArrays =
+      sics::matrixgraph::core::data_structures::GARGraphArrays;
+  using GARPatternArrays =
+      sics::matrixgraph::core::data_structures::GARPatternArrays;
+  using GARMatchArrays =
+      sics::matrixgraph::core::data_structures::GARMatchArrays;
 
  public:
-  GARMatch(const GARGraphParams& g, const GARPatternParams& p,
-           GARMatchOutput* out)
+  GARMatch(const GARGraphArrays& g, const GARPatternArrays& p,
+           GARMatchArrays* out)
       : g_(g), p_(p), out_(out) {}
 
   // C-style entry for go_api: accepts serialized g/p arrays and writes match arrays.
@@ -58,9 +63,9 @@ class GARMatch : public TaskBase {
   __host__ int Status() const { return status_; }
 
  private:
-  GARGraphParams g_{};
-  GARPatternParams p_{};
-  GARMatchOutput* out_ = nullptr;
+  GARGraphArrays g_{};
+  GARPatternArrays p_{};
+  GARMatchArrays* out_ = nullptr;
   int status_ = 1;
 };
 
