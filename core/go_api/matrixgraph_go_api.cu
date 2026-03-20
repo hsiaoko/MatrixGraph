@@ -4,9 +4,11 @@
 #include <cstdio>
 #include <cstdlib>
 
+#include "task/gpu_task/GARMatch.cuh"
 #include "task/gpu_task/kernel/kernel_matrix_ops.cuh"
 
 namespace kernel = sics::matrixgraph::core::task::kernel;
+namespace task = sics::matrixgraph::core::task;
 
 namespace {
 
@@ -208,34 +210,14 @@ int matrixgraph_gar_match(
     uint32_t* out_matched_v_ids,
     int out_match_capacity,
     int* out_match_size) {
-  // Placeholder only: suppress unused warnings and emit empty output.
-  (void)g_v_id;
-  (void)g_v_label_idx;
-  (void)g_n_vertices;
-  (void)g_e_src;
-  (void)g_e_dst;
-  (void)g_e_id;
-  (void)g_e_label_idx;
-  (void)g_n_edges;
-  (void)p_node_label_idx;
-  (void)p_n_nodes;
-  (void)p_edge_src;
-  (void)p_edge_dst;
-  (void)p_edge_label_idx;
-  (void)p_n_edges;
-  (void)out_row_pivot_id;
-  (void)out_row_cond_j;
-  (void)out_row_pos;
-  (void)out_row_offset;
-  (void)out_row_count;
-  (void)out_row_capacity;
-  (void)out_matched_v_ids;
-  (void)out_match_capacity;
-
-  if (out_num_conditions) *out_num_conditions = 0;
-  if (out_row_size) *out_row_size = 0;
-  if (out_match_size) *out_match_size = 0;
-  return 0;
+  // Route to GARMatch::SubIso.
+  return task::GARMatch::SubIso(
+      g_v_id, g_v_label_idx, g_n_vertices, g_e_src, g_e_dst, g_e_id,
+      g_e_label_idx, g_n_edges, p_node_label_idx, p_n_nodes, p_edge_src,
+      p_edge_dst, p_edge_label_idx, p_n_edges, out_num_conditions,
+      out_row_pivot_id, out_row_cond_j, out_row_pos, out_row_offset,
+      out_row_count, out_row_capacity, out_row_size, out_matched_v_ids,
+      out_match_capacity, out_match_size);
 }
 
 }  // extern "C"
