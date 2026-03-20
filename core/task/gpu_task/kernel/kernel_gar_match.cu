@@ -1,5 +1,7 @@
 #include "core/task/gpu_task/kernel/kernel_gar_match.cuh"
 
+#include <iostream>
+
 namespace sics {
 namespace matrixgraph {
 namespace core {
