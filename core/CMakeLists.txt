@@ -33,24 +33,18 @@ set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -Xcompiler=-mno-avx512f,-mno-avx512bf1
 #######################
 # Source Files
 #######################
-# Core CUDA sources
-file(GLOB_RECURSE CORE_SOURCES
-        "*.cu"
-        "components/*.cu"
-        "io/*.cu"
-        "data_structures/*.cu"
-        "util/*.cu"
-        "task/*.cu"
-        "task/gpu_task/kernel/*.cu"
-        "task/gpu_task/kernel/data_structures/*.cu"
-        "task/gpu_task/kernel/algorithms/*.cu"
-        "task/gpu_task/*.cu"
-        "task/cpu_task/*.cpp"
+# Core sources (use absolute globs to avoid empty list on some CMake/env setups)
+file(GLOB_RECURSE CORE_SOURCES CONFIGURE_DEPENDS
+        "${CMAKE_CURRENT_SOURCE_DIR}/*.cu"
+        "${CMAKE_CURRENT_SOURCE_DIR}/*.cpp"
 )
+list(FILTER CORE_SOURCES EXCLUDE REGEX ".*/go_api/.*")
 list(FILTER CORE_SOURCES EXCLUDE REGEX ".*_test\\.cpp$")
 list(FILTER CORE_SOURCES EXCLUDE REGEX ".*_test\\.cu$")
-# go_api/*.cu is built only by matrixgraph_goapi target, not by matrixgraph_core
-list(FILTER CORE_SOURCES EXCLUDE REGEX "go_api/.*")
+
+if (NOT CORE_SOURCES)
+    message(FATAL_ERROR "matrixgraph_core has no source files after filtering. Check core/CMakeLists.txt source globs.")
+endif ()
 
 # AVX：仅对 C++ 启用，CUDA 不启用（避免 nvcc 与 GCC avx512bf16/amxtileintrin 冲突）
 include(CheckCXXCompilerFlag)
