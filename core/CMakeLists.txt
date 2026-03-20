@@ -33,40 +33,39 @@ set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -Xcompiler=-mno-avx512f,-mno-avx512bf1
 #######################
 # Source Files
 #######################
-# Core sources (use absolute globs to avoid empty list on some CMake/env setups)
-file(GLOB_RECURSE CORE_SOURCES CONFIGURE_DEPENDS
-        "${CMAKE_CURRENT_SOURCE_DIR}/*.cu"
-        "${CMAKE_CURRENT_SOURCE_DIR}/*.cpp"
+# Core sources: collect from explicit directory whitelist (stable across CMake/env variants)
+set(CORE_SOURCE_DIRS
+        "${CMAKE_CURRENT_SOURCE_DIR}"
+        "${CMAKE_CURRENT_SOURCE_DIR}/components"
+        "${CMAKE_CURRENT_SOURCE_DIR}/io"
+        "${CMAKE_CURRENT_SOURCE_DIR}/data_structures"
+        "${CMAKE_CURRENT_SOURCE_DIR}/util"
+        "${CMAKE_CURRENT_SOURCE_DIR}/task"
+        "${CMAKE_CURRENT_SOURCE_DIR}/task/cpu_task"
+        "${CMAKE_CURRENT_SOURCE_DIR}/task/gpu_task"
+        "${CMAKE_CURRENT_SOURCE_DIR}/task/gpu_task/kernel"
+        "${CMAKE_CURRENT_SOURCE_DIR}/task/gpu_task/kernel/data_structures"
+        "${CMAKE_CURRENT_SOURCE_DIR}/task/gpu_task/kernel/algorithms"
 )
+set(CORE_SOURCES "")
+foreach(_d IN LISTS CORE_SOURCE_DIRS)
+    if (EXISTS "${_d}")
+        file(GLOB _cu CONFIGURE_DEPENDS "${_d}/*.cu")
+        file(GLOB _cpp CONFIGURE_DEPENDS "${_d}/*.cpp")
+        list(APPEND CORE_SOURCES ${_cu} ${_cpp})
+    endif()
+endforeach()
+list(REMOVE_DUPLICATES CORE_SOURCES)
 list(FILTER CORE_SOURCES EXCLUDE REGEX ".*/go_api/.*")
 list(FILTER CORE_SOURCES EXCLUDE REGEX ".*_test\\.cpp$")
 list(FILTER CORE_SOURCES EXCLUDE REGEX ".*_test\\.cu$")
 
-# Fallback: some CMake/env combinations may not populate absolute-path GLOB_RECURSE.
-if (NOT CORE_SOURCES)
-    file(GLOB_RECURSE _CORE_REL CONFIGURE_DEPENDS
-            RELATIVE "${CMAKE_CURRENT_SOURCE_DIR}"
-            "*.cu"
-            "*.cpp"
-    )
-    set(CORE_SOURCES "")
-    foreach(_s IN LISTS _CORE_REL)
-        if (_s MATCHES "^go_api/")
-            continue()
-        endif()
-        if (_s MATCHES ".*_test\\.cpp$" OR _s MATCHES ".*_test\\.cu$")
-            continue()
-        endif()
-        list(APPEND CORE_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/${_s}")
-    endforeach()
-    unset(_CORE_REL)
-endif ()
-
-if (NOT CORE_SOURCES)
-    message(FATAL_ERROR "matrixgraph_core has no source files after filtering. Check core/CMakeLists.txt source globs.")
-endif ()
 list(LENGTH CORE_SOURCES CORE_SOURCES_COUNT)
+message(STATUS "[matrixgraph_core] source root: ${CMAKE_CURRENT_SOURCE_DIR}")
 message(STATUS "[matrixgraph_core] source files: ${CORE_SOURCES_COUNT}")
+if (CORE_SOURCES_COUNT EQUAL 0)
+    message(FATAL_ERROR "matrixgraph_core has no source files after filtering. Check core/CMakeLists.txt source dirs.")
+endif ()
 
 # AVX：仅对 C++ 启用，CUDA 不启用（避免 nvcc 与 GCC avx512bf16/amxtileintrin 冲突）
 include(CheckCXXCompilerFlag)
