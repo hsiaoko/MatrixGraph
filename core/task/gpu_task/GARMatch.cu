@@ -38,6 +38,7 @@ __host__ int GARMatch::SubIso(
     uint32_t* out_matched_v_ids,
     int out_match_capacity,
     int* out_match_size) {
+      std::cout << "[GARMatch] SubIso() ..." << std::endl;
   GARGraphParams g{
       .v_id = g_v_id,
       .v_label_idx = g_v_label_idx,
