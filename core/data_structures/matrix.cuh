@@ -2,6 +2,8 @@
 #define MATRIXGRAPH_MATRIX_CUH
 
 #include <string>
+#include <stdint.h>
+
 
 namespace sics {
 namespace matrixgraph {
