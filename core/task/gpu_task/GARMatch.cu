@@ -1,8 +1,6 @@
 #include "core/task/gpu_task/GARMatch.cuh"
-
-#include <iostream>
-
 #include "core/task/gpu_task/kernel/kernel_gar_match.cuh"
+#include <iostream>
 
 namespace sics {
 namespace matrixgraph {
@@ -13,32 +11,16 @@ using GARMatchKernelWrapper =
     sics::matrixgraph::core::task::kernel::GARMatchKernelWrapper;
 
 __host__ int GARMatch::SubIso(
-    const uint32_t* g_v_id,
-    const int32_t* g_v_label_idx,
-    int g_n_vertices,
-    const uint32_t* g_e_src,
-    const uint32_t* g_e_dst,
-    const uint32_t* g_e_id,
-    const int32_t* g_e_label_idx,
-    int g_n_edges,
-    const int32_t* p_node_label_idx,
-    int p_n_nodes,
-    const int32_t* p_edge_src,
-    const int32_t* p_edge_dst,
-    const int32_t* p_edge_label_idx,
-    int p_n_edges,
-    int* out_num_conditions,
-    uint32_t* out_row_pivot_id,
-    int32_t* out_row_cond_j,
-    int32_t* out_row_pos,
-    int32_t* out_row_offset,
-    int32_t* out_row_count,
-    int out_row_capacity,
-    int* out_row_size,
-    uint32_t* out_matched_v_ids,
-    int out_match_capacity,
-    int* out_match_size) {
-      std::cout << "[GARMatch] SubIso() ..." << std::endl;
+    const uint32_t* g_v_id, const int32_t* g_v_label_idx, int g_n_vertices,
+    const uint32_t* g_e_src, const uint32_t* g_e_dst, const uint32_t* g_e_id,
+    const int32_t* g_e_label_idx, int g_n_edges,
+    const int32_t* p_node_label_idx, int p_n_nodes, const int32_t* p_edge_src,
+    const int32_t* p_edge_dst, const int32_t* p_edge_label_idx, int p_n_edges,
+    int* out_num_conditions, uint32_t* out_row_pivot_id,
+    int32_t* out_row_cond_j, int32_t* out_row_pos, int32_t* out_row_offset,
+    int32_t* out_row_count, int out_row_capacity, int* out_row_size,
+    uint32_t* out_matched_v_ids, int out_match_capacity, int* out_match_size) {
+  std::cout << "[GARMatch] SubIso() ..." << std::endl;
   GARGraphParams g{
       .v_id = g_v_id,
       .v_label_idx = g_v_label_idx,
