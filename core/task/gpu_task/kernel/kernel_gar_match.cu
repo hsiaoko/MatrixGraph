@@ -163,6 +163,45 @@ int GARMatchKernelWrapper::GARMatch(const GARGraphArrays& g,
                                     GARMatchArrays* out) {
   std::cout << "GARMatchKernelWrapper::GARMatch (placeholder, filters exposed)"
             << std::endl;
+  auto print_u32 = [](const char* name, const uint32_t* arr, int n) {
+    std::cout << name << " (n=" << n << "): [";
+    for (int i = 0; i < n; ++i) {
+      if (i) std::cout << ", ";
+      std::cout << arr[i];
+    }
+    std::cout << "]" << std::endl;
+  };
+  auto print_i32 = [](const char* name, const int32_t* arr, int n) {
+    std::cout << name << " (n=" << n << "): [";
+    for (int i = 0; i < n; ++i) {
+      if (i) std::cout << ", ";
+      std::cout << arr[i];
+    }
+    std::cout << "]" << std::endl;
+  };
+
+  std::cout << "[GARMatch] ---- Graph Arrays (g) ----" << std::endl;
+  std::cout << "g.n_vertices: " << g.n_vertices << std::endl;
+  std::cout << "g.n_edges: " << g.n_edges << std::endl;
+  if (g.v_id && g.n_vertices > 0) print_u32("g.v_id", g.v_id, g.n_vertices);
+  if (g.v_label_idx && g.n_vertices > 0)
+    print_i32("g.v_label_idx", g.v_label_idx, g.n_vertices);
+  if (g.e_src && g.n_edges > 0) print_u32("g.e_src", g.e_src, g.n_edges);
+  if (g.e_dst && g.n_edges > 0) print_u32("g.e_dst", g.e_dst, g.n_edges);
+  if (g.e_id && g.n_edges > 0) print_u32("g.e_id", g.e_id, g.n_edges);
+  if (g.e_label_idx && g.n_edges > 0)
+    print_i32("g.e_label_idx", g.e_label_idx, g.n_edges);
+
+  std::cout << "[GARMatch] ---- Pattern Arrays (p) ----" << std::endl;
+  std::cout << "p.n_nodes: " << p.n_nodes << std::endl;
+  std::cout << "p.n_edges: " << p.n_edges << std::endl;
+  if (p.node_label_idx && p.n_nodes > 0)
+    print_i32("p.node_label_idx", p.node_label_idx, p.n_nodes);
+  if (p.edge_src && p.n_edges > 0) print_i32("p.edge_src", p.edge_src, p.n_edges);
+  if (p.edge_dst && p.n_edges > 0) print_i32("p.edge_dst", p.edge_dst, p.n_edges);
+  if (p.edge_label_idx && p.n_edges > 0)
+    print_i32("p.edge_label_idx", p.edge_label_idx, p.n_edges);
+
   if (out == nullptr) {
     return 1;
   }
@@ -175,10 +214,8 @@ int GARMatchKernelWrapper::GARMatch(const GARGraphArrays& g,
   if (out->match_size) {
     *(out->match_size) = 0;
   }
-  // Keep matching body as placeholder for now; filtering APIs above are ready
-  // to use.
-  (void)g;
-  (void)p;
+  std::cout << "GARMatchKernelWrapper::GARMatch (placeholder, filters exposed) END"
+            << std::endl;
   return 0;
 }
 
