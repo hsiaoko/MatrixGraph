@@ -72,6 +72,13 @@ Converts between graph formats used by MatrixGraph and external tools. MatrixGra
 - `pivot_graphs.jsonl`
 - `README_arangodb_import.txt`
 
+**What is a pivot?**  
+`pivot` is an ArangoDB-export-only grouping anchor (`edgelistcsv2arangodbjson`), used to generate each `pivot_graph_id` entry in `pivot_graphs.jsonl`.
+
+**`-pivot_mode` notes**:
+- `single`: export all vertices/edges into one pivot graph (pivot id is `pg_0`).
+- `source`: group by edge source vertex, and export one pivot graph per source (pivot id is `pg_<src_id>`).
+
 ## Source
 
 `tools/graph_converter/graph_converter.cu`
@@ -92,12 +99,17 @@ Converts between graph formats used by MatrixGraph and external tools. MatrixGra
   -convert_mode gridedgelistbin2csrtiledmatrix -tile_size 64
 
 # CSV edge-list → ArangoDB JSON (single pivot graph)
+# pivot_mode=single:
+#   One pivot graph only (pg_0), containing the whole input graph.
 ./bin/tools/graph_converter -i graph.csv -o arangodb_out/ \
   -convert_mode edgelistcsv2arangodbjson -sep "," \
   -graph_id demo_graph -business_id demo_biz \
   -pivot_mode single -default_vertex_label person -default_edge_label relate_to
 
 # CSV edge-list → ArangoDB JSON (source-based pivot graphs, random labels)
+# pivot_mode=source:
+#   Build many pivot graphs, grouped by src vertex in the edge list.
+#   Example: edges (1,2), (1,3), (4,5) -> pivot graphs pg_1 and pg_4.
 ./bin/tools/graph_converter -i graph.csv -o arangodb_out/ \
   -convert_mode edgelistcsv2arangodbjson -sep "," \
   -pivot_mode source -random_vertex_labels=true -label_range 8
