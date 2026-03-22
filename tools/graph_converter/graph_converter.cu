@@ -12,7 +12,8 @@
 #include <filesystem>
 #include <iostream>
 #include <string>
-#include <thread>
+#include <unordered_map>
+#include <vector>
 
 #include "core/common/types.h"
 #include "core/data_structures/edgelist.h"
@@ -21,6 +22,7 @@
 #include "core/util/bitmap.h"
 #include "core/util/format_converter.cuh"
 #include "tools/graph_converter/converter/to_bit_tiled_matrix.cuh"
+#include "tools/graph_converter/converter/to_arangodb_json.cuh"
 #include "tools/graph_converter/converter/to_edgelist.cuh"
 #include "tools/graph_converter/converter/to_egsm_graph.cuh"
 #include "tools/graph_converter/converter/to_grid_csr_tiled_matrix.cuh"
@@ -41,6 +43,17 @@ DEFINE_string(sep, ",", "Separator for CSV files (default: comma)");
 DEFINE_bool(compressed, false, "Use compressed vertex IDs");
 DEFINE_uint32(tile_size, 64, "Size of a single tile");
 DEFINE_uint32(label_range, 1, "label range for initialization");
+DEFINE_string(graph_id, "demo_graph_id", "Graph ID for ArangoDB export");
+DEFINE_string(business_id, "demo_business_id",
+              "Business ID for ArangoDB export");
+DEFINE_string(pivot_mode, "single",
+              "Pivot graph generation mode for ArangoDB export: single|source");
+DEFINE_string(default_vertex_label, "vertex",
+              "Default vertex label for ArangoDB export");
+DEFINE_string(default_edge_label, "relationship",
+              "Default edge label for ArangoDB export");
+DEFINE_bool(random_vertex_labels, false,
+            "Randomly assign vertex labels within --label_range");
 
 // Conversion modes
 enum class ConvertMode {
@@ -67,6 +80,7 @@ enum class ConvertMode {
   kCSRBin2VF3,               // Convert binary CSR to VF3 format
   kEGSM2EdgelistBin,         // Convert EGSM format to binary edge list
   kEGSM2CSRBin,              // Convert EGSM format to binary csr
+  kEdgelistCSV2ArangoDBJSON, // Convert edge list CSV to ArangoDB JSON files
   kUndefined                 // Undefined conversion mode
 };
 
@@ -95,7 +109,8 @@ ConvertMode ConvertMode2Enum(const std::string& mode) {
       {"csrbin2gnnpe", ConvertMode::kCSRBin2GNNPE},
       {"csrbin2vf3", ConvertMode::kCSRBin2VF3},
       {"egsm2edgelistbin", ConvertMode::kEGSM2EdgelistBin},
-      {"egsm2csrbin", ConvertMode::kEGSM2CSRBin}};
+      {"egsm2csrbin", ConvertMode::kEGSM2CSRBin},
+      {"edgelistcsv2arangodbjson", ConvertMode::kEdgelistCSV2ArangoDBJSON}};
 
   auto it = mode_map.find(mode);
   return it != mode_map.end() ? it->second : ConvertMode::kUndefined;
@@ -127,13 +142,22 @@ void PrintUsage() {
       << "  egsm2edgelistbin           - Convert EGSM format to binary edge "
          "list\n"
       << "  egsm2csrbin                - Convert EGSM format to binary csr\n "
+      << "  edgelistcsv2arangodbjson   - Convert edge list CSV to ArangoDB JSON "
+         "files\n"
       << "\nOptions:\n"
       << "  --sep=<separator>           - Separator for CSV files (default: "
          "comma)\n"
       << "  --compressed                - Use compressed vertex IDs\n"
       << "  --tile_size=<size>         - Size of a single tile (default: 64)\n"
+      << "  --graph_id=<id>             - Graph ID for ArangoDB export\n"
+      << "  --business_id=<id>          - Business ID for ArangoDB export\n"
+      << "  --pivot_mode=single|source  - Pivot generation mode\n"
+      << "  --default_vertex_label=<l>  - Default vertex label\n"
+      << "  --default_edge_label=<l>    - Default edge label\n"
+      << "  --random_vertex_labels      - Random labels within --label_range\n"
       << std::endl;
 }
+
 
 // Validate input parameters
 bool ValidateParameters() {
@@ -232,6 +256,22 @@ int main(int argc, char** argv) {
         sics::matrixgraph::tools::converter::ConvertEGSMGraph2CSRBin(FLAGS_i,
                                                                      FLAGS_o);
         break;
+      case ConvertMode::kEdgelistCSV2ArangoDBJSON: {
+        sics::matrixgraph::tools::converter::ArangoExportOptions opt;
+        opt.graph_id = FLAGS_graph_id;
+        opt.business_id = FLAGS_business_id;
+        opt.pivot_mode = FLAGS_pivot_mode;
+        opt.default_vertex_label = FLAGS_default_vertex_label;
+        opt.default_edge_label = FLAGS_default_edge_label;
+        opt.random_vertex_labels = FLAGS_random_vertex_labels;
+        opt.label_range = FLAGS_label_range;
+        if (!sics::matrixgraph::tools::converter::ConvertEdgelistCSV2ArangoDBJSON(
+                FLAGS_i, FLAGS_o, FLAGS_sep, FLAGS_compressed, opt)) {
+          std::cerr << "Error: write ArangoDB JSON failed." << std::endl;
+          return EXIT_FAILURE;
+        }
+        break;
+      }
       default:
         std::cerr << "Error: Unsupported conversion mode" << std::endl;
         return EXIT_FAILURE;
