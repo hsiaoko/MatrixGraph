@@ -72,6 +72,7 @@ static bool BuildCSVArraysFromEdgelistCSV(const std::string& input_path,
   sics::matrixgraph::core::data_structures::Edges edgelist;
   edgelist.ReadFromCSV(input_path, sep, compressed);
   auto metadata = edgelist.get_metadata();
+  edgelist.ShowGraph();
   auto* localid_to_globalid = edgelist.get_localid_to_globalid_ptr();
   std::unordered_set<std::string> vset;
 
