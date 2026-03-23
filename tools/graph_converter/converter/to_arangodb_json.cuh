@@ -159,14 +159,25 @@ static bool WriteArangoDBJSON(const std::string& out_dir,
       edge_triples.insert(vlabel[e.src] + "|" + opt.default_edge_label + "|" +
                           vlabel[e.dst]);
     }
+    std::vector<std::string> vertex_label_list(vertex_labels.begin(),
+                                               vertex_labels.end());
+    std::sort(vertex_label_list.begin(), vertex_label_list.end());
+    std::vector<std::string> edge_triple_list(edge_triples.begin(),
+                                              edge_triples.end());
+    std::sort(edge_triple_list.begin(), edge_triple_list.end());
 
     std::ofstream fout(graph_structure_path);
     if (!fout.is_open()) return false;
     fout << "{\n";
     fout << "  \"graph_id\": \"" << EscapeJSON(opt.graph_id) << "\",\n";
+    fout << "  \"num_vertices\": " << vertices.size() << ",\n";
+    fout << "  \"num_edges\": " << edges.size() << ",\n";
+    fout << "  \"num_vertex_labels\": " << vertex_label_list.size() << ",\n";
+    fout << "  \"num_edge_label_triples\": " << edge_triple_list.size()
+         << ",\n";
     fout << "  \"vertices\": [\n";
     bool first = true;
-    for (const auto& vl : vertex_labels) {
+    for (const auto& vl : vertex_label_list) {
       if (!first) fout << ",\n";
       first = false;
       fout << "    {\"label\":\"" << EscapeJSON(vl) << "\",\"attrs\":[]}";
@@ -174,7 +185,7 @@ static bool WriteArangoDBJSON(const std::string& out_dir,
     fout << "\n  ],\n";
     fout << "  \"edges\": [\n";
     first = true;
-    for (const auto& et : edge_triples) {
+    for (const auto& et : edge_triple_list) {
       auto p1 = et.find('|');
       auto p2 = et.find('|', p1 + 1);
       std::string sl = et.substr(0, p1);
@@ -241,6 +252,8 @@ static bool WriteArangoDBJSON(const std::string& out_dir,
     fout << "1) graph_structure.json\n";
     fout << "2) pivot_graph_ids.jsonl\n";
     fout << "3) pivot_graphs.jsonl\n\n";
+    fout << "Note: graph_structure.json stores schema/meta (label definitions), not full graph instances.\n";
+    fout << "Full vertices/edges are stored in pivot_graphs.jsonl.\n";
     fout << "The export contains placeholder labels/attrs/time where source data is missing.\n";
   }
   return true;
