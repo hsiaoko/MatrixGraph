@@ -59,7 +59,17 @@ __host__ int GARMatch::Run(
 
 __host__ void GARMatch::Run() {
   std::cout << "[GARMatch] Run() ..." << std::endl;
-  status_ = GARMatchKernelWrapper::GARMatch(g_, p_, out_);
+  if (out_ != nullptr) {
+    status_ = GARMatchKernelWrapper::GARMatch(g_, p_, out_);
+    return;
+  }
+
+  // Placeholder app-entry behavior when initialized from config/output path.
+  std::cout << "[GARMatch] config_path: " << config_path_ << std::endl;
+  std::cout << "[GARMatch] output_path: " << output_path_ << std::endl;
+  std::cout << "[GARMatch] TODO: parse ArangoDB config and load graph/pattern."
+            << std::endl;
+  status_ = 0;
 }
 
 }  // namespace task

@@ -47,6 +47,7 @@ enum TaskType {
   kMatrixAnalysis,
   kPPRQuery,
   kSubIso,
+  kGARMatch,
   kCPUSubIso,
   kWCC,
   kSSSP,

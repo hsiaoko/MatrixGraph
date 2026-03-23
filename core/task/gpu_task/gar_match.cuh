@@ -2,6 +2,7 @@
 #define MATRIXGRAPH_CORE_TASK_GAR_MATCH_CUH_
 
 #include <cstdint>
+#include <string>
 
 #include "core/common/types.h"
 #include "core/data_structures/gar_graph_arrays.h"
@@ -26,6 +27,9 @@ class GARMatch : public TaskBase {
       sics::matrixgraph::core::data_structures::GARMatchArrays;
 
  public:
+  GARMatch(const std::string& config_path, const std::string& output_path)
+      : config_path_(config_path), output_path_(output_path) {}
+
   GARMatch(const GARGraphArrays& g, const GARPatternArrays& p,
            GARMatchArrays* out)
       : g_(g), p_(p), out_(out) {}
@@ -63,6 +67,8 @@ class GARMatch : public TaskBase {
   __host__ int Status() const { return status_; }
 
  private:
+  std::string config_path_;
+  std::string output_path_;
   GARGraphArrays g_{};
   GARPatternArrays p_{};
   GARMatchArrays* out_ = nullptr;

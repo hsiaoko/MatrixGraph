@@ -7,6 +7,7 @@
 #include "core/task/gpu_task/gemm.cuh"
 #include "core/task/gpu_task/pagerank.cuh"
 #include "core/task/gpu_task/ppr_query.cuh"
+#include "core/task/gpu_task/gar_match.cuh"
 #include "core/task/gpu_task/subiso.cuh"
 #include "core/task/gpu_task/wcc.cuh"
 
@@ -40,6 +41,12 @@ void MatrixGraph::Run(TaskType task_type, TaskBase* task_ptr) {
     case common::kSubIso: {
       std::cout << "SubIso Query" << std::endl;
       auto task = reinterpret_cast<task::SubIso*>(task_ptr);
+      task->Run();
+      break;
+    }
+    case common::kGARMatch: {
+      std::cout << "GARMatch Query" << std::endl;
+      auto task = reinterpret_cast<task::GARMatch*>(task_ptr);
       task->Run();
       break;
     }
