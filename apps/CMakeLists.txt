@@ -21,7 +21,9 @@ endif ()
 #######################
 # Artifacts
 #######################
-file(GLOB appfiles "${CMAKE_CURRENT_SOURCE_DIR}/*.cpp")
+file(GLOB appfiles
+    "${CMAKE_CURRENT_SOURCE_DIR}/*.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/*.cu")
 
 foreach (appfile ${appfiles})
     message(STATUS "Found apps: ${appfile}")
