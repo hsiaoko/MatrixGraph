@@ -72,6 +72,9 @@ Converts between graph formats used by MatrixGraph and external tools. MatrixGra
 - `pivot_graphs.jsonl`
 - `README_arangodb_import.txt`
 
+`graph_structure.json` is schema/meta only (labels and label-relations).  
+Full vertex/edge instances are in `pivot_graphs.jsonl`.
+
 **What is a pivot?**  
 `pivot` is an ArangoDB-export-only grouping anchor (`edgelistcsv2arangodbjson`), used to generate each `pivot_graph_id` entry in `pivot_graphs.jsonl`.
 
@@ -114,3 +117,9 @@ Converts between graph formats used by MatrixGraph and external tools. MatrixGra
   -convert_mode edgelistcsv2arangodbjson -sep "," \
   -pivot_mode source -random_vertex_labels=true -label_range 8
 ```
+
+## Import to ArangoDB
+
+For JSON-to-ArangoDB import scripts and robust line-by-line import workflow, see:
+
+- `docs/tools/ArangoDBImport.md`
