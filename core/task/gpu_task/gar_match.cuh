@@ -34,6 +34,8 @@ class GARMatch : public TaskBase {
            GARMatchArrays* out)
       : g_(g), p_(p), out_(out) {}
 
+  ~GARMatch();
+
   // C-style entry for go_api: accepts serialized g/p arrays and writes match arrays.
   __host__ static int Run(
       const uint32_t* g_v_id,
@@ -67,8 +69,46 @@ class GARMatch : public TaskBase {
   __host__ int Status() const { return status_; }
 
  private:
+  __host__ void LoadData();
+  __host__ void ResetOwnedBuffers();
+
   std::string config_path_;
   std::string output_path_;
+
+  // Graph arrays loaded from ArangoDB side (currently placeholder bootstrap
+  // built from metadata/count endpoint).
+  uint32_t* g_v_id_buf_ = nullptr;
+  int32_t* g_v_label_idx_buf_ = nullptr;
+  uint32_t* g_e_src_buf_ = nullptr;
+  uint32_t* g_e_dst_buf_ = nullptr;
+  uint32_t* g_e_id_buf_ = nullptr;
+  int32_t* g_e_label_idx_buf_ = nullptr;
+  int g_n_vertices_ = 0;
+  int g_n_edges_ = 0;
+
+  // Pattern arrays requested by app workflow (simple generated pattern).
+  GARPatternArrays gar_pattern_arrays_{};
+  int32_t* p_node_label_idx_buf_ = nullptr;
+  int32_t* p_edge_src_buf_ = nullptr;
+  int32_t* p_edge_dst_buf_ = nullptr;
+  int32_t* p_edge_label_idx_buf_ = nullptr;
+  int p_n_nodes_ = 0;
+  int p_n_edges_ = 0;
+
+  // Match arrays requested by app workflow.
+  GARMatchArrays gar_match_arrays_{};
+  int num_conditions_storage_ = 0;
+  int row_size_storage_ = 0;
+  int match_size_storage_ = 0;
+  uint32_t* row_pivot_id_buf_ = nullptr;
+  int32_t* row_cond_j_buf_ = nullptr;
+  int32_t* row_pos_buf_ = nullptr;
+  int32_t* row_offset_buf_ = nullptr;
+  int32_t* row_count_buf_ = nullptr;
+  uint32_t* matched_v_ids_buf_ = nullptr;
+  int row_capacity_ = 0;
+  int match_capacity_ = 0;
+
   GARGraphArrays g_{};
   GARPatternArrays p_{};
   GARMatchArrays* out_ = nullptr;
