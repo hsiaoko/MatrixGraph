@@ -312,7 +312,7 @@ __host__ void GARMatch::LoadData() {
         << "ARANGO_GRAPH_ID='" << EscapeShellSingleQuotes(graph_id) << "' "
         << "ARANGO_BUSINESS_ID='" << EscapeShellSingleQuotes(business_id) << "' "
         << "ARANGO_PIVOT_LIMIT='" << std::to_string(pivot_limit) << "' "
-        << "python3 - <<'PY'\n"
+        << "python3 - 2>&1 <<'PY'\n"
         << "import os, json, base64, urllib.request\n"
         << "scheme=os.environ.get('ARANGO_SCHEME','http')\n"
         << "host=os.environ.get('ARANGO_HOST','127.0.0.1')\n"
@@ -362,7 +362,7 @@ __host__ void GARMatch::LoadData() {
         << "except Exception as ex:\n"
         << "  print('ERR\\t'+str(ex))\n"
         << "  raise\n"
-        << "PY 2>&1";
+        << "PY";
     data_dump_cmd = py_cmd.str();
     std::cout << "[GARMatch] arangosh not found, using python3 cursor loader."
               << std::endl;
