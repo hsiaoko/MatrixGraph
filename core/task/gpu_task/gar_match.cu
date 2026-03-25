@@ -150,6 +150,34 @@ int UniqueInPlaceUInt32(uint32_t* arr, int n) {
   return w;
 }
 
+void PrintGraphTopN(
+    const sics::matrixgraph::core::data_structures::GARGraphArrays& g,
+    int top_n = 3) {
+  const int n = std::max(0, top_n);
+  std::cout << "[GARMatch] Graph Summary: n_vertices=" << g.n_vertices
+            << ", n_edges=" << g.n_edges << std::endl;
+
+  const int v_limit = std::min(g.n_vertices, n);
+  std::cout << "[GARMatch] Top-" << n << " vertices:" << std::endl;
+  for (int i = 0; i < v_limit; ++i) {
+    const uint32_t vid = g.v_id ? g.v_id[i] : 0;
+    const int32_t vlabel = g.v_label_idx ? g.v_label_idx[i] : 0;
+    std::cout << "  v[" << i << "]: id=" << vid << ", label_idx=" << vlabel
+              << std::endl;
+  }
+
+  const int e_limit = std::min(g.n_edges, n);
+  std::cout << "[GARMatch] Top-" << n << " edges:" << std::endl;
+  for (int i = 0; i < e_limit; ++i) {
+    const uint32_t src = g.e_src ? g.e_src[i] : 0;
+    const uint32_t dst = g.e_dst ? g.e_dst[i] : 0;
+    const uint32_t eid = g.e_id ? g.e_id[i] : 0;
+    const int32_t elabel = g.e_label_idx ? g.e_label_idx[i] : 0;
+    std::cout << "  e[" << i << "]: src=" << src << ", dst=" << dst
+              << ", eid=" << eid << ", label_idx=" << elabel << std::endl;
+  }
+}
+
 void TrimEOL(std::string* line) {
   if (line == nullptr) return;
   while (!line->empty() &&
@@ -626,12 +654,14 @@ __host__ void GARMatch::ResetOwnedBuffers() {
 __host__ void GARMatch::Run() {
   std::cout << "[GARMatch] Run() ..." << std::endl;
   if (out_ != nullptr) {
+    PrintGraphTopN(g_, 3);
     status_ = GARMatchKernelWrapper::GARMatch(g_, p_, out_);
     return;
   }
   std::cout << "[GARMatch] config_path: " << config_path_ << std::endl;
   std::cout << "[GARMatch] output_path: " << output_path_ << std::endl;
   LoadData();
+  PrintGraphTopN(g_, 3);
   status_ = GARMatchKernelWrapper::GARMatch(g_, p_, &gar_match_arrays_);
   std::cout << "[GARMatch] result row_size=" << owned_out_.row_size
             << ", match_size=" << owned_out_.match_size << std::endl;
