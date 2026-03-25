@@ -1,9 +1,12 @@
 #include "core/task/gpu_task/kernel/kernel_gar_match.cuh"
+#include <cuda_runtime.h>
 #include <algorithm>
 #include <cstdint>
 #include <iostream>
 #include <unordered_set>
 #include <vector>
+
+#include "core/util/cuda_check.cuh"
 
 namespace sics {
 namespace matrixgraph {
@@ -158,6 +161,56 @@ static bool KMinWiseIPFilter(const GARMatchArrays& m, const GARPatternArrays& p,
   return true;
 }
 
+struct ParametersGARFilter {
+  const uint32_t* g_v_id;
+  const int32_t* g_v_label_idx;
+  int n_vertices_g;
+
+  const uint32_t* g_e_src;
+  const uint32_t* g_e_dst;
+  const int32_t* g_e_label_idx;
+  int n_edges_g;
+
+  int32_t p_src_label;
+  int32_t p_dst_label;
+  int32_t p_edge_label;
+
+  uint32_t* cand_src;
+  uint32_t* cand_dst;
+  int* cand_count;
+  int cand_capacity;
+};
+
+static __global__ void GARFilterEdgeCandidatesKernel(ParametersGARFilter params) {
+  unsigned int tid = blockIdx.x * blockDim.x + threadIdx.x;
+  unsigned int step = blockDim.x * gridDim.x;
+
+  for (int ge = static_cast<int>(tid); ge < params.n_edges_g;
+       ge += static_cast<int>(step)) {
+    if (params.g_e_label_idx &&
+        params.g_e_label_idx[ge] != params.p_edge_label) {
+      continue;
+    }
+    const uint32_t gs = params.g_e_src[ge];
+    const uint32_t gd = params.g_e_dst[ge];
+    if (gs >= static_cast<uint32_t>(params.n_vertices_g) ||
+        gd >= static_cast<uint32_t>(params.n_vertices_g) ||
+        params.g_v_label_idx == nullptr) {
+      continue;
+    }
+    const int32_t src_label = params.g_v_label_idx[gs];
+    const int32_t dst_label = params.g_v_label_idx[gd];
+    if (src_label != params.p_src_label || dst_label != params.p_dst_label) {
+      continue;
+    }
+    int slot = atomicAdd(params.cand_count, 1);
+    if (slot < params.cand_capacity) {
+      params.cand_src[slot] = gs;
+      params.cand_dst[slot] = gd;
+    }
+  }
+}
+
 int GARMatchKernelWrapper::GARMatch(const GARGraphArrays& g,
                                     const GARPatternArrays& p,
                                     GARMatchArrays* out) {
@@ -215,9 +268,88 @@ int GARMatchKernelWrapper::GARMatch(const GARGraphArrays& g,
   if (p.edge_label_idx && p.n_edges > 0)
     print_i32("p.edge_label_idx", p.edge_label_idx, p.n_edges, kPrintTopN);
 
+  // CUDA kernel stage 1: candidate filtering for each pattern edge.
+  if (g.n_edges > 0 && p.n_edges > 0 && g.e_src && g.e_dst && p.edge_src &&
+      p.edge_dst && p.node_label_idx) {
+    uint32_t *d_g_v_id = nullptr, *d_g_e_src = nullptr, *d_g_e_dst = nullptr;
+    int32_t *d_g_v_label_idx = nullptr, *d_g_e_label_idx = nullptr;
+    CUDA_CHECK(cudaMalloc(&d_g_v_id, sizeof(uint32_t) * g.n_vertices));
+    CUDA_CHECK(cudaMalloc(&d_g_v_label_idx, sizeof(int32_t) * g.n_vertices));
+    CUDA_CHECK(cudaMalloc(&d_g_e_src, sizeof(uint32_t) * g.n_edges));
+    CUDA_CHECK(cudaMalloc(&d_g_e_dst, sizeof(uint32_t) * g.n_edges));
+    CUDA_CHECK(cudaMalloc(&d_g_e_label_idx, sizeof(int32_t) * g.n_edges));
+    CUDA_CHECK(cudaMemcpy(d_g_v_id, g.v_id, sizeof(uint32_t) * g.n_vertices,
+                          cudaMemcpyHostToDevice));
+    CUDA_CHECK(cudaMemcpy(d_g_v_label_idx, g.v_label_idx,
+                          sizeof(int32_t) * g.n_vertices,
+                          cudaMemcpyHostToDevice));
+    CUDA_CHECK(cudaMemcpy(d_g_e_src, g.e_src, sizeof(uint32_t) * g.n_edges,
+                          cudaMemcpyHostToDevice));
+    CUDA_CHECK(cudaMemcpy(d_g_e_dst, g.e_dst, sizeof(uint32_t) * g.n_edges,
+                          cudaMemcpyHostToDevice));
+    CUDA_CHECK(cudaMemcpy(d_g_e_label_idx, g.e_label_idx,
+                          sizeof(int32_t) * g.n_edges,
+                          cudaMemcpyHostToDevice));
+
+    const int threads = 256;
+    const int blocks = std::max(1, std::min((g.n_edges + threads - 1) / threads, 1024));
+    for (int pe = 0; pe < p.n_edges; ++pe) {
+      const int32_t pu = p.edge_src[pe];
+      const int32_t pv = p.edge_dst[pe];
+      if (pu < 0 || pu >= p.n_nodes || pv < 0 || pv >= p.n_nodes) continue;
+
+      uint32_t* d_cand_src = nullptr;
+      uint32_t* d_cand_dst = nullptr;
+      int* d_cand_count = nullptr;
+      CUDA_CHECK(cudaMalloc(&d_cand_src, sizeof(uint32_t) * g.n_edges));
+      CUDA_CHECK(cudaMalloc(&d_cand_dst, sizeof(uint32_t) * g.n_edges));
+      CUDA_CHECK(cudaMalloc(&d_cand_count, sizeof(int)));
+      CUDA_CHECK(cudaMemset(d_cand_count, 0, sizeof(int)));
+
+      ParametersGARFilter params{
+          .g_v_id = d_g_v_id,
+          .g_v_label_idx = d_g_v_label_idx,
+          .n_vertices_g = g.n_vertices,
+          .g_e_src = d_g_e_src,
+          .g_e_dst = d_g_e_dst,
+          .g_e_label_idx = d_g_e_label_idx,
+          .n_edges_g = g.n_edges,
+          .p_src_label = p.node_label_idx[pu],
+          .p_dst_label = p.node_label_idx[pv],
+          .p_edge_label = p.edge_label_idx ? p.edge_label_idx[pe] : 0,
+          .cand_src = d_cand_src,
+          .cand_dst = d_cand_dst,
+          .cand_count = d_cand_count,
+          .cand_capacity = g.n_edges,
+      };
+      GARFilterEdgeCandidatesKernel<<<blocks, threads>>>(params);
+      CUDA_CHECK(cudaGetLastError());
+      CUDA_CHECK(cudaDeviceSynchronize());
+
+      int h_count = 0;
+      CUDA_CHECK(cudaMemcpy(&h_count, d_cand_count, sizeof(int),
+                            cudaMemcpyDeviceToHost));
+      std::cout << "[GARMatch][CUDA] pattern_edge=" << pe
+                << " candidate_count=" << h_count << std::endl;
+
+      CUDA_CHECK(cudaFree(d_cand_src));
+      CUDA_CHECK(cudaFree(d_cand_dst));
+      CUDA_CHECK(cudaFree(d_cand_count));
+    }
+
+    CUDA_CHECK(cudaFree(d_g_v_id));
+    CUDA_CHECK(cudaFree(d_g_v_label_idx));
+    CUDA_CHECK(cudaFree(d_g_e_src));
+    CUDA_CHECK(cudaFree(d_g_e_dst));
+    CUDA_CHECK(cudaFree(d_g_e_label_idx));
+  }
+
+
+
   if (out == nullptr) {
     return 1;
   }
+
   if (out->num_conditions) {
     *(out->num_conditions) = 1;
   }
