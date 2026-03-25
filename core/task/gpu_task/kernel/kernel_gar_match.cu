@@ -295,11 +295,16 @@ int GARMatchKernelWrapper::GARMatch(const GARGraphArrays& g,
         const_cast<int32_t*>(g.e_label_idx),
         sizeof(int32_t) * static_cast<size_t>(g.n_edges)};
 
-    DeviceOwnedBufferUint32 d_g_v_id(h_g_v_id);
-    DeviceOwnedBufferInt32 d_g_v_label_idx(h_g_v_label_idx);
-    DeviceOwnedBufferUint32 d_g_e_src(h_g_e_src);
-    DeviceOwnedBufferUint32 d_g_e_dst(h_g_e_dst);
-    DeviceOwnedBufferInt32 d_g_e_label_idx(h_g_e_label_idx);
+    DeviceOwnedBufferUint32 d_g_v_id;
+    DeviceOwnedBufferInt32 d_g_v_label_idx;
+    DeviceOwnedBufferUint32 d_g_e_src;
+    DeviceOwnedBufferUint32 d_g_e_dst;
+    DeviceOwnedBufferInt32 d_g_e_label_idx;
+    d_g_v_id.Init(h_g_v_id);
+    d_g_v_label_idx.Init(h_g_v_label_idx);
+    d_g_e_src.Init(h_g_e_src);
+    d_g_e_dst.Init(h_g_e_dst);
+    d_g_e_label_idx.Init(h_g_e_label_idx);
 
     const int threads = 256;
     const int blocks = std::max(1, std::min((g.n_edges + threads - 1) / threads, 1024));
