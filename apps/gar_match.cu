@@ -1,5 +1,6 @@
 #include <gflags/gflags.h>
 
+#include <cuda_runtime.h>
 #include <iostream>
 
 #include "core/components/scheduler/scheduler.h"
@@ -13,6 +14,7 @@ DEFINE_string(o, "", "Path for output results (required)");
 DEFINE_string(
     scheduler, "CHBL",
     "Scheduler type (options: CHBL, EvenSplit, RoundRobin, default: CHBL)");
+DEFINE_int32(device, 2, "CUDA device id to use (default: 0)");
 
 using sics::matrixgraph::core::components::scheduler::SchedulerType;
 using sics::matrixgraph::core::task::GARMatch;
@@ -38,6 +40,10 @@ bool ValidateParameters() {
     std::cerr << "Error: Output path (-o) is required" << std::endl;
     is_valid = false;
   }
+  if (FLAGS_device < 0) {
+    std::cerr << "Error: device id must be >= 0" << std::endl;
+    is_valid = false;
+  }
   return is_valid;
 }
 
@@ -46,6 +52,7 @@ void PrintConfig() {
   std::cout << "Config Path: " << FLAGS_config << std::endl;
   std::cout << "Output Path: " << FLAGS_o << std::endl;
   std::cout << "Scheduler: " << FLAGS_scheduler << std::endl;
+  std::cout << "Device: " << FLAGS_device << std::endl;
   std::cout << "==================================\n" << std::endl;
 }
 
@@ -66,6 +73,26 @@ int main(int argc, char* argv[]) {
   PrintConfig();
 
   try {
+    int device_count = 0;
+    cudaError_t dev_err = cudaGetDeviceCount(&device_count);
+    if (dev_err != cudaSuccess) {
+      std::cerr << "Error: cudaGetDeviceCount failed: "
+                << cudaGetErrorString(dev_err) << std::endl;
+      return EXIT_FAILURE;
+    }
+    if (FLAGS_device >= device_count) {
+      std::cerr << "Error: device id " << FLAGS_device
+                << " is out of range, available devices: " << device_count
+                << std::endl;
+      return EXIT_FAILURE;
+    }
+    dev_err = cudaSetDevice(FLAGS_device);
+    if (dev_err != cudaSuccess) {
+      std::cerr << "Error: cudaSetDevice(" << FLAGS_device
+                << ") failed: " << cudaGetErrorString(dev_err) << std::endl;
+      return EXIT_FAILURE;
+    }
+
     auto scheduler_type = Scheduler2Enum(FLAGS_scheduler);
     sics::matrixgraph::core::MatrixGraph system(scheduler_type);
 
