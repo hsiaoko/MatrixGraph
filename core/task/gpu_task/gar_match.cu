@@ -69,8 +69,6 @@ bool ExtractIntField(const std::string& json, const std::string& field_name,
 
 }  // namespace
 
-GARMatch::~GARMatch() { ResetOwnedBuffers(); }
-
 __host__ int GARMatch::Run(
     const uint32_t* g_v_id, const int32_t* g_v_label_idx, int g_n_vertices,
     const uint32_t* g_e_src, const uint32_t* g_e_dst, const uint32_t* g_e_id,
@@ -163,123 +161,98 @@ __host__ void GARMatch::LoadData() {
 
   // Build a small graph bootstrap from DB metadata/count for now.
   // This keeps the pipeline runnable before full JSON payload parsing.
-  g_n_vertices_ = std::max(2, std::min(pivot_graph_count + 1, 64));
-  g_n_edges_ = g_n_vertices_ - 1;
-  g_v_id_buf_ = new uint32_t[g_n_vertices_]();
-  g_v_label_idx_buf_ = new int32_t[g_n_vertices_]();
-  g_e_src_buf_ = new uint32_t[g_n_edges_]();
-  g_e_dst_buf_ = new uint32_t[g_n_edges_]();
-  g_e_id_buf_ = new uint32_t[g_n_edges_]();
-  g_e_label_idx_buf_ = new int32_t[g_n_edges_]();
-  for (int i = 0; i < g_n_vertices_; ++i) g_v_id_buf_[i] = static_cast<uint32_t>(i);
-  for (int e = 0; e < g_n_edges_; ++e) {
-    g_e_src_buf_[e] = static_cast<uint32_t>(e);
-    g_e_dst_buf_[e] = static_cast<uint32_t>(e + 1);
-    g_e_id_buf_[e] = static_cast<uint32_t>(e);
+  owned_g_.n_vertices = std::max(2, std::min(pivot_graph_count + 1, 64));
+  owned_g_.n_edges = owned_g_.n_vertices - 1;
+  owned_g_.v_id = std::make_unique<uint32_t[]>(owned_g_.n_vertices);
+  owned_g_.v_label_idx = std::make_unique<int32_t[]>(owned_g_.n_vertices);
+  owned_g_.e_src = std::make_unique<uint32_t[]>(owned_g_.n_edges);
+  owned_g_.e_dst = std::make_unique<uint32_t[]>(owned_g_.n_edges);
+  owned_g_.e_id = std::make_unique<uint32_t[]>(owned_g_.n_edges);
+  owned_g_.e_label_idx = std::make_unique<int32_t[]>(owned_g_.n_edges);
+  std::fill_n(owned_g_.v_label_idx.get(), owned_g_.n_vertices, 0);
+  std::fill_n(owned_g_.e_label_idx.get(), owned_g_.n_edges, 0);
+  for (int i = 0; i < owned_g_.n_vertices; ++i) {
+    owned_g_.v_id[i] = static_cast<uint32_t>(i);
+  }
+  for (int e = 0; e < owned_g_.n_edges; ++e) {
+    owned_g_.e_src[e] = static_cast<uint32_t>(e);
+    owned_g_.e_dst[e] = static_cast<uint32_t>(e + 1);
+    owned_g_.e_id[e] = static_cast<uint32_t>(e);
   }
   g_ = GARGraphArrays{
-      .v_id = g_v_id_buf_,
-      .v_label_idx = g_v_label_idx_buf_,
-      .n_vertices = g_n_vertices_,
-      .e_src = g_e_src_buf_,
-      .e_dst = g_e_dst_buf_,
-      .e_id = g_e_id_buf_,
-      .e_label_idx = g_e_label_idx_buf_,
-      .n_edges = g_n_edges_,
+      .v_id = owned_g_.v_id.get(),
+      .v_label_idx = owned_g_.v_label_idx.get(),
+      .n_vertices = owned_g_.n_vertices,
+      .e_src = owned_g_.e_src.get(),
+      .e_dst = owned_g_.e_dst.get(),
+      .e_id = owned_g_.e_id.get(),
+      .e_label_idx = owned_g_.e_label_idx.get(),
+      .n_edges = owned_g_.n_edges,
   };
 
   // Generate a simple pattern: node(0) -> node(1)
-  p_n_nodes_ = 2;
-  p_n_edges_ = 1;
-  p_node_label_idx_buf_ = new int32_t[p_n_nodes_]();
-  p_edge_src_buf_ = new int32_t[p_n_edges_]();
-  p_edge_dst_buf_ = new int32_t[p_n_edges_]();
-  p_edge_label_idx_buf_ = new int32_t[p_n_edges_]();
-  p_node_label_idx_buf_[0] = 0;
-  p_node_label_idx_buf_[1] = 0;
-  p_edge_src_buf_[0] = 0;
-  p_edge_dst_buf_[0] = 1;
-  p_edge_label_idx_buf_[0] = 0;
+  owned_p_.n_nodes = 2;
+  owned_p_.n_edges = 1;
+  owned_p_.node_label_idx = std::make_unique<int32_t[]>(owned_p_.n_nodes);
+  owned_p_.edge_src = std::make_unique<int32_t[]>(owned_p_.n_edges);
+  owned_p_.edge_dst = std::make_unique<int32_t[]>(owned_p_.n_edges);
+  owned_p_.edge_label_idx = std::make_unique<int32_t[]>(owned_p_.n_edges);
+  owned_p_.node_label_idx[0] = 0;
+  owned_p_.node_label_idx[1] = 0;
+  owned_p_.edge_src[0] = 0;
+  owned_p_.edge_dst[0] = 1;
+  owned_p_.edge_label_idx[0] = 0;
   gar_pattern_arrays_ = GARPatternArrays{
-      .node_label_idx = p_node_label_idx_buf_,
-      .n_nodes = p_n_nodes_,
-      .edge_src = p_edge_src_buf_,
-      .edge_dst = p_edge_dst_buf_,
-      .edge_label_idx = p_edge_label_idx_buf_,
-      .n_edges = p_n_edges_,
+      .node_label_idx = owned_p_.node_label_idx.get(),
+      .n_nodes = owned_p_.n_nodes,
+      .edge_src = owned_p_.edge_src.get(),
+      .edge_dst = owned_p_.edge_dst.get(),
+      .edge_label_idx = owned_p_.edge_label_idx.get(),
+      .n_edges = owned_p_.n_edges,
   };
   p_ = gar_pattern_arrays_;
 
   // Allocate GARMatch output arrays owned by this class.
-  row_capacity_ = 4096;
-  match_capacity_ = 16384;
-  row_pivot_id_buf_ = new uint32_t[row_capacity_]();
-  row_cond_j_buf_ = new int32_t[row_capacity_]();
-  row_pos_buf_ = new int32_t[row_capacity_]();
-  row_offset_buf_ = new int32_t[row_capacity_]();
-  row_count_buf_ = new int32_t[row_capacity_]();
-  matched_v_ids_buf_ = new uint32_t[match_capacity_]();
-  num_conditions_storage_ = 0;
-  row_size_storage_ = 0;
-  match_size_storage_ = 0;
+  owned_out_.row_capacity = 4096;
+  owned_out_.match_capacity = 16384;
+  owned_out_.row_pivot_id =
+      std::make_unique<uint32_t[]>(owned_out_.row_capacity);
+  owned_out_.row_cond_j = std::make_unique<int32_t[]>(owned_out_.row_capacity);
+  owned_out_.row_pos = std::make_unique<int32_t[]>(owned_out_.row_capacity);
+  owned_out_.row_offset = std::make_unique<int32_t[]>(owned_out_.row_capacity);
+  owned_out_.row_count = std::make_unique<int32_t[]>(owned_out_.row_capacity);
+  owned_out_.matched_v_ids =
+      std::make_unique<uint32_t[]>(owned_out_.match_capacity);
+  std::fill_n(owned_out_.row_pivot_id.get(), owned_out_.row_capacity, 0);
+  std::fill_n(owned_out_.row_cond_j.get(), owned_out_.row_capacity, 0);
+  std::fill_n(owned_out_.row_pos.get(), owned_out_.row_capacity, 0);
+  std::fill_n(owned_out_.row_offset.get(), owned_out_.row_capacity, 0);
+  std::fill_n(owned_out_.row_count.get(), owned_out_.row_capacity, 0);
+  std::fill_n(owned_out_.matched_v_ids.get(), owned_out_.match_capacity, 0);
+  owned_out_.num_conditions = 0;
+  owned_out_.row_size = 0;
+  owned_out_.match_size = 0;
 
   gar_match_arrays_ = GARMatchArrays{
-      .num_conditions = &num_conditions_storage_,
-      .row_pivot_id = row_pivot_id_buf_,
-      .row_cond_j = row_cond_j_buf_,
-      .row_pos = row_pos_buf_,
-      .row_offset = row_offset_buf_,
-      .row_count = row_count_buf_,
-      .row_capacity = row_capacity_,
-      .row_size = &row_size_storage_,
-      .matched_v_ids = matched_v_ids_buf_,
-      .match_capacity = match_capacity_,
-      .match_size = &match_size_storage_,
+      .num_conditions = &owned_out_.num_conditions,
+      .row_pivot_id = owned_out_.row_pivot_id.get(),
+      .row_cond_j = owned_out_.row_cond_j.get(),
+      .row_pos = owned_out_.row_pos.get(),
+      .row_offset = owned_out_.row_offset.get(),
+      .row_count = owned_out_.row_count.get(),
+      .row_capacity = owned_out_.row_capacity,
+      .row_size = &owned_out_.row_size,
+      .matched_v_ids = owned_out_.matched_v_ids.get(),
+      .match_capacity = owned_out_.match_capacity,
+      .match_size = &owned_out_.match_size,
   };
   out_ = &gar_match_arrays_;
 }
 
 __host__ void GARMatch::ResetOwnedBuffers() {
-  delete[] g_v_id_buf_;
-  delete[] g_v_label_idx_buf_;
-  delete[] g_e_src_buf_;
-  delete[] g_e_dst_buf_;
-  delete[] g_e_id_buf_;
-  delete[] g_e_label_idx_buf_;
-  g_v_id_buf_ = nullptr;
-  g_v_label_idx_buf_ = nullptr;
-  g_e_src_buf_ = nullptr;
-  g_e_dst_buf_ = nullptr;
-  g_e_id_buf_ = nullptr;
-  g_e_label_idx_buf_ = nullptr;
-  g_n_vertices_ = 0;
-  g_n_edges_ = 0;
-
-  delete[] p_node_label_idx_buf_;
-  delete[] p_edge_src_buf_;
-  delete[] p_edge_dst_buf_;
-  delete[] p_edge_label_idx_buf_;
-  p_node_label_idx_buf_ = nullptr;
-  p_edge_src_buf_ = nullptr;
-  p_edge_dst_buf_ = nullptr;
-  p_edge_label_idx_buf_ = nullptr;
-  p_n_nodes_ = 0;
-  p_n_edges_ = 0;
-
-  delete[] row_pivot_id_buf_;
-  delete[] row_cond_j_buf_;
-  delete[] row_pos_buf_;
-  delete[] row_offset_buf_;
-  delete[] row_count_buf_;
-  delete[] matched_v_ids_buf_;
-  row_pivot_id_buf_ = nullptr;
-  row_cond_j_buf_ = nullptr;
-  row_pos_buf_ = nullptr;
-  row_offset_buf_ = nullptr;
-  row_count_buf_ = nullptr;
-  matched_v_ids_buf_ = nullptr;
-  row_capacity_ = 0;
-  match_capacity_ = 0;
+  owned_g_ = OwnedGraphBuffers{};
+  owned_p_ = OwnedPatternBuffers{};
+  owned_out_ = OwnedMatchBuffers{};
 
   g_ = GARGraphArrays{};
   p_ = GARPatternArrays{};
@@ -294,13 +267,12 @@ __host__ void GARMatch::Run() {
     status_ = GARMatchKernelWrapper::GARMatch(g_, p_, out_);
     return;
   }
-
   std::cout << "[GARMatch] config_path: " << config_path_ << std::endl;
   std::cout << "[GARMatch] output_path: " << output_path_ << std::endl;
   LoadData();
   status_ = GARMatchKernelWrapper::GARMatch(g_, p_, &gar_match_arrays_);
-  std::cout << "[GARMatch] result row_size=" << row_size_storage_
-            << ", match_size=" << match_size_storage_ << std::endl;
+  std::cout << "[GARMatch] result row_size=" << owned_out_.row_size
+            << ", match_size=" << owned_out_.match_size << std::endl;
 }
 
 }  // namespace task

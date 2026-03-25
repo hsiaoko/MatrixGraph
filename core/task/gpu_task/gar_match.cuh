@@ -2,6 +2,7 @@
 #define MATRIXGRAPH_CORE_TASK_GAR_MATCH_CUH_
 
 #include <cstdint>
+#include <memory>
 #include <string>
 
 #include "core/common/types.h"
@@ -34,7 +35,7 @@ class GARMatch : public TaskBase {
            GARMatchArrays* out)
       : g_(g), p_(p), out_(out) {}
 
-  ~GARMatch();
+  ~GARMatch() = default;
 
   // C-style entry for go_api: accepts serialized g/p arrays and writes match arrays.
   __host__ static int Run(
@@ -72,42 +73,52 @@ class GARMatch : public TaskBase {
   __host__ void LoadData();
   __host__ void ResetOwnedBuffers();
 
+  struct OwnedGraphBuffers {
+    std::unique_ptr<uint32_t[]> v_id;
+    std::unique_ptr<int32_t[]> v_label_idx;
+    std::unique_ptr<uint32_t[]> e_src;
+    std::unique_ptr<uint32_t[]> e_dst;
+    std::unique_ptr<uint32_t[]> e_id;
+    std::unique_ptr<int32_t[]> e_label_idx;
+    int n_vertices = 0;
+    int n_edges = 0;
+  };
+
+  struct OwnedPatternBuffers {
+    std::unique_ptr<int32_t[]> node_label_idx;
+    std::unique_ptr<int32_t[]> edge_src;
+    std::unique_ptr<int32_t[]> edge_dst;
+    std::unique_ptr<int32_t[]> edge_label_idx;
+    int n_nodes = 0;
+    int n_edges = 0;
+  };
+
+  struct OwnedMatchBuffers {
+    int num_conditions = 0;
+    int row_size = 0;
+    int match_size = 0;
+    std::unique_ptr<uint32_t[]> row_pivot_id;
+    std::unique_ptr<int32_t[]> row_cond_j;
+    std::unique_ptr<int32_t[]> row_pos;
+    std::unique_ptr<int32_t[]> row_offset;
+    std::unique_ptr<int32_t[]> row_count;
+    std::unique_ptr<uint32_t[]> matched_v_ids;
+    int row_capacity = 0;
+    int match_capacity = 0;
+  };
+
   std::string config_path_;
   std::string output_path_;
 
-  // Graph arrays loaded from ArangoDB side (currently placeholder bootstrap
-  // built from metadata/count endpoint).
-  uint32_t* g_v_id_buf_ = nullptr;
-  int32_t* g_v_label_idx_buf_ = nullptr;
-  uint32_t* g_e_src_buf_ = nullptr;
-  uint32_t* g_e_dst_buf_ = nullptr;
-  uint32_t* g_e_id_buf_ = nullptr;
-  int32_t* g_e_label_idx_buf_ = nullptr;
-  int g_n_vertices_ = 0;
-  int g_n_edges_ = 0;
+  OwnedGraphBuffers owned_g_{};
 
-  // Pattern arrays requested by app workflow (simple generated pattern).
+  // View for pattern arrays (points to owned_p_ memory in config mode).
   GARPatternArrays gar_pattern_arrays_{};
-  int32_t* p_node_label_idx_buf_ = nullptr;
-  int32_t* p_edge_src_buf_ = nullptr;
-  int32_t* p_edge_dst_buf_ = nullptr;
-  int32_t* p_edge_label_idx_buf_ = nullptr;
-  int p_n_nodes_ = 0;
-  int p_n_edges_ = 0;
+  OwnedPatternBuffers owned_p_{};
 
-  // Match arrays requested by app workflow.
+  // View for match arrays (points to owned_out_ memory in config mode).
   GARMatchArrays gar_match_arrays_{};
-  int num_conditions_storage_ = 0;
-  int row_size_storage_ = 0;
-  int match_size_storage_ = 0;
-  uint32_t* row_pivot_id_buf_ = nullptr;
-  int32_t* row_cond_j_buf_ = nullptr;
-  int32_t* row_pos_buf_ = nullptr;
-  int32_t* row_offset_buf_ = nullptr;
-  int32_t* row_count_buf_ = nullptr;
-  uint32_t* matched_v_ids_buf_ = nullptr;
-  int row_capacity_ = 0;
-  int match_capacity_ = 0;
+  OwnedMatchBuffers owned_out_{};
 
   GARGraphArrays g_{};
   GARPatternArrays p_{};
