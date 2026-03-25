@@ -51,6 +51,12 @@ std::string ExecCommand(const std::string& command) {
   return output;
 }
 
+bool CommandExists(const std::string& command_name) {
+  const std::string cmd = "command -v " + command_name + " >/dev/null 2>&1; echo $?";
+  const std::string out = ExecCommand(cmd);
+  return !out.empty() && out[0] == '0';
+}
+
 std::string EscapeForJSDoubleQuote(const std::string& s) {
   std::string out;
   out.reserve(s.size() + 8);
@@ -249,6 +255,10 @@ __host__ void GARMatch::LoadData() {
   std::cout << "[GARMatch] pivot_graphs count: " << pivot_graph_count
             << std::endl;
 
+  std::string data_dump_cmd;
+  const bool has_arangosh = CommandExists("arangosh");
+  if (has_arangosh) {
+
   std::ostringstream js;
   js << "const c=db._collection(\"" << EscapeForJSDoubleQuote(pivot_graphs_collection)
      << "\");"
@@ -279,10 +289,72 @@ __host__ void GARMatch::LoadData() {
       EscapeShellSingleQuotes(db) +
       "' --quiet --javascript.execute-string \"" +
       EscapeForJSDoubleQuote(js.str()) + "\"";
+  data_dump_cmd = arangosh_cmd;
+  } else if (CommandExists("python3")) {
+    std::ostringstream py_cmd;
+    py_cmd
+        << "ARANGO_SCHEME='" << EscapeShellSingleQuotes(scheme) << "' "
+        << "ARANGO_HOST='" << EscapeShellSingleQuotes(host) << "' "
+        << "ARANGO_PORT='" << std::to_string(port) << "' "
+        << "ARANGO_DB='" << EscapeShellSingleQuotes(db) << "' "
+        << "ARANGO_USER='" << EscapeShellSingleQuotes(user) << "' "
+        << "ARANGO_PASS='" << EscapeShellSingleQuotes(pass) << "' "
+        << "ARANGO_COLLECTION='"
+        << EscapeShellSingleQuotes(pivot_graphs_collection) << "' "
+        << "ARANGO_GRAPH_ID='" << EscapeShellSingleQuotes(graph_id) << "' "
+        << "ARANGO_BUSINESS_ID='" << EscapeShellSingleQuotes(business_id) << "' "
+        << "ARANGO_PIVOT_LIMIT='" << std::to_string(pivot_limit) << "' "
+        << "python3 - <<'PY'\n"
+        << "import os, json, base64, urllib.request\n"
+        << "scheme=os.environ.get('ARANGO_SCHEME','http')\n"
+        << "host=os.environ.get('ARANGO_HOST','127.0.0.1')\n"
+        << "port=os.environ.get('ARANGO_PORT','8529')\n"
+        << "db=os.environ.get('ARANGO_DB','_system')\n"
+        << "user=os.environ.get('ARANGO_USER','root')\n"
+        << "pwd=os.environ.get('ARANGO_PASS','')\n"
+        << "coll=os.environ.get('ARANGO_COLLECTION','pivot_graphs')\n"
+        << "gid=os.environ.get('ARANGO_GRAPH_ID','')\n"
+        << "bid=os.environ.get('ARANGO_BUSINESS_ID','')\n"
+        << "limit=int(os.environ.get('ARANGO_PIVOT_LIMIT','0') or 0)\n"
+        << "base=f\"{scheme}://{host}:{port}/_db/{db}/_api/cursor\"\n"
+        << "auth='Basic '+base64.b64encode(f\"{user}:{pwd}\".encode()).decode()\n"
+        << "q=f\"FOR d IN {coll} FILTER d.graph_id==@g AND d.business_id==@b\"\n"
+        << "if limit>0: q += \" LIMIT @l\"\n"
+        << "q += \" RETURN d\"\n"
+        << "bind={'g':gid,'b':bid}\n"
+        << "if limit>0: bind['l']=limit\n"
+        << "payload={'query':q,'bindVars':bind,'batchSize':64}\n"
+        << "def req(url, method='POST', body=None):\n"
+        << "  data=None if body is None else json.dumps(body).encode()\n"
+        << "  r=urllib.request.Request(url, data=data, method=method)\n"
+        << "  r.add_header('Authorization', auth)\n"
+        << "  r.add_header('Content-Type','application/json')\n"
+        << "  with urllib.request.urlopen(r, timeout=60) as resp:\n"
+        << "    return json.loads(resp.read().decode())\n"
+        << "def emit(doc):\n"
+        << "  for v in (doc.get('vertices') or []):\n"
+        << "    print('V\\t'+str(v.get('id',''))+'\\t'+str(v.get('label','')))\n"
+        << "  for e in (doc.get('edges') or []):\n"
+        << "    print('E\\t'+str(e.get('src_id',''))+'\\t'+str(e.get('dst_id',''))+'\\t'+str(e.get('label','')))\n"
+        << "first=req(base,'POST',payload)\n"
+        << "for d in (first.get('result') or []): emit(d)\n"
+        << "while first.get('hasMore'):\n"
+        << "  cid=first.get('id')\n"
+        << "  if not cid: break\n"
+        << "  first=req(base+'/'+cid,'PUT',{})\n"
+        << "  for d in (first.get('result') or []): emit(d)\n"
+        << "PY";
+    data_dump_cmd = py_cmd.str();
+    std::cout << "[GARMatch] arangosh not found, using python3 cursor loader."
+              << std::endl;
+  } else {
+    throw std::runtime_error(
+        "Neither arangosh nor python3 is available for ArangoDB data loading.");
+  }
 
-  FILE* pipe = popen(arangosh_cmd.c_str(), "r");
+  FILE* pipe = popen(data_dump_cmd.c_str(), "r");
   if (pipe == nullptr) {
-    throw std::runtime_error("Failed to execute arangosh command");
+    throw std::runtime_error("Failed to execute ArangoDB data dump command");
   }
 
   int vertex_token_count = 0;
@@ -330,9 +402,9 @@ __host__ void GARMatch::LoadData() {
   std::unique_ptr<uint32_t[]> vertex_tokens(
       new uint32_t[vertex_token_count]());
 
-  pipe = popen(arangosh_cmd.c_str(), "r");
+  pipe = popen(data_dump_cmd.c_str(), "r");
   if (pipe == nullptr) {
-    throw std::runtime_error("Failed to execute arangosh command (2nd pass)");
+    throw std::runtime_error("Failed to execute data dump command (2nd pass)");
   }
   int v_write = 0;
   while (fgets(line_buf.data(), static_cast<int>(line_buf.size()), pipe) !=
@@ -387,9 +459,9 @@ __host__ void GARMatch::LoadData() {
   }
 
   // Third pass: stream edges directly into pre-allocated arrays.
-  pipe = popen(arangosh_cmd.c_str(), "r");
+  pipe = popen(data_dump_cmd.c_str(), "r");
   if (pipe == nullptr) {
-    throw std::runtime_error("Failed to execute arangosh command (3rd pass)");
+    throw std::runtime_error("Failed to execute data dump command (3rd pass)");
   }
   int e_write = 0;
   while (fgets(line_buf.data(), static_cast<int>(line_buf.size()), pipe) !=
