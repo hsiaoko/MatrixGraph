@@ -263,15 +263,22 @@ __host__ void GARMatch::LoadData() {
   js << "const c=db._collection(\"" << EscapeForJSDoubleQuote(pivot_graphs_collection)
      << "\");"
      << "if(!c){throw new Error(\"collection not found\");}"
-     << "const q='FOR d IN " << EscapeForJSDoubleQuote(pivot_graphs_collection)
-     << " FILTER d.graph_id==@g AND d.business_id==@b"
+     << "let q='FOR d IN " << EscapeForJSDoubleQuote(pivot_graphs_collection)
+     << "';"
+     << "const hasG=" << (graph_id.empty() ? "false" : "true") << ";"
+     << "const hasB=" << (business_id.empty() ? "false" : "true") << ";"
+     << "if(hasG&&hasB){q+=' FILTER d.graph_id==@g AND d.business_id==@b';}"
+     << "else if(hasG){q+=' FILTER d.graph_id==@g';}"
+     << "else if(hasB){q+=' FILTER d.business_id==@b';}"
      << (pivot_limit > 0 ? " LIMIT @l" : "") << " RETURN d';"
      << "const bind={g:\""
      << EscapeForJSDoubleQuote(graph_id) << "\",b:\""
      << EscapeForJSDoubleQuote(business_id) << "\""
      << (pivot_limit > 0 ? ",l:" + std::to_string(pivot_limit) : "") << "};"
      << "const cur=db._query(q,bind);"
+     << "let docs=0;"
      << "while(cur.hasNext()){"
+     << "docs++;"
      << "const d=cur.next();"
      << "const vs=d.vertices||[];"
      << "for(let i=0;i<vs.length;i++){const v=vs[i];"
@@ -279,7 +286,8 @@ __host__ void GARMatch::LoadData() {
      << "const es=d.edges||[];"
      << "for(let i=0;i<es.length;i++){const e=es[i];"
      << "print(\"E\\t\"+String(e.src_id||\"\")+\"\\t\"+String(e.dst_id||\"\")+\"\\t\"+String(e.label||\"\"));}"
-     << "}";
+     << "}"
+     << "print(\"M\\tDOCS\\t\"+String(docs));";
 
   const std::string arangosh_cmd =
       "arangosh --server.endpoint 'http+tcp://" + EscapeShellSingleQuotes(host) +
@@ -288,7 +296,7 @@ __host__ void GARMatch::LoadData() {
       EscapeShellSingleQuotes(pass) + "' --server.database '" +
       EscapeShellSingleQuotes(db) +
       "' --quiet --javascript.execute-string \"" +
-      EscapeForJSDoubleQuote(js.str()) + "\"";
+      EscapeForJSDoubleQuote(js.str()) + "\" 2>&1";
   data_dump_cmd = arangosh_cmd;
   } else if (CommandExists("python3")) {
     std::ostringstream py_cmd;
@@ -318,10 +326,15 @@ __host__ void GARMatch::LoadData() {
         << "limit=int(os.environ.get('ARANGO_PIVOT_LIMIT','0') or 0)\n"
         << "base=f\"{scheme}://{host}:{port}/_db/{db}/_api/cursor\"\n"
         << "auth='Basic '+base64.b64encode(f\"{user}:{pwd}\".encode()).decode()\n"
-        << "q=f\"FOR d IN {coll} FILTER d.graph_id==@g AND d.business_id==@b\"\n"
+        << "q=f\"FOR d IN {coll}\"\n"
+        << "if gid and bid: q += \" FILTER d.graph_id==@g AND d.business_id==@b\"\n"
+        << "elif gid: q += \" FILTER d.graph_id==@g\"\n"
+        << "elif bid: q += \" FILTER d.business_id==@b\"\n"
         << "if limit>0: q += \" LIMIT @l\"\n"
         << "q += \" RETURN d\"\n"
-        << "bind={'g':gid,'b':bid}\n"
+        << "bind={}\n"
+        << "if gid: bind['g']=gid\n"
+        << "if bid: bind['b']=bid\n"
         << "if limit>0: bind['l']=limit\n"
         << "payload={'query':q,'bindVars':bind,'batchSize':64}\n"
         << "def req(url, method='POST', body=None):\n"
@@ -336,14 +349,20 @@ __host__ void GARMatch::LoadData() {
         << "    print('V\\t'+str(v.get('id',''))+'\\t'+str(v.get('label','')))\n"
         << "  for e in (doc.get('edges') or []):\n"
         << "    print('E\\t'+str(e.get('src_id',''))+'\\t'+str(e.get('dst_id',''))+'\\t'+str(e.get('label','')))\n"
-        << "first=req(base,'POST',payload)\n"
-        << "for d in (first.get('result') or []): emit(d)\n"
-        << "while first.get('hasMore'):\n"
-        << "  cid=first.get('id')\n"
-        << "  if not cid: break\n"
-        << "  first=req(base+'/'+cid,'PUT',{})\n"
-        << "  for d in (first.get('result') or []): emit(d)\n"
-        << "PY";
+        << "try:\n"
+        << "  docs=0\n"
+        << "  first=req(base,'POST',payload)\n"
+        << "  for d in (first.get('result') or []): emit(d); docs+=1\n"
+        << "  while first.get('hasMore'):\n"
+        << "    cid=first.get('id')\n"
+        << "    if not cid: break\n"
+        << "    first=req(base+'/'+cid,'PUT',{})\n"
+        << "    for d in (first.get('result') or []): emit(d); docs+=1\n"
+        << "  print('M\\tDOCS\\t'+str(docs))\n"
+        << "except Exception as ex:\n"
+        << "  print('ERR\\t'+str(ex))\n"
+        << "  raise\n"
+        << "PY 2>&1";
     data_dump_cmd = py_cmd.str();
     std::cout << "[GARMatch] arangosh not found, using python3 cursor loader."
               << std::endl;
@@ -359,6 +378,8 @@ __host__ void GARMatch::LoadData() {
 
   int vertex_token_count = 0;
   int edge_count = 0;
+  int doc_count = -1;
+  std::string load_error_line;
 
   std::array<char, 4096> line_buf{};
   while (fgets(line_buf.data(), static_cast<int>(line_buf.size()), pipe) !=
@@ -366,6 +387,14 @@ __host__ void GARMatch::LoadData() {
     std::string line(line_buf.data());
     TrimEOL(&line);
     if (line.empty()) continue;
+    if (line.rfind("ERR\t", 0) == 0) {
+      load_error_line = line;
+      continue;
+    }
+    if (line.rfind("M\tDOCS\t", 0) == 0) {
+      doc_count = std::atoi(line.substr(7).c_str());
+      continue;
+    }
     if (line.rfind("V\t", 0) == 0) {
       size_t p1 = line.find('\t', 2);
       if (p1 == std::string::npos) continue;
@@ -392,6 +421,14 @@ __host__ void GARMatch::LoadData() {
     }
   }
   pclose(pipe);
+  if (!load_error_line.empty()) {
+    throw std::runtime_error("ArangoDB loader error: " + load_error_line);
+  }
+  if (doc_count == 0) {
+    throw std::runtime_error(
+        "No pivot_graph documents matched graph_id/business_id filters. "
+        "Please check configs/arangodb.yaml.");
+  }
 
   if (vertex_token_count <= 0 || edge_count <= 0) {
     throw std::runtime_error(
