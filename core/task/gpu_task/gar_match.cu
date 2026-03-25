@@ -7,6 +7,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <iostream>
+#include <limits>
 #include <sstream>
 #include <stdexcept>
 
@@ -50,6 +51,27 @@ std::string ExecCommand(const std::string& command) {
   return output;
 }
 
+std::string EscapeForJSDoubleQuote(const std::string& s) {
+  std::string out;
+  out.reserve(s.size() + 8);
+  for (char c : s) {
+    if (c == '\\') {
+      out += "\\\\";
+    } else if (c == '"') {
+      out += "\\\"";
+    } else if (c == '\n') {
+      out += "\\n";
+    } else if (c == '\r') {
+      out += "\\r";
+    } else if (c == '\t') {
+      out += "\\t";
+    } else {
+      out += c;
+    }
+  }
+  return out;
+}
+
 bool ExtractIntField(const std::string& json, const std::string& field_name,
                      int* out) {
   if (out == nullptr) return false;
@@ -65,6 +87,69 @@ bool ExtractIntField(const std::string& json, const std::string& field_name,
   if (end == pos) return false;
   *out = std::stoi(json.substr(pos, end - pos));
   return true;
+}
+
+uint32_t ParseVertexIDOrFallback(const std::string& s, uint32_t fallback) {
+  if (s.empty()) return fallback;
+  uint64_t v = 0;
+  for (char c : s) {
+    if (!std::isdigit(static_cast<unsigned char>(c))) return fallback;
+    v = v * 10 + static_cast<uint64_t>(c - '0');
+    if (v > static_cast<uint64_t>(std::numeric_limits<uint32_t>::max()))
+      return fallback;
+  }
+  return static_cast<uint32_t>(v);
+}
+
+uint32_t ParseVertexIDStable(const std::string& s) {
+  if (s.empty()) return 0u;
+  bool all_digit = true;
+  for (char c : s) {
+    if (!std::isdigit(static_cast<unsigned char>(c))) {
+      all_digit = false;
+      break;
+    }
+  }
+  if (all_digit) return ParseVertexIDOrFallback(s, 0u);
+
+  // FNV-1a 32-bit for stable non-numeric id mapping.
+  uint32_t h = 2166136261u;
+  for (char c : s) {
+    h ^= static_cast<uint8_t>(c);
+    h *= 16777619u;
+  }
+  return h;
+}
+
+int LowerBoundUInt32(const uint32_t* arr, int n, uint32_t target) {
+  int l = 0, r = n;
+  while (l < r) {
+    int m = l + ((r - l) >> 1);
+    if (arr[m] < target)
+      l = m + 1;
+    else
+      r = m;
+  }
+  return l;
+}
+
+int UniqueInPlaceUInt32(uint32_t* arr, int n) {
+  if (arr == nullptr || n <= 0) return 0;
+  int w = 1;
+  for (int i = 1; i < n; ++i) {
+    if (arr[i] != arr[w - 1]) {
+      arr[w++] = arr[i];
+    }
+  }
+  return w;
+}
+
+void TrimEOL(std::string* line) {
+  if (line == nullptr) return;
+  while (!line->empty() &&
+         (line->back() == '\n' || line->back() == '\r')) {
+    line->pop_back();
+  }
 }
 
 }  // namespace
@@ -129,6 +214,11 @@ __host__ void GARMatch::LoadData() {
   const std::string pass = cfg["arango"]["password"].as<std::string>("");
   const std::string pivot_graphs_collection =
       cfg["collections"]["pivot_graphs"].as<std::string>("pivot_graphs");
+  const std::string graph_id =
+      cfg["graph_query"]["graph_id"].as<std::string>("");
+  const std::string business_id =
+      cfg["graph_query"]["business_id"].as<std::string>("");
+  const int pivot_limit = cfg["graph_query"]["pivot_limit"].as<int>(0);
 
   const std::string auth_url = scheme + "://" + user + ":" + pass + "@" + host +
                                ":" + std::to_string(port);
@@ -159,26 +249,189 @@ __host__ void GARMatch::LoadData() {
   std::cout << "[GARMatch] pivot_graphs count: " << pivot_graph_count
             << std::endl;
 
-  // Build a small graph bootstrap from DB metadata/count for now.
-  // This keeps the pipeline runnable before full JSON payload parsing.
-  owned_g_.n_vertices = std::max(2, std::min(pivot_graph_count + 1, 64));
-  owned_g_.n_edges = owned_g_.n_vertices - 1;
+  std::ostringstream js;
+  js << "const c=db._collection(\"" << EscapeForJSDoubleQuote(pivot_graphs_collection)
+     << "\");"
+     << "if(!c){throw new Error(\"collection not found\");}"
+     << "const q='FOR d IN " << EscapeForJSDoubleQuote(pivot_graphs_collection)
+     << " FILTER d.graph_id==@g AND d.business_id==@b"
+     << (pivot_limit > 0 ? " LIMIT @l" : "") << " RETURN d';"
+     << "const bind={g:\""
+     << EscapeForJSDoubleQuote(graph_id) << "\",b:\""
+     << EscapeForJSDoubleQuote(business_id) << "\""
+     << (pivot_limit > 0 ? ",l:" + std::to_string(pivot_limit) : "") << "};"
+     << "const cur=db._query(q,bind);"
+     << "while(cur.hasNext()){"
+     << "const d=cur.next();"
+     << "const vs=d.vertices||[];"
+     << "for(let i=0;i<vs.length;i++){const v=vs[i];"
+     << "print(\"V\\t\"+String(v.id||\"\")+\"\\t\"+String(v.label||\"\"));}"
+     << "const es=d.edges||[];"
+     << "for(let i=0;i<es.length;i++){const e=es[i];"
+     << "print(\"E\\t\"+String(e.src_id||\"\")+\"\\t\"+String(e.dst_id||\"\")+\"\\t\"+String(e.label||\"\"));}"
+     << "}";
+
+  const std::string arangosh_cmd =
+      "arangosh --server.endpoint 'http+tcp://" + EscapeShellSingleQuotes(host) +
+      ":" + std::to_string(port) + "' --server.username '" +
+      EscapeShellSingleQuotes(user) + "' --server.password '" +
+      EscapeShellSingleQuotes(pass) + "' --server.database '" +
+      EscapeShellSingleQuotes(db) +
+      "' --quiet --javascript.execute-string \"" +
+      EscapeForJSDoubleQuote(js.str()) + "\"";
+
+  FILE* pipe = popen(arangosh_cmd.c_str(), "r");
+  if (pipe == nullptr) {
+    throw std::runtime_error("Failed to execute arangosh command");
+  }
+
+  int vertex_token_count = 0;
+  int edge_count = 0;
+
+  std::array<char, 4096> line_buf{};
+  while (fgets(line_buf.data(), static_cast<int>(line_buf.size()), pipe) !=
+         nullptr) {
+    std::string line(line_buf.data());
+    TrimEOL(&line);
+    if (line.empty()) continue;
+    if (line.rfind("V\t", 0) == 0) {
+      size_t p1 = line.find('\t', 2);
+      if (p1 == std::string::npos) continue;
+      std::string vid = line.substr(2, p1 - 2);
+      std::string vlabel = line.substr(p1 + 1);
+      (void)vlabel;
+      if (vid.empty()) continue;
+      ++vertex_token_count;
+      continue;
+    }
+    if (line.rfind("E\t", 0) == 0) {
+      size_t p1 = line.find('\t', 2);
+      if (p1 == std::string::npos) continue;
+      size_t p2 = line.find('\t', p1 + 1);
+      if (p2 == std::string::npos) continue;
+      std::string src = line.substr(2, p1 - 2);
+      std::string dst = line.substr(p1 + 1, p2 - p1 - 1);
+      std::string elabel = line.substr(p2 + 1);
+      (void)elabel;
+      if (src.empty() || dst.empty()) continue;
+      vertex_token_count += 2;
+      ++edge_count;
+      continue;
+    }
+  }
+  pclose(pipe);
+
+  if (vertex_token_count <= 0 || edge_count <= 0) {
+    throw std::runtime_error(
+        "No vertices/edges loaded from ArangoDB pivot_graphs");
+  }
+
+  // Allocate raw space for all seen vertex tokens, then deduplicate in-place.
+  std::unique_ptr<uint32_t[]> vertex_tokens(
+      new uint32_t[vertex_token_count]());
+
+  pipe = popen(arangosh_cmd.c_str(), "r");
+  if (pipe == nullptr) {
+    throw std::runtime_error("Failed to execute arangosh command (2nd pass)");
+  }
+  int v_write = 0;
+  while (fgets(line_buf.data(), static_cast<int>(line_buf.size()), pipe) !=
+         nullptr) {
+    std::string line(line_buf.data());
+    TrimEOL(&line);
+    if (line.empty()) continue;
+    if (line.rfind("V\t", 0) == 0) {
+      size_t p1 = line.find('\t', 2);
+      if (p1 == std::string::npos) continue;
+      std::string vid = line.substr(2, p1 - 2);
+      if (vid.empty()) continue;
+      if (v_write < vertex_token_count) {
+        vertex_tokens[v_write++] = ParseVertexIDStable(vid);
+      }
+      continue;
+    }
+    if (line.rfind("E\t", 0) == 0) {
+      size_t p1 = line.find('\t', 2);
+      if (p1 == std::string::npos) continue;
+      size_t p2 = line.find('\t', p1 + 1);
+      if (p2 == std::string::npos) continue;
+      std::string src = line.substr(2, p1 - 2);
+      std::string dst = line.substr(p1 + 1, p2 - p1 - 1);
+      if (src.empty() || dst.empty()) continue;
+      if (v_write + 1 < vertex_token_count) {
+        vertex_tokens[v_write++] = ParseVertexIDStable(src);
+        vertex_tokens[v_write++] = ParseVertexIDStable(dst);
+      }
+      continue;
+    }
+  }
+  pclose(pipe);
+  if (v_write <= 0) {
+    throw std::runtime_error("Failed to collect vertex ids from ArangoDB data");
+  }
+
+  std::sort(vertex_tokens.get(), vertex_tokens.get() + v_write);
+  const int unique_vertex_count = UniqueInPlaceUInt32(vertex_tokens.get(), v_write);
+
+  owned_g_.n_vertices = unique_vertex_count;
+  owned_g_.n_edges = edge_count;
   owned_g_.v_id = std::make_unique<uint32_t[]>(owned_g_.n_vertices);
   owned_g_.v_label_idx = std::make_unique<int32_t[]>(owned_g_.n_vertices);
   owned_g_.e_src = std::make_unique<uint32_t[]>(owned_g_.n_edges);
   owned_g_.e_dst = std::make_unique<uint32_t[]>(owned_g_.n_edges);
   owned_g_.e_id = std::make_unique<uint32_t[]>(owned_g_.n_edges);
   owned_g_.e_label_idx = std::make_unique<int32_t[]>(owned_g_.n_edges);
-  std::fill_n(owned_g_.v_label_idx.get(), owned_g_.n_vertices, 0);
-  std::fill_n(owned_g_.e_label_idx.get(), owned_g_.n_edges, 0);
   for (int i = 0; i < owned_g_.n_vertices; ++i) {
-    owned_g_.v_id[i] = static_cast<uint32_t>(i);
+    owned_g_.v_id[i] = vertex_tokens[i];
+    owned_g_.v_label_idx[i] = 0;
   }
-  for (int e = 0; e < owned_g_.n_edges; ++e) {
-    owned_g_.e_src[e] = static_cast<uint32_t>(e);
-    owned_g_.e_dst[e] = static_cast<uint32_t>(e + 1);
-    owned_g_.e_id[e] = static_cast<uint32_t>(e);
+
+  // Third pass: stream edges directly into pre-allocated arrays.
+  pipe = popen(arangosh_cmd.c_str(), "r");
+  if (pipe == nullptr) {
+    throw std::runtime_error("Failed to execute arangosh command (3rd pass)");
   }
+  int e_write = 0;
+  while (fgets(line_buf.data(), static_cast<int>(line_buf.size()), pipe) !=
+         nullptr) {
+    std::string line(line_buf.data());
+    TrimEOL(&line);
+    if (line.rfind("E\t", 0) != 0) continue;
+
+    size_t p1 = line.find('\t', 2);
+    if (p1 == std::string::npos) continue;
+    size_t p2 = line.find('\t', p1 + 1);
+    if (p2 == std::string::npos) continue;
+    std::string src = line.substr(2, p1 - 2);
+    std::string dst = line.substr(p1 + 1, p2 - p1 - 1);
+    std::string elabel = line.substr(p2 + 1);
+    (void)elabel;
+    if (src.empty() || dst.empty()) continue;
+    const uint32_t src_id = ParseVertexIDStable(src);
+    const uint32_t dst_id = ParseVertexIDStable(dst);
+
+    if (e_write >= owned_g_.n_edges) break;
+    int src_local = LowerBoundUInt32(vertex_tokens.get(), unique_vertex_count, src_id);
+    int dst_local = LowerBoundUInt32(vertex_tokens.get(), unique_vertex_count, dst_id);
+    if (src_local >= unique_vertex_count || vertex_tokens[src_local] != src_id ||
+        dst_local >= unique_vertex_count || vertex_tokens[dst_local] != dst_id) {
+      continue;
+    }
+    owned_g_.e_src[e_write] = static_cast<uint32_t>(src_local);
+    owned_g_.e_dst[e_write] = static_cast<uint32_t>(dst_local);
+    owned_g_.e_id[e_write] = static_cast<uint32_t>(e_write);
+    owned_g_.e_label_idx[e_write] = 0;
+    ++e_write;
+  }
+  pclose(pipe);
+  if (e_write != owned_g_.n_edges) {
+    owned_g_.n_edges = e_write;
+  }
+
+  std::cout << "[GARMatch] loaded real graph from ArangoDB: n_vertices="
+            << owned_g_.n_vertices << ", n_edges=" << owned_g_.n_edges
+            << std::endl;
+
   g_ = GARGraphArrays{
       .v_id = owned_g_.v_id.get(),
       .v_label_idx = owned_g_.v_label_idx.get(),
