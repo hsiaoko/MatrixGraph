@@ -14,8 +14,8 @@ collections:
   pivot_graphs: "pivot_graphs"
 
 graph_query:
-  graph_id: "demo_graph"
-  business_id: "demo_business"
+  graph_id: "demo_graph_id"
+  business_id: "demo_business_id"
   pivot_mode: "single"   # single | source
   pivot_limit: 0         # 0 means no limit
 
