@@ -6,6 +6,8 @@
 #include <unordered_set>
 #include <vector>
 
+#include "core/data_structures/device_buffer.cuh"
+#include "core/data_structures/host_buffer.cuh"
 #include "core/util/cuda_check.cuh"
 
 namespace sics {
@@ -18,6 +20,15 @@ using GARGraphArrays = sics::matrixgraph::core::data_structures::GARGraphArrays;
 using GARPatternArrays =
     sics::matrixgraph::core::data_structures::GARPatternArrays;
 using GARMatchArrays = sics::matrixgraph::core::data_structures::GARMatchArrays;
+using BufferUint32 = sics::matrixgraph::core::data_structures::Buffer<uint32_t>;
+using BufferInt32 = sics::matrixgraph::core::data_structures::Buffer<int32_t>;
+using BufferInt = sics::matrixgraph::core::data_structures::Buffer<int>;
+using DeviceOwnedBufferUint32 =
+    sics::matrixgraph::core::data_structures::DeviceOwnedBuffer<uint32_t>;
+using DeviceOwnedBufferInt32 =
+    sics::matrixgraph::core::data_structures::DeviceOwnedBuffer<int32_t>;
+using DeviceOwnedBufferInt =
+    sics::matrixgraph::core::data_structures::DeviceOwnedBuffer<int>;
 
 GARMatchKernelWrapper* GARMatchKernelWrapper::GetInstance() {
   if (ptr_ == nullptr) {
@@ -271,25 +282,24 @@ int GARMatchKernelWrapper::GARMatch(const GARGraphArrays& g,
   // CUDA kernel stage 1: candidate filtering for each pattern edge.
   if (g.n_edges > 0 && p.n_edges > 0 && g.e_src && g.e_dst && p.edge_src &&
       p.edge_dst && p.node_label_idx) {
-    uint32_t *d_g_v_id = nullptr, *d_g_e_src = nullptr, *d_g_e_dst = nullptr;
-    int32_t *d_g_v_label_idx = nullptr, *d_g_e_label_idx = nullptr;
-    CUDA_CHECK(cudaMalloc(&d_g_v_id, sizeof(uint32_t) * g.n_vertices));
-    CUDA_CHECK(cudaMalloc(&d_g_v_label_idx, sizeof(int32_t) * g.n_vertices));
-    CUDA_CHECK(cudaMalloc(&d_g_e_src, sizeof(uint32_t) * g.n_edges));
-    CUDA_CHECK(cudaMalloc(&d_g_e_dst, sizeof(uint32_t) * g.n_edges));
-    CUDA_CHECK(cudaMalloc(&d_g_e_label_idx, sizeof(int32_t) * g.n_edges));
-    CUDA_CHECK(cudaMemcpy(d_g_v_id, g.v_id, sizeof(uint32_t) * g.n_vertices,
-                          cudaMemcpyHostToDevice));
-    CUDA_CHECK(cudaMemcpy(d_g_v_label_idx, g.v_label_idx,
-                          sizeof(int32_t) * g.n_vertices,
-                          cudaMemcpyHostToDevice));
-    CUDA_CHECK(cudaMemcpy(d_g_e_src, g.e_src, sizeof(uint32_t) * g.n_edges,
-                          cudaMemcpyHostToDevice));
-    CUDA_CHECK(cudaMemcpy(d_g_e_dst, g.e_dst, sizeof(uint32_t) * g.n_edges,
-                          cudaMemcpyHostToDevice));
-    CUDA_CHECK(cudaMemcpy(d_g_e_label_idx, g.e_label_idx,
-                          sizeof(int32_t) * g.n_edges,
-                          cudaMemcpyHostToDevice));
+    BufferUint32 h_g_v_id{const_cast<uint32_t*>(g.v_id),
+                          sizeof(uint32_t) * static_cast<size_t>(g.n_vertices)};
+    BufferInt32 h_g_v_label_idx{const_cast<int32_t*>(g.v_label_idx),
+                                sizeof(int32_t) *
+                                    static_cast<size_t>(g.n_vertices)};
+    BufferUint32 h_g_e_src{const_cast<uint32_t*>(g.e_src),
+                           sizeof(uint32_t) * static_cast<size_t>(g.n_edges)};
+    BufferUint32 h_g_e_dst{const_cast<uint32_t*>(g.e_dst),
+                           sizeof(uint32_t) * static_cast<size_t>(g.n_edges)};
+    BufferInt32 h_g_e_label_idx{
+        const_cast<int32_t*>(g.e_label_idx),
+        sizeof(int32_t) * static_cast<size_t>(g.n_edges)};
+
+    DeviceOwnedBufferUint32 d_g_v_id(h_g_v_id);
+    DeviceOwnedBufferInt32 d_g_v_label_idx(h_g_v_label_idx);
+    DeviceOwnedBufferUint32 d_g_e_src(h_g_e_src);
+    DeviceOwnedBufferUint32 d_g_e_dst(h_g_e_dst);
+    DeviceOwnedBufferInt32 d_g_e_label_idx(h_g_e_label_idx);
 
     const int threads = 256;
     const int blocks = std::max(1, std::min((g.n_edges + threads - 1) / threads, 1024));
@@ -298,28 +308,26 @@ int GARMatchKernelWrapper::GARMatch(const GARGraphArrays& g,
       const int32_t pv = p.edge_dst[pe];
       if (pu < 0 || pu >= p.n_nodes || pv < 0 || pv >= p.n_nodes) continue;
 
-      uint32_t* d_cand_src = nullptr;
-      uint32_t* d_cand_dst = nullptr;
-      int* d_cand_count = nullptr;
-      CUDA_CHECK(cudaMalloc(&d_cand_src, sizeof(uint32_t) * g.n_edges));
-      CUDA_CHECK(cudaMalloc(&d_cand_dst, sizeof(uint32_t) * g.n_edges));
-      CUDA_CHECK(cudaMalloc(&d_cand_count, sizeof(int)));
-      CUDA_CHECK(cudaMemset(d_cand_count, 0, sizeof(int)));
+      DeviceOwnedBufferUint32 d_cand_src(
+          sizeof(uint32_t) * static_cast<size_t>(g.n_edges));
+      DeviceOwnedBufferUint32 d_cand_dst(
+          sizeof(uint32_t) * static_cast<size_t>(g.n_edges));
+      DeviceOwnedBufferInt d_cand_count(sizeof(int));
 
       ParametersGARFilter params{
-          .g_v_id = d_g_v_id,
-          .g_v_label_idx = d_g_v_label_idx,
+          .g_v_id = d_g_v_id.GetPtr(),
+          .g_v_label_idx = d_g_v_label_idx.GetPtr(),
           .n_vertices_g = g.n_vertices,
-          .g_e_src = d_g_e_src,
-          .g_e_dst = d_g_e_dst,
-          .g_e_label_idx = d_g_e_label_idx,
+          .g_e_src = d_g_e_src.GetPtr(),
+          .g_e_dst = d_g_e_dst.GetPtr(),
+          .g_e_label_idx = d_g_e_label_idx.GetPtr(),
           .n_edges_g = g.n_edges,
           .p_src_label = p.node_label_idx[pu],
           .p_dst_label = p.node_label_idx[pv],
           .p_edge_label = p.edge_label_idx ? p.edge_label_idx[pe] : 0,
-          .cand_src = d_cand_src,
-          .cand_dst = d_cand_dst,
-          .cand_count = d_cand_count,
+          .cand_src = d_cand_src.GetPtr(),
+          .cand_dst = d_cand_dst.GetPtr(),
+          .cand_count = d_cand_count.GetPtr(),
           .cand_capacity = g.n_edges,
       };
       GARFilterEdgeCandidatesKernel<<<blocks, threads>>>(params);
@@ -327,21 +335,11 @@ int GARMatchKernelWrapper::GARMatch(const GARGraphArrays& g,
       CUDA_CHECK(cudaDeviceSynchronize());
 
       int h_count = 0;
-      CUDA_CHECK(cudaMemcpy(&h_count, d_cand_count, sizeof(int),
-                            cudaMemcpyDeviceToHost));
+      BufferInt h_count_buf{&h_count, sizeof(int)};
+      d_cand_count.Device2Host(&h_count_buf);
       std::cout << "[GARMatch][CUDA] pattern_edge=" << pe
                 << " candidate_count=" << h_count << std::endl;
-
-      CUDA_CHECK(cudaFree(d_cand_src));
-      CUDA_CHECK(cudaFree(d_cand_dst));
-      CUDA_CHECK(cudaFree(d_cand_count));
     }
-
-    CUDA_CHECK(cudaFree(d_g_v_id));
-    CUDA_CHECK(cudaFree(d_g_v_label_idx));
-    CUDA_CHECK(cudaFree(d_g_e_src));
-    CUDA_CHECK(cudaFree(d_g_e_dst));
-    CUDA_CHECK(cudaFree(d_g_e_label_idx));
   }
 
 
