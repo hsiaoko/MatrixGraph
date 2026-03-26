@@ -580,6 +580,14 @@ __host__ void GARMatch::LoadData() {
       .n_edges = owned_g_.n_edges,
   };
 
+  // TMP init graph labels.
+  for (int i = 0; i < owned_g_.n_vertices; ++i) {
+    owned_g_.v_label_idx[i] = i % 3;
+  }
+  for (int i = 0; i < owned_g_.n_edges; ++i) {
+    owned_g_.e_label_idx[i] = i % 3;
+  }
+
   // Generate a simple pattern: node(0) -> node(1)
   owned_p_.n_nodes = 2;
   owned_p_.n_edges = 1;
