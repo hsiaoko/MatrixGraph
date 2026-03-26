@@ -6,6 +6,7 @@
 #include <unordered_set>
 #include <vector>
 
+#include "core/common/consts.h"
 #include "core/data_structures/device_buffer.cuh"
 #include "core/data_structures/host_buffer.cuh"
 #include "core/util/cuda_check.cuh"
@@ -29,6 +30,8 @@ using DeviceOwnedBufferInt32 =
     sics::matrixgraph::core::data_structures::DeviceOwnedBuffer<int32_t>;
 using DeviceOwnedBufferInt =
     sics::matrixgraph::core::data_structures::DeviceOwnedBuffer<int>;
+using sics::matrixgraph::core::common::kBlockDim;
+using sics::matrixgraph::core::common::kGridDim;
 
 GARMatchKernelWrapper* GARMatchKernelWrapper::GetInstance() {
   if (ptr_ == nullptr) {
@@ -306,8 +309,8 @@ int GARMatchKernelWrapper::GARMatch(const GARGraphArrays& g,
     d_g_e_dst.Init(h_g_e_dst);
     d_g_e_label_idx.Init(h_g_e_label_idx);
 
-    const int threads = 256;
-    const int blocks = std::max(1, std::min((g.n_edges + threads - 1) / threads, 1024));
+    dim3 dimBlock(kBlockDim);
+    dim3 dimGrid(kGridDim);
     for (int pe = 0; pe < p.n_edges; ++pe) {
       const int32_t pu = p.edge_src[pe];
       const int32_t pv = p.edge_dst[pe];
@@ -335,7 +338,7 @@ int GARMatchKernelWrapper::GARMatch(const GARGraphArrays& g,
           .cand_count = d_cand_count.GetPtr(),
           .cand_capacity = g.n_edges,
       };
-      GARFilterEdgeCandidatesKernel<<<blocks, threads>>>(params);
+      GARFilterEdgeCandidatesKernel<<<dimGrid, dimBlock>>>(params);
       CUDA_CHECK(cudaGetLastError());
       CUDA_CHECK(cudaDeviceSynchronize());
 
