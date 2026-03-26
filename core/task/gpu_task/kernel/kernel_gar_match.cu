@@ -416,19 +416,22 @@ int GARMatchKernelWrapper::GARMatch(const GARGraphArrays& g,
       BufferInt h_count_buf{&h_count, sizeof(int)};
       d_cand_count.Device2Host(&h_count_buf);
       int keep = std::max(0, std::min(h_count, g.n_edges));
-      cand_src_by_edge[static_cast<size_t>(pe)].resize(
-          static_cast<size_t>(keep));
-      cand_dst_by_edge[static_cast<size_t>(pe)].resize(
-          static_cast<size_t>(keep));
       if (keep > 0) {
-        BufferUint32 h_cand_src{
-            cand_src_by_edge[static_cast<size_t>(pe)].data(),
-            sizeof(uint32_t) * static_cast<size_t>(keep)};
-        BufferUint32 h_cand_dst{
-            cand_dst_by_edge[static_cast<size_t>(pe)].data(),
-            sizeof(uint32_t) * static_cast<size_t>(keep)};
+        std::vector<uint32_t> tmp_src(static_cast<size_t>(g.n_edges), 0);
+        std::vector<uint32_t> tmp_dst(static_cast<size_t>(g.n_edges), 0);
+        BufferUint32 h_cand_src{tmp_src.data(),
+                                sizeof(uint32_t) * static_cast<size_t>(g.n_edges)};
+        BufferUint32 h_cand_dst{tmp_dst.data(),
+                                sizeof(uint32_t) * static_cast<size_t>(g.n_edges)};
         d_cand_src.Device2Host(&h_cand_src);
         d_cand_dst.Device2Host(&h_cand_dst);
+        cand_src_by_edge[static_cast<size_t>(pe)].assign(
+            tmp_src.begin(), tmp_src.begin() + keep);
+        cand_dst_by_edge[static_cast<size_t>(pe)].assign(
+            tmp_dst.begin(), tmp_dst.begin() + keep);
+      } else {
+        cand_src_by_edge[static_cast<size_t>(pe)].clear();
+        cand_dst_by_edge[static_cast<size_t>(pe)].clear();
       }
       std::cout << "[GARMatch][CUDA] pattern_edge=" << pe
                 << " candidate_count=" << h_count << std::endl;
@@ -560,7 +563,7 @@ int GARMatchKernelWrapper::GARMatch(const GARGraphArrays& g,
 
   if (h_curr_count > 0) {
     std::vector<int32_t> h_embeddings_raw(
-        static_cast<size_t>(h_curr_count) * static_cast<size_t>(p.n_nodes), -1);
+        static_cast<size_t>(max_embeddings) * static_cast<size_t>(p.n_nodes), -1);
     BufferInt32 h_embeddings_buf{h_embeddings_raw.data(),
                                  sizeof(int32_t) * h_embeddings_raw.size()};
     DeviceOwnedBufferInt32& d_curr =
