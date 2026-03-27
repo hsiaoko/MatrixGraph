@@ -1,17 +1,16 @@
-#include "core/task/gpu_task/kernel/kernel_gar_match.cuh"
-#include <cuda_runtime.h>
-#include <algorithm>
-#include <cstdint>
-#include <iostream>
-#include <vector>
-
 #include "core/common/consts.h"
 #include "core/data_structures/device_buffer.cuh"
 #include "core/data_structures/heap.cuh"
 #include "core/data_structures/host_buffer.cuh"
 #include "core/data_structures/mini_kernel_bitmap.cuh"
 #include "core/task/gpu_task/kernel/algorithms/hash.cuh"
+#include "core/task/gpu_task/kernel/kernel_gar_match.cuh"
 #include "core/util/cuda_check.cuh"
+#include <algorithm>
+#include <cstdint>
+#include <cuda_runtime.h>
+#include <iostream>
+#include <vector>
 
 namespace sics {
 namespace matrixgraph {
@@ -32,12 +31,13 @@ using DeviceOwnedBufferInt32 =
     sics::matrixgraph::core::data_structures::DeviceOwnedBuffer<int32_t>;
 using DeviceOwnedBufferInt =
     sics::matrixgraph::core::data_structures::DeviceOwnedBuffer<int>;
-using MiniKernelBitmap = sics::matrixgraph::core::task::kernel::MiniKernelBitmap;
+using MiniKernelBitmap =
+    sics::matrixgraph::core::task::kernel::MiniKernelBitmap;
 using MinHeap = sics::matrixgraph::core::task::kernel::MinHeap;
-using sics::matrixgraph::core::common::kDefaultHeapCapacity;
-using sics::matrixgraph::core::common::kMaxVertexID;
 using sics::matrixgraph::core::common::kBlockDim;
+using sics::matrixgraph::core::common::kDefaultHeapCapacity;
 using sics::matrixgraph::core::common::kGridDim;
+using sics::matrixgraph::core::common::kMaxVertexID;
 
 GARMatchKernelWrapper* GARMatchKernelWrapper::GetInstance() {
   if (ptr_ == nullptr) {
@@ -47,7 +47,8 @@ GARMatchKernelWrapper* GARMatchKernelWrapper::GetInstance() {
 }
 
 static __forceinline__ __device__ bool LabelDegreeFilter(
-    const GARPatternArrays& p, const GARGraphArrays& g, int u_idx, uint32_t v_idx) {
+    const GARPatternArrays& p, const GARGraphArrays& g, int u_idx,
+    uint32_t v_idx) {
   if (u_idx < 0 || u_idx >= p.n_nodes) return false;
   if (v_idx >= static_cast<uint32_t>(g.n_vertices)) return false;
   if (p.node_label_idx == nullptr || g.v_label_idx == nullptr) return false;
@@ -69,7 +70,8 @@ static __forceinline__ __device__ bool LabelDegreeFilter(
 }
 
 static __forceinline__ __device__ bool NeighborLabelCounterFilter(
-    const GARPatternArrays& p, const GARGraphArrays& g, int u_idx, uint32_t v_idx) {
+    const GARPatternArrays& p, const GARGraphArrays& g, int u_idx,
+    uint32_t v_idx) {
   if (u_idx < 0 || u_idx >= p.n_nodes) return false;
   if (v_idx >= static_cast<uint32_t>(g.n_vertices)) return false;
   if (p.node_label_idx == nullptr || g.v_label_idx == nullptr) return false;
@@ -83,12 +85,16 @@ static __forceinline__ __device__ bool NeighborLabelCounterFilter(
   u_label_visited.Clear();
   v_label_visited.Clear();
   for (int e = 0; e < p.n_edges; ++e) {
-    if (p.edge_src[e] == u_idx && p.edge_dst[e] >= 0 && p.edge_dst[e] < p.n_nodes) {
-      const uint32_t l = static_cast<uint32_t>(p.node_label_idx[p.edge_dst[e]]) & 31U;
+    if (p.edge_src[e] == u_idx && p.edge_dst[e] >= 0 &&
+        p.edge_dst[e] < p.n_nodes) {
+      const uint32_t l =
+          static_cast<uint32_t>(p.node_label_idx[p.edge_dst[e]]) & 31U;
       u_label_visited.SetBit(l);
     }
-    if (p.edge_dst[e] == u_idx && p.edge_src[e] >= 0 && p.edge_src[e] < p.n_nodes) {
-      const uint32_t l = static_cast<uint32_t>(p.node_label_idx[p.edge_src[e]]) & 31U;
+    if (p.edge_dst[e] == u_idx && p.edge_src[e] >= 0 &&
+        p.edge_src[e] < p.n_nodes) {
+      const uint32_t l =
+          static_cast<uint32_t>(p.node_label_idx[p.edge_src[e]]) & 31U;
       u_label_visited.SetBit(l);
     }
   }
@@ -112,7 +118,8 @@ static __forceinline__ __device__ bool NeighborLabelCounterFilter(
 }
 
 static __forceinline__ __device__ bool KMinWiseIPFilter(
-    const GARPatternArrays& p, const GARGraphArrays& g, int u_idx, uint32_t v_idx) {
+    const GARPatternArrays& p, const GARGraphArrays& g, int u_idx,
+    uint32_t v_idx) {
   if (u_idx < 0 || u_idx >= p.n_nodes) return false;
   if (v_idx >= static_cast<uint32_t>(g.n_vertices)) return false;
   if (p.node_label_idx == nullptr || g.v_label_idx == nullptr) return false;
@@ -139,13 +146,17 @@ static __forceinline__ __device__ bool KMinWiseIPFilter(
   uint32_t v_k_min_heap_data[kDefaultHeapCapacity];
 
   for (int e = 0; e < p.n_edges; ++e) {
-    if (p.edge_src[e] == u_idx && p.edge_dst[e] >= 0 && p.edge_dst[e] < p.n_nodes) {
-      const uint32_t l = static_cast<uint32_t>(p.node_label_idx[p.edge_dst[e]]) & 31U;
+    if (p.edge_src[e] == u_idx && p.edge_dst[e] >= 0 &&
+        p.edge_dst[e] < p.n_nodes) {
+      const uint32_t l =
+          static_cast<uint32_t>(p.node_label_idx[p.edge_dst[e]]) & 31U;
       u_label_visited.SetBit(l);
       u_k_min_heap.Insert(HashTable(l));
     }
-    if (p.edge_dst[e] == u_idx && p.edge_src[e] >= 0 && p.edge_src[e] < p.n_nodes) {
-      const uint32_t l = static_cast<uint32_t>(p.node_label_idx[p.edge_src[e]]) & 31U;
+    if (p.edge_dst[e] == u_idx && p.edge_src[e] >= 0 &&
+        p.edge_src[e] < p.n_nodes) {
+      const uint32_t l =
+          static_cast<uint32_t>(p.node_label_idx[p.edge_src[e]]) & 31U;
       u_label_visited.SetBit(l);
       u_k_min_heap.Insert(HashTable(l));
     }
@@ -194,10 +205,12 @@ static __forceinline__ __device__ bool KMinWiseIPFilter(
 }
 
 static __forceinline__ __device__ bool GARVertexFilter(
-    const GARPatternArrays& p, const GARGraphArrays& g, int u_idx, uint32_t v_idx) {
-  return LabelDegreeFilter(p, g, u_idx, v_idx) &&
-         NeighborLabelCounterFilter(p, g, u_idx, v_idx) &&
-         KMinWiseIPFilter(p, g, u_idx, v_idx);
+    const GARPatternArrays& p, const GARGraphArrays& g, int u_idx,
+    uint32_t v_idx) {
+  if (!LabelDegreeFilter(p, g, u_idx, v_idx)) return false;
+  if (!NeighborLabelCounterFilter(p, g, u_idx, v_idx)) return false;
+  if (!KMinWiseIPFilter(p, g, u_idx, v_idx)) return false;
+  return true;
 }
 
 struct ParametersGARFilter {
@@ -230,31 +243,25 @@ struct ParametersGARFilter {
 };
 
 static __global__ void GARBuildVertexValidMaskKernel(ParametersGARFilter params,
-                                                      int u_idx,
-                                                      int32_t* valid_mask) {
+                                                     int u_idx,
+                                                     int32_t* valid_mask) {
   unsigned int tid = blockIdx.x * blockDim.x + threadIdx.x;
   unsigned int step = blockDim.x * gridDim.x;
-  GARGraphArrays g_view{params.g_v_id,
-                        params.g_v_label_idx,
-                        params.n_vertices_g,
-                        params.g_e_src,
-                        params.g_e_dst,
-                        nullptr,
-                        params.g_e_label_idx,
-                        params.n_edges_g};
-  GARPatternArrays p_view{params.p_node_label_idx,
-                          params.p_n_nodes,
-                          params.p_edge_src,
-                          params.p_edge_dst,
-                          nullptr,
-                          params.p_n_edges};
+  GARGraphArrays g_view{params.g_v_id,        params.g_v_label_idx,
+                        params.n_vertices_g,  params.g_e_src,
+                        params.g_e_dst,       nullptr,
+                        params.g_e_label_idx, params.n_edges_g};
+  GARPatternArrays p_view{
+      params.p_node_label_idx, params.p_n_nodes, params.p_edge_src,
+      params.p_edge_dst,       nullptr,          params.p_n_edges};
   for (uint32_t v = tid; v < static_cast<uint32_t>(params.n_vertices_g);
        v += step) {
     valid_mask[v] = GARVertexFilter(p_view, g_view, u_idx, v) ? 1 : 0;
   }
 }
 
-static __global__ void GARFilterEdgeCandidatesKernel(ParametersGARFilter params) {
+static __global__ void GARFilterEdgeCandidatesKernel(
+    ParametersGARFilter params) {
   unsigned int tid = blockIdx.x * blockDim.x + threadIdx.x;
   unsigned int step = blockDim.x * gridDim.x;
 
@@ -286,8 +293,9 @@ static __global__ void GARFilterEdgeCandidatesKernel(ParametersGARFilter params)
   }
 }
 
-static __device__ __forceinline__ bool GARContainsAssigned(
-    const int32_t* row, int n_nodes, uint32_t v) {
+static __device__ __forceinline__ bool GARContainsAssigned(const int32_t* row,
+                                                           int n_nodes,
+                                                           uint32_t v) {
   for (int i = 0; i < n_nodes; ++i) {
     if (row[i] >= 0 && static_cast<uint32_t>(row[i]) == v) return true;
   }
@@ -326,8 +334,10 @@ static __global__ void GARExpandEmbeddingsKernel(
       static_cast<unsigned long long>(curr_count) *
       static_cast<unsigned long long>(n_cand);
   for (unsigned long long k = tid; k < total_pairs; k += step) {
-    const int emb_idx = static_cast<int>(k / static_cast<unsigned long long>(n_cand));
-    const int cand_idx = static_cast<int>(k % static_cast<unsigned long long>(n_cand));
+    const int emb_idx =
+        static_cast<int>(k / static_cast<unsigned long long>(n_cand));
+    const int cand_idx =
+        static_cast<int>(k % static_cast<unsigned long long>(n_cand));
     const int32_t* row =
         curr_embeddings + static_cast<size_t>(emb_idx) * n_nodes;
     const uint32_t gs = cand_src[cand_idx];
@@ -369,9 +379,9 @@ int GARMatchKernelWrapper::GARMatch(const GARGraphArrays& g,
       p.edge_dst && p.node_label_idx) {
     BufferUint32 h_g_v_id{const_cast<uint32_t*>(g.v_id),
                           sizeof(uint32_t) * static_cast<size_t>(g.n_vertices)};
-    BufferInt32 h_g_v_label_idx{const_cast<int32_t*>(g.v_label_idx),
-                                sizeof(int32_t) *
-                                    static_cast<size_t>(g.n_vertices)};
+    BufferInt32 h_g_v_label_idx{
+        const_cast<int32_t*>(g.v_label_idx),
+        sizeof(int32_t) * static_cast<size_t>(g.n_vertices)};
     BufferUint32 h_g_e_src{const_cast<uint32_t*>(g.e_src),
                            sizeof(uint32_t) * static_cast<size_t>(g.n_edges)};
     BufferUint32 h_g_e_dst{const_cast<uint32_t*>(g.e_dst),
@@ -411,14 +421,14 @@ int GARMatchKernelWrapper::GARMatch(const GARGraphArrays& g,
       const int32_t pv = p.edge_dst[pe];
       if (pu < 0 || pu >= p.n_nodes || pv < 0 || pv >= p.n_nodes) continue;
 
-      DeviceOwnedBufferInt32 d_src_valid(
-          sizeof(int32_t) * static_cast<size_t>(g.n_vertices));
-      DeviceOwnedBufferInt32 d_dst_valid(
-          sizeof(int32_t) * static_cast<size_t>(g.n_vertices));
-      DeviceOwnedBufferUint32 d_cand_src(
-          sizeof(uint32_t) * static_cast<size_t>(g.n_edges));
-      DeviceOwnedBufferUint32 d_cand_dst(
-          sizeof(uint32_t) * static_cast<size_t>(g.n_edges));
+      DeviceOwnedBufferInt32 d_src_valid(sizeof(int32_t) *
+                                         static_cast<size_t>(g.n_vertices));
+      DeviceOwnedBufferInt32 d_dst_valid(sizeof(int32_t) *
+                                         static_cast<size_t>(g.n_vertices));
+      DeviceOwnedBufferUint32 d_cand_src(sizeof(uint32_t) *
+                                         static_cast<size_t>(g.n_edges));
+      DeviceOwnedBufferUint32 d_cand_dst(sizeof(uint32_t) *
+                                         static_cast<size_t>(g.n_edges));
       DeviceOwnedBufferInt d_cand_count(sizeof(int));
 
       ParametersGARFilter params{
@@ -446,11 +456,11 @@ int GARMatchKernelWrapper::GARMatch(const GARGraphArrays& g,
           .cand_count = d_cand_count.GetPtr(),
           .cand_capacity = g.n_edges,
       };
-      GARBuildVertexValidMaskKernel<<<dimGrid, dimBlock>>>(params, pu,
-                                                           d_src_valid.GetPtr());
+      GARBuildVertexValidMaskKernel<<<dimGrid, dimBlock>>>(
+          params, pu, d_src_valid.GetPtr());
       CUDA_CHECK(cudaGetLastError());
-      GARBuildVertexValidMaskKernel<<<dimGrid, dimBlock>>>(params, pv,
-                                                           d_dst_valid.GetPtr());
+      GARBuildVertexValidMaskKernel<<<dimGrid, dimBlock>>>(
+          params, pv, d_dst_valid.GetPtr());
       CUDA_CHECK(cudaGetLastError());
       CUDA_CHECK(cudaDeviceSynchronize());
       GARFilterEdgeCandidatesKernel<<<dimGrid, dimBlock>>>(params);
@@ -464,10 +474,10 @@ int GARMatchKernelWrapper::GARMatch(const GARGraphArrays& g,
       if (keep > 0) {
         std::vector<uint32_t> tmp_src(static_cast<size_t>(g.n_edges), 0);
         std::vector<uint32_t> tmp_dst(static_cast<size_t>(g.n_edges), 0);
-        BufferUint32 h_cand_src{tmp_src.data(),
-                                sizeof(uint32_t) * static_cast<size_t>(g.n_edges)};
-        BufferUint32 h_cand_dst{tmp_dst.data(),
-                                sizeof(uint32_t) * static_cast<size_t>(g.n_edges)};
+        BufferUint32 h_cand_src{
+            tmp_src.data(), sizeof(uint32_t) * static_cast<size_t>(g.n_edges)};
+        BufferUint32 h_cand_dst{
+            tmp_dst.data(), sizeof(uint32_t) * static_cast<size_t>(g.n_edges)};
         d_cand_src.Device2Host(&h_cand_src);
         d_cand_dst.Device2Host(&h_cand_dst);
         cand_src_by_edge[static_cast<size_t>(pe)].assign(
@@ -482,8 +492,6 @@ int GARMatchKernelWrapper::GARMatch(const GARGraphArrays& g,
                 << " candidate_count=" << h_count << std::endl;
     }
   }
-
-
 
   if (out == nullptr) {
     return 1;
@@ -527,7 +535,8 @@ int GARMatchKernelWrapper::GARMatch(const GARGraphArrays& g,
   std::vector<std::vector<uint32_t>> embeddings;
   const int max_embeddings =
       std::max(1, out->match_capacity / std::max(1, p.n_nodes));
-  const size_t emb_bytes = sizeof(int32_t) * static_cast<size_t>(max_embeddings) *
+  const size_t emb_bytes = sizeof(int32_t) *
+                           static_cast<size_t>(max_embeddings) *
                            static_cast<size_t>(p.n_nodes);
   DeviceOwnedBufferInt32 d_frontier_a(emb_bytes);
   DeviceOwnedBufferInt32 d_frontier_b(emb_bytes);
@@ -608,7 +617,8 @@ int GARMatchKernelWrapper::GARMatch(const GARGraphArrays& g,
 
   if (h_curr_count > 0) {
     std::vector<int32_t> h_embeddings_raw(
-        static_cast<size_t>(max_embeddings) * static_cast<size_t>(p.n_nodes), -1);
+        static_cast<size_t>(max_embeddings) * static_cast<size_t>(p.n_nodes),
+        -1);
     BufferInt32 h_embeddings_buf{h_embeddings_raw.data(),
                                  sizeof(int32_t) * h_embeddings_raw.size()};
     DeviceOwnedBufferInt32& d_curr =
@@ -649,15 +659,16 @@ int GARMatchKernelWrapper::GARMatch(const GARGraphArrays& g,
     const uint32_t pivot_local = embeddings[group_begin][0];
     const uint32_t pivot_id = local_to_instance(pivot_local);
     size_t group_end = group_begin;
-    while (group_end < embeddings.size() && embeddings[group_end][0] == pivot_local) {
+    while (group_end < embeddings.size() &&
+           embeddings[group_end][0] == pivot_local) {
       ++group_end;
     }
     for (int pos = 0; pos < p.n_nodes; ++pos) {
       std::vector<uint32_t> vals;
       vals.reserve(group_end - group_begin);
       for (size_t k = group_begin; k < group_end; ++k) {
-        vals.push_back(local_to_instance(
-            embeddings[k][static_cast<size_t>(pos)]));
+        vals.push_back(
+            local_to_instance(embeddings[k][static_cast<size_t>(pos)]));
       }
       std::sort(vals.begin(), vals.end());
       vals.erase(std::unique(vals.begin(), vals.end()), vals.end());
@@ -679,9 +690,11 @@ int GARMatchKernelWrapper::GARMatch(const GARGraphArrays& g,
       }
       match_size += write_n;
       row_size += 1;
-      if (row_size >= out->row_capacity || match_size >= out->match_capacity) break;
+      if (row_size >= out->row_capacity || match_size >= out->match_capacity)
+        break;
     }
-    if (row_size >= out->row_capacity || match_size >= out->match_capacity) break;
+    if (row_size >= out->row_capacity || match_size >= out->match_capacity)
+      break;
     group_begin = group_end;
   }
   if (out->row_size) *(out->row_size) = row_size;
