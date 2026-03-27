@@ -40,21 +40,14 @@ GARMatchKernelWrapper* GARMatchKernelWrapper::GetInstance() {
   return ptr_;
 }
 
-static bool LabelDegreeFilter(const GARMatchArrays& m,
-                              const GARPatternArrays& p,
+static bool LabelDegreeFilter(const GARPatternArrays& p,
                               const GARGraphArrays& g, int u_idx,
-                              uint32_t v_id) {
-  (void)m;
+                              uint32_t v_idx) {
   if (u_idx < 0 || u_idx >= p.n_nodes) return false;
+  if (v_idx >= static_cast<uint32_t>(g.n_vertices)) return false;
+  if (g.v_label_idx == nullptr) return false;
   int32_t u_label = p.node_label_idx[u_idx];
-  int32_t v_label = -1;
-  for (int i = 0; i < g.n_vertices; ++i) {
-    if (g.v_id[i] == v_id) {
-      v_label = g.v_label_idx[i];
-      break;
-    }
-  }
-  if (v_label < 0) return false;
+  int32_t v_label = g.v_label_idx[v_idx];
   if (u_label != v_label) return false;
   int p_out = 0, p_in = 0, g_out = 0, g_in = 0;
   for (int e = 0; e < p.n_edges; ++e) {
@@ -62,27 +55,21 @@ static bool LabelDegreeFilter(const GARMatchArrays& m,
     if (p.edge_dst[e] == u_idx) ++p_in;
   }
   for (int e = 0; e < g.n_edges; ++e) {
-    if (g.e_src[e] == v_id) ++g_out;
-    if (g.e_dst[e] == v_id) ++g_in;
+    if (g.e_src[e] == v_idx) ++g_out;
+    if (g.e_dst[e] == v_idx) ++g_in;
   }
   return g_out >= p_out && g_in >= p_in;
 }
 
-static bool NeighborLabelCounterFilter(const GARMatchArrays& m,
-                                       const GARPatternArrays& p,
+static bool NeighborLabelCounterFilter(const GARPatternArrays& p,
                                        const GARGraphArrays& g, int u_idx,
-                                       uint32_t v_id) {
-  (void)m;
+                                       uint32_t v_idx) {
   if (u_idx < 0 || u_idx >= p.n_nodes) return false;
+  if (v_idx >= static_cast<uint32_t>(g.n_vertices)) return false;
+  if (g.v_label_idx == nullptr) return false;
   int32_t u_label = p.node_label_idx[u_idx];
-  int32_t v_label = -1;
-  for (int i = 0; i < g.n_vertices; ++i) {
-    if (g.v_id[i] == v_id) {
-      v_label = g.v_label_idx[i];
-      break;
-    }
-  }
-  if (v_label < 0 || u_label != v_label) return false;
+  int32_t v_label = g.v_label_idx[v_idx];
+  if (u_label != v_label) return false;
 
   std::unordered_set<int32_t> p_labels;
   std::unordered_set<int32_t> g_labels;
@@ -93,35 +80,26 @@ static bool NeighborLabelCounterFilter(const GARMatchArrays& m,
       p_labels.insert(p.node_label_idx[p.edge_src[e]]);
   }
   for (int e = 0; e < g.n_edges; ++e) {
-    if (g.e_src[e] == v_id) {
-      int li = -1;
-      for (int i = 0; i < g.n_vertices; ++i) {
-        if (g.v_id[i] == g.e_dst[e]) {
-          li = i;
-          break;
-        }
-      }
-      if (li >= 0) g_labels.insert(g.v_label_idx[li]);
+    if (g.e_src[e] == v_idx) {
+      const uint32_t li = g.e_dst[e];
+      if (li < static_cast<uint32_t>(g.n_vertices))
+        g_labels.insert(g.v_label_idx[li]);
     }
-    if (g.e_dst[e] == v_id) {
-      int li = -1;
-      for (int i = 0; i < g.n_vertices; ++i) {
-        if (g.v_id[i] == g.e_src[e]) {
-          li = i;
-          break;
-        }
-      }
-      if (li >= 0) g_labels.insert(g.v_label_idx[li]);
+    if (g.e_dst[e] == v_idx) {
+      const uint32_t li = g.e_src[e];
+      if (li < static_cast<uint32_t>(g.n_vertices))
+        g_labels.insert(g.v_label_idx[li]);
     }
   }
   return g_labels.size() >= p_labels.size();
 }
 
-static bool KMinWiseIPFilter(const GARMatchArrays& m, const GARPatternArrays& p,
-                             const GARGraphArrays& g, int u_idx,
-                             uint32_t v_id) {
-  (void)m;
+static bool KMinWiseIPFilter(const GARPatternArrays& p, const GARGraphArrays& g,
+                             int u_idx,
+                             uint32_t v_idx) {
   if (u_idx < 0 || u_idx >= p.n_nodes) return false;
+  if (v_idx >= static_cast<uint32_t>(g.n_vertices)) return false;
+  if (g.v_label_idx == nullptr) return false;
   std::vector<uint32_t> pu;
   std::vector<uint32_t> gv;
   auto hasher = std::hash<int32_t>{};
@@ -134,15 +112,9 @@ static bool KMinWiseIPFilter(const GARMatchArrays& m, const GARPatternArrays& p,
     }
   }
   for (int e = 0; e < g.n_edges; ++e) {
-    if (g.e_dst[e] == v_id) {
-      int li = -1;
-      for (int i = 0; i < g.n_vertices; ++i) {
-        if (g.v_id[i] == g.e_src[e]) {
-          li = i;
-          break;
-        }
-      }
-      if (li >= 0) {
+    if (g.e_dst[e] == v_idx) {
+      const uint32_t li = g.e_src[e];
+      if (li < static_cast<uint32_t>(g.n_vertices)) {
         gv.push_back(
             static_cast<uint32_t>((hasher(g.v_label_idx[li]) << 3) % 64));
       }
@@ -188,6 +160,8 @@ struct ParametersGARFilter {
   int32_t p_src_label;
   int32_t p_dst_label;
   int32_t p_edge_label;
+  const int32_t* src_valid_mask;
+  const int32_t* dst_valid_mask;
 
   uint32_t* cand_src;
   uint32_t* cand_dst;
@@ -217,6 +191,8 @@ static __global__ void GARFilterEdgeCandidatesKernel(ParametersGARFilter params)
     if (src_label != params.p_src_label || dst_label != params.p_dst_label) {
       continue;
     }
+    if (params.src_valid_mask && params.src_valid_mask[gs] == 0) continue;
+    if (params.dst_valid_mask && params.dst_valid_mask[gd] == 0) continue;
     int slot = atomicAdd(params.cand_count, 1);
     if (slot < params.cand_capacity) {
       params.cand_src[slot] = gs;
@@ -337,6 +313,30 @@ int GARMatchKernelWrapper::GARMatch(const GARGraphArrays& g,
       const int32_t pv = p.edge_dst[pe];
       if (pu < 0 || pu >= p.n_nodes || pv < 0 || pv >= p.n_nodes) continue;
 
+      // Host pre-filter by three refinement predicates, then apply as masks in
+      // edge-candidate kernel.
+      std::vector<int32_t> src_valid(static_cast<size_t>(g.n_vertices), 0);
+      std::vector<int32_t> dst_valid(static_cast<size_t>(g.n_vertices), 0);
+      for (int vi = 0; vi < g.n_vertices; ++vi) {
+        const uint32_t v_idx = static_cast<uint32_t>(vi);
+        const bool src_ok = LabelDegreeFilter(p, g, pu, v_idx) &&
+                            NeighborLabelCounterFilter(p, g, pu, v_idx) &&
+                            KMinWiseIPFilter(p, g, pu, v_idx);
+        const bool dst_ok = LabelDegreeFilter(p, g, pv, v_idx) &&
+                            NeighborLabelCounterFilter(p, g, pv, v_idx) &&
+                            KMinWiseIPFilter(p, g, pv, v_idx);
+        src_valid[static_cast<size_t>(vi)] = src_ok ? 1 : 0;
+        dst_valid[static_cast<size_t>(vi)] = dst_ok ? 1 : 0;
+      }
+      BufferInt32 h_src_valid{src_valid.data(),
+                              sizeof(int32_t) * static_cast<size_t>(g.n_vertices)};
+      BufferInt32 h_dst_valid{dst_valid.data(),
+                              sizeof(int32_t) * static_cast<size_t>(g.n_vertices)};
+      DeviceOwnedBufferInt32 d_src_valid;
+      DeviceOwnedBufferInt32 d_dst_valid;
+      d_src_valid.Init(h_src_valid);
+      d_dst_valid.Init(h_dst_valid);
+
       DeviceOwnedBufferUint32 d_cand_src(
           sizeof(uint32_t) * static_cast<size_t>(g.n_edges));
       DeviceOwnedBufferUint32 d_cand_dst(
@@ -354,6 +354,8 @@ int GARMatchKernelWrapper::GARMatch(const GARGraphArrays& g,
           .p_src_label = p.node_label_idx[pu],
           .p_dst_label = p.node_label_idx[pv],
           .p_edge_label = p.edge_label_idx ? p.edge_label_idx[pe] : 0,
+          .src_valid_mask = d_src_valid.GetPtr(),
+          .dst_valid_mask = d_dst_valid.GetPtr(),
           .cand_src = d_cand_src.GetPtr(),
           .cand_dst = d_cand_dst.GetPtr(),
           .cand_count = d_cand_count.GetPtr(),

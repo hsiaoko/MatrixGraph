@@ -11,6 +11,48 @@ namespace core {
 namespace data_structures {
 
 // Flattened match arrays (output).
+//
+// Semantics:
+// - This is NOT a plain "list of full embeddings".
+// - It is a grouped/flattened view indexed by rows:
+//     row i => (pivot, condition j, pattern position pos)
+//   and each row points to a slice in matched_v_ids via (offset, count).
+//
+// Field mapping:
+// - num_conditions:
+//     Usually set to pattern node count (p.n_nodes) in current GAR path.
+// - row_* arrays (same length = *row_size):
+//     row_pivot_id[i] : pivot vertex ID in data graph (instance ID, not local idx)
+//     row_cond_j[i]   : condition index j (currently same as pos in this pipeline)
+//     row_pos[i]      : pattern vertex position
+//     row_offset[i]   : start index in matched_v_ids
+//     row_count[i]    : number of IDs for this row
+// - matched_v_ids:
+//     Global pool storing concatenated row values.
+//     For row i, slice is:
+//       matched_v_ids[row_offset[i] ... row_offset[i] + row_count[i] - 1]
+//
+// Capacity/truncation:
+// - row_capacity / match_capacity are hard limits.
+// - If row_size == row_capacity or match_size == match_capacity, results are
+//   truncated at capacity boundary.
+//
+// Example:
+//   num_conditions = 2
+//   row_size = 4
+//   match_size = 5
+//   row_pivot_id = [126, 126, 138, 138]
+//   row_cond_j   = [0,   1,   0,   1]
+//   row_pos      = [0,   1,   0,   1]
+//   row_offset   = [0,   1,   3,   4]
+//   row_count    = [1,   2,   1,   1]
+//   matched_v_ids= [126, 183, 115407, 138, 192]
+//
+//   Row interpretation:
+//   - row 0: pivot=126, pos=0 -> matched_v_ids[0:1] = [126]
+//   - row 1: pivot=126, pos=1 -> matched_v_ids[1:3] = [183, 115407]
+//   - row 2: pivot=138, pos=0 -> matched_v_ids[3:4] = [138]
+//   - row 3: pivot=138, pos=1 -> matched_v_ids[4:5] = [192]
 struct GARMatchArrays {
   int* num_conditions = nullptr;
 
