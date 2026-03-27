@@ -13,6 +13,8 @@
 
 #include <yaml-cpp/yaml.h>
 
+#include "core/common/consts.h"
+
 namespace sics {
 namespace matrixgraph {
 namespace core {
@@ -615,7 +617,7 @@ __host__ void GARMatch::LoadData() {
   p_ = gar_pattern_arrays_;
 
   // Allocate GARMatch output arrays owned by this class.
-  owned_out_.row_capacity = kMaxNumWeft;
+  owned_out_.row_capacity = static_cast<int>(common::kMaxNumWeft);
   owned_out_.match_capacity = owned_g_.n_vertices;
   owned_out_.row_pivot_id =
       std::make_unique<uint32_t[]>(owned_out_.row_capacity);
