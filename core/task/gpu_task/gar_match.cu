@@ -198,7 +198,7 @@ __host__ int GARMatch::Run(
     int32_t* out_row_cond_j, int32_t* out_row_pos, int32_t* out_row_offset,
     int32_t* out_row_count, int out_row_capacity, int* out_row_size,
     uint32_t* out_matched_v_ids, int out_match_capacity, int* out_match_size) {
-  std::cout << "[GARMatch] Run() ..." << std::endl;
+  std::cout << "[GARMatch] Run(C-style) ..." << std::endl;
   GARGraphArrays g{
       .v_id = g_v_id,
       .v_label_idx = g_v_label_idx,
@@ -230,9 +230,13 @@ __host__ int GARMatch::Run(
       .match_capacity = out_match_capacity,
       .match_size = out_match_size,
   };
-  GARMatchKernelWrapper::GARMatch(g, p, &out);
-
-  return 0;
+  PrintGraphTopN(g, 3);
+  const int status = GARMatchKernelWrapper::GARMatch(g, p, &out);
+  if (out.row_size != nullptr && out.match_size != nullptr) {
+    std::cout << "[GARMatch] result row_size=" << *(out.row_size)
+              << ", match_size=" << *(out.match_size) << std::endl;
+  }
+  return status;
 }
 
 __host__ void GARMatch::LoadData() {
@@ -611,8 +615,8 @@ __host__ void GARMatch::LoadData() {
   p_ = gar_pattern_arrays_;
 
   // Allocate GARMatch output arrays owned by this class.
-  owned_out_.row_capacity = 4096;
-  owned_out_.match_capacity = 16384;
+  owned_out_.row_capacity = kMaxNumWeft;
+  owned_out_.match_capacity = owned_g_.n_vertices;
   owned_out_.row_pivot_id =
       std::make_unique<uint32_t[]>(owned_out_.row_capacity);
   owned_out_.row_cond_j = std::make_unique<int32_t[]>(owned_out_.row_capacity);
