@@ -3,12 +3,14 @@
 #include <algorithm>
 #include <cstdint>
 #include <iostream>
-#include <unordered_set>
 #include <vector>
 
 #include "core/common/consts.h"
 #include "core/data_structures/device_buffer.cuh"
+#include "core/data_structures/heap.cuh"
 #include "core/data_structures/host_buffer.cuh"
+#include "core/data_structures/mini_kernel_bitmap.cuh"
+#include "core/task/gpu_task/kernel/algorithms/hash.cuh"
 #include "core/util/cuda_check.cuh"
 
 namespace sics {
@@ -30,6 +32,10 @@ using DeviceOwnedBufferInt32 =
     sics::matrixgraph::core::data_structures::DeviceOwnedBuffer<int32_t>;
 using DeviceOwnedBufferInt =
     sics::matrixgraph::core::data_structures::DeviceOwnedBuffer<int>;
+using MiniKernelBitmap = sics::matrixgraph::core::task::kernel::MiniKernelBitmap;
+using MinHeap = sics::matrixgraph::core::task::kernel::MinHeap;
+using sics::matrixgraph::core::common::kDefaultHeapCapacity;
+using sics::matrixgraph::core::common::kMaxVertexID;
 using sics::matrixgraph::core::common::kBlockDim;
 using sics::matrixgraph::core::common::kGridDim;
 
@@ -40,15 +46,16 @@ GARMatchKernelWrapper* GARMatchKernelWrapper::GetInstance() {
   return ptr_;
 }
 
-static bool LabelDegreeFilter(const GARPatternArrays& p,
-                              const GARGraphArrays& g, int u_idx,
-                              uint32_t v_idx) {
+static __noinline__ __device__ bool LabelDegreeFilter(
+    const GARPatternArrays& p, const GARGraphArrays& g, int u_idx, uint32_t v_idx) {
   if (u_idx < 0 || u_idx >= p.n_nodes) return false;
   if (v_idx >= static_cast<uint32_t>(g.n_vertices)) return false;
-  if (g.v_label_idx == nullptr) return false;
-  int32_t u_label = p.node_label_idx[u_idx];
-  int32_t v_label = g.v_label_idx[v_idx];
+  if (p.node_label_idx == nullptr || g.v_label_idx == nullptr) return false;
+
+  const int32_t u_label = p.node_label_idx[u_idx];
+  const int32_t v_label = g.v_label_idx[v_idx];
   if (u_label != v_label) return false;
+
   int p_out = 0, p_in = 0, g_out = 0, g_in = 0;
   for (int e = 0; e < p.n_edges; ++e) {
     if (p.edge_src[e] == u_idx) ++p_out;
@@ -61,90 +68,136 @@ static bool LabelDegreeFilter(const GARPatternArrays& p,
   return g_out >= p_out && g_in >= p_in;
 }
 
-static bool NeighborLabelCounterFilter(const GARPatternArrays& p,
-                                       const GARGraphArrays& g, int u_idx,
-                                       uint32_t v_idx) {
+static __noinline__ __device__ bool NeighborLabelCounterFilter(
+    const GARPatternArrays& p, const GARGraphArrays& g, int u_idx, uint32_t v_idx) {
   if (u_idx < 0 || u_idx >= p.n_nodes) return false;
   if (v_idx >= static_cast<uint32_t>(g.n_vertices)) return false;
-  if (g.v_label_idx == nullptr) return false;
-  int32_t u_label = p.node_label_idx[u_idx];
-  int32_t v_label = g.v_label_idx[v_idx];
+  if (p.node_label_idx == nullptr || g.v_label_idx == nullptr) return false;
+
+  const int32_t u_label = p.node_label_idx[u_idx];
+  const int32_t v_label = g.v_label_idx[v_idx];
   if (u_label != v_label) return false;
 
-  std::unordered_set<int32_t> p_labels;
-  std::unordered_set<int32_t> g_labels;
+  MiniKernelBitmap u_label_visited(32);
+  MiniKernelBitmap v_label_visited(32);
+  u_label_visited.Clear();
+  v_label_visited.Clear();
   for (int e = 0; e < p.n_edges; ++e) {
-    if (p.edge_src[e] == u_idx)
-      p_labels.insert(p.node_label_idx[p.edge_dst[e]]);
-    if (p.edge_dst[e] == u_idx)
-      p_labels.insert(p.node_label_idx[p.edge_src[e]]);
+    if (p.edge_src[e] == u_idx && p.edge_dst[e] >= 0 && p.edge_dst[e] < p.n_nodes) {
+      const uint32_t l = static_cast<uint32_t>(p.node_label_idx[p.edge_dst[e]]) & 31U;
+      u_label_visited.SetBit(l);
+    }
+    if (p.edge_dst[e] == u_idx && p.edge_src[e] >= 0 && p.edge_src[e] < p.n_nodes) {
+      const uint32_t l = static_cast<uint32_t>(p.node_label_idx[p.edge_src[e]]) & 31U;
+      u_label_visited.SetBit(l);
+    }
   }
   for (int e = 0; e < g.n_edges; ++e) {
     if (g.e_src[e] == v_idx) {
-      const uint32_t li = g.e_dst[e];
-      if (li < static_cast<uint32_t>(g.n_vertices))
-        g_labels.insert(g.v_label_idx[li]);
+      const uint32_t nbr = g.e_dst[e];
+      if (nbr < static_cast<uint32_t>(g.n_vertices)) {
+        const uint32_t l = static_cast<uint32_t>(g.v_label_idx[nbr]) & 31U;
+        v_label_visited.SetBit(l);
+      }
     }
     if (g.e_dst[e] == v_idx) {
-      const uint32_t li = g.e_src[e];
-      if (li < static_cast<uint32_t>(g.n_vertices))
-        g_labels.insert(g.v_label_idx[li]);
+      const uint32_t nbr = g.e_src[e];
+      if (nbr < static_cast<uint32_t>(g.n_vertices)) {
+        const uint32_t l = static_cast<uint32_t>(g.v_label_idx[nbr]) & 31U;
+        v_label_visited.SetBit(l);
+      }
     }
   }
-  return g_labels.size() >= p_labels.size();
+  return v_label_visited.Count() >= u_label_visited.Count();
 }
 
-static bool KMinWiseIPFilter(const GARPatternArrays& p, const GARGraphArrays& g,
-                             int u_idx,
-                             uint32_t v_idx) {
+static __noinline__ __device__ bool KMinWiseIPFilter(
+    const GARPatternArrays& p, const GARGraphArrays& g, int u_idx, uint32_t v_idx) {
   if (u_idx < 0 || u_idx >= p.n_nodes) return false;
   if (v_idx >= static_cast<uint32_t>(g.n_vertices)) return false;
-  if (g.v_label_idx == nullptr) return false;
-  std::vector<uint32_t> pu;
-  std::vector<uint32_t> gv;
-  auto hasher = std::hash<int32_t>{};
+  if (p.node_label_idx == nullptr || g.v_label_idx == nullptr) return false;
+
+  const int32_t u_label = p.node_label_idx[u_idx];
+  const int32_t v_label = g.v_label_idx[v_idx];
+  if (u_label != v_label) return false;
+
+  int p_out = 0, p_in = 0, g_out = 0, g_in = 0;
+  for (int e = 0; e < p.n_edges; ++e) {
+    if (p.edge_src[e] == u_idx) ++p_out;
+    if (p.edge_dst[e] == u_idx) ++p_in;
+  }
+  for (int e = 0; e < g.n_edges; ++e) {
+    if (g.e_src[e] == v_idx) ++g_out;
+    if (g.e_dst[e] == v_idx) ++g_in;
+  }
+
+  MiniKernelBitmap u_label_visited(32);
+  MiniKernelBitmap v_label_visited(32);
+  MinHeap u_k_min_heap;
+  MinHeap v_k_min_heap;
+  uint32_t u_k_min_heap_data[kDefaultHeapCapacity];
+  uint32_t v_k_min_heap_data[kDefaultHeapCapacity];
 
   for (int e = 0; e < p.n_edges; ++e) {
-    if (p.edge_dst[e] == u_idx) {
-      int nbr = p.edge_src[e];
-      pu.push_back(
-          static_cast<uint32_t>((hasher(p.node_label_idx[nbr]) << 3) % 64));
+    if (p.edge_src[e] == u_idx && p.edge_dst[e] >= 0 && p.edge_dst[e] < p.n_nodes) {
+      const uint32_t l = static_cast<uint32_t>(p.node_label_idx[p.edge_dst[e]]) & 31U;
+      u_label_visited.SetBit(l);
+      u_k_min_heap.Insert(HashTable(l));
+    }
+    if (p.edge_dst[e] == u_idx && p.edge_src[e] >= 0 && p.edge_src[e] < p.n_nodes) {
+      const uint32_t l = static_cast<uint32_t>(p.node_label_idx[p.edge_src[e]]) & 31U;
+      u_label_visited.SetBit(l);
+      u_k_min_heap.Insert(HashTable(l));
     }
   }
   for (int e = 0; e < g.n_edges; ++e) {
+    if (g.e_src[e] == v_idx) {
+      const uint32_t nbr = g.e_dst[e];
+      if (nbr < static_cast<uint32_t>(g.n_vertices)) {
+        const uint32_t l = static_cast<uint32_t>(g.v_label_idx[nbr]) & 31U;
+        v_label_visited.SetBit(l);
+        v_k_min_heap.Insert(HashTable(l));
+      }
+    }
     if (g.e_dst[e] == v_idx) {
-      const uint32_t li = g.e_src[e];
-      if (li < static_cast<uint32_t>(g.n_vertices)) {
-        gv.push_back(
-            static_cast<uint32_t>((hasher(g.v_label_idx[li]) << 3) % 64));
+      const uint32_t nbr = g.e_src[e];
+      if (nbr < static_cast<uint32_t>(g.n_vertices)) {
+        const uint32_t l = static_cast<uint32_t>(g.v_label_idx[nbr]) & 31U;
+        v_label_visited.SetBit(l);
+        v_k_min_heap.Insert(HashTable(l));
       }
     }
   }
 
-  std::sort(pu.begin(), pu.end());
-  std::sort(gv.begin(), gv.end());
-  size_t i = 0, j = 0;
-  std::vector<uint32_t> pu_only;
-  std::vector<uint32_t> gv_only;
-  while (i < pu.size() && j < gv.size()) {
-    if (pu[i] == gv[j]) {
-      ++i;
-      ++j;
-    } else if (pu[i] < gv[j]) {
-      pu_only.push_back(pu[i++]);
-    } else {
-      gv_only.push_back(gv[j++]);
+  u_k_min_heap.CopyData(u_k_min_heap_data);
+  v_k_min_heap.CopyData(v_k_min_heap_data);
+  for (uint32_t i = 0; i < v_k_min_heap.get_offset(); ++i) {
+    const uint32_t v_ip = v_k_min_heap_data[i];
+    for (uint32_t j = 0; j < u_k_min_heap.get_offset(); ++j) {
+      if (u_k_min_heap_data[j] == v_ip) {
+        v_k_min_heap_data[i] = kMaxVertexID;
+        u_k_min_heap_data[j] = kMaxVertexID;
+        break;
+      }
     }
   }
-  while (i < pu.size()) pu_only.push_back(pu[i++]);
-  while (j < gv.size()) gv_only.push_back(gv[j++]);
-  if (pu_only.empty()) return true;
-  if (gv_only.empty()) return false;
-  uint32_t min_gv = gv_only.front();
-  for (uint32_t x : pu_only) {
-    if (x < min_gv) return false;
+  uint32_t min_v = kMaxVertexID;
+  for (uint32_t i = 0; i < v_k_min_heap.get_offset(); ++i) {
+    if (v_k_min_heap_data[i] < min_v) min_v = v_k_min_heap_data[i];
   }
-  return true;
+  for (uint32_t i = 0; i < u_k_min_heap.get_offset(); ++i) {
+    if (u_k_min_heap_data[i] < min_v) return false;
+  }
+
+  return v_label_visited.Count() >= u_label_visited.Count() && g_out >= p_out &&
+         g_in >= p_in;
+}
+
+static __noinline__ __device__ bool GARVertexFilter(
+    const GARPatternArrays& p, const GARGraphArrays& g, int u_idx, uint32_t v_idx) {
+  return LabelDegreeFilter(p, g, u_idx, v_idx) &&
+         NeighborLabelCounterFilter(p, g, u_idx, v_idx) &&
+         KMinWiseIPFilter(p, g, u_idx, v_idx);
 }
 
 struct ParametersGARFilter {
@@ -160,8 +213,13 @@ struct ParametersGARFilter {
   int32_t p_src_label;
   int32_t p_dst_label;
   int32_t p_edge_label;
-  const int32_t* src_valid_mask;
-  const int32_t* dst_valid_mask;
+  const int32_t* p_node_label_idx;
+  int p_n_nodes;
+  const int32_t* p_edge_src;
+  const int32_t* p_edge_dst;
+  int p_n_edges;
+  int32_t p_src_idx;
+  int32_t p_dst_idx;
 
   uint32_t* cand_src;
   uint32_t* cand_dst;
@@ -191,8 +249,15 @@ static __global__ void GARFilterEdgeCandidatesKernel(ParametersGARFilter params)
     if (src_label != params.p_src_label || dst_label != params.p_dst_label) {
       continue;
     }
-    if (params.src_valid_mask && params.src_valid_mask[gs] == 0) continue;
-    if (params.dst_valid_mask && params.dst_valid_mask[gd] == 0) continue;
+    GARGraphArrays g_view{
+        params.g_v_id,      params.g_v_label_idx, params.n_vertices_g,
+        params.g_e_src,     params.g_e_dst,       nullptr,
+        params.g_e_label_idx, params.n_edges_g};
+    GARPatternArrays p_view{
+        params.p_node_label_idx, params.p_n_nodes, params.p_edge_src,
+        params.p_edge_dst,       nullptr,          params.p_n_edges};
+    if (!GARVertexFilter(p_view, g_view, params.p_src_idx, gs)) continue;
+    if (!GARVertexFilter(p_view, g_view, params.p_dst_idx, gd)) continue;
     int slot = atomicAdd(params.cand_count, 1);
     if (slot < params.cand_capacity) {
       params.cand_src[slot] = gs;
@@ -294,17 +359,30 @@ int GARMatchKernelWrapper::GARMatch(const GARGraphArrays& g,
     BufferInt32 h_g_e_label_idx{
         const_cast<int32_t*>(g.e_label_idx),
         sizeof(int32_t) * static_cast<size_t>(g.n_edges)};
+    BufferInt32 h_p_node_label_idx{
+        const_cast<int32_t*>(p.node_label_idx),
+        sizeof(int32_t) * static_cast<size_t>(p.n_nodes)};
+    BufferInt32 h_p_edge_src{const_cast<int32_t*>(p.edge_src),
+                             sizeof(int32_t) * static_cast<size_t>(p.n_edges)};
+    BufferInt32 h_p_edge_dst{const_cast<int32_t*>(p.edge_dst),
+                             sizeof(int32_t) * static_cast<size_t>(p.n_edges)};
 
     DeviceOwnedBufferUint32 d_g_v_id;
     DeviceOwnedBufferInt32 d_g_v_label_idx;
     DeviceOwnedBufferUint32 d_g_e_src;
     DeviceOwnedBufferUint32 d_g_e_dst;
     DeviceOwnedBufferInt32 d_g_e_label_idx;
+    DeviceOwnedBufferInt32 d_p_node_label_idx;
+    DeviceOwnedBufferInt32 d_p_edge_src;
+    DeviceOwnedBufferInt32 d_p_edge_dst;
     d_g_v_id.Init(h_g_v_id);
     d_g_v_label_idx.Init(h_g_v_label_idx);
     d_g_e_src.Init(h_g_e_src);
     d_g_e_dst.Init(h_g_e_dst);
     d_g_e_label_idx.Init(h_g_e_label_idx);
+    d_p_node_label_idx.Init(h_p_node_label_idx);
+    d_p_edge_src.Init(h_p_edge_src);
+    d_p_edge_dst.Init(h_p_edge_dst);
 
     dim3 dimBlock(kBlockDim);
     dim3 dimGrid(kGridDim);
@@ -312,30 +390,6 @@ int GARMatchKernelWrapper::GARMatch(const GARGraphArrays& g,
       const int32_t pu = p.edge_src[pe];
       const int32_t pv = p.edge_dst[pe];
       if (pu < 0 || pu >= p.n_nodes || pv < 0 || pv >= p.n_nodes) continue;
-
-      // Host pre-filter by three refinement predicates, then apply as masks in
-      // edge-candidate kernel.
-      std::vector<int32_t> src_valid(static_cast<size_t>(g.n_vertices), 0);
-      std::vector<int32_t> dst_valid(static_cast<size_t>(g.n_vertices), 0);
-      for (int vi = 0; vi < g.n_vertices; ++vi) {
-        const uint32_t v_idx = static_cast<uint32_t>(vi);
-        const bool src_ok = LabelDegreeFilter(p, g, pu, v_idx) &&
-                            NeighborLabelCounterFilter(p, g, pu, v_idx) &&
-                            KMinWiseIPFilter(p, g, pu, v_idx);
-        const bool dst_ok = LabelDegreeFilter(p, g, pv, v_idx) &&
-                            NeighborLabelCounterFilter(p, g, pv, v_idx) &&
-                            KMinWiseIPFilter(p, g, pv, v_idx);
-        src_valid[static_cast<size_t>(vi)] = src_ok ? 1 : 0;
-        dst_valid[static_cast<size_t>(vi)] = dst_ok ? 1 : 0;
-      }
-      BufferInt32 h_src_valid{src_valid.data(),
-                              sizeof(int32_t) * static_cast<size_t>(g.n_vertices)};
-      BufferInt32 h_dst_valid{dst_valid.data(),
-                              sizeof(int32_t) * static_cast<size_t>(g.n_vertices)};
-      DeviceOwnedBufferInt32 d_src_valid;
-      DeviceOwnedBufferInt32 d_dst_valid;
-      d_src_valid.Init(h_src_valid);
-      d_dst_valid.Init(h_dst_valid);
 
       DeviceOwnedBufferUint32 d_cand_src(
           sizeof(uint32_t) * static_cast<size_t>(g.n_edges));
@@ -354,8 +408,13 @@ int GARMatchKernelWrapper::GARMatch(const GARGraphArrays& g,
           .p_src_label = p.node_label_idx[pu],
           .p_dst_label = p.node_label_idx[pv],
           .p_edge_label = p.edge_label_idx ? p.edge_label_idx[pe] : 0,
-          .src_valid_mask = d_src_valid.GetPtr(),
-          .dst_valid_mask = d_dst_valid.GetPtr(),
+          .p_node_label_idx = d_p_node_label_idx.GetPtr(),
+          .p_n_nodes = p.n_nodes,
+          .p_edge_src = d_p_edge_src.GetPtr(),
+          .p_edge_dst = d_p_edge_dst.GetPtr(),
+          .p_n_edges = p.n_edges,
+          .p_src_idx = pu,
+          .p_dst_idx = pv,
           .cand_src = d_cand_src.GetPtr(),
           .cand_dst = d_cand_dst.GetPtr(),
           .cand_count = d_cand_count.GetPtr(),
