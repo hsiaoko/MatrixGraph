@@ -9,6 +9,8 @@
 
 #include <gflags/gflags.h>
 
+#include <algorithm>
+#include <cctype>
 #include <filesystem>
 #include <iostream>
 #include <string>
@@ -43,9 +45,13 @@ DEFINE_string(sep, ",", "Separator for CSV files (default: comma)");
 DEFINE_bool(compressed, false, "Use compressed vertex IDs");
 DEFINE_uint32(tile_size, 64, "Size of a single tile");
 DEFINE_uint32(label_range, 1, "label range for initialization");
-DEFINE_string(graph_id, "demo_graph_id", "Graph ID for ArangoDB export");
-DEFINE_string(business_id, "demo_business_id",
+DEFINE_string(graph_id, "1", "Graph ID for ArangoDB export (numeric)");
+DEFINE_string(business_id, "1",
               "Business ID for ArangoDB export");
+DEFINE_string(import_time, "1970-01-01T00:00:00Z",
+              "Import time for ArangoDB export (_time)");
+DEFINE_string(pivot_time, "1970-01-01T00:00:00Z",
+              "Business time for ArangoDB export (_pivot_time)");
 DEFINE_string(pivot_mode, "single",
               "Pivot graph generation mode for ArangoDB export: single|source");
 DEFINE_string(default_vertex_label, "vertex",
@@ -151,6 +157,8 @@ void PrintUsage() {
       << "  --tile_size=<size>         - Size of a single tile (default: 64)\n"
       << "  --graph_id=<id>             - Graph ID for ArangoDB export\n"
       << "  --business_id=<id>          - Business ID for ArangoDB export\n"
+      << "  --import_time=<ts>          - Import time (_time)\n"
+      << "  --pivot_time=<ts>           - Business time (_pivot_time)\n"
       << "  --pivot_mode=single|source  - Pivot generation mode\n"
       << "  --default_vertex_label=<l>  - Default vertex label\n"
       << "  --default_edge_label=<l>    - Default edge label\n"
@@ -180,6 +188,20 @@ bool ValidateParameters() {
     std::cerr << "Error: Invalid conversion mode: " << FLAGS_convert_mode
               << std::endl;
     return false;
+  }
+
+  if (ConvertMode2Enum(FLAGS_convert_mode) ==
+      ConvertMode::kEdgelistCSV2ArangoDBJSON) {
+    auto is_numeric = [](const std::string& s) {
+      return !s.empty() &&
+             std::all_of(s.begin(), s.end(),
+                         [](unsigned char c) { return std::isdigit(c) != 0; });
+    };
+    if (!is_numeric(FLAGS_graph_id) || !is_numeric(FLAGS_business_id)) {
+      std::cerr << "Error: --graph_id and --business_id must be numeric."
+                << std::endl;
+      return false;
+    }
   }
 
   return true;
@@ -258,8 +280,10 @@ int main(int argc, char** argv) {
         break;
       case ConvertMode::kEdgelistCSV2ArangoDBJSON: {
         sics::matrixgraph::tools::converter::ArangoExportOptions opt;
-        opt.graph_id = FLAGS_graph_id;
-        opt.business_id = FLAGS_business_id;
+        opt.graph_id = std::stoull(FLAGS_graph_id);
+        opt.business_id = std::stoull(FLAGS_business_id);
+        opt.import_time = FLAGS_import_time;
+        opt.pivot_time = FLAGS_pivot_time;
         opt.pivot_mode = FLAGS_pivot_mode;
         opt.default_vertex_label = FLAGS_default_vertex_label;
         opt.default_edge_label = FLAGS_default_edge_label;

@@ -2,6 +2,7 @@
 #define MATRIXGRAPH_TOOLS_GRAPH_CONVERTER_CONVERTER_TO_ARANGODB_JSON_CUH_
 
 #include <algorithm>
+#include <cstdint>
 #include <filesystem>
 #include <fstream>
 #include <random>
@@ -23,11 +24,13 @@ struct CsvEdge {
 };
 
 struct ArangoExportOptions {
-  std::string graph_id = "demo_graph_id";
-  std::string business_id = "demo_business_id";
+  uint64_t graph_id = 1;
+  uint64_t business_id = 1;
   std::string pivot_mode = "single";  // single | source
   std::string default_vertex_label = "vertex";
   std::string default_edge_label = "relationship";
+  std::string import_time = "1970-01-01T00:00:00Z";  // _time: import time
+  std::string pivot_time = "1970-01-01T00:00:00Z";   // _pivot_time: business time
   bool random_vertex_labels = false;
   unsigned label_range = 1;
 };
@@ -169,7 +172,8 @@ static bool WriteArangoDBJSON(const std::string& out_dir,
     std::ofstream fout(graph_structure_path);
     if (!fout.is_open()) return false;
     fout << "{\n";
-    fout << "  \"graph_id\": \"" << EscapeJSON(opt.graph_id) << "\",\n";
+    fout << "  \"graph_id\": " << opt.graph_id << ",\n";
+    fout << "  \"business_id\": " << opt.business_id << ",\n";
     fout << "  \"num_vertices\": " << vertices.size() << ",\n";
     fout << "  \"num_edges\": " << edges.size() << ",\n";
     fout << "  \"num_vertex_labels\": " << vertex_label_list.size() << ",\n";
@@ -205,9 +209,9 @@ static bool WriteArangoDBJSON(const std::string& out_dir,
     std::ofstream fout(pivot_ids_path);
     if (!fout.is_open()) return false;
     for (const auto& pg : pivots) {
-      fout << "{\"graph_id\":\"" << EscapeJSON(opt.graph_id)
-           << "\",\"business_id\":\"" << EscapeJSON(opt.business_id)
-           << "\",\"pivot_graph_id\":\"" << EscapeJSON(pg.pivot_id)
+      fout << "{\"graph_id\":" << opt.graph_id
+           << ",\"business_id\":" << opt.business_id
+           << ",\"pivot_graph_id\":\"" << EscapeJSON(pg.pivot_id)
            << "\"}\n";
     }
   }
@@ -217,15 +221,19 @@ static bool WriteArangoDBJSON(const std::string& out_dir,
     if (!fout.is_open()) return false;
     int edge_auto = 0;
     for (const auto& pg : pivots) {
-      fout << "{\"graph_id\":\"" << EscapeJSON(opt.graph_id)
-           << "\",\"business_id\":\"" << EscapeJSON(opt.business_id)
-           << "\",\"pivot_graph_id\":\"" << EscapeJSON(pg.pivot_id)
-           << "\",\"vertices\":[";
+      fout << "{";
+      fout << "\"graph_id\":" << opt.graph_id << ",";
+      fout << "\"business_id\":" << opt.business_id << ",";
+      fout << "\"pivot_graph_id\":\"" << EscapeJSON(pg.pivot_id) << "\",";
+      fout << "\"_time\":\"" << EscapeJSON(opt.import_time) << "\",";
+      fout << "\"_pivot_time\":\"" << EscapeJSON(opt.pivot_time) << "\",";
+      fout << "\"graph\":{\"main\":{\"vertices\":[";
       for (size_t i = 0; i < pg.vertices.size(); ++i) {
         const auto& v = pg.vertices[i];
         if (i) fout << ",";
         fout << "{\"id\":\"" << EscapeJSON(v)
-             << "\",\"time\":\"1970-01-01T00:00:00Z\",\"label\":\""
+             << "\",\"time\":\"" << EscapeJSON(opt.import_time)
+             << "\",\"label\":\""
              << EscapeJSON(vlabel[v])
              << "\",\"attrs\":[{\"key\":\"placeholder\",\"value\":\"0\"}]}";
       }
@@ -234,14 +242,15 @@ static bool WriteArangoDBJSON(const std::string& out_dir,
         const auto& e = pg.edges[i];
         if (i) fout << ",";
         fout << "{\"id\":\"e_" << edge_auto++
-             << "\",\"time\":\"1970-01-01T00:00:00Z\",\"src_id\":\""
-             << EscapeJSON(e.src) << "\",\"dst_id\":\"" << EscapeJSON(e.dst)
-             << "\",\"src_label\":\"" << EscapeJSON(vlabel[e.src])
              << "\",\"label\":\"" << EscapeJSON(opt.default_edge_label)
-             << "\",\"dst_label\":\"" << EscapeJSON(vlabel[e.dst])
+             << "\",\"srcId\":\"" << EscapeJSON(e.src)
+             << "\",\"dstId\":\"" << EscapeJSON(e.dst)
+             << "\",\"time\":\"" << EscapeJSON(opt.import_time)
+             << "\",\"dstLabel\":\"" << EscapeJSON(vlabel[e.dst])
+             << "\",\"srcLabel\":\"" << EscapeJSON(vlabel[e.src])
              << "\",\"attrs\":[{\"key\":\"placeholder\",\"value\":\"0\"}]}";
       }
-      fout << "]}\n";
+      fout << "]}}}\n";
     }
   }
 
@@ -252,9 +261,9 @@ static bool WriteArangoDBJSON(const std::string& out_dir,
     fout << "1) graph_structure.json\n";
     fout << "2) pivot_graph_ids.jsonl\n";
     fout << "3) pivot_graphs.jsonl\n\n";
-    fout << "Note: graph_structure.json stores schema/meta (label definitions), not full graph instances.\n";
-    fout << "Full vertices/edges are stored in pivot_graphs.jsonl.\n";
-    fout << "The export contains placeholder labels/attrs/time where source data is missing.\n";
+    fout << "pivot_graphs.jsonl shape: {graph_id,business_id,pivot_graph_id,_time,_pivot_time,graph:{main:{vertices,edges}}}\n";
+    fout << "Each edge fields: label,id,srcId,dstId,time,dstLabel,srcLabel,attrs.\n";
+    fout << "The export contains placeholder labels/attrs where source data is missing.\n";
   }
   return true;
 }

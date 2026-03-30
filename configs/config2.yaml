@@ -1,0 +1,25 @@
+# GARMatch runtime config2 (derived from DiscoverPattern demo defaults)
+
+arango:
+  # From ARANGODB_ENDPOINTS default: http://192.168.15.10:8529/
+  host: "192.168.15.10"
+  port: 8529
+  scheme: "http"
+  database: "_system"
+  username: "root"
+  password: "IoD123456"
+
+collections:
+  graph_structure: "graph_structure"
+  pivot_graph_ids: "pivot_graph_ids"
+  pivot_graphs: "pivot_graphs"
+
+graph_query:
+  graph_id: "1998649691503333376"
+  business_id: "1998657722987319296"
+  pivot_mode: "single"   # single | source
+  pivot_limit: 0         # 0 means no limit
+
+runtime:
+  output_path: "./output/gar_match"
+  log_level: "info"
