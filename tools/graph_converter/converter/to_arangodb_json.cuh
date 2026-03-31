@@ -101,13 +101,6 @@ static bool WriteArangoDBJSON(const std::string& out_dir,
     return edgelist.get_globalid_by_localid(local_id);
   };
 
-  auto subgraphs = edgelist.BuildKHopOutSubgraphs(2);
-  for (const auto& subgraph : subgraphs) {
-    std::cout << "Subgraph " << subgraph.get_metadata().gid << " has " << subgraph.get_metadata().num_vertices << " vertices and " << subgraph.get_metadata().num_edges << " edges" << std::endl;
-    subgraph.ShowGraph();
-    std::cout << "--------------------------------" << std::endl;
-  }
-  
   std::mt19937 rng(42);
   std::unordered_map<VertexID, std::string> vlabel;
   for (size_t i = 0; i < metadata.num_vertices; ++i) {
