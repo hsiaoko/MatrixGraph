@@ -18,14 +18,14 @@ using VertexLabel = sics::matrixgraph::core::common::VertexLabel;
 static void ConvertEdgelistCSV2EdgelistBin(const std::string& input_path,
                                            const std::string& output_path,
                                            const std::string& sep,
-                                           bool compressed = false,
+                                           bool keep_original_vid = false,
                                            unsigned label_range = 1) {
   std::cout << "ConvertEdgelistCSV2EdgelistBin" << std::endl;
   if (!std::filesystem::exists(output_path))
     std::filesystem::create_directory(output_path);
 
   sics::matrixgraph::core::data_structures::Edges edgelist;
-  edgelist.ReadFromCSV(input_path, sep, compressed);
+  edgelist.ReadFromCSV(input_path, sep, keep_original_vid);
   edgelist.GenerateVLabel(label_range);
   edgelist.ShowGraph();
   edgelist.WriteToBinary(output_path);
@@ -33,7 +33,7 @@ static void ConvertEdgelistCSV2EdgelistBin(const std::string& input_path,
 
 static void ConvertImmutableCSR2EdgelistBin(const std::string& input_path,
                                             const std::string& output_path,
-                                            bool compressed = false) {
+                                            bool keep_original_vid = false) {
   ImmutableCSR csr;
   csr.Read(input_path);
 
@@ -51,7 +51,7 @@ static void ConvertImmutableCSR2EdgelistBin(const std::string& input_path,
           csr);
 
   edges_ptr->GenerateLocalID2GlobalID();
-  if (compressed) {
+  if (keep_original_vid) {
     edges_ptr->Compacted();
   }
 

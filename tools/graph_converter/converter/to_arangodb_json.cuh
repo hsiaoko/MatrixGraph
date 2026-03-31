@@ -63,10 +63,10 @@ static std::string EscapeJSON(const std::string& in) {
 
 static bool BuildCSVArraysFromEdgelistCSV(const std::string& input_path,
                                           const std::string& sep,
-                                          bool compressed,
+                                          bool keep_original_vid,
                                           sics::matrixgraph::core::data_structures::Edges* out_edgelist) {
   if (out_edgelist == nullptr) return false;
-  out_edgelist->ReadFromCSV(input_path, sep, compressed);
+  out_edgelist->ReadFromCSV(input_path, sep, keep_original_vid);
   out_edgelist->ShowGraph();
   return true;
 }
@@ -266,13 +266,13 @@ static bool WriteArangoDBJSON(const std::string& out_dir,
 static bool ConvertEdgelistCSV2ArangoDBJSON(const std::string& input_path,
                                             const std::string& output_path,
                                             const std::string& sep,
-                                            bool compressed,
+                                            bool keep_original_vid,
                                             const ArangoExportOptions& opt) {
   if (!std::filesystem::exists(output_path))
     std::filesystem::create_directory(output_path);
 
   sics::matrixgraph::core::data_structures::Edges edgelist;
-  if (!BuildCSVArraysFromEdgelistCSV(input_path, sep, compressed, &edgelist)) {
+  if (!BuildCSVArraysFromEdgelistCSV(input_path, sep, keep_original_vid, &edgelist)) {
     return false;
   }
   return WriteArangoDBJSON(output_path, edgelist, opt);

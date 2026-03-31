@@ -198,7 +198,7 @@ void Edges::ReadFromBin(const std::string& input_path) {
 }
 
 void Edges::ReadFromCSV(const std::string& filename, const std::string& sep,
-                        bool compressed) {
+                        bool keep_original_vid) {
   auto parallelism = std::thread::hardware_concurrency();
   std::vector<size_t> worker(parallelism);
   std::iota(worker.begin(), worker.end(), 0);
@@ -235,49 +235,57 @@ void Edges::ReadFromCSV(const std::string& filename, const std::string& sep,
   content.clear();
   in_file.close();
 
-  auto aligned_max_vid = (((max_vid + 1) >> 6) << 6) + 64;
-  edges_ptr_ = new Edge[n_edges]();
-  BitmapOwnership bitmap(aligned_max_vid);
-
-  auto vid_map = new VertexID[aligned_max_vid]();
-  auto compressed_buffer_edges = new VertexID[n_edges * 2]();
-
-  // Compute the mapping between origin vid to compressed vid.
-  for (EdgeIndex index = 0; index < n_edges * 2; index++) {
-    if (!bitmap.GetBit(buffer_edges[index])) {
-      bitmap.SetBit(buffer_edges[index]);
-      vid_map[buffer_edges[index]] = compressed_vid++;
-    }
-  }
-
-  for (EdgeIndex i = 0; i < n_edges; i++) {
-    edges_ptr_[i].src = buffer_edges[2 * i];
-    edges_ptr_[i].dst = buffer_edges[2 * i + 1];
-  }
-
-  delete[] buffer_edges;
-  delete[] vid_map;
-  delete[] compressed_buffer_edges;
-
   // Compute metadata.
   edgelist_metadata_.num_edges = n_edges;
-  edgelist_metadata_.num_vertices = bitmap.Count();
   edgelist_metadata_.max_vid = max_vid;
-  GenerateLocalID2GlobalID();
 
   vertex_label_base_pointer_ =
-      new VertexLabel[edgelist_metadata_.num_vertices]();
+      new VertexLabel[keep_original_vid ? (max_vid + 1) : (((max_vid + 1) >> 6) << 6) + 64]();
 
-  if (compressed) {
-    std::cout << "[Edges] Reading CSV with compressed ..." << std::endl;
-    ParForEach(worker.begin(), worker.end(), [this, step](auto w) {
-      for (auto i = w; i < get_metadata().num_vertices; i += step) {
-        localid_to_globalid_[i] = i;
-      }
-    });
+  if (keep_original_vid) {
+    std::cout << "[Edges] Reading CSV: keeping original vertex IDs (no compression) ..." << std::endl;
+    // Keep original vertex IDs (no compression): num_vertices = max_vid + 1
+    edgelist_metadata_.num_vertices = max_vid + 1;
+    edges_ptr_ = new Edge[n_edges]();
+    localid_to_globalid_ = new VertexID[edgelist_metadata_.num_vertices]();
 
+    // Initialize identity mapping and copy edges with original IDs
+    for (VertexID i = 0; i <= max_vid; ++i) {
+      localid_to_globalid_[i] = i;
+    }
+    for (EdgeIndex i = 0; i < n_edges; i++) {
+      edges_ptr_[i].src = buffer_edges[2 * i];
+      edges_ptr_[i].dst = buffer_edges[2 * i + 1];
+    }
+    delete[] buffer_edges;
   } else {
-    std::cout << "[Edges] Reading CSV without compressed ..." << std::endl;
+    std::cout << "[Edges] Reading CSV: compressing vertex IDs to contiguous range ..." << std::endl;
+    // Compress vertex IDs to contiguous range [0, num_vertices)
+    auto aligned_max_vid = (((max_vid + 1) >> 6) << 6) + 64;
+    edges_ptr_ = new Edge[n_edges]();
+    BitmapOwnership bitmap(aligned_max_vid);
+
+    auto vid_map = new VertexID[aligned_max_vid]();
+
+    // Compute the mapping between original vid to compressed vid.
+    for (EdgeIndex index = 0; index < n_edges * 2; index++) {
+      if (!bitmap.GetBit(buffer_edges[index])) {
+        bitmap.SetBit(buffer_edges[index]);
+        vid_map[buffer_edges[index]] = compressed_vid++;
+      }
+    }
+
+    // Initialize edges with compressed IDs (before deleting buffer_edges)
+    for (EdgeIndex i = 0; i < n_edges; i++) {
+      edges_ptr_[i].src = vid_map[buffer_edges[2 * i]];
+      edges_ptr_[i].dst = vid_map[buffer_edges[2 * i + 1]];
+    }
+
+    delete[] buffer_edges;
+
+    edgelist_metadata_.num_vertices = bitmap.Count();
+    GenerateLocalID2GlobalID();
+    delete[] vid_map;
   }
 }
 

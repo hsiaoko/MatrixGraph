@@ -175,7 +175,7 @@ class Edges {
 
   // Read From CSv
   void ReadFromCSV(const std::string& filename, const std::string& sep,
-                   bool compressed = true);
+                   bool keep_original_vid = false);
 
   // Read From Bin
   void ReadFromBin(const std::string& filename);

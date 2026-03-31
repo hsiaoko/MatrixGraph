@@ -21,16 +21,16 @@ using VertexID = sics::matrixgraph::core::common::VertexID;
 static void ConvertEdgelistCSV2ImmutableCSR(const std::string& input_path,
                                             const std::string& output_path,
                                             const std::string& sep,
-                                            bool compressed = false,
+                                            bool keep_original_vid = false,
                                             unsigned label_range = 1) {
   if (!std::filesystem::exists(output_path))
     std::filesystem::create_directory(output_path);
 
   sics::matrixgraph::core::data_structures::Edges edgelist;
-  edgelist.ReadFromCSV(input_path, sep, compressed);
+  edgelist.ReadFromCSV(input_path, sep, keep_original_vid);
 
   edgelist.GenerateLocalID2GlobalID();
-  if (compressed) {
+  if (keep_original_vid) {
     edgelist.Compacted();
   }
 
@@ -49,7 +49,7 @@ static void ConvertEdgelistCSV2ImmutableCSR(const std::string& input_path,
 
 static void ConvertEdgelistBin2CSRBin(const std::string& input_path,
                                       const std::string& output_path,
-                                      bool compressed = false,
+                                      bool keep_original_vid = false,
                                       unsigned label_range = 1) {
   std::cout << "ConvertEdgelistBin2CSRBin" << std::endl;
 
@@ -57,7 +57,7 @@ static void ConvertEdgelistBin2CSRBin(const std::string& input_path,
   edgelist.ReadFromBin(input_path);
 
   edgelist.GenerateLocalID2GlobalID();
-  if (compressed) {
+  if (keep_original_vid) {
     edgelist.Compacted();
   }
   edgelist.ShowGraph(10);

@@ -20,7 +20,7 @@ Converts between graph formats used by MatrixGraph and external tools. MatrixGra
 | `-o` | | (required) | Output path |
 | `-convert_mode` | | (required) | Conversion mode (see below) |
 | `-sep` | | `,` | CSV separator |
-| `-compressed` | | `false` | Use compressed vertex IDs |
+| `-keep_original_vid` | | `false` | Keep original vertex IDs (no compression to contiguous range). By default, vertex IDs are compressed to a contiguous range `[0, num_vertices)` for memory efficiency. Use this flag to preserve original IDs from the input file. |
 | `-tile_size` | | `64` | Tile size for tiled matrix |
 | `-label_range` | | `1` | Label range for vertex labels |
 | `-graph_id` | | `demo_graph_id` | Graph ID used in ArangoDB JSON export |

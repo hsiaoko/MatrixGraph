@@ -42,7 +42,7 @@ DEFINE_string(o, "", "Output file path");
 DEFINE_string(convert_mode, "",
               "Conversion mode (see help for available modes)");
 DEFINE_string(sep, ",", "Separator for CSV files (default: comma)");
-DEFINE_bool(compressed, false, "Use compressed vertex IDs");
+DEFINE_bool(keep_original_vid, false, "Keep original vertex IDs (no compression to contiguous range)");
 DEFINE_uint32(tile_size, 64, "Size of a single tile");
 DEFINE_uint32(label_range, 1, "label range for initialization");
 DEFINE_string(graph_id, "1", "Graph ID for ArangoDB export (numeric)");
@@ -153,7 +153,7 @@ void PrintUsage() {
       << "\nOptions:\n"
       << "  --sep=<separator>           - Separator for CSV files (default: "
          "comma)\n"
-      << "  --compressed                - Use compressed vertex IDs\n"
+      << "  --keep_original_vid         - Keep original vertex IDs (no compression to contiguous range)\n"
       << "  --tile_size=<size>         - Size of a single tile (default: 64)\n"
       << "  --graph_id=<id>             - Graph ID for ArangoDB export\n"
       << "  --business_id=<id>          - Business ID for ArangoDB export\n"
@@ -220,7 +220,7 @@ int main(int argc, char** argv) {
     switch (ConvertMode2Enum(FLAGS_convert_mode)) {
       case ConvertMode::kEdgelistBin2CSRBin:
         sics::matrixgraph::tools::converter::ConvertEdgelistBin2CSRBin(
-            FLAGS_i, FLAGS_o, FLAGS_compressed, FLAGS_label_range);
+            FLAGS_i, FLAGS_o, FLAGS_keep_original_vid, FLAGS_label_range);
         break;
       case ConvertMode::kEdgelistBin2TransposedEdgelistBin:
         sics::matrixgraph::tools::converter::
@@ -228,15 +228,15 @@ int main(int argc, char** argv) {
         break;
       case ConvertMode::kEdgelistCSV2CSRBin:
         sics::matrixgraph::tools::converter::ConvertEdgelistCSV2ImmutableCSR(
-            FLAGS_i, FLAGS_o, FLAGS_sep, FLAGS_compressed, FLAGS_label_range);
+            FLAGS_i, FLAGS_o, FLAGS_sep, FLAGS_keep_original_vid, FLAGS_label_range);
         break;
       case ConvertMode::kEdgelistCSV2EdgelistBin:
         sics::matrixgraph::tools::converter::ConvertEdgelistCSV2EdgelistBin(
-            FLAGS_i, FLAGS_o, FLAGS_sep, FLAGS_compressed, FLAGS_label_range);
+            FLAGS_i, FLAGS_o, FLAGS_sep, FLAGS_keep_original_vid, FLAGS_label_range);
         break;
       case ConvertMode::kCSRBin2EdgelistBin:
         sics::matrixgraph::tools::converter::ConvertImmutableCSR2EdgelistBin(
-            FLAGS_i, FLAGS_o, FLAGS_compressed);
+            FLAGS_i, FLAGS_o, FLAGS_keep_original_vid);
         break;
       case ConvertMode::kGridEdgelistBin2BitTiledMatrix:
         sics::matrixgraph::tools::converter::ConvertGridGraph2BitTiledMatrix(
@@ -290,7 +290,7 @@ int main(int argc, char** argv) {
         opt.random_vertex_labels = FLAGS_random_vertex_labels;
         opt.label_range = FLAGS_label_range;
         if (!sics::matrixgraph::tools::converter::ConvertEdgelistCSV2ArangoDBJSON(
-                FLAGS_i, FLAGS_o, FLAGS_sep, FLAGS_compressed, opt)) {
+                FLAGS_i, FLAGS_o, FLAGS_sep, FLAGS_keep_original_vid, opt)) {
           std::cerr << "Error: write ArangoDB JSON failed." << std::endl;
           return EXIT_FAILURE;
         }
