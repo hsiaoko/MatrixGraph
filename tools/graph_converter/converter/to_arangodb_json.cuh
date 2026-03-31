@@ -18,10 +18,8 @@ namespace matrixgraph {
 namespace tools {
 namespace converter {
 
-struct CsvEdge {
-  std::string src;
-  std::string dst;
-};
+using VertexID = sics::matrixgraph::core::common::VertexID;
+using Edge = sics::matrixgraph::core::data_structures::Edge;
 
 struct ArangoExportOptions {
   uint64_t graph_id = 1;
@@ -66,42 +64,19 @@ static std::string EscapeJSON(const std::string& in) {
 static bool BuildCSVArraysFromEdgelistCSV(const std::string& input_path,
                                           const std::string& sep,
                                           bool compressed,
-                                          std::vector<CsvEdge>* edges,
-                                          std::vector<std::string>* vertices) {
-  if (edges == nullptr || vertices == nullptr) return false;
-  edges->clear();
-  vertices->clear();
-
-  sics::matrixgraph::core::data_structures::Edges edgelist;
-  edgelist.ReadFromCSV(input_path, sep, compressed);
-  auto metadata = edgelist.get_metadata();
-  edgelist.ShowGraph();
-  auto* localid_to_globalid = edgelist.get_localid_to_globalid_ptr();
-  std::unordered_set<std::string> vset;
-
-  for (size_t i = 0; i < metadata.num_edges; ++i) {
-    auto src = edgelist.get_src_by_index(i);
-    auto dst = edgelist.get_dst_by_index(i);
-    if (localid_to_globalid != nullptr) {
-      src = localid_to_globalid[src];
-      dst = localid_to_globalid[dst];
-    }
-    const std::string src_str = std::to_string(src);
-    const std::string dst_str = std::to_string(dst);
-    edges->push_back({src_str, dst_str});
-    vset.insert(src_str);
-    vset.insert(dst_str);
-  }
-  if (edges->empty() && metadata.num_edges > 0) return false;
-  vertices->assign(vset.begin(), vset.end());
-  std::sort(vertices->begin(), vertices->end());
+                                          sics::matrixgraph::core::data_structures::Edges* out_edgelist) {
+  if (out_edgelist == nullptr) return false;
+  sics::matrixgraph::core::data_structures::Edges loaded_edgelist;
+  loaded_edgelist.ReadFromCSV(input_path, sep, compressed);
+  loaded_edgelist.ShowGraph();
+  *out_edgelist = std::move(loaded_edgelist);
   return true;
 }
 
 struct PivotGraphDoc {
   std::string pivot_id;
-  std::vector<std::string> vertices;
-  std::vector<CsvEdge> edges;
+  std::vector<VertexID> vertices;
+  std::vector<Edge> edges;
 };
 
 static std::string PickVertexLabel(std::mt19937* rng,
@@ -114,27 +89,45 @@ static std::string PickVertexLabel(std::mt19937* rng,
 }
 
 static bool WriteArangoDBJSON(const std::string& out_dir,
-                              const std::vector<CsvEdge>& edges,
-                              const std::vector<std::string>& vertices,
+                              const sics::matrixgraph::core::data_structures::Edges& edgelist,
                               const ArangoExportOptions& opt) {
   const std::string graph_structure_path = out_dir + "/graph_structure.json";
   const std::string pivot_ids_path = out_dir + "/pivot_graph_ids.jsonl";
   const std::string pivot_graphs_path = out_dir + "/pivot_graphs.jsonl";
   const std::string readme_path = out_dir + "/README_arangodb_import.txt";
 
+  const auto metadata = edgelist.get_metadata();
+  auto to_global = [&edgelist](VertexID local_id) {
+    return edgelist.get_globalid_by_localid(local_id);
+  };
+
+  auto subgraphs = edgelist.BuildKHopOutSubgraphs(2);
+  for (const auto& subgraph : subgraphs) {
+    std::cout << "Subgraph " << subgraph.get_metadata().gid << " has " << subgraph.get_metadata().num_vertices << " vertices and " << subgraph.get_metadata().num_edges << " edges" << std::endl;
+    subgraph.ShowGraph();
+    std::cout << "--------------------------------" << std::endl;
+  }
+  
   std::mt19937 rng(42);
-  std::unordered_map<std::string, std::string> vlabel;
-  for (const auto& v : vertices) vlabel[v] = PickVertexLabel(&rng, opt);
+  std::unordered_map<VertexID, std::string> vlabel;
+  for (size_t i = 0; i < metadata.num_vertices; ++i) {
+    auto vid = to_global(static_cast<VertexID>(i));
+    vlabel[vid] = PickVertexLabel(&rng, opt);
+  }
 
   std::vector<PivotGraphDoc> pivots;
   if (opt.pivot_mode == "source") {
-    std::unordered_map<std::string, PivotGraphDoc> by_pivot;
-    for (const auto& e : edges) {
-      auto& doc = by_pivot[e.src];
-      if (doc.pivot_id.empty()) doc.pivot_id = "pg_" + e.src;
-      doc.vertices.push_back(e.src);
-      doc.vertices.push_back(e.dst);
-      doc.edges.push_back(e);
+    std::unordered_map<VertexID, PivotGraphDoc> by_pivot;
+    for (size_t i = 0; i < metadata.num_edges; ++i) {
+      auto e = edgelist.get_edge_by_index(i);
+      Edge global_edge(to_global(e.src), to_global(e.dst));
+      auto& doc = by_pivot[global_edge.src];
+      if (doc.pivot_id.empty()) {
+        doc.pivot_id = "pg_" + std::to_string(global_edge.src);
+      }
+      doc.vertices.push_back(global_edge.src);
+      doc.vertices.push_back(global_edge.dst);
+      doc.edges.push_back(global_edge);
     }
     for (auto& kv : by_pivot) {
       auto& vs = kv.second.vertices;
@@ -149,8 +142,15 @@ static bool WriteArangoDBJSON(const std::string& out_dir,
   } else {
     PivotGraphDoc doc;
     doc.pivot_id = "pg_0";
-    doc.vertices = vertices;
-    doc.edges = edges;
+    doc.vertices.reserve(metadata.num_vertices);
+    for (size_t i = 0; i < metadata.num_vertices; ++i) {
+      doc.vertices.push_back(to_global(static_cast<VertexID>(i)));
+    }
+    doc.edges.reserve(metadata.num_edges);
+    for (size_t i = 0; i < metadata.num_edges; ++i) {
+      auto e = edgelist.get_edge_by_index(i);
+      doc.edges.emplace_back(to_global(e.src), to_global(e.dst));
+    }
     pivots.push_back(std::move(doc));
   }
 
@@ -158,9 +158,12 @@ static bool WriteArangoDBJSON(const std::string& out_dir,
     std::unordered_set<std::string> vertex_labels;
     for (const auto& kv : vlabel) vertex_labels.insert(kv.second);
     std::unordered_set<std::string> edge_triples;
-    for (const auto& e : edges) {
-      edge_triples.insert(vlabel[e.src] + "|" + opt.default_edge_label + "|" +
-                          vlabel[e.dst]);
+    for (size_t i = 0; i < metadata.num_edges; ++i) {
+      auto e = edgelist.get_edge_by_index(i);
+      auto src = to_global(e.src);
+      auto dst = to_global(e.dst);
+      edge_triples.insert(vlabel[src] + "|" + opt.default_edge_label + "|" +
+                          vlabel[dst]);
     }
     std::vector<std::string> vertex_label_list(vertex_labels.begin(),
                                                vertex_labels.end());
@@ -174,8 +177,8 @@ static bool WriteArangoDBJSON(const std::string& out_dir,
     fout << "{\n";
     fout << "  \"graph_id\": " << opt.graph_id << ",\n";
     fout << "  \"business_id\": " << opt.business_id << ",\n";
-    fout << "  \"num_vertices\": " << vertices.size() << ",\n";
-    fout << "  \"num_edges\": " << edges.size() << ",\n";
+    fout << "  \"num_vertices\": " << metadata.num_vertices << ",\n";
+    fout << "  \"num_edges\": " << metadata.num_edges << ",\n";
     fout << "  \"num_vertex_labels\": " << vertex_label_list.size() << ",\n";
     fout << "  \"num_edge_label_triples\": " << edge_triple_list.size()
          << ",\n";
@@ -231,7 +234,7 @@ static bool WriteArangoDBJSON(const std::string& out_dir,
       for (size_t i = 0; i < pg.vertices.size(); ++i) {
         const auto& v = pg.vertices[i];
         if (i) fout << ",";
-        fout << "{\"id\":\"" << EscapeJSON(v)
+        fout << "{\"id\":\"" << std::to_string(v)
              << "\",\"time\":\"" << EscapeJSON(opt.import_time)
              << "\",\"label\":\""
              << EscapeJSON(vlabel[v])
@@ -243,8 +246,8 @@ static bool WriteArangoDBJSON(const std::string& out_dir,
         if (i) fout << ",";
         fout << "{\"id\":\"e_" << edge_auto++
              << "\",\"label\":\"" << EscapeJSON(opt.default_edge_label)
-             << "\",\"srcId\":\"" << EscapeJSON(e.src)
-             << "\",\"dstId\":\"" << EscapeJSON(e.dst)
+             << "\",\"srcId\":\"" << std::to_string(e.src)
+             << "\",\"dstId\":\"" << std::to_string(e.dst)
              << "\",\"time\":\"" << EscapeJSON(opt.import_time)
              << "\",\"dstLabel\":\"" << EscapeJSON(vlabel[e.dst])
              << "\",\"srcLabel\":\"" << EscapeJSON(vlabel[e.src])
@@ -265,6 +268,7 @@ static bool WriteArangoDBJSON(const std::string& out_dir,
     fout << "Each edge fields: label,id,srcId,dstId,time,dstLabel,srcLabel,attrs.\n";
     fout << "The export contains placeholder labels/attrs where source data is missing.\n";
   }
+  
   return true;
 }
 
@@ -276,13 +280,11 @@ static bool ConvertEdgelistCSV2ArangoDBJSON(const std::string& input_path,
   if (!std::filesystem::exists(output_path))
     std::filesystem::create_directory(output_path);
 
-  std::vector<CsvEdge> edges;
-  std::vector<std::string> vertices;
-  if (!BuildCSVArraysFromEdgelistCSV(input_path, sep, compressed, &edges,
-                                     &vertices)) {
+  sics::matrixgraph::core::data_structures::Edges edgelist;
+  if (!BuildCSVArraysFromEdgelistCSV(input_path, sep, compressed, &edgelist)) {
     return false;
   }
-  return WriteArangoDBJSON(output_path, edges, vertices, opt);
+  return WriteArangoDBJSON(output_path, edgelist, opt);
 }
 
 }  // namespace converter

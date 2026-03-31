@@ -1,3 +1,9 @@
+#include "core/common/consts.h"
+#include "core/common/types.h"
+#include "core/data_structures/edgelist.h"
+#include "core/util/atomic.h"
+#include "core/util/bitmap.h"
+#include "core/util/bitmap_ownership.h"
 #include "core/util/execution_policy.h"
 #include <algorithm>
 #include <filesystem>
@@ -5,13 +11,6 @@
 #include <numeric>
 #include <random>
 #include <thread>
-
-#include "core/common/consts.h"
-#include "core/common/types.h"
-#include "core/data_structures/edgelist.h"
-#include "core/util/atomic.h"
-#include "core/util/bitmap.h"
-#include "core/util/bitmap_ownership.h"
 
 namespace sics {
 namespace matrixgraph {
@@ -37,6 +36,35 @@ Edges::Edges(const Edges& edges) {
   }
 }
 
+Edges::Edges(Edges&& edges) noexcept {
+  edgelist_metadata_ = edges.edgelist_metadata_;
+  edges_ptr_ = edges.edges_ptr_;
+  localid_to_globalid_ = edges.localid_to_globalid_;
+  vertex_label_base_pointer_ = edges.vertex_label_base_pointer_;
+
+  edges.edges_ptr_ = nullptr;
+  edges.localid_to_globalid_ = nullptr;
+  edges.vertex_label_base_pointer_ = nullptr;
+  edges.edgelist_metadata_ = {};
+}
+
+Edges& Edges::operator=(Edges&& edges) noexcept {
+  if (this == &edges) return *this;
+
+  delete[] edges_ptr_;
+
+  edgelist_metadata_ = edges.edgelist_metadata_;
+  edges_ptr_ = edges.edges_ptr_;
+  localid_to_globalid_ = edges.localid_to_globalid_;
+  vertex_label_base_pointer_ = edges.vertex_label_base_pointer_;
+
+  edges.edges_ptr_ = nullptr;
+  edges.localid_to_globalid_ = nullptr;
+  edges.vertex_label_base_pointer_ = nullptr;
+  edges.edgelist_metadata_ = {};
+  return *this;
+}
+
 Edges::Edges(EdgeIndex n_edges, VertexID* edges_buf,
              VertexID* localid2globalid) {
   Init(n_edges, edges_buf, localid2globalid);
@@ -57,27 +85,27 @@ void Edges::Init(EdgeIndex n_edges, VertexID* edges_buf,
 
   // Get Min Max vertex ID.
   ParForEach(worker.begin(), worker.end(),
-                [this, n_edges, step, &edges_buf, &min_vid, &max_vid](auto w) {
-                  for (EdgeIndex _ = w; _ < n_edges; _ += step) {
-                    edges_ptr_[_].src = edges_buf[_ * 2];
-                    edges_ptr_[_].dst = edges_buf[_ * 2 + 1];
-                    WriteMin(&min_vid, edges_ptr_[_].src);
-                    WriteMin(&min_vid, edges_ptr_[_].dst);
-                    WriteMax(&max_vid, edges_ptr_[_].src);
-                    WriteMax(&max_vid, edges_ptr_[_].dst);
-                  }
-                });
+             [this, n_edges, step, &edges_buf, &min_vid, &max_vid](auto w) {
+               for (EdgeIndex _ = w; _ < n_edges; _ += step) {
+                 edges_ptr_[_].src = edges_buf[_ * 2];
+                 edges_ptr_[_].dst = edges_buf[_ * 2 + 1];
+                 WriteMin(&min_vid, edges_ptr_[_].src);
+                 WriteMin(&min_vid, edges_ptr_[_].dst);
+                 WriteMax(&max_vid, edges_ptr_[_].src);
+                 WriteMax(&max_vid, edges_ptr_[_].dst);
+               }
+             });
 
   BitmapOwnership visited(max_vid);
 
   // Get number of vertices.
   ParForEach(worker.begin(), worker.end(),
-                [this, &visited, step, n_edges](auto w) {
-                  for (EdgeIndex _ = w; _ < n_edges; _ += step) {
-                    visited.SetBit(edges_ptr_[_].src);
-                    visited.SetBit(edges_ptr_[_].dst);
-                  }
-                });
+             [this, &visited, step, n_edges](auto w) {
+               for (EdgeIndex _ = w; _ < n_edges; _ += step) {
+                 visited.SetBit(edges_ptr_[_].src);
+                 visited.SetBit(edges_ptr_[_].dst);
+               }
+             });
 
   edgelist_metadata_.num_edges = n_edges;
   edgelist_metadata_.num_vertices = visited.Count();
@@ -242,13 +270,11 @@ void Edges::ReadFromCSV(const std::string& filename, const std::string& sep,
 
   if (compressed) {
     std::cout << "[Edges] Reading CSV with compressed ..." << std::endl;
-    ParForEach(worker.begin(), worker.end(),
-                  [this, step](auto w) {
-                    for (auto i = w; i < get_metadata().num_vertices;
-                         i += step) {
-                      localid_to_globalid_[i] = i;
-                    }
-                  });
+    ParForEach(worker.begin(), worker.end(), [this, step](auto w) {
+      for (auto i = w; i < get_metadata().num_vertices; i += step) {
+        localid_to_globalid_[i] = i;
+      }
+    });
 
   } else {
     std::cout << "[Edges] Reading CSV without compressed ..." << std::endl;
@@ -289,19 +315,19 @@ void Edges::GenerateLocalID2GlobalID() {
 
   edgelist_metadata_.num_vertices = bitmap.Count();
   ParForEach(worker.begin(), worker.end(),
-                [this, step, &vid_map, &new_localid_to_globalid](auto w) {
-                  for (auto i = w; i < get_metadata().num_edges; i += step) {
-                    auto e = get_edge_by_index(i);
-                    if (localid_to_globalid_ != nullptr) {
-                      e.src = localid_to_globalid_[e.src];
-                      e.dst = localid_to_globalid_[e.dst];
-                    }
-                    new_localid_to_globalid[vid_map[e.src]] = e.src;
-                    new_localid_to_globalid[vid_map[e.dst]] = e.dst;
-                    edges_ptr_[i].src = vid_map[e.src];
-                    edges_ptr_[i].dst = vid_map[e.dst];
-                  }
-                });
+             [this, step, &vid_map, &new_localid_to_globalid](auto w) {
+               for (auto i = w; i < get_metadata().num_edges; i += step) {
+                 auto e = get_edge_by_index(i);
+                 if (localid_to_globalid_ != nullptr) {
+                   e.src = localid_to_globalid_[e.src];
+                   e.dst = localid_to_globalid_[e.dst];
+                 }
+                 new_localid_to_globalid[vid_map[e.src]] = e.src;
+                 new_localid_to_globalid[vid_map[e.dst]] = e.dst;
+                 edges_ptr_[i].src = vid_map[e.src];
+                 edges_ptr_[i].dst = vid_map[e.dst];
+               }
+             });
   delete[] vid_map;
   delete[] localid_to_globalid_;
   localid_to_globalid_ = new_localid_to_globalid;
@@ -320,14 +346,13 @@ void Edges::Compacted() {
            sizeof(VertexID) * get_metadata().num_vertices);
   }
 
-  ParForEach(worker.begin(), worker.end(),
-                [this, step](auto w) {
-                  for (auto i = w; i < get_metadata().num_edges; i += step) {
-                    auto e = get_edge_by_index(i);
-                    localid_to_globalid_[e.src] = e.src;
-                    localid_to_globalid_[e.dst] = e.dst;
-                  }
-                });
+  ParForEach(worker.begin(), worker.end(), [this, step](auto w) {
+    for (auto i = w; i < get_metadata().num_edges; i += step) {
+      auto e = get_edge_by_index(i);
+      localid_to_globalid_[e.src] = e.src;
+      localid_to_globalid_[e.dst] = e.dst;
+    }
+  });
   edgelist_metadata_.max_vid = edgelist_metadata_.num_vertices - 1;
 }
 
@@ -336,14 +361,13 @@ void Edges::Transpose() {
   std::vector<size_t> worker(parallelism);
   std::iota(worker.begin(), worker.end(), 0);
   auto step = worker.size();
-  ParForEach(worker.begin(), worker.end(),
-                [this, step](auto w) {
-                  for (auto i = w; i < get_metadata().num_edges; i += step) {
-                    VertexID tmp = edges_ptr_[i].src;
-                    edges_ptr_[i].src = edges_ptr_[i].dst;  // swap src and dst
-                    edges_ptr_[i].dst = tmp;
-                  }
-                });
+  ParForEach(worker.begin(), worker.end(), [this, step](auto w) {
+    for (auto i = w; i < get_metadata().num_edges; i += step) {
+      VertexID tmp = edges_ptr_[i].src;
+      edges_ptr_[i].src = edges_ptr_[i].dst;  // swap src and dst
+      edges_ptr_[i].dst = tmp;
+    }
+  });
 }
 
 void Edges::SortBySrc() {
@@ -380,23 +404,19 @@ void Edges::GenerateVLabel(VertexID range, bool random) {
 
     std::uniform_int_distribution<> dis(0, range);
 
-    ParForEach(worker.begin(), worker.end(),
-                  [this, step, &dis, &gen](auto w) {
-                    for (auto vid = w; vid < edgelist_metadata_.num_vertices;
-                         vid += step) {
-                      auto vlabel_ptr = get_vertex_label_ptr();
-                      vlabel_ptr[vid] = dis(gen);
-                    }
-                  });
+    ParForEach(worker.begin(), worker.end(), [this, step, &dis, &gen](auto w) {
+      for (auto vid = w; vid < edgelist_metadata_.num_vertices; vid += step) {
+        auto vlabel_ptr = get_vertex_label_ptr();
+        vlabel_ptr[vid] = dis(gen);
+      }
+    });
   } else {
-    ParForEach(worker.begin(), worker.end(),
-                  [this, step, range](auto w) {
-                    for (auto vid = w; vid < edgelist_metadata_.num_vertices;
-                         vid += step) {
-                      auto vlabel_ptr = get_vertex_label_ptr();
-                      vlabel_ptr[vid] = vid % range;
-                    }
-                  });
+    ParForEach(worker.begin(), worker.end(), [this, step, range](auto w) {
+      for (auto vid = w; vid < edgelist_metadata_.num_vertices; vid += step) {
+        auto vlabel_ptr = get_vertex_label_ptr();
+        vlabel_ptr[vid] = vid % range;
+      }
+    });
   }
 }
 
@@ -408,6 +428,86 @@ VertexID Edges::get_globalid_by_localid(VertexID localid) const {
 void Edges::SetLocalIDToGlobalID(VertexID* localid_to_globalid) {
   if (localid_to_globalid_ != nullptr) delete[] localid_to_globalid;
   localid_to_globalid_ = localid_to_globalid;
+}
+
+std::vector<Edges> Edges::BuildKHopOutSubgraphs(VertexID k) const {
+  const EdgeIndex num_edges = edgelist_metadata_.num_edges;
+  if (num_edges == 0) return {};
+
+  // Adjacency by src: sort all edges by (src, dst), then lower_bound per
+  // vertex.
+  std::vector<Edge> sorted_e(edges_ptr_, edges_ptr_ + num_edges);
+  std::sort(sorted_e.begin(), sorted_e.end(), [](const Edge& a, const Edge& b) {
+    if (a.src != b.src) return a.src < b.src;
+    return a.dst < b.dst;
+  });
+
+  VertexID max_v = 0;
+  std::for_each(sorted_e.begin(), sorted_e.end(), [&max_v](const Edge& e) {
+    WriteMax(&max_v, e.src);
+    WriteMax(&max_v, e.dst);
+  });
+  const size_t bm_sz = static_cast<size_t>(max_v) + 1;
+  BitmapOwnership visited_bm(bm_sz);
+
+  std::vector<VertexID> centers;
+  centers.reserve(static_cast<size_t>(num_edges) * 2);
+  std::for_each(sorted_e.begin(), sorted_e.end(), [&](const Edge& e) {
+    centers.push_back(e.src);
+    centers.push_back(e.dst);
+  });
+  std::sort(centers.begin(), centers.end());
+  centers.erase(std::unique(centers.begin(), centers.end()), centers.end());
+
+  std::vector<Edges> subgraphs;
+  subgraphs.reserve(centers.size());
+  VertexID stub_pair[2] = {0, 0};
+
+  std::for_each(centers.begin(), centers.end(), [&](VertexID center) {
+    visited_bm.Clear();
+    visited_bm.SetBit(static_cast<size_t>(center));
+    std::queue<std::pair<VertexID, VertexID>> q;
+    q.emplace(center, 0);
+    std::vector<Edge> picked_edges;
+
+    while (!q.empty()) {
+      auto cur = q.front();
+      q.pop();
+      const VertexID u = cur.first;
+      const VertexID depth = cur.second;
+      if (depth >= k) continue;
+
+      auto lo =
+          std::lower_bound(sorted_e.begin(), sorted_e.end(), u,
+                           [](const Edge& e, VertexID x) { return e.src < x; });
+      for (auto it = lo; it != sorted_e.end() && it->src == u; ++it) {
+        picked_edges.push_back(*it);
+        const size_t di = static_cast<size_t>(it->dst);
+        if (!visited_bm.GetBit(di)) {
+          visited_bm.SetBit(di);
+          q.emplace(it->dst, depth + 1);
+        }
+      }
+    }
+
+    if (picked_edges.empty()) {
+      subgraphs.emplace_back(static_cast<EdgeIndex>(0), stub_pair);
+      return;
+    }
+
+    std::vector<VertexID> edge_buf;
+    edge_buf.reserve(picked_edges.size() * 2);
+    std::for_each(picked_edges.begin(), picked_edges.end(), [&](const Edge& e) {
+      edge_buf.push_back(e.src);
+      edge_buf.push_back(e.dst);
+    });
+
+    Edges one_subgraph(static_cast<EdgeIndex>(picked_edges.size()),
+                       edge_buf.data());
+    subgraphs.emplace_back(std::move(one_subgraph));
+  });
+
+  return subgraphs;
 }
 
 }  // namespace data_structures

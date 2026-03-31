@@ -4,6 +4,7 @@
 #include <yaml-cpp/yaml.h>
 
 #include <cstring>
+#include <queue>
 #include "core/util/execution_policy.h"
 #include <iostream>
 
@@ -159,6 +160,8 @@ class Edges {
             VertexID* localid2globalid = nullptr);
 
   Edges(const Edges& edges);
+  Edges(Edges&& edges) noexcept;
+  Edges& operator=(Edges&& edges) noexcept;
 
   ~Edges() { delete[] edges_ptr_; }
 
@@ -213,6 +216,12 @@ class Edges {
   VertexID get_globalid_by_localid(VertexID localid) const;
 
   void SetLocalIDToGlobalID(VertexID* localid_to_globalid);
+
+  // Build one directed k-hop outgoing-neighborhood subgraph for each vertex
+  // that appears as an endpoint in this edgelist (supports non-compact IDs).
+  // Uses edges sorted by src for adjacency and util::BitmapOwnership for BFS
+  // visited marks ([0 .. max_vid]; size = max_vid + 1). Return is moved.
+  std::vector<Edges> BuildKHopOutSubgraphs(VertexID k) const;
 
  private:
   VertexID* localid_to_globalid_ = nullptr;
