@@ -173,8 +173,10 @@ arangosh \
   --server.database "${ARANGO_DB}" \
   --javascript.execute-string '
 const col = "'"${COLLECTION}"'";
-print("count =", db._collection(col).count());
-printjson(db._query("FOR d IN @@c LIMIT 1 RETURN d", {"@c": col}).toArray());
+const c = db._collection(col);
+print("count =", c.count());
+const result = db._query("FOR d IN @@c LIMIT 1 RETURN d", {"@c": col}).toArray();
+console.log(JSON.stringify(result, null, 2));
 '
 ```
 
