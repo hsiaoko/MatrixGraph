@@ -175,7 +175,7 @@ arangosh \
 const col = "'"${COLLECTION}"'";
 const c = db._collection(col);
 print("count =", c.count());
-const result = db._query("FOR d IN @@c LIMIT 1 RETURN d", {"@c": col}).toArray();
+const result = db._query("FOR d IN " + col + " LIMIT 1 RETURN d").toArray();
 console.log(JSON.stringify(result, null, 2));
 '
 ```
