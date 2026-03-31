@@ -66,10 +66,8 @@ static bool BuildCSVArraysFromEdgelistCSV(const std::string& input_path,
                                           bool compressed,
                                           sics::matrixgraph::core::data_structures::Edges* out_edgelist) {
   if (out_edgelist == nullptr) return false;
-  sics::matrixgraph::core::data_structures::Edges loaded_edgelist;
-  loaded_edgelist.ReadFromCSV(input_path, sep, compressed);
-  loaded_edgelist.ShowGraph();
-  *out_edgelist = std::move(loaded_edgelist);
+  out_edgelist->ReadFromCSV(input_path, sep, compressed);
+  out_edgelist->ShowGraph();
   return true;
 }
 
