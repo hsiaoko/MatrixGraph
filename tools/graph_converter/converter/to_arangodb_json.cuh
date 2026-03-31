@@ -24,13 +24,14 @@ using Edge = sics::matrixgraph::core::data_structures::Edge;
 struct ArangoExportOptions {
   uint64_t graph_id = 1;
   uint64_t business_id = 1;
-  std::string pivot_mode = "single";  // single | source
+  std::string pivot_mode = "single";  // single | source | k_hop
   std::string default_vertex_label = "vertex";
   std::string default_edge_label = "relationship";
   std::string import_time = "1970-01-01T00:00:00Z";  // _time: import time
   std::string pivot_time = "1970-01-01T00:00:00Z";   // _pivot_time: business time
   bool random_vertex_labels = false;
   unsigned label_range = 1;
+  VertexID k_hop = 0;  // k-hop distance for k_hop pivot mode (0 means unlimited/all)
 };
 
 static std::string EscapeJSON(const std::string& in) {
@@ -130,7 +131,50 @@ static bool WriteArangoDBJSON(const std::string& out_dir,
               [](const PivotGraphDoc& a, const PivotGraphDoc& b) {
                 return a.pivot_id < b.pivot_id;
               });
+  } else if (opt.pivot_mode == "k_hop") {
+    // Build k-hop subgraphs for each pivot vertex using BuildKHopOutSubgraphs
+    VertexID k = opt.k_hop > 0 ? opt.k_hop : metadata.max_vid + 1;
+    auto subgraphs = edgelist.BuildKHopOutSubgraphs(k);
+    
+    // Get all unique vertices as centers (same order as BuildKHopOutSubgraphs)
+    std::vector<VertexID> centers;
+    centers.reserve(subgraphs.size());
+    for (size_t i = 0; i < subgraphs.size(); ++i) {
+      centers.push_back(to_global(static_cast<VertexID>(i)));
+    }
+    
+    for (size_t i = 0; i < subgraphs.size(); ++i) {
+      const auto& subgraph = subgraphs[i];
+      const auto& sub_meta = subgraph.get_metadata();
+      
+      PivotGraphDoc doc;
+      doc.pivot_id = "pg_" + std::to_string(centers[i]);
+      
+      // Collect vertices from subgraph
+      std::unordered_set<VertexID> vertex_set;
+      for (size_t j = 0; j < sub_meta.num_edges; ++j) {
+        auto e = subgraph.get_edge_by_index(j);
+        VertexID global_src = to_global(e.src);
+        VertexID global_dst = to_global(e.dst);
+        vertex_set.insert(global_src);
+        vertex_set.insert(global_dst);
+        doc.edges.emplace_back(global_src, global_dst);
+      }
+      
+      doc.vertices.assign(vertex_set.begin(), vertex_set.end());
+      std::sort(doc.vertices.begin(), doc.vertices.end());
+      
+      if (!doc.edges.empty()) {
+        pivots.push_back(std::move(doc));
+      }
+    }
+    
+    std::sort(pivots.begin(), pivots.end(),
+              [](const PivotGraphDoc& a, const PivotGraphDoc& b) {
+                return a.pivot_id < b.pivot_id;
+              });
   } else {
+    // Default: single pivot containing all vertices and edges
     PivotGraphDoc doc;
     doc.pivot_id = "pg_0";
     doc.vertices.reserve(metadata.num_vertices);

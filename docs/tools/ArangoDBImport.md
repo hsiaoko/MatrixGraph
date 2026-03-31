@@ -5,6 +5,82 @@ ArangoDB, with collection naming aligned to GAR runtime lookup:
 
 `datasource_{graphId}_time_pivot_graph_{businessId}`.
 
+## 0. Export Edgelist to ArangoDB JSON
+
+MatrixGraph provides a tool to convert edgelist CSV to ArangoDB JSON format.
+
+### Basic Usage
+
+```bash
+graph-convert \
+  --convert_mode=edgelistcsv2arangodbjson \
+  -i <input_edgelist.csv> \
+  -o <output_directory> \
+  [--sep=separator] \
+  [--keep_original_vid] \
+  [--graph_id=<id>] \
+  [--business_id=<id>] \
+  [--pivot_mode=<mode>] \
+  [--k_hop=<N>]
+```
+
+### Pivot Modes
+
+The `--pivot_mode` option controls how pivot graphs are generated:
+
+- **`single`** (default): All vertices and edges are stored in a single pivot graph (one row in `pivot_graphs.jsonl`).
+
+- **`source`**: One pivot graph per source vertex. Each pivot contains all outgoing edges from that source vertex.
+
+- **`k_hop`**: One pivot graph per vertex. Each pivot contains the k-hop outgoing neighborhood subgraph centered at that vertex (the pivot vertex and all vertices/edges reachable within k hops).
+
+### K-Hop Subgraph Mode
+
+When using `--pivot_mode=k_hop`, each pivot graph represents a vertex's k-hop neighborhood:
+
+```bash
+# Export with 2-hop neighborhoods (default k=2)
+graph-convert \
+  --convert_mode=edgelistcsv2arangodbjson \
+  -i graph.csv \
+  -o arangodb_output \
+  --pivot_mode=k_hop \
+  --k_hop=2 \
+  --graph_id=1 \
+  --business_id=1
+
+# Export with 3-hop neighborhoods
+graph-convert \
+  --convert_mode=edgelistcsv2arangodbjson \
+  -i graph.csv \
+  -o arangodb_output \
+  --pivot_mode=k_hop \
+  --k_hop=3
+```
+
+**Output Structure (k_hop mode):**
+- `graph_structure.json`: Global graph metadata (vertex/edge labels, counts)
+- `pivot_graph_ids.jsonl`: One line per pivot graph with IDs
+- `pivot_graphs.jsonl`: One line per pivot vertex, containing:
+  - `pivot_graph_id`: Unique identifier (e.g., `pg_123` for pivot vertex 123)
+  - `vertices`: All vertices reachable within k hops from the pivot
+  - `edges`: All edges within the k-hop subgraph
+
+### Additional Options
+
+```bash
+--sep=<separator>           # CSV separator (default: comma)
+--keep_original_vid         # Keep original vertex IDs (no compression)
+--graph_id=<id>             # Graph ID (default: 1)
+--business_id=<id>          # Business ID (default: 1)
+--import_time=<ts>          # Import timestamp (_time field)
+--pivot_time=<ts>           # Business timestamp (_pivot_time field)
+--default_vertex_label=<l>  # Default vertex label (default: "vertex")
+--default_edge_label=<l>    # Default edge label (default: "relationship")
+--random_vertex_labels      # Randomly assign labels within label_range
+--label_range=<N>           # Range for random labels (default: 1)
+```
+
 ## 1. Prerequisites
 
 - `arangosh` is available.

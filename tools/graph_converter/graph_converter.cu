@@ -53,7 +53,8 @@ DEFINE_string(import_time, "1970-01-01T00:00:00Z",
 DEFINE_string(pivot_time, "1970-01-01T00:00:00Z",
               "Business time for ArangoDB export (_pivot_time)");
 DEFINE_string(pivot_mode, "single",
-              "Pivot graph generation mode for ArangoDB export: single|source");
+              "Pivot graph generation mode for ArangoDB export: single|source|k_hop");
+DEFINE_uint32(k_hop, 2, "K-hop distance for k_hop pivot mode (default: 2)");
 DEFINE_string(default_vertex_label, "vertex",
               "Default vertex label for ArangoDB export");
 DEFINE_string(default_edge_label, "relationship",
@@ -159,7 +160,8 @@ void PrintUsage() {
       << "  --business_id=<id>          - Business ID for ArangoDB export\n"
       << "  --import_time=<ts>          - Import time (_time)\n"
       << "  --pivot_time=<ts>           - Business time (_pivot_time)\n"
-      << "  --pivot_mode=single|source  - Pivot generation mode\n"
+      << "  --pivot_mode=single|source|k_hop  - Pivot generation mode\n"
+      << "  --k_hop=<N>                 - K-hop distance for k_hop mode (default: 2)\n"
       << "  --default_vertex_label=<l>  - Default vertex label\n"
       << "  --default_edge_label=<l>    - Default edge label\n"
       << "  --random_vertex_labels      - Random labels within --label_range\n"
@@ -285,6 +287,7 @@ int main(int argc, char** argv) {
         opt.import_time = FLAGS_import_time;
         opt.pivot_time = FLAGS_pivot_time;
         opt.pivot_mode = FLAGS_pivot_mode;
+        opt.k_hop = FLAGS_k_hop;
         opt.default_vertex_label = FLAGS_default_vertex_label;
         opt.default_edge_label = FLAGS_default_edge_label;
         opt.random_vertex_labels = FLAGS_random_vertex_labels;
