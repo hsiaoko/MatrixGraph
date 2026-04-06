@@ -301,10 +301,11 @@ __host__ void GARMatch::LoadData() {
      << "';"
      << "const hasG=" << (graph_id.empty() ? "false" : "true") << ";"
      << "const hasB=" << (business_id.empty() ? "false" : "true") << ";"
-     << "if(hasG&&hasB){q+=' FILTER d.graph_id==@g AND d.business_id==@b';}"
-     << "else if(hasG){q+=' FILTER d.graph_id==@g';}"
-     << "else if(hasB){q+=' FILTER d.business_id==@b';}"
-     << (pivot_limit > 0 ? " LIMIT @l" : "") << " RETURN d';"
+     << "if(hasG&&hasB){q+=' FILTER TO_STRING(d.graph_id)==@g AND TO_STRING(d.business_id)==@b';}"
+     << "else if(hasG){q+=' FILTER TO_STRING(d.graph_id)==@g';}"
+     << "else if(hasB){q+=' FILTER TO_STRING(d.business_id)==@b';}"
+     << (pivot_limit > 0 ? "q+=' LIMIT @l';" : "")
+     << "q+=' RETURN d';"
      << "const bind={g:\""
      << EscapeForJSDoubleQuote(graph_id) << "\",b:\""
      << EscapeForJSDoubleQuote(business_id) << "\""
@@ -314,12 +315,14 @@ __host__ void GARMatch::LoadData() {
      << "while(cur.hasNext()){"
      << "docs++;"
      << "const d=cur.next();"
-     << "const vs=d.vertices||[];"
+     << "const g=d.graph||{};"
+     << "const main=g.main||{};"
+     << "const vs=main.vertices||[];"
      << "for(let i=0;i<vs.length;i++){const v=vs[i];"
      << "print(\"V\\t\"+String(v.id||\"\")+\"\\t\"+String(v.label||\"\"));}"
-     << "const es=d.edges||[];"
+     << "const es=main.edges||[];"
      << "for(let i=0;i<es.length;i++){const e=es[i];"
-     << "print(\"E\\t\"+String(e.src_id||\"\")+\"\\t\"+String(e.dst_id||\"\")+\"\\t\"+String(e.label||\"\"));}"
+     << "print(\"E\\t\"+String(e.srcId||\"\")+\"\\t\"+String(e.dstId||\"\")+\"\\t\"+String(e.label||\"\"));}"
      << "}"
      << "print(\"M\\tDOCS\\t\"+String(docs));";
 
@@ -329,8 +332,8 @@ __host__ void GARMatch::LoadData() {
       EscapeShellSingleQuotes(user) + "' --server.password '" +
       EscapeShellSingleQuotes(pass) + "' --server.database '" +
       EscapeShellSingleQuotes(db) +
-      "' --quiet --javascript.execute-string \"" +
-      EscapeForJSDoubleQuote(js.str()) + "\" 2>&1";
+      "' --quiet --javascript.execute /dev/stdin 2>&1 <<'ARANGOSH_EOF'\n" +
+      js.str() + "\nARANGOSH_EOF\n";
   data_dump_cmd = arangosh_cmd;
   } else if (CommandExists("python3")) {
     std::ostringstream py_cmd;
@@ -361,9 +364,9 @@ __host__ void GARMatch::LoadData() {
         << "base=f\"{scheme}://{host}:{port}/_db/{db}/_api/cursor\"\n"
         << "auth='Basic '+base64.b64encode(f\"{user}:{pwd}\".encode()).decode()\n"
         << "q=f\"FOR d IN {coll}\"\n"
-        << "if gid and bid: q += \" FILTER d.graph_id==@g AND d.business_id==@b\"\n"
-        << "elif gid: q += \" FILTER d.graph_id==@g\"\n"
-        << "elif bid: q += \" FILTER d.business_id==@b\"\n"
+        << "if gid and bid: q += \" FILTER TO_STRING(d.graph_id)==@g AND TO_STRING(d.business_id)==@b\"\n"
+        << "elif gid: q += \" FILTER TO_STRING(d.graph_id)==@g\"\n"
+        << "elif bid: q += \" FILTER TO_STRING(d.business_id)==@b\"\n"
         << "if limit>0: q += \" LIMIT @l\"\n"
         << "q += \" RETURN d\"\n"
         << "bind={}\n"
@@ -379,10 +382,12 @@ __host__ void GARMatch::LoadData() {
         << "  with urllib.request.urlopen(r, timeout=60) as resp:\n"
         << "    return json.loads(resp.read().decode())\n"
         << "def emit(doc):\n"
-        << "  for v in (doc.get('vertices') or []):\n"
+        << "  gm=doc.get('graph') or {}\n"
+        << "  main=gm.get('main') or {}\n"
+        << "  for v in (main.get('vertices') or []):\n"
         << "    print('V\\t'+str(v.get('id',''))+'\\t'+str(v.get('label','')))\n"
-        << "  for e in (doc.get('edges') or []):\n"
-        << "    print('E\\t'+str(e.get('src_id',''))+'\\t'+str(e.get('dst_id',''))+'\\t'+str(e.get('label','')))\n"
+        << "  for e in (main.get('edges') or []):\n"
+        << "    print('E\\t'+str(e.get('srcId',''))+'\\t'+str(e.get('dstId',''))+'\\t'+str(e.get('label','')))\n"
         << "try:\n"
         << "  docs=0\n"
         << "  first=req(base,'POST',payload)\n"

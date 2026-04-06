@@ -1,0 +1,24 @@
+# GARMatch runtime config (used by apps/gar_match.cu via -config)
+
+arango:
+  host: "192.168.51.10"
+  port: 8529
+  scheme: "http"
+  database: "congress"
+  username: "root"
+  password: "123456"
+
+collections:
+  graph_structure: "graph_structure"
+  pivot_graph_ids: "pivot_graph_ids"
+  pivot_graphs: "datasource_1_time_pivot_graph_1"
+
+graph_query:
+  graph_id: "1"
+  business_id: "1"
+  pivot_mode: "single"   # single | source
+  pivot_limit: 0         # 0 means no limit
+
+runtime:
+  output_path: "./output/gar_match"
+  log_level: "info"
