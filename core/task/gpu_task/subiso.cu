@@ -24,6 +24,8 @@
 #include "core/task/gpu_task/subiso.cuh"
 #include "core/util/atomic.h"
 #include "core/util/bitmap_no_ownership.h"
+#include "core/util/cuda_check.cuh"
+#include "core/util/cuda_device.cuh"
 #include "core/util/format_converter.cuh"
 
 namespace sics {
@@ -118,7 +120,8 @@ __host__ void SubIso::Matching(const ImmutableCSR& p, const ImmutableCSR& g) {
   std::iota(worker.begin(), worker.end(), 0);
   auto step = worker.size();
 
-  cudaSetDevice(1);
+  CUDA_CHECK(cudaSetDevice(
+      sics::matrixgraph::core::util::MatrixGraphCudaDevice()));
 
   // Init pattern.
   BufferUint8 data_p;

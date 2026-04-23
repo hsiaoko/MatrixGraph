@@ -229,7 +229,7 @@ class Edges {
 
   VertexLabel* vertex_label_base_pointer_ = nullptr;
 
-  Edge* edges_ptr_;
+  Edge* edges_ptr_ = nullptr;
   EdgelistMetadata edgelist_metadata_;
 };
 

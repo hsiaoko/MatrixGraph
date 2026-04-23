@@ -20,6 +20,8 @@
 #include "core/task/gpu_task/kernel/kernel_pagerank.cuh"
 #include "core/task/gpu_task/pagerank.cuh"
 #include "core/util/atomic.h"
+#include "core/util/cuda_check.cuh"
+#include "core/util/cuda_device.cuh"
 
 namespace sics {
 namespace matrixgraph {
@@ -65,7 +67,8 @@ __host__ void PageRank::ComputePageRank(const ImmutableCSR& g) {
   std::iota(worker.begin(), worker.end(), 0);
   auto step = worker.size();
 
-  cudaSetDevice(1);
+  CUDA_CHECK(cudaSetDevice(
+      sics::matrixgraph::core::util::MatrixGraphCudaDevice()));
 
   // Init data_graph.
   BufferUint8 data_g;

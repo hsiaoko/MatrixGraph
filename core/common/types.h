@@ -53,6 +53,7 @@ enum TaskType {
   kSSSP,
   kBFS,
   kDiameter,
+  kSkew,
   kPageRank,
   kGEMV,
   // Other types.

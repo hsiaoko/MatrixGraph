@@ -4,6 +4,8 @@
 
 MatrixGraph is a C++/CUDA library for parallel graph computing. This directory contains documentation for tools, GPU tasks, CPU tasks, and command-line **applications**.
 
+For a **single YAML summary** of a CSR dataset (|V|, |E|, degree stats, approximate diameter & skew, WCC count), use **[GraphFeatures](tools/GraphFeatures.md)** (`tools/python/graph_features.py`), which shells out to `wcc_exec`, `diameter_exec`, and `skew_exec`.
+
 ---
 
 ## Applications (`apps/`)
@@ -18,6 +20,7 @@ Shipped executables are built as `<name>_exec` from `apps/`. Full table, build h
 | `bfs_exec` | [BFS](apps/bfs.md) |
 | `pagerank_exec` | [PageRank](apps/pagerank.md) |
 | `diameter_exec` | [Diameter](apps/diameter.md) |
+| `skew_exec` | [Skew](apps/skew.md) |
 | `gemm_exec` | [GEMM](apps/gemm.md) |
 | `subiso_exec` | [SubIso (GPU)](apps/subiso_gpu.md) |
 | `cpu_subiso_exec` | [SubIso (CPU)](cpu_task/subiso.md) |
@@ -37,6 +40,8 @@ Shipped executables are built as `<name>_exec` from `apps/`. Full table, build h
 | [SubIsoTraining](tools/SubIsoTraining.md) | ML filter training workflow for SubIso |
 | [Embedding](tools/Embedding.md) | Graph embedding generator (PyTorch → binary) |
 | [ComputeF1](tools/ComputeF1.md) | F1 / Precision / Recall calculator |
+| [GraphFeatures](tools/GraphFeatures.md) | CSR graph summary YAML (|V|, |E|, degrees, diameter, skew, WCC) |
+| [ArangoDBImport](tools/ArangoDBImport.md) | ArangoDB setup & import for GAR / `gar_match_exec` |
 
 ---
 
@@ -45,6 +50,8 @@ Shipped executables are built as `<name>_exec` from `apps/`. Full table, build h
 | Document | Description |
 |----------|--------------|
 | [SubIso](cpu_task/subiso.md) | Subgraph isomorphism (VF3 + ML filter) |
+
+**CPU metrics (via apps):** [Diameter](apps/diameter.md) and [Skew](apps/skew.md) implement host-side BFS statistics; see also [GraphFeatures](tools/GraphFeatures.md) to batch-export YAML.
 
 ---
 
@@ -63,10 +70,16 @@ Shipped executables are built as `<name>_exec` from `apps/`. Full table, build h
 
 ```
 CSV → graph_converter (edgelistcsv2edgelistbin) → edgelist
-edgelist → graph_converter (edgelistbin2csrbin) → CSR → wcc_exec / bfs_exec / pagerank_exec / diameter_exec
+edgelist → graph_converter (edgelistbin2csrbin) → CSR → wcc_exec / bfs_exec / pagerank_exec / diameter_exec / skew_exec
 ```
 
-(`diameter_exec` is CPU-only and exact; large graphs may be expensive—see [Diameter](apps/diameter.md).)
+(`diameter_exec` / `skew_exec` are CPU-only; by default **approximate d_hat** uses 50 random BFS sources—see [Diameter](apps/diameter.md) and [Skew](apps/skew.md).)
+
+**CSR → feature YAML (batch stats):**
+
+```
+CSR directory → python3 tools/python/graph_features.py -g <csr_root> -o features.yaml
+```
 
 **Graph → GEMM / PPR (tiled):**
 

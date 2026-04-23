@@ -1,4 +1,4 @@
-#include "core/task/cpu_task/diameter.h"
+#include "core/task/cpu_task/skew.h"
 
 #include <algorithm>
 #include <atomic>
@@ -57,17 +57,22 @@ uint32_t BfsMaxDistanceUndirected(const ImmutableCSRGraph& g, VertexID src) {
 
 }  // namespace
 
-void Diameter::LoadData() {
-  std::cout << "[Diameter] LoadData()" << std::endl;
+void Skew::LoadData() {
+  std::cout << "[Skew] LoadData()" << std::endl;
   g_.Read(data_graph_path_);
 }
 
-void Diameter::ComputeUndirectedDiameter(const ImmutableCSRGraph& g) {
+void Skew::ComputeSkew(const ImmutableCSRGraph& g) {
   const VertexID n = g.get_num_vertices();
   if (n == 0) {
-    std::cout << "[Diameter] undirected diameter: 0 (empty graph)" << std::endl;
+    std::cout << "[Skew] empty graph; skew undefined." << std::endl;
     return;
   }
+
+  const double n_d = static_cast<double>(n);
+  const double m_out = static_cast<double>(g.get_num_outgoing_edges());
+  const double m_in = static_cast<double>(g.get_num_incoming_edges());
+  const double d_bar = (m_out + m_in) / n_d;
 
   const size_t n_sz = static_cast<size_t>(n);
   const bool exact = (sample_sources_ == 0);
@@ -83,45 +88,56 @@ void Diameter::ComputeUndirectedDiameter(const ImmutableCSRGraph& g) {
     std::sample(pool.begin(), pool.end(), sources.begin(), k, gen);
   }
 
-  std::atomic<uint32_t> best{0};
+  std::atomic<uint32_t> d_hat_atomic{0};
   std::for_each(std::execution::par, sources.begin(), sources.end(),
                 [&](VertexID s) {
                   const uint32_t ecc = BfsMaxDistanceUndirected(g, s);
-                  uint32_t cur = best.load(std::memory_order_relaxed);
+                  uint32_t cur = d_hat_atomic.load(std::memory_order_relaxed);
                   while (ecc > cur &&
-                         !best.compare_exchange_weak(
+                         !d_hat_atomic.compare_exchange_weak(
                              cur, ecc, std::memory_order_relaxed,
                              std::memory_order_relaxed)) {
                   }
                 });
 
-  const uint32_t value = best.load();
+  const uint32_t d_hat = d_hat_atomic.load();
+
+  std::cout << "[Skew] d_bar = (|E_out|+|E_in|)/n = " << d_bar << std::endl;
   if (exact) {
-    std::cout << "[Diameter] undirected diameter (exact, " << k
-              << " BFS sources): " << value << std::endl;
+    std::cout << "[Skew] d_hat(G) (exact, " << k << " BFS sources): " << d_hat
+              << std::endl;
   } else {
-    std::cout << "[Diameter] undirected diameter (approximate, " << k
+    std::cout << "[Skew] d_hat(G) (approximate, " << k
               << " random BFS sources, seed=" << random_seed_
-              << "): " << value << std::endl;
-    std::cout << "[Diameter] note: value is max eccentricity over sampled "
-                  "sources (≤ true undirected diameter)."
+              << "): " << d_hat << std::endl;
+    std::cout << "[Skew] note: d_hat ≤ true undirected diameter (same as "
+                  "Diameter app)."
               << std::endl;
   }
+
+  if (d_bar <= 0.0) {
+    std::cout << "[Skew] skew(G) undefined (mean total degree is 0)."
+              << std::endl;
+    return;
+  }
+
+  const double skew = static_cast<double>(d_hat) / d_bar;
+  std::cout << "[Skew] skew(G) ≈ d_hat / d_bar = " << skew << std::endl;
 }
 
-void Diameter::Run() {
+void Skew::Run() {
   auto t0 = std::chrono::system_clock::now();
   LoadData();
   auto t1 = std::chrono::system_clock::now();
-  ComputeUndirectedDiameter(g_);
+  ComputeSkew(g_);
   auto t2 = std::chrono::system_clock::now();
 
-  std::cout << "[Diameter] LoadData() elapsed: "
+  std::cout << "[Skew] LoadData() elapsed: "
             << std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0)
                        .count() /
                    static_cast<double>(CLOCKS_PER_SEC)
             << std::endl;
-  std::cout << "[Diameter] Compute() elapsed: "
+  std::cout << "[Skew] Compute() elapsed: "
             << std::chrono::duration_cast<std::chrono::microseconds>(t2 - t1)
                        .count() /
                    static_cast<double>(CLOCKS_PER_SEC)

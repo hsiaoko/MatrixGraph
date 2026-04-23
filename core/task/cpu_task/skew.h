@@ -1,5 +1,5 @@
-#ifndef MATRIXGRAPH_CORE_TASK_CPU_TASK_DIAMETER_H_
-#define MATRIXGRAPH_CORE_TASK_CPU_TASK_DIAMETER_H_
+#ifndef MATRIXGRAPH_CORE_TASK_CPU_TASK_SKEW_H_
+#define MATRIXGRAPH_CORE_TASK_CPU_TASK_SKEW_H_
 
 #include <cstdint>
 #include <string>
@@ -13,15 +13,14 @@ namespace matrixgraph {
 namespace core {
 namespace task {
 
-// Undirected diameter on CSR: treat each directed edge as undirected
-// (traverse both out- and in-adjacency).
-// Default: approximate — BFS from `sample_sources_` random vertices (max
-// eccentricity among them; never exceeds true diameter). `sample_sources_ == 0`
-// means exact: BFS from every vertex (O(n*(n+m))).
-class Diameter : public TaskBase {
+// skew(G) ≈ d_hat(G) / d_bar, with the same undirected BFS setup as Diameter:
+// d_hat = max eccentricity over sampled (or all) sources; edges treated as
+// undirected via out- + in-adjacency.
+// d_bar = mean total degree per vertex: (|E_out| + |E_in|) / n in the CSR.
+class Skew : public TaskBase {
  public:
-  Diameter(std::string data_graph_path, size_t sample_sources = 50,
-           uint64_t random_seed = 42)
+  Skew(std::string data_graph_path, size_t sample_sources = 50,
+       uint64_t random_seed = 42)
       : data_graph_path_(std::move(data_graph_path)),
         sample_sources_(sample_sources),
         random_seed_(random_seed) {}
@@ -33,7 +32,7 @@ class Diameter : public TaskBase {
   using ImmutableCSR = sics::matrixgraph::core::data_structures::ImmutableCSR;
 
   void LoadData();
-  void ComputeUndirectedDiameter(const ImmutableCSR& g);
+  void ComputeSkew(const ImmutableCSR& g);
 
   ImmutableCSR g_;
   std::string data_graph_path_;
@@ -46,4 +45,4 @@ class Diameter : public TaskBase {
 }  // namespace matrixgraph
 }  // namespace sics
 
-#endif  // MATRIXGRAPH_CORE_TASK_CPU_TASK_DIAMETER_H_
+#endif  // MATRIXGRAPH_CORE_TASK_CPU_TASK_SKEW_H_

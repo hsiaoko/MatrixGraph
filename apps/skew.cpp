@@ -7,22 +7,21 @@
 #include "core/common/types.h"
 #include "core/components/scheduler/scheduler.h"
 #include "core/matrixgraph.cuh"
-#include "core/task/cpu_task/diameter.h"
+#include "core/task/cpu_task/skew.h"
 #include "core/task/gpu_task/task_base.cuh"
 
 DEFINE_string(g, "", "Path to the input graph file (required)");
 DEFINE_int32(
-    diameter_samples, 50,
-    "Approximate diameter: number of random BFS source vertices. "
-    "Use 0 for exact diameter (BFS from every vertex; can be very slow).");
-DEFINE_uint64(diameter_seed, 42,
-              "RNG seed for sampling sources when diameter_samples > 0.");
+    skew_samples, 50,
+    "Approximate d_hat: number of random BFS source vertices. "
+    "Use 0 for exact d_hat (BFS from every vertex; can be very slow).");
+DEFINE_uint64(skew_seed, 42, "RNG seed for sampling sources when skew_samples > 0.");
 DEFINE_string(
     scheduler, "CHBL",
     "Scheduler type (options: CHBL, EvenSplit, RoundRobin, default: CHBL)");
 
 using sics::matrixgraph::core::components::scheduler::SchedulerType;
-using sics::matrixgraph::core::task::Diameter;
+using sics::matrixgraph::core::task::Skew;
 
 SchedulerType Scheduler2Enum(const std::string& s) {
   if (s == "EvenSplit")
@@ -39,8 +38,8 @@ bool ValidateParameters() {
     std::cerr << "Error: Input graph path (-g) is required" << std::endl;
     return false;
   }
-  if (FLAGS_diameter_samples < 0) {
-    std::cerr << "Error: diameter_samples must be >= 0 (0 = exact)"
+  if (FLAGS_skew_samples < 0) {
+    std::cerr << "Error: skew_samples must be >= 0 (0 = exact d_hat)"
               << std::endl;
     return false;
   }
@@ -48,32 +47,34 @@ bool ValidateParameters() {
 }
 
 void PrintConfig() {
-  std::cout << "\n=== Graph Diameter ===" << std::endl;
+  std::cout << "\n=== Graph Skew ===" << std::endl;
   std::cout << "Input Graph: " << FLAGS_g << std::endl;
-  std::cout << "Scheduler: " << FLAGS_scheduler << std::endl;
-  std::cout << "Metric: undirected diameter (out + in adjacency as undirected)"
+  std::cout << "skew(G) ≈ d_hat(G) / d_bar" << std::endl;
+  std::cout << "  d_hat: max BFS eccentricity (undirected: out+in adjacency), "
+               "same sampling as Diameter"
             << std::endl;
-  if (FLAGS_diameter_samples == 0) {
-    std::cout << "Mode: exact (all vertices as BFS sources; O(n*(n+m)))"
-              << std::endl;
+  std::cout << "  d_bar: mean total degree (|E_out|+|E_in|)/n" << std::endl;
+  std::cout << "Scheduler: " << FLAGS_scheduler << std::endl;
+  if (FLAGS_skew_samples == 0) {
+    std::cout << "Mode: exact d_hat (all vertices as BFS sources)" << std::endl;
   } else {
-    std::cout << "Mode: approximate, diameter_samples=" << FLAGS_diameter_samples
-              << ", diameter_seed=" << FLAGS_diameter_seed << std::endl;
+    std::cout << "Mode: approximate d_hat, skew_samples=" << FLAGS_skew_samples
+              << ", skew_seed=" << FLAGS_skew_seed << std::endl;
   }
   std::cout << "=======================\n" << std::endl;
 }
 
 int main(int argc, char* argv[]) {
   gflags::SetUsageMessage(
-      "Undirected graph diameter (default: approximate) using MatrixGraph\n"
+      "Graph skew ≈ d_hat / d_bar (default: approximate d_hat)\n"
       "Usage: " +
       std::string(argv[0]) +
-      " -g <graph_path> [-diameter_samples N] [-diameter_seed S] [options]");
+      " -g <graph_path> [-skew_samples N] [-skew_seed S] [options]");
 
   gflags::ParseCommandLineFlags(&argc, &argv, true);
 
   if (!ValidateParameters()) {
-    gflags::ShowUsageWithFlagsRestrict(argv[0], "apps/diameter.cpp");
+    gflags::ShowUsageWithFlagsRestrict(argv[0], "apps/skew.cpp");
     return EXIT_FAILURE;
   }
 
@@ -83,9 +84,9 @@ int main(int argc, char* argv[]) {
     auto scheduler_type = Scheduler2Enum(FLAGS_scheduler);
     sics::matrixgraph::core::MatrixGraph system(scheduler_type);
 
-    auto* task = new Diameter(
-        FLAGS_g, static_cast<size_t>(FLAGS_diameter_samples), FLAGS_diameter_seed);
-    system.Run(sics::matrixgraph::core::common::kDiameter, task);
+    auto* task = new Skew(FLAGS_g, static_cast<size_t>(FLAGS_skew_samples),
+                          FLAGS_skew_seed);
+    system.Run(sics::matrixgraph::core::common::kSkew, task);
     delete task;
   } catch (const std::exception& e) {
     std::cerr << "Error: " << e.what() << std::endl;

@@ -11,6 +11,8 @@ Computes **weakly connected components** on a graph in CSR form using the GPU Ha
 | `-g` | **Required.** Root path of the input graph (CSR layout + `meta.yaml`, same as other apps). |
 | `-scheduler` | `CHBL` (default), `EvenSplit`, or `RoundRobin`. |
 
+**Environment:** `MATRIXGRAPH_CUDA_DEVICE` — 0-based GPU id (default **0**). Required if you only have one GPU; previously the code targeted device 1 and could **crash (SIGSEGV)**.
+
 ## Example
 
 ```bash
@@ -25,4 +27,5 @@ Computes **weakly connected components** on a graph in CSR form using the GPU Ha
 
 ## See also
 
+- [GraphFeatures](../tools/GraphFeatures.md) — YAML summary including WCC component count
 - [Applications index](README.md)
