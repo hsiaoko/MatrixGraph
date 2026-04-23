@@ -108,5 +108,6 @@ graph_query:
 
 ## See Also
 
+- [Applications index](../apps/README.md) — all `*_exec` binaries
 - [Matrix Operations](matrix_ops.md) — Other GPU-accelerated matrix operations
 - [SubIso](../cpu_task/subiso.md) — CPU-based subgraph isomorphism

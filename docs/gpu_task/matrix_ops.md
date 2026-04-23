@@ -73,3 +73,10 @@ auto* task = new MatrixOps();
 task->Matmult(buf_A.GetPtr(), buf_B.GetPtr(), buf_C.GetPtr(), m, k, n);
 delete task;
 ```
+
+---
+
+## See also
+
+- [GEMM app](../apps/gemm.md) — `gemm_exec` tiled graph pipeline that uses GPU linear algebra
+- [Applications index](../apps/README.md)
