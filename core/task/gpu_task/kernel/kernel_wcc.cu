@@ -40,6 +40,8 @@ struct ParametersWCC {
   uint64_t* in_visited_bitmap_data;      // Input visited bitmap
   uint64_t* out_visited_bitmap_data;     // Output visited bitmap
   uint64_t* visited_bitmap_data;         // Global visited bitmap
+  // If non-null, HashMinKernel only counts WCC representatives (v_label[v]==v).
+  unsigned int* d_num_components;
 };
 
 /**
@@ -73,6 +75,15 @@ static __global__ void InitKernel(ParametersWCC params) {
 static __global__ void HashMinKernel(ParametersWCC params) {
   const unsigned int tid = blockIdx.x * blockDim.x + threadIdx.x;
   const unsigned int step = blockDim.x * gridDim.x;
+
+  if (params.d_num_components != nullptr) {
+    for (VertexID v_idx = tid; v_idx < params.n_vertices_g; v_idx += step) {
+      if (params.v_label_g[v_idx] == static_cast<VertexLabel>(v_idx)) {
+        atomicAdd(params.d_num_components, 1u);
+      }
+    }
+    return;
+  }
 
   // Get pointers to different parts of the CSR data structure
   VertexID* const globalid_g = reinterpret_cast<VertexID*>(params.data_g);
@@ -313,7 +324,8 @@ void WCCKernelWrapper::WCC(
                        .out_active_vertices_offset = out_active_vertices_offset,
                        .in_visited_bitmap_data = in_visited.data(),
                        .out_visited_bitmap_data = out_visited.data(),
-                       .visited_bitmap_data = visited.data()};
+                       .visited_bitmap_data = visited.data(),
+                       .d_num_components = nullptr};
 
   InitKernel<<<dimGrid, dimBlock, 0, stream>>>(params);
 
@@ -335,14 +347,15 @@ void WCCKernelWrapper::WCC(
         .out_active_vertices_offset = out_active_vertices_offset,
         .in_visited_bitmap_data = in_visited.data(),
         .out_visited_bitmap_data = out_visited.data(),
-        .visited_bitmap_data = visited.data()};
+        .visited_bitmap_data = visited.data(),
+        .d_num_components = nullptr};
 
     // std::cout << "Round " << round++
     //           << " Active vertices: " << in_visited.Count() << std::endl;
     std::cout << "Round " << round++
               << " Active vertices: " << *(in_active_vertices_offset)
               << std::endl;
-    HashMinKernel<<<dimGrid, dimBlock, 65536, stream>>>(params);
+    HashMinKernel<<<dimGrid, dimBlock, 0, stream>>>(params);
     // HashMinRangeKernel<<<dimGrid, dimBlock, 0, stream>>>(params);
     //    HashMinKernelActiveVertices<<<dimGrid, dimBlock, 0, stream>>>(params);
     cudaStreamSynchronize(stream);
@@ -358,6 +371,28 @@ void WCCKernelWrapper::WCC(
   }
   auto time2 = std::chrono::system_clock::now();
 
+  unsigned int* d_num_components = nullptr;
+  CUDA_CHECK(cudaMalloc(&d_num_components, sizeof(unsigned int)));
+  CUDA_CHECK(cudaMemset(d_num_components, 0, sizeof(unsigned int)));
+  ParametersWCC count_params{.n_vertices_g = n_vertices_g,
+                             .n_edges_g = n_edges_g,
+                             .data_g = nullptr,
+                             .v_label_g = v_label_g.GetPtr(),
+                             .in_active_vertices = nullptr,
+                             .out_active_vertices = nullptr,
+                             .in_active_vertices_offset = nullptr,
+                             .out_active_vertices_offset = nullptr,
+                             .in_visited_bitmap_data = nullptr,
+                             .out_visited_bitmap_data = nullptr,
+                             .visited_bitmap_data = nullptr,
+                             .d_num_components = d_num_components};
+  HashMinKernel<<<dimGrid, dimBlock, 0, stream>>>(count_params);
+  cudaStreamSynchronize(stream);
+  unsigned int num_components = 0;
+  CUDA_CHECK(cudaMemcpy(&num_components, d_num_components, sizeof(unsigned int),
+                        cudaMemcpyDeviceToHost));
+  CUDA_CHECK(cudaFree(d_num_components));
+
   std::cout << "[WCC]:"
             << std::chrono::duration_cast<std::chrono::microseconds>(time2 -
                                                                      time1)
@@ -369,11 +404,14 @@ void WCCKernelWrapper::WCC(
                        .count() /
                    (double)CLOCKS_PER_SEC
             << std::endl;
+  std::cout << "[WCC] num_weakly_connected_components: " << num_components
+            << std::endl;
 
   cudaError_t err = cudaGetLastError();
   if (err != cudaSuccess) {
     CUDA_CHECK(err);
   }
+  cudaFree(visited_bitmap_data);
   cudaFree(in_visited_bitmap_data);
   cudaFree(out_visited_bitmap_data);
   cudaFree(in_active_vertices);

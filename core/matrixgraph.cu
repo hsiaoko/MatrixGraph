@@ -10,6 +10,7 @@
 #include "core/task/gpu_task/gar_match.cuh"
 #include "core/task/gpu_task/subiso.cuh"
 #include "core/task/gpu_task/wcc.cuh"
+#include "core/task/cpu_task/diameter.h"
 
 namespace sics {
 namespace matrixgraph {
@@ -71,6 +72,12 @@ void MatrixGraph::Run(TaskType task_type, TaskBase* task_ptr) {
     case common::kBFS: {
       std::cout << "[BFS Traverse]" << std::endl;
       auto task = reinterpret_cast<task::BFS*>(task_ptr);
+      task->Run();
+      break;
+    }
+    case common::kDiameter: {
+      std::cout << "[Diameter]" << std::endl;
+      auto task = reinterpret_cast<task::Diameter*>(task_ptr);
       task->Run();
       break;
     }

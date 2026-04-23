@@ -221,6 +221,7 @@ class Edges {
   // that appears as an endpoint in this edgelist (supports non-compact IDs).
   // Uses edges sorted by src for adjacency and util::BitmapOwnership for BFS
   // visited marks ([0 .. max_vid]; size = max_vid + 1). Return is moved.
+  // Implemented in edgelist_khop.cpp (parallel std::for_each / std::sort + execution).
   std::vector<Edges> BuildKHopOutSubgraphs(VertexID k) const;
 
  private:

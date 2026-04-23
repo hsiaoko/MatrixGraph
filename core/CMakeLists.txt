@@ -114,6 +114,10 @@ if (MATRIXGRAPH_AVX_CXX_FLAGS)
 endif ()
 
 # Dependencies
+# TBB::tbb: used by oneTBB directly and required by libstdc++ parallel algorithms
+# (std::for_each / std::sort with std::execution::par) in CXX-only sources such as
+# data_structures/edgelist_khop.cpp. nvcc cannot compile <execution> reliably, so
+# that logic stays out of .cu files.
 target_link_libraries(${PROJECT_NAME}
         PUBLIC
         yaml-cpp
