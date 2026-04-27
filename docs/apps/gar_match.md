@@ -1,4 +1,4 @@
-# GARMatch (Graph Association Rule Match)
+# GARMatch (`gar_match_exec`)
 
 ## Overview
 
@@ -56,9 +56,9 @@ GAR match results written to the specified output path. The output contains:
 
 ## Source
 
-`core/task/gpu_task/gar_match.cuh`
-`core/task/gpu_task/gar_match.cu`
-`core/task/gpu_task/kernel/kernel_gar_match.cuh`
+`core/task/gpu_task/gar_match.cuh`  
+`core/task/gpu_task/gar_match.cu`  
+`core/task/gpu_task/kernel/kernel_gar_match.cuh`  
 `apps/gar_match.cu`
 
 ## Examples
@@ -108,6 +108,6 @@ graph_query:
 
 ## See Also
 
-- [Applications index](../apps/README.md) — all `*_exec` binaries
-- [Matrix Operations](matrix_ops.md) — Other GPU-accelerated matrix operations
-- [SubIso](../cpu_task/subiso.md) — CPU-based subgraph isomorphism
+- [Applications index](README.md) — all `*_exec` binaries
+- [Matrix Operations](../gpu_task/matrix_ops.md) — other GPU matrix helpers used by the stack
+- [SubIso (CPU)](cpu_subiso.md) — CPU-based subgraph isomorphism

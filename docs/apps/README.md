@@ -11,8 +11,8 @@ Executables are built as `<name>_exec` from `apps/<name>.{cpp,cu}` (see `apps/CM
 | `skew_exec` | [Skew](skew.md) | skew ≈ d_hat / d_bar (CPU; same d_hat sampling as Diameter) |
 | `gemm_exec` | [GEMM](gemm.md) | Tiled graph/matrix pipeline (GPU) |
 | `subiso_exec` | [SubIso (GPU)](subiso_gpu.md) | Subgraph isomorphism (GPU) |
-| `cpu_subiso_exec` | [SubIso (CPU)](../cpu_task/subiso.md) | Subgraph isomorphism (CPU, VF3 / ML filter) |
-| `gar_match_exec` | [GARMatch](../gpu_task/gar_match.md) | Graph association rule matching (GPU, ArangoDB) |
+| `cpu_subiso_exec` | [SubIso (CPU)](cpu_subiso.md) | Subgraph isomorphism (CPU, VF3 / ML filter) |
+| `gar_match_exec` | [GARMatch](gar_match.md) | Graph association rule matching (GPU, ArangoDB) |
 
 ## Build
 

@@ -2,7 +2,7 @@
 
 ## Overview
 
-**Subgraph isomorphism** on the GPU (`core/task/gpu_task/subiso.cu`). Separate from the CPU VF3 / ML pipeline ([SubIso (CPU)](../cpu_task/subiso.md)).
+**Subgraph isomorphism** on the GPU (`core/task/gpu_task/subiso.cu`). Separate from the CPU VF3 / ML pipeline ([SubIso (CPU)](cpu_subiso.md)).
 
 ## Parameters
 
@@ -28,5 +28,5 @@
 
 ## See also
 
-- [SubIso (CPU)](../cpu_task/subiso.md) — `cpu_subiso_exec`
+- [SubIso (CPU)](cpu_subiso.md) — `cpu_subiso_exec`
 - [Applications index](README.md)

@@ -2,7 +2,7 @@
 
 ## Overview
 
-MatrixGraph is a C++/CUDA library for parallel graph computing. This directory contains documentation for tools, GPU tasks, CPU tasks, and command-line **applications**.
+MatrixGraph is a C++/CUDA library for parallel graph computing. This directory contains documentation for tools, optional **GPU library** APIs (`docs/gpu_task/`), and command-line **applications** (`docs/apps/`).
 
 For a **single YAML summary** of a CSR dataset (|V|, |E|, degree stats, approximate diameter & skew, WCC count), use **[GraphFeatures](tools/GraphFeatures.md)** (`tools/python/graph_features.py`), which shells out to `wcc_exec`, `diameter_exec`, and `skew_exec`.
 
@@ -23,8 +23,8 @@ Shipped executables are built as `<name>_exec` from `apps/`. Full table, build h
 | `skew_exec` | [Skew](apps/skew.md) |
 | `gemm_exec` | [GEMM](apps/gemm.md) |
 | `subiso_exec` | [SubIso (GPU)](apps/subiso_gpu.md) |
-| `cpu_subiso_exec` | [SubIso (CPU)](cpu_task/subiso.md) |
-| `gar_match_exec` | [GARMatch](gpu_task/gar_match.md) |
+| `cpu_subiso_exec` | [SubIso (CPU)](apps/cpu_subiso.md) |
+| `gar_match_exec` | [GARMatch](apps/gar_match.md) |
 
 ---
 
@@ -45,22 +45,17 @@ Shipped executables are built as `<name>_exec` from `apps/`. Full table, build h
 
 ---
 
-## CPU Tasks
+## CPU graph metrics (via apps)
 
-| Document | Description |
-|----------|--------------|
-| [SubIso](cpu_task/subiso.md) | Subgraph isomorphism (VF3 + ML filter) |
-
-**CPU metrics (via apps):** [Diameter](apps/diameter.md) and [Skew](apps/skew.md) implement host-side BFS statistics; see also [GraphFeatures](tools/GraphFeatures.md) to batch-export YAML.
+[Diameter](apps/diameter.md) and [Skew](apps/skew.md) implement host-side BFS statistics; see also [GraphFeatures](tools/GraphFeatures.md) to batch-export YAML.
 
 ---
 
-## GPU Tasks
+## GPU library APIs
 
 | Document | Description |
 |----------|--------------|
-| [Matrix Operations](gpu_task/matrix_ops.md) | Matmult, Activate (ReLU) |
-| [GARMatch](gpu_task/gar_match.md) | Graph association rule matching (ArangoDB + GPU); app: `gar_match_exec` |
+| [Matrix Operations](gpu_task/matrix_ops.md) | Matmult, Activate (ReLU); C++ API, not a standalone `*_exec` |
 
 ---
 

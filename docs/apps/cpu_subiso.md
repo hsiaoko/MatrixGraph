@@ -1,4 +1,4 @@
-# SubIso (Subgraph Isomorphism)
+# SubIso — CPU (`cpu_subiso_exec`)
 
 ## Overview
 
@@ -57,7 +57,7 @@ Subgraph isomorphism matches (format depends on application output configuration
 
 ## See Also
 
-- [Applications index](../apps/README.md) — all `*_exec` binaries
-- [SubIso (GPU)](../apps/subiso_gpu.md) — `subiso_exec`
+- [Applications index](README.md) — all `*_exec` binaries
+- [SubIso (GPU)](subiso_gpu.md) — `subiso_exec`
 - [SubIsoTraining.md](../tools/SubIsoTraining.md) — ML model training
 - [GraphConverter.md](../tools/GraphConverter.md) — CSR conversion (`csrbin2vf3`, etc.)

@@ -68,4 +68,4 @@ python tools/python/train_config.py --config config.yaml
 ## See Also
 
 - [Preprocessing4MatrixFilter.md](Preprocessing4MatrixFilter.md) — preprocessing pipeline
-- [subiso.md](../cpu_task/subiso.md) — SubIso application usage
+- [cpu_subiso.md](../apps/cpu_subiso.md) — `cpu_subiso_exec` usage
