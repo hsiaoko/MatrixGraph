@@ -109,5 +109,5 @@ graph_query:
 ## See Also
 
 - [Applications index](README.md) — all `*_exec` binaries
-- [Matrix Operations](../gpu_task/matrix_ops.md) — other GPU matrix helpers used by the stack
+- [GEMM / MatrixOps](gemm.md#matrixops-c-api) — dense GPU `Matmult` / `Activate` helpers (`matrix_ops.cuh`)
 - [SubIso (CPU)](cpu_subiso.md) — CPU-based subgraph isomorphism

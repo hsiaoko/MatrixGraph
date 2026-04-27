@@ -2,7 +2,7 @@
 
 ## Overview
 
-MatrixGraph is a C++/CUDA library for parallel graph computing. This directory contains documentation for tools, optional **GPU library** APIs (`docs/gpu_task/`), and command-line **applications** (`docs/apps/`).
+MatrixGraph is a C++/CUDA library for parallel graph computing. This directory contains documentation for **tools** and command-line **applications** (`docs/apps/`). The [GEMM](apps/gemm.md) page also documents the `MatrixOps` C++ API (`Matmult` / `Activate`) used outside `gemm_exec`.
 
 For a **single YAML summary** of a CSR dataset (|V|, |E|, degree stats, approximate diameter & skew, WCC count), use **[GraphFeatures](tools/GraphFeatures.md)** (`tools/python/graph_features.py`), which shells out to `wcc_exec`, `diameter_exec`, and `skew_exec`.
 
@@ -48,14 +48,6 @@ Shipped executables are built as `<name>_exec` from `apps/`. Full table, build h
 ## CPU graph metrics (via apps)
 
 [Diameter](apps/diameter.md) and [Skew](apps/skew.md) implement host-side BFS statistics; see also [GraphFeatures](tools/GraphFeatures.md) to batch-export YAML.
-
----
-
-## GPU library APIs
-
-| Document | Description |
-|----------|--------------|
-| [Matrix Operations](gpu_task/matrix_ops.md) | Matmult, Activate (ReLU); C++ API, not a standalone `*_exec` |
 
 ---
 
