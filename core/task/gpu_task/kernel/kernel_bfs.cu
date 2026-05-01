@@ -10,6 +10,7 @@
 #include "core/data_structures/mini_kernel_bitmap.cuh"
 #include "core/task/gpu_task/kernel/kernel_bfs.cuh"
 #include "core/util/bitmap_no_ownership.h"
+#include "core/util/cuda_launch_dims.cuh"
 
 namespace sics {
 namespace matrixgraph {
@@ -156,8 +157,8 @@ void BFSKernelWrapper::BFS(
                        .visited_bitmap_data = visited.data(),
                        .current_level = 0};
 
-  dim3 dimBlock(kBlockDim);
-  dim3 dimGrid(kGridDim);
+  dim3 dimBlock(util::MatrixGraphEnvLaunchBlockDim(kBlockDim));
+  dim3 dimGrid(util::MatrixGraphEnvLaunchGridDim(kGridDim));
 
   InitKernel<<<dimGrid, dimBlock, 0, stream>>>(params, source_vertex);
   cudaStreamSynchronize(stream);

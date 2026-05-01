@@ -27,8 +27,10 @@ static const uint64_t kMaxNumCandidates = 65536;
 static const uint64_t kMaxNumCandidatesPerThread = 128;
 static const uint64_t kMaxNumLocalWeft = 1 << 8;
 
-// WOJ SubIso
-static const uint64_t kMaxNumWeft = 1 << 13;
+// WOJ SubIso: total WOJMatches buffer is n_edges_p * kMaxNumWeft VertexIDs;
+// row-major stride is get_x_offset() (2 on filter), so max rows are
+// (n_edges_p * kMaxNumWeft) / stride. Keep large enough for dense data graphs.
+static const uint64_t kMaxNumWeft = 1 << 16;
 
 // GPU configure.
 static const uint32_t kSharedMemoryCapacity = 65536;  // 64kb per SM for V100

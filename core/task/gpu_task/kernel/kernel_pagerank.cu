@@ -9,6 +9,7 @@
 #include "core/data_structures/kernel_bitmap_no_ownership.cuh"
 #include "core/task/gpu_task/kernel/kernel_pagerank.cuh"
 #include "core/util/bitmap_no_ownership.h"
+#include "core/util/cuda_launch_dims.cuh"
 
 namespace sics {
 namespace matrixgraph {
@@ -189,8 +190,8 @@ void PageRankKernelWrapper::PageRank(
     const data_structures::UnifiedOwnedBuffer<uint8_t>& data_g,
     data_structures::UnifiedOwnedBuffer<float>& page_ranks,
     float damping_factor, float epsilon, int max_iterations) {
-  dim3 dimBlock(kBlockDim);
-  dim3 dimGrid(kGridDim);
+  dim3 dimBlock(util::MatrixGraphEnvLaunchBlockDim(kBlockDim));
+  dim3 dimGrid(util::MatrixGraphEnvLaunchGridDim(kGridDim));
 
   uint64_t* visited_bitmap_data;
   CUDA_CHECK(cudaMallocManaged(

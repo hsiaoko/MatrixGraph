@@ -1,46 +1,45 @@
-cmake_minimum_required(VERSION 3.20)
-project(graph_converter LANGUAGES CXX CUDA)
 
 #######################
-# Directory Structure
+# graph_converter — 纯主机 CXX；ParForEach 等在 __CUDACC__ 外走 std::execution::par。
 #######################
 set(EXECUTABLE_OUTPUT_PATH ${PROJECT_ROOT_DIR}/bin/tools)
 
-#######################
-# Source Files
-#######################
-file(GLOB_RECURSE CONVERTER_SOURCES
-        "${CMAKE_CURRENT_SOURCE_DIR}/converter/*.cu"
-        "${CMAKE_CURRENT_SOURCE_DIR}/converter/*.cpp"
-        )
+set(CONVERTER_MAIN "${CMAKE_CURRENT_SOURCE_DIR}/graph_converter.cpp")
 
-#######################
-# Executables
-#######################
-file(GLOB CONVERTER_APPS "${CMAKE_CURRENT_SOURCE_DIR}/*.cu")
-foreach (app_source ${CONVERTER_APPS})
-    get_filename_component(app_name ${app_source} NAME_WE)
-    message(STATUS "[Graph Converter] Adding executable: ${app_name}")
+if(EXISTS "${CONVERTER_MAIN}")
+    add_executable(graph_converter ${CONVERTER_MAIN} ${TOOLS_SOURCES})
 
-    # Create executable
-    add_executable("${app_name}"
-            ${app_source}
-            ${TOOLS_SOURCES}
-            )
+    if(DEFINED CMAKE_CUDA_COMPILER)
+        get_filename_component(_gc_cuda_bin "${CMAKE_CUDA_COMPILER}" DIRECTORY)
+        get_filename_component(_gc_cuda_root "${_gc_cuda_bin}" DIRECTORY)
+        target_include_directories(graph_converter PRIVATE "${_gc_cuda_root}/include")
+        target_link_directories(graph_converter PRIVATE "${_gc_cuda_root}/lib64")
+    else()
+        target_include_directories(graph_converter PRIVATE ${CMAKE_CUDA_TOOLKIT_INCLUDE_DIRECTORIES})
+    endif()
 
-    # Link dependencies
-    target_link_libraries("${app_name}"
+    target_link_libraries(graph_converter
             PRIVATE
             matrixgraph_core
             yaml-cpp
             gflags::gflags
-	    TBB::tbb
+            TBB::tbb
             stdc++fs
+            cudart
             )
 
-    # Set target properties
-    set_target_properties("${app_name}" PROPERTIES
-            CUDA_SEPARABLE_COMPILATION ON
+    # format_converter.cuh 经 cuda_check/gpu_bitmap 等仍可包含 CUDA 头与非关键字；
+    # 由 g++ 编译时需屏蔽 nvcc 专用关键字。
+    target_compile_definitions(graph_converter PRIVATE
+            "__host__="
+            "__device__="
+            )
+
+    set_target_properties(graph_converter PROPERTIES
             POSITION_INDEPENDENT_CODE ON
             )
-endforeach ()
+
+    message(STATUS "[Graph Converter] CXX executable graph_converter (${CONVERTER_MAIN})")
+else()
+    message(WARNING "[Graph Converter] graph_converter.cpp not found; skipping tool.")
+endif()

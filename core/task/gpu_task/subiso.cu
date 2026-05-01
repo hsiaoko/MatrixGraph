@@ -206,7 +206,8 @@ __host__ void SubIso::WOJMatching(const ImmutableCSR& p,
   // Generate Execution Plan
   WOJExecutionPlan exec_plan;
   exec_plan.GenerateWOJExecutionPlan(p, g);
-  exec_plan.SetNDevices(1);
+  exec_plan.SetCudaDeviceIds(
+      sics::matrixgraph::core::util::MatrixGraphCudaDeviceList());
 
   auto start_time_0 = std::chrono::system_clock::now();
   auto woj_matches = WOJSubIsoKernelWrapper::Filter(exec_plan, p, g);

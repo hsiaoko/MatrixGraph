@@ -4,6 +4,8 @@
 #include <memory>
 #include <stdint.h>
 
+#include <cuda_runtime.h>
+
 #include "core/common/types.h"
 #include "core/data_structures/metadata.h"
 #include "core/util/bitmap.h"

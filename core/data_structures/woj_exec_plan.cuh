@@ -9,6 +9,7 @@
 #include "core/data_structures/metadata.h"
 #include "core/data_structures/unified_buffer.cuh"
 #include "core/util/bitmap.h"
+#include <vector>
 
 namespace sics {
 namespace matrixgraph {
@@ -28,7 +29,7 @@ class WOJExecutionPlan {
   using ImmutableCSR = sics::matrixgraph::core::data_structures::ImmutableCSR;
 
  public:
-  WOJExecutionPlan() { CUDA_CHECK(cudaGetDeviceCount(&n_devices_)); }
+  WOJExecutionPlan() = default;
 
   __host__ void GenerateWOJExecutionPlan(const ImmutableCSR& p,
                                          const ImmutableCSR& g) {
@@ -53,6 +54,24 @@ class WOJExecutionPlan {
 
   inline void SetNDevices(VertexID n_devices) { n_devices_ = n_devices; }
 
+  // Maps logical GPU index 0..n-1 to physical cuda device ids (for multi-GPU).
+  // If unset, CudaDeviceId(i) returns i.
+  inline void SetCudaDeviceIds(const std::vector<int>& ids) {
+    cuda_device_ids_ = ids;
+    if (!cuda_device_ids_.empty()) {
+      n_devices_ = static_cast<VertexID>(cuda_device_ids_.size());
+    }
+  }
+
+  inline int CudaDeviceId(int logical_index) const {
+    const int n = n_devices_ > 0 ? static_cast<int>(n_devices_) : 1;
+    const int lid = ((logical_index % n) + n) % n;
+    if (!cuda_device_ids_.empty()) {
+      return cuda_device_ids_[static_cast<size_t>(lid)];
+    }
+    return lid;
+  }
+
   inline VertexID* get_exec_path_in_edges_ptr() const {
     return exec_path_in_edges_;
   }
@@ -76,6 +95,8 @@ class WOJExecutionPlan {
   VertexID n_edges_g_ = 0;
 
   int n_devices_ = 1;
+
+  std::vector<int> cuda_device_ids_;
 
   std::vector<VertexID> join_key_uid_;
 };

@@ -7,6 +7,7 @@
 #include <mutex>
 #include <thread>
 #include <unordered_map>
+#include <vector>
 
 #include "core/common/consts.h"
 #include "core/common/host_algorithms.cuh"
@@ -23,6 +24,7 @@
 #include "core/util/bitmap_no_ownership.h"
 #include "core/util/cuda_check.cuh"
 #include "core/util/cuda_device.cuh"
+#include "core/util/cuda_prefetch.cuh"
 #include "core/util/format_converter.cuh"
 
 namespace sics {
@@ -61,8 +63,11 @@ __host__ void BFS::ExecuteBFS(const ImmutableCSR& g, VertexID src) {
   std::iota(worker.begin(), worker.end(), 0);
   auto step = worker.size();
 
-  CUDA_CHECK(cudaSetDevice(
-      sics::matrixgraph::core::util::MatrixGraphCudaDevice()));
+  const std::vector<int> cuda_devices =
+      sics::matrixgraph::core::util::MatrixGraphCudaDeviceList();
+  const int primary_gpu =
+      cuda_devices.empty() ? 0 : cuda_devices[0];
+  CUDA_CHECK(cudaSetDevice(primary_gpu));
 
   // Initialize buffers
   UnifiedOwnedBufferUint8 unified_data_g;
@@ -86,15 +91,22 @@ __host__ void BFS::ExecuteBFS(const ImmutableCSR& g, VertexID src) {
   v_label_g.size = sizeof(VertexLabel) * g.get_max_vid();
   unified_v_label_g.Init(v_label_g);
 
-  // Execute BFS
+  sics::matrixgraph::core::util::MatrixGraphPrefetchManagedToDevice(
+      primary_gpu,
+      sics::matrixgraph::core::util::MatrixGraphCudaStreamsPerGpu(),
+      {{reinterpret_cast<void*>(unified_data_g.GetPtr()),
+        unified_data_g.GetSize()},
+       {reinterpret_cast<void*>(unified_v_label_g.GetPtr()),
+        unified_v_label_g.GetSize()}});
+
   cudaStream_t stream;
-  cudaStreamCreate(&stream);
+  CUDA_CHECK(cudaStreamCreate(&stream));
 
   BFSKernelWrapper::BFS(stream, g.get_num_vertices(),
                         g.get_num_outgoing_edges(), src, unified_data_g,
                         unified_v_label_g);
 
-  cudaStreamDestroy(stream);
+  CUDA_CHECK(cudaStreamDestroy(stream));
 }
 
 __host__ void BFS::Run() {

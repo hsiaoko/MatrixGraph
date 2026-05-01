@@ -1,5 +1,7 @@
 #include "core/task/cpu_task/skew.h"
 
+#include "core/util/cpu_parallel_scope.h"
+
 #include <algorithm>
 #include <atomic>
 #include <chrono>
@@ -16,6 +18,8 @@ namespace sics {
 namespace matrixgraph {
 namespace core {
 namespace task {
+
+using util::CpuParallelScope;
 
 using VertexID = sics::matrixgraph::core::common::VertexID;
 using ImmutableCSRGraph =
@@ -88,6 +92,7 @@ void Skew::ComputeSkew(const ImmutableCSRGraph& g) {
     std::sample(pool.begin(), pool.end(), sources.begin(), k, gen);
   }
 
+  CpuParallelScope cap_threads(cpu_parallelism_);
   std::atomic<uint32_t> d_hat_atomic{0};
   std::for_each(std::execution::par, sources.begin(), sources.end(),
                 [&](VertexID s) {

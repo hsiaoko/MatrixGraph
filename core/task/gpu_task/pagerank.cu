@@ -7,6 +7,7 @@
 #include <numeric>
 #include <thread>
 #include <unordered_map>
+#include <vector>
 
 #include "core/util/execution_policy.h"
 
@@ -22,6 +23,7 @@
 #include "core/util/atomic.h"
 #include "core/util/cuda_check.cuh"
 #include "core/util/cuda_device.cuh"
+#include "core/util/cuda_prefetch.cuh"
 
 namespace sics {
 namespace matrixgraph {
@@ -67,8 +69,11 @@ __host__ void PageRank::ComputePageRank(const ImmutableCSR& g) {
   std::iota(worker.begin(), worker.end(), 0);
   auto step = worker.size();
 
-  CUDA_CHECK(cudaSetDevice(
-      sics::matrixgraph::core::util::MatrixGraphCudaDevice()));
+  const std::vector<int> cuda_devices =
+      sics::matrixgraph::core::util::MatrixGraphCudaDeviceList();
+  const int primary_gpu =
+      cuda_devices.empty() ? 0 : cuda_devices[0];
+  CUDA_CHECK(cudaSetDevice(primary_gpu));
 
   // Init data_graph.
   BufferUint8 data_g;
@@ -103,15 +108,24 @@ __host__ void PageRank::ComputePageRank(const ImmutableCSR& g) {
   UnifiedOwnedBufferFloat unified_page_ranks;
   unified_page_ranks.Init(page_ranks);
 
-  // Start PageRank ...
+  sics::matrixgraph::core::util::MatrixGraphPrefetchManagedToDevice(
+      primary_gpu,
+      sics::matrixgraph::core::util::MatrixGraphCudaStreamsPerGpu(),
+      {{reinterpret_cast<void*>(unified_data_g.GetPtr()),
+        unified_data_g.GetSize()},
+       {reinterpret_cast<void*>(unified_v_label_g.GetPtr()),
+        unified_v_label_g.GetSize()},
+       {reinterpret_cast<void*>(unified_page_ranks.GetPtr()),
+        unified_page_ranks.GetSize()}});
+
   cudaStream_t stream;
-  cudaStreamCreate(&stream);
+  CUDA_CHECK(cudaStreamCreate(&stream));
 
   PageRankKernelWrapper::PageRank(
       stream, g.get_num_vertices(), g.get_num_outgoing_edges(), unified_data_g,
       unified_page_ranks, damping_factor_, epsilon_, max_iterations_);
 
-  cudaStreamDestroy(stream);
+  CUDA_CHECK(cudaStreamDestroy(stream));
 }
 
 __host__ void PageRank::Run() {

@@ -82,9 +82,15 @@ Full vertex/edge instances are in `pivot_graphs.jsonl`.
 - `single`: export all vertices/edges into one pivot graph (pivot id is `pg_0`).
 - `source`: group by edge source vertex, and export one pivot graph per source (pivot id is `pg_<src_id>`).
 
-## Source
+## Source / build notes
 
-`tools/graph_converter/graph_converter.cu`
+**Entry**: `tools/graph_converter/graph_converter.cpp` (pure host C++; built with the C++ toolchain, **not** `nvcc`).
+
+**Shared helpers**: `tools/common/edgelist_subgraphs_io.cpp` (partitioned edge-list I/O).
+
+The converter includes `core/util/format_converter.cuh` and other headers. Parallel loops use `ParForEach` from `core/util/execution_policy.h`; in **CXX translation units**, that maps to `std::for_each` with `std::execution::par`. The linker still pulls in **CUDA runtime** (`cudart`) and uses the toolkit include path so headers that reference `cuda_runtime.h` (for example inlined host allocation in tiling types) compile cleanly—the tool itself runs only on the host.
+
+Implementations remain in `tools/graph_converter/converter/*.cuh`.
 
 ## Examples
 

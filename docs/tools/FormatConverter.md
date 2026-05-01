@@ -2,7 +2,7 @@
 
 ## Overview
 
-Internal C++ utilities for converting between graph formats. Used by the `graph_converter` CLI and other tools.
+Internal C++ utilities for converting between graph formats. Used by the `graph_converter` CLI and other tools. Parallel traversal uses `ParForEach` in `core/util/execution_policy.h`: **parallel** (`std::execution::par`) in normal C++ sources, **serial** inside translation units compiled with `nvcc` (no `<execution>` there).
 
 ## Source
 

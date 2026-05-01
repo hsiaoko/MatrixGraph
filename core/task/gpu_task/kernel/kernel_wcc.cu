@@ -5,6 +5,7 @@
 #include "core/data_structures/mini_kernel_bitmap.cuh"
 #include "core/task/gpu_task/kernel/kernel_wcc.cuh"
 #include "core/util/bitmap_no_ownership.h"
+#include "core/util/cuda_launch_dims.cuh"
 #include <chrono>
 #include <cuda_runtime.h>
 #include <iostream>
@@ -276,8 +277,8 @@ void WCCKernelWrapper::WCC(
     const cudaStream_t& stream, VertexID n_vertices_g, EdgeIndex n_edges_g,
     const data_structures::UnifiedOwnedBuffer<uint8_t>& data_g,
     const data_structures::UnifiedOwnedBuffer<VertexLabel>& v_label_g) {
-  dim3 dimBlock(kBlockDim);
-  dim3 dimGrid(kGridDim);
+  dim3 dimBlock(util::MatrixGraphEnvLaunchBlockDim(kBlockDim));
+  dim3 dimGrid(util::MatrixGraphEnvLaunchGridDim(kGridDim));
   // dim3 dimBlock(1);
   // dim3 dimGrid(1);
 
