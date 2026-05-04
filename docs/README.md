@@ -47,7 +47,7 @@ Shipped executables are built as `<name>_exec` from `apps/`. Full table, build h
 
 ## CPU graph metrics (via apps)
 
-[Diameter](apps/diameter.md) and [Skew](apps/skew.md) implement host-side BFS statistics; see also [GraphFeatures](tools/GraphFeatures.md) to batch-export YAML.
+[Diameter](apps/diameter.md) and [Skew](apps/skew.md) implement host-side BFS statistics; both accept **`-cpu_parallel`** to cap oneTBB-backed parallelism over sources. See also [GraphFeatures](tools/GraphFeatures.md) to batch-export YAML, and [Applications index — batch benchmarks](apps/README.md#batch-benchmarks-autoconfig-yaml) for **`scripts/run_autoconfig_gpu_exp.py`** (maps YAML **`cpu_cores`** to `-cpu_parallel`).
 
 ---
 

@@ -11,7 +11,7 @@ Reports **skew** as a dimensionless ratio:
 - **\(\hat{d}(G)\)** — same as [Diameter](diameter.md): undirected BFS (out + in adjacency), **max eccentricity** over BFS sources. Default: **50 random** sources; `0` = exact (all vertices).
 - **\(\overline{d}\)** — mean **total** degree per vertex: \((|E_{\text{out}}| + |E_{\text{in}}|) / n\) from the CSR metadata.
 
-CPU-only, parallel over sources (`std::execution::par`).
+CPU-only: parallel loop over BFS sources uses **`std::execution::par`** (oneTBB-backed). Use **`-cpu_parallel`** to cap worker threads (**`0`** = default unlimited); see `core/util/cpu_parallel_scope.h`.
 
 ## Parameters
 
@@ -20,12 +20,14 @@ CPU-only, parallel over sources (`std::execution::par`).
 | `-g` | **Required.** Input graph directory (CSR). |
 | `-skew_samples` | Random BFS sources for \(\hat{d}\) (default **50**). **`0` = exact** \(\hat{d}\). |
 | `-skew_seed` | RNG seed (default **42**). |
+| `-cpu_parallel` | Max oneTBB workers for the parallel loop over sources (**`0` = default / unlimited**). |
 | `-scheduler` | `CHBL` (default), `EvenSplit`, or `RoundRobin`. |
 
 ## Example
 
 ```bash
 ./bin/skew_exec -g /path/to/csr_graph/
+./bin/skew_exec -g /path/to/csr_graph/ -cpu_parallel=16
 ./bin/skew_exec -g /path/to/csr_graph/ -skew_samples 200 -skew_seed 1
 ./bin/skew_exec -g /path/to/csr_graph/ -skew_samples 0   # exact d_hat
 ```
@@ -34,6 +36,7 @@ CPU-only, parallel over sources (`std::execution::par`).
 
 - `apps/skew.cpp`
 - `core/task/cpu_task/skew.h`, `skew.cpp`
+- `core/util/cpu_parallel_scope.h`
 
 ## See also
 

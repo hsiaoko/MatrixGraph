@@ -35,3 +35,18 @@ To generate a **YAML** with `num_vertices`, `num_edges`, degree **avg/max/min/st
 ```bash
 python3 tools/python/graph_features.py -g /path/to/csr_graph/ -o graph_features.yaml
 ```
+
+## Batch benchmarks (AutoConfig YAML)
+
+Use **`scripts/run_autoconfig_gpu_exp.py`** for sweeps over AutoConfig GPU YAMLs (`conf_*.yaml` with `grid_size`, `block_size`, **`cpu_cores`**, etc.). Besides **wcc / bfs / pagerank / subiso**, it supports **`diameter`** and **`skew`**. For those CPU apps it passes **`-cpu_parallel=<cpu_cores>`** from each YAML’s `configurations[0].resource.cpu_cores` when that value is positive, so per-conf parallelism matches the sampled catalog. Logs go under **`exp/gpu/<dataset>/conf_xx/`** (`diameter.log`, `skew.log`, …); **`SKIP_GPU`** still runs diameter/skew when they are listed in **`--apps`**.
+
+Example:
+
+```bash
+python3 scripts/run_autoconfig_gpu_exp.py \
+  --apps diameter,skew \
+  --datasets web-sk,livejournal \
+  --conf-dir /path/to/AutoConfig/exp/conf/gpu
+```
+
+See also [Diameter](diameter.md) and [Skew](skew.md) for **`-cpu_parallel`** when invoking **`diameter_exec`** / **`skew_exec`** manually.
