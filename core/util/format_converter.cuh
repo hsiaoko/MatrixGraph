@@ -263,7 +263,6 @@ static ImmutableCSR* Edgelist2ImmutableCSR(const Edges& edgelist) {
         }
       });
 
-  std::cout << edgelist.get_metadata().num_vertices << std::endl;
   immutable_csr->SetVertexLabelBuffer(
       new VertexLabel[edgelist.get_metadata().num_vertices]());
 

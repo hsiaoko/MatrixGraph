@@ -53,17 +53,10 @@ using WOJExecutionPlan =
     sics::matrixgraph::core::data_structures::WOJExecutionPlan;
 using ExecutionPlan = sics::matrixgraph::core::data_structures::ExecutionPlan;
 using BitmapOwnership = sics::matrixgraph::core::util::BitmapOwnership;
-using sics::matrixgraph::core::common::kLogWarpSize;
 using sics::matrixgraph::core::common::kMaxNumLocalWeft;
 using sics::matrixgraph::core::common::kMaxNumWeft;
+using sics::matrixgraph::core::common::kMaxMatchTableRows;
 using sics::matrixgraph::core::common::kMaxVertexID;
-using sics::matrixgraph::core::common::kNCUDACoresPerSM;
-using sics::matrixgraph::core::common::kNSMsPerGPU;
-using sics::matrixgraph::core::common::kNWarpPerCUDACore;
-using sics::matrixgraph::core::common::kSharedMemoryCapacity;
-using sics::matrixgraph::core::common::kSharedMemorySize;
-using sics::matrixgraph::core::common::kWarpSize;
-using BitmapOwnership = sics::matrixgraph::core::util::BitmapOwnership;
 using BitmapNoOwnerShip = sics::matrixgraph::core::util::BitmapNoOwnerShip;
 using sics::matrixgraph::core::common::kDefaultHeapCapacity;
 
@@ -342,7 +335,7 @@ static std::vector<WOJMatches*> WOJFilter(
 
   for (VertexID _ = 0; _ < exec_plan.get_n_edges_p(); _++) {
     woj_matches_vec[_] = new WOJMatches();
-    woj_matches_vec[_]->Init(exec_plan.get_n_edges_p(), kMaxNumWeft);
+    woj_matches_vec[_]->Init(exec_plan.get_n_edges_p(), kMaxMatchTableRows);
     woj_matches_vec[_]->SetXOffset(2);
     woj_matches_vec[_]->SetYOffset(0);
     woj_matches_vec[_]->SetHeader(
@@ -436,7 +429,7 @@ static inline void Join(VertexID n_vertices_g,
               // Write direct on the global memory.
               auto output_y_offset =
                   __sync_fetch_and_add(output_y_offset_ptr, 1);
-              if (output_y_offset > kMaxNumWeft / output_x_offset) break;
+              if (output_y_offset > kMaxMatchTableRows / output_x_offset) break;
 
               memcpy(output_data + output_y_offset * output_x_offset,
                      left_data + left_data_offset * left_x_offset,
@@ -461,7 +454,7 @@ static inline void Join(VertexID n_vertices_g,
               // Write direct on the global memory.
               auto output_y_offset =
                   __sync_fetch_and_add(output_y_offset_ptr, 1);
-              if (output_y_offset > kMaxNumWeft / output_x_offset) break;
+              if (output_y_offset > kMaxMatchTableRows / output_x_offset) break;
 
               memcpy(output_data + output_y_offset * output_x_offset,
                      left_data + left_data_offset * left_x_offset,
@@ -493,7 +486,7 @@ static WOJMatches* WOJEnumerating(
   auto step = worker.size();
 
   WOJMatches* output_woj_matches = new WOJMatches();
-  output_woj_matches->Init(exec_plan.get_n_edges_p(), kMaxNumWeft);
+  output_woj_matches->Init(exec_plan.get_n_edges_p(), kMaxMatchTableRows);
 
   // Sort candidate
   BitmapOwnership header_visited(32);

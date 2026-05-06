@@ -6,9 +6,9 @@
 #include <iostream>
 #include <mutex>
 #include <thread>
+#include <vector>
 #include <unordered_map>
 
-#include "core/common/consts.h"
 #include "core/common/host_algorithms.cuh"
 #include "core/common/types.h"
 #include "core/data_structures/device_buffer.cuh"
@@ -90,15 +90,8 @@ using EdgelistMetadata =
     sics::matrixgraph::core::data_structures::EdgelistMetadata;
 using GridGraphMetadata =
     sics::matrixgraph::core::data_structures::GridGraphMetadata;
-using sics::matrixgraph::core::common::kDefalutNumEdgesPerBlock;
-using sics::matrixgraph::core::common::kDefalutNumEdgesPerTile;
-using sics::matrixgraph::core::common::kMaxNumCandidates;
-using sics::matrixgraph::core::common::kMaxNumEdges;
-using sics::matrixgraph::core::common::kMaxNumEdgesPerBlock;
-using sics::matrixgraph::core::common::kMaxVertexID;
 using Matches = sics::matrixgraph::core::data_structures::Matches;
 using WOJMatches = sics::matrixgraph::core::data_structures::WOJMatches;
-using sics::matrixgraph::core::common::kMaxNumWeft;
 
 __host__ void SubIso::LoadData() {
   std::cout << "[SubIso] LoadData() ..." << std::endl;
@@ -206,8 +199,27 @@ __host__ void SubIso::WOJMatching(const ImmutableCSR& p,
   // Generate Execution Plan
   WOJExecutionPlan exec_plan;
   exec_plan.GenerateWOJExecutionPlan(p, g);
-  exec_plan.SetCudaDeviceIds(
-      sics::matrixgraph::core::util::MatrixGraphCudaDeviceList());
+  const std::vector<int> cuda_devices =
+      sics::matrixgraph::core::util::MatrixGraphCudaDeviceList();
+  exec_plan.SetCudaDeviceIds(cuda_devices);
+
+  std::cout << "[SubIso] WOJMatching: execution plan |V_p|="
+            << exec_plan.get_n_vertices_p() << " |E_p|="
+            << exec_plan.get_n_edges_p() << " |V_g|="
+            << exec_plan.get_n_vertices_g() << " |E_g|="
+            << exec_plan.get_n_edges_g() << std::endl;
+  std::cout << "[SubIso] WOJMatching: plan uses " << exec_plan.get_n_devices()
+            << " logical GPU(s), device id(s): ";
+  for (size_t i = 0; i < cuda_devices.size(); ++i) {
+    if (i) {
+      std::cout << ", ";
+    }
+    std::cout << cuda_devices[i];
+  }
+  std::cout << std::endl;
+  std::cout << "[SubIso] WOJMatching: step 1 WOJSubIsoKernelWrapper::Filter, "
+               "step 2 Join ..."
+            << std::endl;
 
   auto start_time_0 = std::chrono::system_clock::now();
   auto woj_matches = WOJSubIsoKernelWrapper::Filter(exec_plan, p, g);

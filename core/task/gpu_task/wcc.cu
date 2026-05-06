@@ -9,7 +9,6 @@
 #include <unordered_map>
 #include <vector>
 
-#include "core/common/consts.h"
 #include "core/common/host_algorithms.cuh"
 #include "core/common/types.h"
 #include "core/data_structures/device_buffer.cuh"
@@ -88,12 +87,6 @@ using EdgelistMetadata =
     sics::matrixgraph::core::data_structures::EdgelistMetadata;
 using GridGraphMetadata =
     sics::matrixgraph::core::data_structures::GridGraphMetadata;
-using sics::matrixgraph::core::common::kDefalutNumEdgesPerBlock;
-using sics::matrixgraph::core::common::kDefalutNumEdgesPerTile;
-using sics::matrixgraph::core::common::kMaxNumCandidates;
-using sics::matrixgraph::core::common::kMaxNumEdges;
-using sics::matrixgraph::core::common::kMaxNumEdgesPerBlock;
-using sics::matrixgraph::core::common::kMaxVertexID;
 
 __host__ void WCC::LoadData() {
   std::cout << "[WCC] LoadData()" << std::endl;

@@ -1,6 +1,7 @@
 #ifndef MATRIXGRAPH_CORE_TASK_KERNEL_ALGORITHMS_SORT_CUH_
 #define MATRIXGRAPH_CORE_TASK_KERNEL_ALGORITHMS_SORT_CUH_
 
+#include <cstddef>
 #include <cuda_runtime.h>
 #include <iostream>
 
@@ -70,37 +71,56 @@ static __global__ void MergeSortKernel(VertexID *input, VertexID *output,
   }
 }
 
-// Host function for merge sort
-static void MergeSort(const cudaStream_t &stream, VertexID *data, VertexID key,
-                      VertexID x, VertexID y, VertexID data_size) {
-  VertexID *input_data = data;
-  VertexID *tmp_data;
-  CUDA_CHECK(cudaMallocManaged(&tmp_data, data_size));
-  // CUDA_CHECK(cudaMalloc(&tmp_data, data_size));
+// Host function for merge sort on managed row buffers. `data_size_bytes` is the
+// full WOJ row storage (x * y * sizeof(VertexID)). If `scratch_pool` is
+// non-null, it must point to at least `data_size_bytes` bytes; no extra
+// allocation is performed (reused across sorts). If null, a temp buffer is
+// allocated and freed per call.
+static void MergeSort(const cudaStream_t& stream, VertexID* data, VertexID key,
+                      VertexID x, VertexID y, size_t data_size_bytes,
+                      VertexID* scratch_pool = nullptr) {
+  VertexID* input_data = data;
+  VertexID* tmp_data = nullptr;
+  bool owns_tmp = false;
+  if (scratch_pool != nullptr) {
+    tmp_data = scratch_pool;
+  } else {
+    CUDA_CHECK(cudaMallocManaged(&tmp_data, data_size_bytes));
+    owns_tmp = true;
+  }
+
+  VertexID* in_buf = input_data;
+  VertexID* out_buf = tmp_data;
 
   int step = 2;
-  while (step / 2 < y) {
-    int threadsPerBlock = 1024;
-    int blocks = (y + step - 1) / step;
+  while (step / 2 < static_cast<int>(y)) {
+    const int threadsPerBlock = static_cast<int>(kBlockDim);
+    int blocks = (static_cast<int>(y) + step - 1) / step;
 
-    MergeSortKernel<<<blocks, threadsPerBlock, 0, stream>>>(data, tmp_data, key,
-                                                            x, y, step);
-    cudaStreamSynchronize(stream);
+    MergeSortKernel<<<blocks, threadsPerBlock, 0, stream>>>(in_buf, out_buf,
+                                                              key, x, y, step);
+    CUDA_CHECK(cudaStreamSynchronize(stream));
     cudaError_t err = cudaGetLastError();
     if (err != cudaSuccess) {
       CUDA_CHECK(err);
     }
-    // Swap input and output arrays
-    std::swap(data, tmp_data);
+    std::swap(in_buf, out_buf);
     step *= 2;
   }
 
-  if (data == input_data) {
-    cudaFree(tmp_data);
+  // Sorted result is in `in_buf` after the last swap (same end state as legacy
+  // implementation using `data` / `tmp_data`).
+  if (in_buf == input_data) {
+    if (owns_tmp) {
+      CUDA_CHECK(cudaFree(out_buf));
+    }
   } else {
-    CUDA_CHECK(cudaMemcpyAsync(input_data, data, x * y * sizeof(VertexID),
+    CUDA_CHECK(cudaMemcpyAsync(input_data, in_buf, data_size_bytes,
                                cudaMemcpyDefault, stream));
-    cudaFree(data);
+    CUDA_CHECK(cudaStreamSynchronize(stream));
+    if (owns_tmp) {
+      CUDA_CHECK(cudaFree(in_buf));
+    }
   }
 }
 

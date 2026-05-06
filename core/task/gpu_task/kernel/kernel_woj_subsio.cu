@@ -4,8 +4,9 @@
 #include <chrono>
 #include <cstdlib>
 #include <iostream>
-#include <numeric>
+#include <optional>
 #include <thread>
+#include <vector>
 
 #include "core/common/consts.h"
 #include "core/common/host_algorithms.cuh"
@@ -23,7 +24,9 @@
 #include "core/task/gpu_task/kernel/algorithms/sort.cuh"
 #include "core/task/gpu_task/kernel/kernel_woj_subiso.cuh"
 #include "core/util/bitmap_ownership.h"
-#include "core/util/execution_policy.h"
+#include "core/util/cuda_check.cuh"
+#include "core/util/cuda_device.cuh"
+#include "core/util/cuda_prefetch.cuh"
 
 namespace sics {
 namespace matrixgraph {
@@ -38,13 +41,8 @@ using BitmapOwnership = sics::matrixgraph::core::util::BitmapOwnership;
 using sics::matrixgraph::core::common::kBlockDim;
 using sics::matrixgraph::core::common::kGridDim;
 using sics::matrixgraph::core::common::kLogWarpSize;
-using sics::matrixgraph::core::common::kMaxNumCandidatesPerThread;
-using sics::matrixgraph::core::common::kMaxNumWeft;
+using sics::matrixgraph::core::common::kMaxMatchTableRows;
 using sics::matrixgraph::core::common::kMaxVertexID;
-using sics::matrixgraph::core::common::kNCUDACoresPerSM;
-using sics::matrixgraph::core::common::kNSMsPerGPU;
-using sics::matrixgraph::core::common::kNWarpPerCUDACore;
-using sics::matrixgraph::core::common::kSharedMemoryCapacity;
 using sics::matrixgraph::core::common::kSharedMemorySize;
 using sics::matrixgraph::core::common::kWarpSize;
 using sics::matrixgraph::core::task::kernel::HostKernelBitmap;
@@ -93,6 +91,73 @@ uint32_t WojLaunchBlockDim() {
     }
   }
   return kBlockDim;
+}
+
+// Host-side stripe parallelism for WOJ Filter/Join (std::thread count). Default 4.
+size_t WojHostStripeThreads() {
+  if (const char* e = std::getenv("MG_WOJ_STRIPE_THREADS")) {
+    if (e[0] != '\0') {
+      int v = std::atoi(e);
+      if (v > 0) {
+        return static_cast<size_t>(v);
+      }
+    }
+  }
+  return 4;
+}
+
+// Join: number of row partitions of table[0]. Defaults to 1 per GPU; increase to
+// overlap multiple left-deep pipelines on the same device (MG_WOJ_JOIN_STRIPES_PER_GPU).
+size_t WojJoinStripesPerGpu() {
+  if (const char* e = std::getenv("MG_WOJ_JOIN_STRIPES_PER_GPU")) {
+    if (e[0] != '\0') {
+      int v = std::atoi(e);
+      if (v > 0) {
+        return static_cast<size_t>(v);
+      }
+    }
+  }
+  return 1;
+}
+
+// Host threads that actually run join stripes (caps oversubscription; override with
+// MG_WOJ_JOIN_MAX_THREADS).
+size_t WojJoinHostWorkerCount(size_t n_join_stripes) {
+  size_t hw = std::thread::hardware_concurrency();
+  if (hw == 0) {
+    hw = WojHostStripeThreads();
+  }
+  size_t cap = std::max(hw, WojHostStripeThreads());
+  size_t workers = std::min(n_join_stripes, cap);
+  if (const char* e = std::getenv("MG_WOJ_JOIN_MAX_THREADS")) {
+    if (e[0] != '\0') {
+      int v = std::atoi(e);
+      if (v > 0) {
+        workers = std::min(workers, static_cast<size_t>(v));
+      }
+    }
+  }
+  return std::max<size_t>(1, workers);
+}
+
+// ParForEach is serial under __CUDACC__ (see execution_policy.h). Use explicit
+// host threads so WOJ Filter/Join can drive multiple GPUs concurrently.
+template <typename F>
+void RunHostStripeParallel(size_t num_stripes, F&& f) {
+  const size_t n = std::max<size_t>(1, num_stripes);
+  if (n <= 1) {
+    f(static_cast<size_t>(0));
+    return;
+  }
+  std::vector<std::thread> threads;
+  threads.reserve(n - 1);
+  for (size_t w = 1; w < n; ++w) {
+    threads.emplace_back([w, &f]() { f(w); });
+  }
+  f(0);
+  for (auto& t : threads) {
+    t.join();
+  }
 }
 
 }  // namespace
@@ -590,7 +655,7 @@ static __global__ void WOJFilterVCKernel(ParametersFilter params) {
   auto data_ptr = params.woj_matches.get_data_ptr();
   const VertexID x_stride = params.woj_matches.get_x_offset();
   const VertexID max_table_rows =
-      x_stride ? (params.n_edges_p * kMaxNumWeft) / x_stride : 0;
+      x_stride ? (params.n_edges_p * kMaxMatchTableRows) / x_stride : 0;
 
   VertexID u_eid = params.u_eid;
   VertexID u_src = params.exec_path_in_edges[2 * u_eid];
@@ -700,7 +765,7 @@ static __noinline__ __global__ void WOJJoinKernel(ParametersJoin params) {
                  target) {
         // Write direct on the global memory.
         auto global_offset = atomicAdd(global_offset_ptr, 1);
-        if (global_offset > kMaxNumWeft / output_x_offset) break;
+        if (global_offset > kMaxMatchTableRows / output_x_offset) break;
 
         memcpy(output_data + global_offset * output_x_offset,
                left_data + left_data_offset * left_x_offset,
@@ -725,7 +790,7 @@ static __noinline__ __global__ void WOJJoinKernel(ParametersJoin params) {
               target) {
         // Write direct on the global memory.
         auto global_offset = atomicAdd(global_offset_ptr, 1);
-        if (global_offset > kMaxNumWeft / output_x_offset) break;
+        if (global_offset > kMaxMatchTableRows / output_x_offset) break;
 
         memcpy(output_data + global_offset * output_x_offset,
                left_data + left_data_offset * left_x_offset,
@@ -760,19 +825,22 @@ std::vector<WOJMatches*> WOJSubIsoKernelWrapper::Filter(
   dim3 dimBlock(WojLaunchBlockDim());
   dim3 dimGrid(WojLaunchGridDim());
 
-  auto parallelism = std::thread::hardware_concurrency();
-  std::vector<size_t> worker(parallelism);
-  std::mutex mtx;
+  const size_t parallelism = WojHostStripeThreads();
 
-  std::iota(worker.begin(), worker.end(), 0);
-  auto step = worker.size();
+  std::cout << "[WOJ Filter] begin: |E_p|=" << exec_plan.get_n_edges_p()
+            << " cudaGrid=(" << dimGrid.x << "," << dimGrid.y << ","
+            << dimGrid.z << ") block=(" << dimBlock.x << "," << dimBlock.y
+            << "," << dimBlock.z << ") host_worker_stripes=" << parallelism
+            << " GPUs=" << static_cast<int>(exec_plan.get_n_devices())
+            << std::endl;
 
   // Init Streams
   std::vector<cudaStream_t> p_streams_vec;
   p_streams_vec.resize(p.get_num_outgoing_edges());
-  ParForEach(worker.begin(), worker.end(),
-      [step, &exec_plan, &p_streams_vec, &mtx](auto w) {
-        for (VertexID i = w; i < p_streams_vec.size(); i += step) {
+  RunHostStripeParallel(parallelism,
+      [parallelism, &exec_plan, &p_streams_vec](size_t w) {
+        for (VertexID i = static_cast<VertexID>(w); i < p_streams_vec.size();
+             i += static_cast<VertexID>(parallelism)) {
           const int logical =
               static_cast<int>(common::hash_function(i) %
                                exec_plan.get_n_devices());
@@ -780,6 +848,32 @@ std::vector<WOJMatches*> WOJSubIsoKernelWrapper::Filter(
           cudaStreamCreate(&p_streams_vec[i]);
         }
       });
+
+  {
+    const VertexID n_e = exec_plan.get_n_edges_p();
+    const VertexID kMaxEdgeRows = 48;
+    std::cout
+        << "[WOJ Filter] one cudaStream per pattern edge eid; kernel "
+           "WOJFilterVCKernel<<<grid,block,0,stream>>>"
+        << std::endl;
+    for (VertexID e = 0; e < n_e && e < kMaxEdgeRows; ++e) {
+      const VertexID logical_dev =
+          common::hash_function(e) % exec_plan.get_n_devices();
+      const int cuda_dev =
+          exec_plan.CudaDeviceId(static_cast<int>(logical_dev));
+      std::cout << "  eid=" << e << " logical_gpu=" << logical_dev
+                << " cudaDevice=" << cuda_dev << " stream=0x" << std::hex
+                << reinterpret_cast<uintptr_t>(p_streams_vec[e]) << std::dec
+                << std::endl;
+    }
+    if (n_e > kMaxEdgeRows) {
+      std::cout << "  ... (" << (n_e - kMaxEdgeRows)
+                << " more edges, stream mapping follows same hash rule)"
+                << std::endl;
+    }
+  }
+
+  std::cout << "[WOJ Filter] dispatch WOJFilterVCKernel ..." << std::endl;
 
   // Init pattern.
   BufferUint8 data_p;
@@ -853,7 +947,7 @@ std::vector<WOJMatches*> WOJSubIsoKernelWrapper::Filter(
 
   for (VertexID _ = 0; _ < exec_plan.get_n_edges_p(); _++) {
     woj_matches_vec[_] = new WOJMatches();
-    woj_matches_vec[_]->Init(exec_plan.get_n_edges_p(), kMaxNumWeft);
+    woj_matches_vec[_]->Init(exec_plan.get_n_edges_p(), kMaxMatchTableRows);
     woj_matches_vec[_]->SetXOffset(2);
     woj_matches_vec[_]->SetYOffset(0);
     woj_matches_vec[_]->SetHeader(
@@ -863,29 +957,39 @@ std::vector<WOJMatches*> WOJSubIsoKernelWrapper::Filter(
   }
 
   auto time1 = std::chrono::system_clock::now();
-  for (VertexID _ = 0; _ < exec_plan.get_n_edges_p(); _++) {
-    const VertexID logical_dev =
-        common::hash_function(_) % exec_plan.get_n_devices();
-    cudaSetDevice(exec_plan.CudaDeviceId(static_cast<int>(logical_dev)));
-    cudaStream_t& stream = p_streams_vec[_];
-    ParametersFilter params{
-        .u_eid = _,
-        .exec_path_in_edges = exec_path_in_edges_vec[logical_dev].GetPtr(),
-        .n_vertices_p = p.get_num_vertices(),
-        .n_edges_p = p.get_num_outgoing_edges(),
-        .data_p = data_p_vec[logical_dev].GetPtr(),
-        .v_label_p = v_label_p_vec[logical_dev].GetPtr(),
-        .n_vertices_g = g.get_num_vertices(),
-        .n_edges_g = g.get_num_outgoing_edges(),
-        .data_g = data_g_vec[logical_dev].GetPtr(),
-        .edgelist_g = nullptr,
-        .v_label_g = v_label_g_vec[logical_dev].GetPtr(),
-        .woj_matches = *woj_matches_vec[_]};
+  RunHostStripeParallel(parallelism,
+      [parallelism, &dimGrid, &dimBlock, &exec_plan, &p, &g,
+       &exec_path_in_edges_vec, &data_p_vec, &v_label_p_vec, &data_g_vec,
+       &v_label_g_vec, &woj_matches_vec, &p_streams_vec](size_t w) {
+        for (VertexID _ = static_cast<VertexID>(w);
+             _ < exec_plan.get_n_edges_p();
+             _ += static_cast<VertexID>(parallelism)) {
+          const VertexID logical_dev =
+              common::hash_function(_) % exec_plan.get_n_devices();
+          cudaSetDevice(
+              exec_plan.CudaDeviceId(static_cast<int>(logical_dev)));
+          cudaStream_t& stream = p_streams_vec[_];
+          ParametersFilter params{
+              .u_eid = _,
+              .exec_path_in_edges =
+                  exec_path_in_edges_vec[logical_dev].GetPtr(),
+              .n_vertices_p = p.get_num_vertices(),
+              .n_edges_p = p.get_num_outgoing_edges(),
+              .data_p = data_p_vec[logical_dev].GetPtr(),
+              .v_label_p = v_label_p_vec[logical_dev].GetPtr(),
+              .n_vertices_g = g.get_num_vertices(),
+              .n_edges_g = g.get_num_outgoing_edges(),
+              .data_g = data_g_vec[logical_dev].GetPtr(),
+              .edgelist_g = nullptr,
+              .v_label_g = v_label_g_vec[logical_dev].GetPtr(),
+              .woj_matches = *woj_matches_vec[_]};
 
-    WOJFilterVCKernel<<<dimGrid, dimBlock, 0, stream>>>(params);
+          WOJFilterVCKernel<<<dimGrid, dimBlock, 0, stream>>>(params);
+        }
+      });
 
-    // cudaDeviceSynchronize();
-  }
+  std::cout << "[WOJ Filter] cudaDeviceSynchronize() each plan GPU..."
+            << std::endl;
 
   for (VertexID device_id = 0; device_id < exec_plan.get_n_devices();
        device_id++) {
@@ -914,15 +1018,258 @@ std::vector<WOJMatches*> WOJSubIsoKernelWrapper::Filter(
     CUDA_CHECK(err);
   }
 
-  ParForEach(worker.begin(), worker.end(),
-                [step, &p_streams_vec, &mtx](auto w) {
-                  for (VertexID i = w; i < p_streams_vec.size(); i += step) {
-                    cudaStreamDestroy(p_streams_vec[i]);
-                  }
-                });
+  RunHostStripeParallel(parallelism,
+      [parallelism, &exec_plan, &p_streams_vec](size_t w) {
+        for (VertexID i = static_cast<VertexID>(w); i < p_streams_vec.size();
+             i += static_cast<VertexID>(parallelism)) {
+          const int logical =
+              static_cast<int>(common::hash_function(i) %
+                               exec_plan.get_n_devices());
+          cudaSetDevice(exec_plan.CudaDeviceId(logical));
+          cudaStreamDestroy(p_streams_vec[i]);
+        }
+      });
 
   return woj_matches_vec;
 }
+
+namespace {
+
+void SortWojJoinInputs(const std::vector<WOJMatches*>& input_woj_matches_vec) {
+  if (input_woj_matches_vec.empty()) {
+    return;
+  }
+
+  size_t max_row_bytes = 0;
+  for (auto* t : input_woj_matches_vec) {
+    const size_t b = sizeof(VertexID) * static_cast<size_t>(t->get_x()) *
+                     static_cast<size_t>(t->get_y());
+    if (b > max_row_bytes) {
+      max_row_bytes = b;
+    }
+  }
+
+  VertexID* sort_scratch = nullptr;
+  cudaStream_t sort_stream{};
+  CUDA_CHECK(cudaStreamCreate(&sort_stream));
+  if (max_row_bytes > 0) {
+    CUDA_CHECK(cudaMallocManaged(&sort_scratch, max_row_bytes));
+  }
+
+  BitmapOwnership header_visited(32);
+  auto header_ptr0 = input_woj_matches_vec[0]->get_header_ptr();
+  for (auto _ = 0; _ < input_woj_matches_vec[0]->get_x_offset(); _++) {
+    header_visited.SetBit(header_ptr0[_]);
+  }
+
+  for (VertexID _ = 1; _ < input_woj_matches_vec.size(); _++) {
+    bool sort_tag = false;
+    auto header_ptr = input_woj_matches_vec[_]->get_header_ptr();
+    const size_t row_bytes =
+        sizeof(VertexID) * static_cast<size_t>(input_woj_matches_vec[_]->get_y()) *
+        static_cast<size_t>(input_woj_matches_vec[_]->get_x());
+    for (VertexID __ = 0; __ < input_woj_matches_vec[_]->get_x_offset(); __++) {
+      if (header_visited.GetBit(header_ptr[__]) && sort_tag == false) {
+        MergeSort(sort_stream, input_woj_matches_vec[_]->get_data_ptr(), __,
+                  input_woj_matches_vec[_]->get_x_offset(),
+                  input_woj_matches_vec[_]->get_y_offset(), row_bytes,
+                  sort_scratch);
+        sort_tag = true;
+      }
+      header_visited.SetBit(header_ptr[__]);
+    }
+  }
+
+  if (sort_scratch != nullptr) {
+    CUDA_CHECK(cudaFree(sort_scratch));
+  }
+  CUDA_CHECK(cudaStreamDestroy(sort_stream));
+}
+
+bool WojPrefetchJoinInputEnabled() {
+  const char* e = std::getenv("MG_WOJ_PREFETCH_JOIN");
+  if (e != nullptr && e[0] == '0' && e[1] == '\0') {
+    return false;
+  }
+  return true;
+}
+
+void PrefetchWojJoinTables(
+    const std::vector<WOJMatches*>& input_woj_matches_vec) {
+  if (!WojPrefetchJoinInputEnabled() || input_woj_matches_vec.empty()) {
+    return;
+  }
+  using sics::matrixgraph::core::util::MatrixGraphCudaDeviceList;
+  using sics::matrixgraph::core::util::MatrixGraphCudaStreamsPerGpu;
+  using sics::matrixgraph::core::util::MatrixGraphPrefetchManagedToDevice;
+
+  const std::vector<int> devices =
+      MatrixGraphCudaDeviceList();
+  if (devices.empty()) {
+    return;
+  }
+  std::vector<std::pair<void*, size_t>> chunks;
+  chunks.reserve(input_woj_matches_vec.size() * 4u);
+  for (auto* t : input_woj_matches_vec) {
+    const size_t data_bytes =
+        sizeof(VertexID) * static_cast<size_t>(t->get_x()) *
+        static_cast<size_t>(t->get_y());
+    const size_t header_bytes =
+        sizeof(VertexID) * static_cast<size_t>(t->get_x());
+    chunks.push_back({static_cast<void*>(t->get_data_ptr()), data_bytes});
+    chunks.push_back({static_cast<void*>(t->get_header_ptr()), header_bytes});
+    chunks.push_back({static_cast<void*>(t->get_y_offset_ptr()), sizeof(VertexID)});
+    chunks.push_back({static_cast<void*>(t->get_x_offset_ptr()), sizeof(VertexID)});
+  }
+  const int n_streams = MatrixGraphCudaStreamsPerGpu();
+  int prev_dev = 0;
+  CUDA_CHECK(cudaGetDevice(&prev_dev));
+  for (int dev : devices) {
+    CUDA_CHECK(cudaSetDevice(dev));
+    MatrixGraphPrefetchManagedToDevice(dev, n_streams, chunks);
+  }
+  CUDA_CHECK(cudaSetDevice(prev_dev));
+}
+
+bool WojBushyJoinEnabled() {
+  const char* e = std::getenv("MG_WOJ_BUSHY_JOIN");
+  if (e == nullptr || e[0] == '\0') {
+    return true;
+  }
+  return e[0] == '1';
+}
+
+bool AdjacentPairsAllJoinable(const std::vector<WOJMatches*>& cur) {
+  const size_t n = cur.size();
+  if (n < 2) {
+    return false;
+  }
+  for (size_t i = 0; i + 1 < n; i += 2) {
+    auto jk = cur[i]->GetJoinKey(*cur[i + 1]);
+    if (jk.first == kMaxVertexID || jk.second == kMaxVertexID) {
+      return false;
+    }
+  }
+  return true;
+}
+
+void RunBinaryJoinOnDevice(const WOJExecutionPlan& exec_plan,
+                           WOJMatches* left_woj_matches,
+                           WOJMatches* right_woj_matches,
+                           WOJMatches* output_woj_matches, dim3 dimGrid,
+                           dim3 dimBlock, int logical_gpu) {
+  cudaSetDevice(exec_plan.CudaDeviceId(logical_gpu));
+  cudaStream_t stream{};
+  CUDA_CHECK(cudaStreamCreate(&stream));
+  VertexID* jump_count = nullptr;
+  CUDA_CHECK(cudaMallocManaged(&jump_count, sizeof(VertexID)));
+
+  HostKernelBitmap visited_bm;
+  HostKernelBitmap jump_visited_bm;
+  visited_bm.Init(exec_plan.get_n_vertices_g());
+  jump_visited_bm.Init(exec_plan.get_n_vertices_g());
+
+  WOJMatches* L = left_woj_matches;
+  WOJMatches* const R = right_woj_matches;
+  WOJMatches* Out = output_woj_matches;
+
+  for (int step = 0; step < 64; ++step) {
+    auto join_keys = L->GetJoinKey(*R);
+    if (join_keys.first == kMaxVertexID || join_keys.second == kMaxVertexID) {
+      break;
+    }
+    visited_bm.ClearAsync(stream);
+    jump_visited_bm.ClearAsync(stream);
+    *jump_count = 0;
+
+    Out->SetHeader(L->get_header_ptr(), L->get_x_offset(), R->get_header_ptr(),
+                   R->get_x_offset(), join_keys);
+
+    ParametersJoin params{.n_vertices_g = exec_plan.get_n_vertices_g(),
+                          .left_woj_matches = *L,
+                          .right_woj_matches = *R,
+                          .output_woj_matches = *Out,
+                          .left_hash_idx = join_keys.first,
+                          .right_hash_idx = join_keys.second,
+                          .right_visited_data = visited_bm.GetPtr(),
+                          .jump_visited_data = jump_visited_bm.GetPtr(),
+                          .jump_count = jump_count};
+
+    WOJJoinKernel<<<dimGrid, dimBlock, 0, stream>>>(params);
+    cudaStreamSynchronize(stream);
+    cudaError_t err = cudaGetLastError();
+    if (err != cudaSuccess) {
+      CUDA_CHECK(err);
+    }
+
+    if (Out->get_y_offset() == 0) {
+      break;
+    }
+    if (Out->get_x_offset() == Out->get_x()) {
+      break;
+    }
+    std::swap(L, Out);
+    Out->Clear();
+  }
+
+  cudaFree(jump_count);
+  CUDA_CHECK(cudaStreamDestroy(stream));
+}
+
+std::vector<WOJMatches*> ExecuteBushyPairwiseRound(
+    const WOJExecutionPlan& exec_plan, const std::vector<WOJMatches*>& cur,
+    dim3 dimGrid, dim3 dimBlock) {
+  const size_t n = cur.size();
+  const size_t npairs = n / 2;
+  const bool has_tail = (n % 2u) == 1u;
+  std::vector<WOJMatches*> outs(npairs);
+  for (size_t k = 0; k < npairs; ++k) {
+    outs[k] = new WOJMatches();
+    outs[k]->Init(exec_plan.get_n_edges_p(), kMaxMatchTableRows);
+  }
+  const VertexID nd =
+      std::max(static_cast<VertexID>(1), exec_plan.get_n_devices());
+  const size_t workers = WojJoinHostWorkerCount(npairs);
+
+  RunHostStripeParallel(workers, [&](size_t w) {
+    for (size_t k = w; k < npairs; k += workers) {
+      const int log_dev = static_cast<int>(static_cast<VertexID>(k) % nd);
+      RunBinaryJoinOnDevice(exec_plan, cur[2 * k], cur[2 * k + 1], outs[k],
+                            dimGrid, dimBlock, log_dev);
+    }
+  });
+
+  std::vector<WOJMatches*> next;
+  next.reserve(npairs + (has_tail ? 1u : 0u));
+  for (size_t k = 0; k < npairs; ++k) {
+    next.push_back(outs[k]);
+  }
+  if (has_tail) {
+    next.push_back(cur[n - 1]);
+  }
+  return next;
+}
+
+std::optional<std::vector<WOJMatches*>> TryBushyPairwiseJoin(
+    const WOJExecutionPlan& exec_plan, std::vector<WOJMatches*> cur,
+    dim3 dimGrid, dim3 dimBlock) {
+  int level = 0;
+  while (cur.size() > 1) {
+    if (!AdjacentPairsAllJoinable(cur)) {
+      std::cout << "[WOJ Join] bushy: level " << level
+                << " cannot pair adjacent tables (missing join key) -> striped "
+                   "fallback\n";
+      return std::nullopt;
+    }
+    std::cout << "[WOJ Join] bushy level " << level << " pairwise joins, tables="
+              << cur.size() << std::endl;
+    cur = ExecuteBushyPairwiseRound(exec_plan, cur, dimGrid, dimBlock);
+    level++;
+  }
+  return std::vector<WOJMatches*>{cur[0]};
+}
+
+}  // namespace
 
 std::vector<WOJMatches*> WOJSubIsoKernelWrapper::Join(
     const WOJExecutionPlan& exec_plan,
@@ -933,27 +1280,66 @@ std::vector<WOJMatches*> WOJSubIsoKernelWrapper::Join(
   dim3 dimBlock(WojLaunchBlockDim());
   dim3 dimGrid(WojLaunchGridDim());
 
-  auto parallelism = std::thread::hardware_concurrency();
-  std::vector<size_t> worker(parallelism);
-  std::mutex mtx;
+  SortWojJoinInputs(input_woj_matches_vec);
+  PrefetchWojJoinTables(input_woj_matches_vec);
+  if (WojBushyJoinEnabled() && input_woj_matches_vec.size() >= 2) {
+    std::vector<WOJMatches*> bushy_tables;
+    bushy_tables.reserve(input_woj_matches_vec.size());
+    for (auto* t : input_woj_matches_vec) {
+      bushy_tables.push_back(t);
+    }
+    auto bushy_out =
+        TryBushyPairwiseJoin(exec_plan, std::move(bushy_tables), dimGrid, dimBlock);
+    if (bushy_out.has_value()) {
+      std::cout << "[WOJ Join] bushy pairwise reduction completed -> 1 result "
+                   "table\n";
+      return std::move(*bushy_out);
+    }
+  }
+  std::cout << "[WOJ Join] striped left-deep path\n";
 
-  std::iota(worker.begin(), worker.end(), 0);
-  auto step = worker.size();
+  const VertexID n_devices = exec_plan.get_n_devices();
+  const size_t join_stripes_per_gpu = WojJoinStripesPerGpu();
+  const VertexID n_join_stripes = static_cast<VertexID>(std::max<size_t>(
+      1, static_cast<size_t>(n_devices) * join_stripes_per_gpu));
+  const size_t join_workers = WojJoinHostWorkerCount(
+      static_cast<size_t>(n_join_stripes));
+
+  std::cout << "[WOJ Join] begin: input match tables="
+            << input_woj_matches_vec.size() << " cudaGrid=(" << dimGrid.x
+            << "," << dimGrid.y << "," << dimGrid.z << ") block=("
+            << dimBlock.x << "," << dimBlock.y << "," << dimBlock.z
+            << ") join_stripes=" << static_cast<int>(n_join_stripes) << " (GPUs="
+            << static_cast<int>(n_devices) << " * JOIN_STRIPES_PER_GPU="
+            << join_stripes_per_gpu << ") host_workers=" << join_workers
+            << std::endl;
 
   auto src_matches_vec =
-      input_woj_matches_vec[0]->SplitAndCopy(exec_plan.get_n_devices());
+      input_woj_matches_vec[0]->SplitAndCopy(n_join_stripes);
 
   std::vector<WOJMatches*> output_woj_matches_vec;
-  output_woj_matches_vec.resize(exec_plan.get_n_devices());
+  output_woj_matches_vec.resize(static_cast<size_t>(n_join_stripes));
 
-  for (auto _ = 0; _ < exec_plan.get_n_devices(); _++) {
+  for (VertexID _ = 0; _ < n_join_stripes; _++) {
     output_woj_matches_vec[_] = new WOJMatches();
-    output_woj_matches_vec[_]->Init(exec_plan.get_n_edges_p(), kMaxNumWeft);
+    output_woj_matches_vec[_]->Init(exec_plan.get_n_edges_p(), kMaxMatchTableRows);
   }
 
   // Init Streams
   std::vector<cudaStream_t> p_streams_vec;
-  p_streams_vec.resize(exec_plan.get_n_devices());
+  p_streams_vec.resize(static_cast<size_t>(n_join_stripes));
+
+  std::cout << "[WOJ Join] one stream per split stripe s in [0, "
+            << p_streams_vec.size()
+            << "); device = CudaDeviceId(s % N); WOJJoinKernel on that stripe's stream"
+            << std::endl;
+  for (size_t s = 0; s < p_streams_vec.size(); ++s) {
+    const int logical =
+        static_cast<int>(static_cast<VertexID>(s) % exec_plan.get_n_devices());
+    const int cuda_dev = exec_plan.CudaDeviceId(logical);
+    std::cout << "  stripe s=" << s << " logical_gpu=" << logical
+              << " cudaDevice=" << cuda_dev << std::endl;
+  }
 
   std::vector<HostKernelBitmap> visited_bm_vec;
   visited_bm_vec.resize(p_streams_vec.size() * exec_plan.get_n_edges_p());
@@ -969,39 +1355,18 @@ std::vector<WOJMatches*> WOJSubIsoKernelWrapper::Join(
       jump_count_ptr, 0,
       sizeof(VertexID) * p_streams_vec.size() * exec_plan.get_n_edges_p()));
 
-  // Sort candidates.
-  BitmapOwnership candidates_visited(input_woj_matches_vec.size());
-
-  auto header_ptr = input_woj_matches_vec[0]->get_header_ptr();
-  BitmapOwnership header_visited(32);
-  for (auto _ = 0; _ < input_woj_matches_vec[0]->get_x_offset(); _++)
-    header_visited.SetBit(header_ptr[_]);
-
-  for (VertexID _ = 1; _ < input_woj_matches_vec.size(); _++) {
-    bool sort_tag = false;
-    auto header_ptr = input_woj_matches_vec[_]->get_header_ptr();
-    for (VertexID __ = 0; __ < input_woj_matches_vec[_]->get_x_offset(); __++) {
-      if (header_visited.GetBit(header_ptr[__]) && sort_tag == false) {
-        MergeSort(0, input_woj_matches_vec[_]->get_data_ptr(), __,
-                  input_woj_matches_vec[_]->get_x_offset(),
-                  input_woj_matches_vec[_]->get_y_offset(),
-                  sizeof(VertexID) * input_woj_matches_vec[_]->get_y() *
-                      input_woj_matches_vec[_]->get_x());
-        sort_tag = true;
-      }
-      header_visited.SetBit(header_ptr[__]);
-    }
-  }
-
-  // Join candidates
-  ParForEach(worker.begin(), worker.end(),
-      [step, &dimBlock, &dimGrid, &exec_plan, &p_streams_vec, &mtx,
-       &src_matches_vec, &input_woj_matches_vec, &output_woj_matches_vec,
-       &visited_bm_vec, &jump_visited_bm_vec, &jump_count_ptr](auto w) {
-        for (VertexID s = w; s < p_streams_vec.size(); s += step) {
-          const int logical =
-              static_cast<int>(common::hash_function(s) %
-                               exec_plan.get_n_devices());
+  // Join candidates: one left-deep chain per stripe; stripes are scheduled across
+  // join_workers host threads (see WojJoinHostWorkerCount).
+  RunHostStripeParallel(
+      join_workers,
+      [join_workers, n_join_stripes, &dimBlock, &dimGrid, &exec_plan,
+       &p_streams_vec, &src_matches_vec, &input_woj_matches_vec,
+       &output_woj_matches_vec, &visited_bm_vec, &jump_visited_bm_vec,
+       &jump_count_ptr](size_t w) {
+        for (VertexID s = static_cast<VertexID>(w); s < n_join_stripes;
+             s += static_cast<VertexID>(join_workers)) {
+          const int logical = static_cast<int>(
+              static_cast<VertexID>(s) % exec_plan.get_n_devices());
           cudaSetDevice(exec_plan.CudaDeviceId(logical));
           cudaStream_t& stream = p_streams_vec[s];
 
@@ -1054,7 +1419,8 @@ std::vector<WOJMatches*> WOJSubIsoKernelWrapper::Join(
                 right_woj_matches->get_header_ptr(),
                 right_woj_matches->get_x_offset(), join_keys);
 
-            auto* jump_count = jump_count_ptr + s * p_streams_vec.size() + _;
+            auto* jump_count =
+                jump_count_ptr + s * exec_plan.get_n_edges_p() + _;
 
             ParametersJoin params{
                 .n_vertices_g = exec_plan.get_n_vertices_g(),
@@ -1096,12 +1462,21 @@ std::vector<WOJMatches*> WOJSubIsoKernelWrapper::Join(
     CUDA_CHECK(err);
   }
 
-  ParForEach(worker.begin(), worker.end(),
-                [step, &p_streams_vec, &mtx](auto w) {
-                  for (VertexID i = w; i < p_streams_vec.size(); i += step) {
-                    cudaStreamDestroy(p_streams_vec[i]);
-                  }
-                });
+  std::cout << "[WOJ Join] destroy per-stripe streams ..." << std::endl;
+
+  RunHostStripeParallel(
+      join_workers,
+      [join_workers, n_join_stripes, &p_streams_vec, &exec_plan](size_t w) {
+        for (VertexID i = static_cast<VertexID>(w); i < n_join_stripes;
+             i += static_cast<VertexID>(join_workers)) {
+          const int logical = static_cast<int>(
+              static_cast<VertexID>(i) % exec_plan.get_n_devices());
+          cudaSetDevice(exec_plan.CudaDeviceId(logical));
+          cudaStreamDestroy(p_streams_vec[i]);
+        }
+      });
+
+  std::cout << "[WOJ Join] finished" << std::endl;
 
   for (VertexID eid = 1; eid < (exec_plan.get_n_edges_p() - 1); eid++) {
     VertexID count = 0;
