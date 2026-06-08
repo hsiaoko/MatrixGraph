@@ -97,7 +97,7 @@ __host__ void PageRank::ComputePageRank(const ImmutableCSR& g) {
   unified_data_g.Init(data_g);
 
   v_label_g.data = g.GetVLabelBasePointer();
-  v_label_g.size = sizeof(VertexLabel) * g.get_max_vid();
+  v_label_g.size = sizeof(VertexLabel) * g.get_num_vertices();
 
   unified_v_label_g.Init(v_label_g);
 

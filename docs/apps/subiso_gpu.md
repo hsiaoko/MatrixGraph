@@ -14,6 +14,10 @@
 | `-o` | **Required.** Output directory / path for results. |
 | `-scheduler` | `CHBL` (default), `EvenSplit`, or `RoundRobin`. |
 
+## Environment variables
+
+CUDA device list, WOJ launch dims (`MG_SUBISO_GRID` / `MG_SUBISO_BLOCK`), and related toggles are **optional**; defaults apply when unset. See **[MATRIXGRAPH_ENV](../MATRIXGRAPH_ENV.md)**.
+
 ## Example
 
 ```bash

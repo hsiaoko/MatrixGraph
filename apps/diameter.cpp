@@ -17,6 +17,10 @@ DEFINE_int32(
     "Use 0 for exact diameter (BFS from every vertex; can be very slow).");
 DEFINE_uint64(diameter_seed, 42,
               "RNG seed for sampling sources when diameter_samples > 0.");
+DEFINE_uint32(
+    cpu_parallel, 0,
+    "Cap TBB parallelism for the BFS-source loop (matches batch cpu_cores); "
+    "0 = default / unlimited.");
 DEFINE_string(
     scheduler, "CHBL",
     "Scheduler type (options: CHBL, EvenSplit, RoundRobin, default: CHBL)");
@@ -60,6 +64,12 @@ void PrintConfig() {
     std::cout << "Mode: approximate, diameter_samples=" << FLAGS_diameter_samples
               << ", diameter_seed=" << FLAGS_diameter_seed << std::endl;
   }
+  if (FLAGS_cpu_parallel > 0) {
+    std::cout << "CPU parallelism cap (TBB, BFS sources): " << FLAGS_cpu_parallel
+              << std::endl;
+  } else {
+    std::cout << "CPU parallelism cap (TBB): default (unlimited)" << std::endl;
+  }
   std::cout << "=======================\n" << std::endl;
 }
 
@@ -83,8 +93,10 @@ int main(int argc, char* argv[]) {
     auto scheduler_type = Scheduler2Enum(FLAGS_scheduler);
     sics::matrixgraph::core::MatrixGraph system(scheduler_type);
 
-    auto* task = new Diameter(
-        FLAGS_g, static_cast<size_t>(FLAGS_diameter_samples), FLAGS_diameter_seed);
+    auto* task = new Diameter(FLAGS_g,
+                              static_cast<size_t>(FLAGS_diameter_samples),
+                              FLAGS_diameter_seed,
+                              static_cast<size_t>(FLAGS_cpu_parallel));
     system.Run(sics::matrixgraph::core::common::kDiameter, task);
     delete task;
   } catch (const std::exception& e) {

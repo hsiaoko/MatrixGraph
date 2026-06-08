@@ -16,6 +16,10 @@ DEFINE_int32(
     "Approximate d_hat: number of random BFS source vertices. "
     "Use 0 for exact d_hat (BFS from every vertex; can be very slow).");
 DEFINE_uint64(skew_seed, 42, "RNG seed for sampling sources when skew_samples > 0.");
+DEFINE_uint32(
+    cpu_parallel, 0,
+    "Cap TBB parallelism for the BFS-source loop (matches batch cpu_cores); "
+    "0 = default / unlimited.");
 DEFINE_string(
     scheduler, "CHBL",
     "Scheduler type (options: CHBL, EvenSplit, RoundRobin, default: CHBL)");
@@ -61,6 +65,12 @@ void PrintConfig() {
     std::cout << "Mode: approximate d_hat, skew_samples=" << FLAGS_skew_samples
               << ", skew_seed=" << FLAGS_skew_seed << std::endl;
   }
+  if (FLAGS_cpu_parallel > 0) {
+    std::cout << "CPU parallelism cap (TBB, BFS sources): " << FLAGS_cpu_parallel
+              << std::endl;
+  } else {
+    std::cout << "CPU parallelism cap (TBB): default (unlimited)" << std::endl;
+  }
   std::cout << "=======================\n" << std::endl;
 }
 
@@ -85,7 +95,8 @@ int main(int argc, char* argv[]) {
     sics::matrixgraph::core::MatrixGraph system(scheduler_type);
 
     auto* task = new Skew(FLAGS_g, static_cast<size_t>(FLAGS_skew_samples),
-                          FLAGS_skew_seed);
+                          FLAGS_skew_seed,
+                          static_cast<size_t>(FLAGS_cpu_parallel));
     system.Run(sics::matrixgraph::core::common::kSkew, task);
     delete task;
   } catch (const std::exception& e) {

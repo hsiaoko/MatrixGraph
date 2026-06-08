@@ -175,6 +175,9 @@ public:
   }
 
   uint64_t Count() const {
+    if (data_ == nullptr || size_ == 0) {
+      return 0;
+    }
     uint64_t count = 0;
     for (uint64_t i = 0; i <= KERNEL_WORD_OFFSET(size_); i++) {
       auto x = data_[i];

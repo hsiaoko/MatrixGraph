@@ -29,8 +29,10 @@ static void ConvertEdgelistCSV2ImmutableCSR(const std::string& input_path,
   sics::matrixgraph::core::data_structures::Edges edgelist;
   edgelist.ReadFromCSV(input_path, sep, keep_original_vid);
 
-  edgelist.GenerateLocalID2GlobalID();
+  // ReadFromCSV already calls GenerateLocalID2GlobalID() when compressing to a
+  // contiguous range; calling it again remaps twice and can corrupt ordering.
   if (keep_original_vid) {
+    edgelist.GenerateLocalID2GlobalID();
     edgelist.Compacted();
   }
 

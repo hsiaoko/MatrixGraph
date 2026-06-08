@@ -88,7 +88,7 @@ __host__ void BFS::ExecuteBFS(const ImmutableCSR& g, VertexID src) {
   // Set up vertex label buffer
   BufferVertexLabel v_label_g;
   v_label_g.data = g.GetVLabelBasePointer();
-  v_label_g.size = sizeof(VertexLabel) * g.get_max_vid();
+  v_label_g.size = sizeof(VertexLabel) * g.get_num_vertices();
   unified_v_label_g.Init(v_label_g);
 
   sics::matrixgraph::core::util::MatrixGraphPrefetchManagedToDevice(

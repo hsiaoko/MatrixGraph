@@ -58,20 +58,16 @@ inline void MatrixGraphParseDeviceList(const char* str, std::vector<int>* out) {
 }
 
 // Active CUDA devices for multi-GPU execution.
-// - MATRIXGRAPH_CUDA_DEVICES="0,1,2" — explicit list (must be valid indices).
-// - MATRIXGRAPH_CUDA_ALL_DEVICES=1 — use every visible device 0..count-1.
+// Precedence:
+// - MATRIXGRAPH_CUDA_DEVICES="0,1,2" (non-empty after parsing valid ids) wins over
+//   MATRIXGRAPH_CUDA_ALL_DEVICES so an explicit list is never overridden by “use all”.
+// - MATRIXGRAPH_CUDA_ALL_DEVICES=1 — every visible device 0..count-1 (only when the
+//   explicit list env is unset, empty, or parses to zero valid GPUs).
 // - Otherwise — single device { MatrixGraphCudaPrimaryDeviceIndex() }.
 inline std::vector<int> MatrixGraphCudaDeviceList() {
   int n = 0;
   if (cudaGetDeviceCount(&n) != cudaSuccess || n <= 0) {
     return {0};
-  }
-
-  const char* use_all = std::getenv("MATRIXGRAPH_CUDA_ALL_DEVICES");
-  if (use_all != nullptr && use_all[0] == '1' && use_all[1] == '\0') {
-    std::vector<int> all(static_cast<size_t>(n));
-    std::iota(all.begin(), all.end(), 0);
-    return all;
   }
 
   const char* list_env = std::getenv("MATRIXGRAPH_CUDA_DEVICES");
@@ -88,6 +84,13 @@ inline std::vector<int> MatrixGraphCudaDeviceList() {
     if (!valid.empty()) {
       return valid;
     }
+  }
+
+  const char* use_all = std::getenv("MATRIXGRAPH_CUDA_ALL_DEVICES");
+  if (use_all != nullptr && use_all[0] == '1' && use_all[1] == '\0') {
+    std::vector<int> all(static_cast<size_t>(n));
+    std::iota(all.begin(), all.end(), 0);
+    return all;
   }
 
   return {MatrixGraphCudaPrimaryDeviceIndex()};

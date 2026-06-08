@@ -45,6 +45,14 @@ Shipped executables are built as `<name>_exec` from `apps/`. Full table, build h
 
 ---
 
+## GPU runtime (environment)
+
+| Document | Description |
+|----------|-------------|
+| [MATRIXGRAPH_ENV](MATRIXGRAPH_ENV.md) | Optional env vars: CUDA device list (`MATRIXGRAPH_CUDA_DEVICES`), launch dims (`MG_GPU_*`, `MG_SUBISO_*`), WOJ tuning. **All optional**; defaults apply when unset. |
+
+---
+
 ## CPU graph metrics (via apps)
 
 [Diameter](apps/diameter.md) and [Skew](apps/skew.md) implement host-side BFS statistics; both accept **`-cpu_parallel`** to cap oneTBB-backed parallelism over sources. See also [GraphFeatures](tools/GraphFeatures.md) to batch-export YAML, and [Applications index — batch benchmarks](apps/README.md#batch-benchmarks-autoconfig-yaml) for **`scripts/run_autoconfig_gpu_exp.py`** (maps YAML **`cpu_cores`** to `-cpu_parallel`).

@@ -43,7 +43,6 @@ using sics::matrixgraph::core::common::kGridDim;
 using sics::matrixgraph::core::common::kLogWarpSize;
 using sics::matrixgraph::core::common::kMaxMatchTableRows;
 using sics::matrixgraph::core::common::kMaxVertexID;
-using sics::matrixgraph::core::common::kSharedMemorySize;
 using sics::matrixgraph::core::common::kWarpSize;
 using sics::matrixgraph::core::task::kernel::HostKernelBitmap;
 using sics::matrixgraph::core::task::kernel::HostMiniKernelBitmap;
@@ -623,24 +622,6 @@ static __global__ void WOJFilterVCKernel(ParametersFilter params) {
   unsigned int tid = blockIdx.x * blockDim.x + threadIdx.x;
   unsigned int step = blockDim.x * gridDim.x;
 
-  auto lane_id = threadIdx.x & (kWarpSize - 1);
-  auto warp_id = threadIdx.x >> kLogWarpSize;
-
-  __shared__ VertexID local_matches_data[kSharedMemorySize];
-  __shared__ VertexID local_matches_offset;
-
-  if (threadIdx.x == 0) local_matches_offset = 0;
-  __syncthreads();
-
-  VertexID* globalid_p = (VertexID*)(params.data_p);
-  VertexID* in_degree_p = globalid_p + params.n_vertices_p;
-  VertexID* out_degree_p = in_degree_p + params.n_vertices_p;
-  EdgeIndex* in_offset_p = (EdgeIndex*)(out_degree_p + params.n_vertices_p);
-  EdgeIndex* out_offset_p = (EdgeIndex*)(in_offset_p + params.n_vertices_p + 1);
-  EdgeIndex* in_edges_p = (EdgeIndex*)(out_offset_p + params.n_vertices_p + 1);
-  VertexID* out_edges_p = in_edges_p + params.n_edges_p;
-  VertexID* edges_globalid_by_localid_p = out_edges_p + params.n_edges_p;
-
   VertexID* globalid_g = (VertexID*)(params.data_g);
   VertexID* in_degree_g = globalid_g + params.n_vertices_g;
   VertexID* out_degree_g = in_degree_g + params.n_vertices_g;
@@ -648,11 +629,9 @@ static __global__ void WOJFilterVCKernel(ParametersFilter params) {
   EdgeIndex* out_offset_g = (EdgeIndex*)(in_offset_g + params.n_vertices_g + 1);
   EdgeIndex* in_edges_g = (EdgeIndex*)(out_offset_g + params.n_vertices_g + 1);
   VertexID* out_edges_g = in_edges_g + params.n_edges_g;
-  VertexID* edges_globalid_by_localid_g = out_edges_g + params.n_edges_g;
 
-  VertexID offset = 0;
   VertexID* global_y_offset_ptr = params.woj_matches.get_y_offset_ptr();
-  auto data_ptr = params.woj_matches.get_data_ptr();
+  VertexID* data_ptr = params.woj_matches.get_data_ptr();
   const VertexID x_stride = params.woj_matches.get_x_offset();
   const VertexID max_table_rows =
       x_stride ? (params.n_edges_p * kMaxMatchTableRows) / x_stride : 0;
@@ -661,6 +640,8 @@ static __global__ void WOJFilterVCKernel(ParametersFilter params) {
   VertexID u_src = params.exec_path_in_edges[2 * u_eid];
   VertexID u_dst = params.exec_path_in_edges[2 * u_eid + 1];
 
+  // One atomic row reservation per match. The old block-shared staging + mid-kernel
+  // flush was racy for blockDim.x > 1; direct global writes are correct for any block.
   for (VertexID v_idx = tid; v_idx < params.n_vertices_g; v_idx += step) {
     if (Filter(params, u_src, v_idx)) {
       EdgeIndex v_offset_base = out_offset_g[v_idx];
@@ -669,35 +650,15 @@ static __global__ void WOJFilterVCKernel(ParametersFilter params) {
         VertexID nbr_v = out_edges_g[v_offset_base + nbr_v_idx];
 
         if (Filter(params, u_dst, nbr_v)) {
-          offset = atomicAdd(&local_matches_offset, 1);
-          local_matches_data[x_stride * offset] = v_idx;
-          local_matches_data[x_stride * offset + 1] = nbr_v;
-          if (offset > kSharedMemorySize / 2 - 32) {
-            VertexID n_flush = offset + 1;
-            VertexID write_y_offset = atomicAdd(global_y_offset_ptr, n_flush);
-            if (write_y_offset + n_flush <= max_table_rows) {
-              memcpy(data_ptr + x_stride * write_y_offset, local_matches_data,
-                     sizeof(VertexID) * x_stride * n_flush);
-            } else {
-              atomicSub(global_y_offset_ptr, n_flush);
-            }
-            atomicExch(&local_matches_offset, 0);
+          VertexID row = atomicAdd(global_y_offset_ptr, 1);
+          if (row < max_table_rows) {
+            data_ptr[x_stride * row] = v_idx;
+            data_ptr[x_stride * row + 1] = nbr_v;
+          } else {
+            atomicSub(global_y_offset_ptr, 1);
           }
         }
       }
-    }
-  }
-
-  __syncthreads();
-  if (threadIdx.x == 0) {
-    VertexID n_tail = local_matches_offset;
-    if (n_tail == 0) return;
-    VertexID write_y_offset = atomicAdd(global_y_offset_ptr, n_tail);
-    if (write_y_offset + n_tail <= max_table_rows) {
-      memcpy(data_ptr + x_stride * write_y_offset, local_matches_data,
-             sizeof(VertexID) * x_stride * n_tail);
-    } else {
-      atomicSub(global_y_offset_ptr, n_tail);
     }
   }
 }
