@@ -50,6 +50,26 @@ class SubIso : public TaskBase {
 
   __host__ void Run();
 
+  // C API helper: run subiso from flat CSR buffers + labels.
+  // Returns 0 on success, non-zero on error.
+  // Output is written into caller-allocated flat buffers; if a table
+  // exceeds max_result_rows it is truncated.
+  __host__ static int Run(
+      // Pattern graph
+      uint32_t p_num_vertices, uint32_t p_num_in_edges, uint32_t p_num_out_edges,
+      uint32_t p_max_vid, uint32_t p_min_vid, const uint8_t* p_csr_data,
+      uint64_t p_csr_data_size, const uint32_t* p_labels,
+      // Data graph
+      uint32_t g_num_vertices, uint32_t g_num_in_edges, uint32_t g_num_out_edges,
+      uint32_t g_max_vid, uint32_t g_min_vid, const uint8_t* g_csr_data,
+      uint64_t g_csr_data_size, const uint32_t* g_labels,
+      // Output capacity
+      int max_result_tables, int max_result_rows, int max_result_cols,
+      // Output buffers (caller-allocated)
+      uint32_t* out_table_cols, uint32_t* out_table_rows,
+      uint32_t* out_headers_flat, uint32_t* out_data_flat,
+      int* out_num_tables);
+
  private:
   __host__ void LoadData();
 

@@ -13,6 +13,7 @@ Executables are built as `<name>_exec` from `apps/<name>.{cpp,cu}` (see `apps/CM
 | `subiso_exec` | [SubIso (GPU)](subiso_gpu.md) | Subgraph isomorphism (GPU) |
 | `cpu_subiso_exec` | [SubIso (CPU)](cpu_subiso.md) | Subgraph isomorphism (CPU, VF3 / ML filter) |
 | `gar_match_exec` | [GARMatch](gar_match.md) | Graph association rule matching (GPU, ArangoDB) |
+| `graph_aggregate_exec` | [GraphAggregate](graph_aggregate.md) | Per-vertex feature aggregation demo (GPU, synthetic) |
 
 ## Build
 

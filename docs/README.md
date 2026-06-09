@@ -2,9 +2,17 @@
 
 ## Overview
 
-MatrixGraph is a C++/CUDA library for parallel graph computing. This directory contains documentation for **tools** and command-line **applications** (`docs/apps/`). The [GEMM](apps/gemm.md) page also documents the `MatrixOps` C++ API (`Matmult` / `Activate`) used outside `gemm_exec`.
+MatrixGraph is a C++/CUDA library for parallel graph computing. This directory contains documentation for **tools**, command-line **applications** (`docs/apps/`), and the **Go CGO API** (`docs/go_api/`). The [GEMM](apps/gemm.md) page also documents the `MatrixOps` C++ API (`Matmult` / `Activate`) used outside `gemm_exec`.
 
 For a **single YAML summary** of a CSR dataset (|V|, |E|, degree stats, approximate diameter & skew, WCC count), use **[GraphFeatures](tools/GraphFeatures.md)** (`tools/python/graph_features.py`), which shells out to `wcc_exec`, `diameter_exec`, and `skew_exec`.
+
+---
+
+## Go API (`go_api/`)
+
+CGO bindings for `libmatrixgraph_goapi.so` — matrix ops, GraphAggregate feature computation, and SubIso (GPU WOJ).
+
+**[Go API docs →](go_api/README.md)**
 
 ---
 

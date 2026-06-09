@@ -275,6 +275,128 @@ __host__ void SubIso::Run() {
             << std::endl;
 }
 
+// ---------------------------------------------------------------------------
+// C API helper: build ImmutableCSR from flat buffers and run WOJMatching.
+// ---------------------------------------------------------------------------
+__host__ int SubIso::Run(
+    uint32_t p_num_vertices, uint32_t p_num_in_edges, uint32_t p_num_out_edges,
+    uint32_t p_max_vid, uint32_t p_min_vid, const uint8_t* p_csr_data,
+    uint64_t p_csr_data_size, const uint32_t* p_labels,
+    uint32_t g_num_vertices, uint32_t g_num_in_edges, uint32_t g_num_out_edges,
+    uint32_t g_max_vid, uint32_t g_min_vid, const uint8_t* g_csr_data,
+    uint64_t g_csr_data_size, const uint32_t* g_labels,
+    int max_result_tables, int max_result_rows, int max_result_cols,
+    uint32_t* out_table_cols, uint32_t* out_table_rows,
+    uint32_t* out_headers_flat, uint32_t* out_data_flat, int* out_num_tables) {
+  if (!p_csr_data || !p_labels || !g_csr_data || !g_labels || !out_num_tables) {
+    return 1;
+  }
+
+  // Helper: build an ImmutableCSR from flat arrays.
+  auto build_csr = [](uint32_t num_vertices, uint32_t num_in_edges,
+                      uint32_t num_out_edges, uint32_t max_vid,
+                      uint32_t min_vid, const uint8_t* csr_data,
+                      uint64_t csr_data_size, const uint32_t* labels) {
+    ImmutableCSR* csr = new ImmutableCSR();
+    csr->SetNumVertices(num_vertices);
+    csr->SetNumIncomingEdges(num_in_edges);
+    csr->SetNumOutgoingEdges(num_out_edges);
+    csr->SetMaxVid(max_vid);
+    csr->SetMinVid(min_vid);
+
+    uint8_t* buf = new uint8_t[csr_data_size];
+    std::memcpy(buf, csr_data, csr_data_size);
+    csr->SetGraphBuffer(buf);
+    csr->ParseBasePtr(buf);
+
+    VertexLabel* lbl = new VertexLabel[num_vertices];
+    std::memcpy(lbl, labels, sizeof(VertexLabel) * num_vertices);
+    csr->SetVertexLabelBuffer(lbl);
+
+    return csr;
+  };
+
+  ImmutableCSR* p = build_csr(p_num_vertices, p_num_in_edges, p_num_out_edges,
+                              p_max_vid, p_min_vid, p_csr_data,
+                              p_csr_data_size, p_labels);
+  ImmutableCSR* g = build_csr(g_num_vertices, g_num_in_edges, g_num_out_edges,
+                              g_max_vid, g_min_vid, g_csr_data,
+                              g_csr_data_size, g_labels);
+
+  // Run WOJ matching.
+  std::vector<WOJMatches*> results;
+  try {
+    WOJExecutionPlan exec_plan;
+    exec_plan.GenerateWOJExecutionPlan(*p, *g);
+    const std::vector<int> cuda_devices =
+        sics::matrixgraph::core::util::MatrixGraphCudaDeviceList();
+    exec_plan.SetCudaDeviceIds(cuda_devices);
+
+    results = WOJSubIsoKernelWrapper::Filter(exec_plan, *p, *g);
+    results = WOJSubIsoKernelWrapper::Join(exec_plan, results);
+  } catch (...) {
+    delete[] p->GetVLabelBasePointer();
+    delete[] g->GetVLabelBasePointer();
+    delete p;
+    delete g;
+    return 1;
+  }
+
+  int n_tables = static_cast<int>(results.size());
+  if (n_tables > max_result_tables) n_tables = max_result_tables;
+  *out_num_tables = n_tables;
+
+  for (int t = 0; t < n_tables; ++t) {
+    WOJMatches* m = results[t];
+    uint32_t cols = m->get_x_offset();
+    uint32_t rows = m->get_y_offset();
+    out_table_cols[t] = cols;
+    out_table_rows[t] = rows;
+
+    // Copy headers (column IDs).
+    uint32_t header_copy = cols > static_cast<uint32_t>(max_result_cols)
+                               ? static_cast<uint32_t>(max_result_cols)
+                               : cols;
+    if (header_copy > 0 && out_headers_flat) {
+      uint32_t* dst_header =
+          out_headers_flat + t * max_result_cols;
+      std::memcpy(dst_header, m->get_header_ptr(),
+                  sizeof(uint32_t) * header_copy);
+    }
+
+    // Copy data (row-major, each row has 'cols' elements).
+    uint32_t row_copy = rows > static_cast<uint32_t>(max_result_rows)
+                            ? static_cast<uint32_t>(max_result_rows)
+                            : rows;
+    if (row_copy > 0 && cols > 0 && out_data_flat) {
+      uint32_t* dst_data = out_data_flat + t * max_result_rows * max_result_cols;
+      const uint32_t* src_data = m->get_data_ptr();
+      for (uint32_t r = 0; r < row_copy; ++r) {
+        uint32_t col_copy = cols > static_cast<uint32_t>(max_result_cols)
+                                ? static_cast<uint32_t>(max_result_cols)
+                                : cols;
+        std::memcpy(dst_data + r * max_result_cols,
+                    src_data + r * m->get_x(),
+                    sizeof(uint32_t) * col_copy);
+      }
+    }
+  }
+
+  // Cleanup WOJMatches (allocated inside Filter/Join).
+  for (auto* m : results) {
+    if (m) m->Free();
+    delete m;
+  }
+
+  // Cleanup CSR labels (graph buffers are owned by unique_ptr in ImmutableCSR).
+  delete[] p->GetVLabelBasePointer();
+  delete[] g->GetVLabelBasePointer();
+  delete p;
+  delete g;
+
+  return 0;
+}
+
 }  // namespace task
 }  // namespace core
 }  // namespace matrixgraph

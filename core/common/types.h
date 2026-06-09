@@ -56,6 +56,7 @@ enum TaskType {
   kSkew,
   kPageRank,
   kGEMV,
+  kGraphAggregate,
   // Other types.
 };
 
