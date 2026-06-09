@@ -266,6 +266,20 @@ int matrixgraph_graph_aggregate_load_synthetic(void* handle,
   return 0;
 }
 
+int matrixgraph_graph_aggregate_add_synthetic(void* handle,
+                                              uint32_t n_vertices,
+                                              uint32_t out_degree) {
+  set_device_from_env();
+  auto* task = static_cast<GraphAggregate*>(handle);
+  if (!task) return 1;
+  try {
+    task->AddSyntheticGraph(n_vertices, out_degree);
+  } catch (...) {
+    return 1;
+  }
+  return 0;
+}
+
 int matrixgraph_graph_aggregate_compute_features(
     void* handle, const uint32_t* pivot_graph_ids,
     const uint32_t* pivot_vertex_ids, uint32_t n_pivots,

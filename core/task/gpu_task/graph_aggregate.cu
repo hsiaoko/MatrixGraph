@@ -352,13 +352,24 @@ __host__ void GraphAggregate::ComputeFeatures(
 // ---------------------------------------------------------------------------
 __host__ void GraphAggregate::LoadSyntheticData(uint32_t n_vertices,
                                                 uint32_t out_degree_per_vertex) {
-  std::cout << "[GraphAggregate] Loading synthetic data: " << n_vertices
+  // Clear everything and start fresh for backward compatibility.
+  graphs_.clear();
+  per_graph_vertex_attrs_.clear();
+  FreeDeviceBuffers();
+  AddSyntheticGraph(n_vertices, out_degree_per_vertex);
+}
+
+__host__ void GraphAggregate::AddSyntheticGraph(
+    uint32_t n_vertices, uint32_t out_degree_per_vertex) {
+  std::cout << "[GraphAggregate] Adding synthetic graph: " << n_vertices
             << " vertices, out-degree=" << out_degree_per_vertex << std::endl;
 
+  // Invalidate device buffers so ComputeFeatures will re-transfer.
+  FreeDeviceBuffers();
+
   // 1. Build a synthetic directed ring-like CSR graph.
-  graphs_.resize(1);
-  graphs_[0] = std::make_unique<ImmutableCSR>();
-  ImmutableCSR* csr = graphs_[0].get();
+  graphs_.emplace_back(std::make_unique<ImmutableCSR>());
+  ImmutableCSR* csr = graphs_.back().get();
 
   uint32_t n_edges = n_vertices * out_degree_per_vertex;
   uint32_t max_vid = n_vertices - 1;
@@ -449,7 +460,7 @@ __host__ void GraphAggregate::LoadSyntheticData(uint32_t n_vertices,
   // We intentionally leak d_scores / d_flags for the synthetic test lifetime.
   // In production code these would be owned by a proper buffer manager.
 
-  per_graph_vertex_attrs_.resize(1);
+  per_graph_vertex_attrs_.emplace_back();
   uint32_t n_attrs = 2;
   uint32_t capacity = 1;
   while (capacity < static_cast<uint32_t>(n_attrs / 0.7f) + 1) capacity <<= 1;
@@ -502,8 +513,9 @@ __host__ void GraphAggregate::LoadSyntheticData(uint32_t n_vertices,
     }
   }
 
-  per_graph_vertex_attrs_[0].Build(h_attrs.data(), n_vertices);
-  std::cout << "[GraphAggregate] Synthetic data ready." << std::endl;
+  per_graph_vertex_attrs_.back().Build(h_attrs.data(), n_vertices);
+  std::cout << "[GraphAggregate] Synthetic graph " << (graphs_.size() - 1)
+            << " ready." << std::endl;
 }
 
 }  // namespace task

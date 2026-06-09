@@ -3,6 +3,7 @@
 #include <cmath>
 #include <cstdint>
 #include <iostream>
+#include <sstream>
 #include <string>
 #include <vector>
 
@@ -13,8 +14,13 @@
 #include "core/task/gpu_task/task_base.cuh"
 
 // Synthetic graph parameters
-DEFINE_uint32(n, 100, "Number of vertices in the synthetic graph");
-DEFINE_uint32(deg, 3, "Out-degree per vertex");
+DEFINE_uint32(n_graphs, 1, "Number of synthetic graphs to create");
+DEFINE_string(n, "100",
+              "Comma-separated number of vertices per graph (e.g. 100,200). "
+              "If single value, reused for all graphs.");
+DEFINE_string(deg, "3",
+              "Comma-separated out-degree per vertex per graph (e.g. 3,4). "
+              "If single value, reused for all graphs.");
 
 // Feature selection (comma-separated list of primitives)
 DEFINE_string(prims, "Mean,Sum,Count,PercentTrue",
@@ -72,7 +78,6 @@ static std::vector<std::string> SplitByComma(const std::string& s) {
     size_t end = s.find(',', start);
     if (end == std::string::npos) end = s.size();
     std::string part = s.substr(start, end - start);
-    // trim whitespace
     size_t ws_front = 0;
     while (ws_front < part.size() && std::isspace(part[ws_front])) ++ws_front;
     size_t ws_back = part.size();
@@ -83,10 +88,19 @@ static std::vector<std::string> SplitByComma(const std::string& s) {
   return parts;
 }
 
+static std::vector<uint32_t> ParseUintList(const std::string& s) {
+  std::vector<uint32_t> vals;
+  for (const auto& p : SplitByComma(s)) {
+    vals.push_back(static_cast<uint32_t>(std::stoul(p)));
+  }
+  return vals;
+}
+
 void PrintConfig() {
   std::cout << "\n=== GraphAggregate Configuration ===" << std::endl;
-  std::cout << "Vertices: " << FLAGS_n << std::endl;
-  std::cout << "Out-degree: " << FLAGS_deg << std::endl;
+  std::cout << "Graphs: " << FLAGS_n_graphs << std::endl;
+  std::cout << "Vertices per graph: " << FLAGS_n << std::endl;
+  std::cout << "Out-degree per graph: " << FLAGS_deg << std::endl;
   std::cout << "Primitives: " << FLAGS_prims << std::endl;
   std::cout << "Scheduler: " << FLAGS_scheduler << std::endl;
   std::cout << "=====================================\n" << std::endl;
@@ -97,7 +111,7 @@ int main(int argc, char* argv[]) {
       "GraphAggregate synthetic feature computation using MatrixGraph\n"
       "Usage: " +
       std::string(argv[0]) +
-      " -n <vertices> -deg <out_degree> -prims <primitives>");
+      " -n_graphs <count> -n <v1,v2,...> -deg <d1,d2,...> -prims <primitives>");
 
   gflags::ParseCommandLineFlags(&argc, &argv, true);
   PrintConfig();
@@ -106,37 +120,72 @@ int main(int argc, char* argv[]) {
     auto scheduler_type = Scheduler2Enum(FLAGS_scheduler);
     sics::matrixgraph::core::MatrixGraph system(scheduler_type);
 
-    // 1. Create task and load synthetic data.
-    auto* task = new GraphAggregate(std::vector<std::string>{});
-    task->LoadSyntheticData(FLAGS_n, FLAGS_deg);
+    // 1. Parse per-graph parameters.
+    std::vector<uint32_t> n_vertices_list = ParseUintList(FLAGS_n);
+    std::vector<uint32_t> out_deg_list = ParseUintList(FLAGS_deg);
+    uint32_t n_graphs = FLAGS_n_graphs;
 
-    // 2. Build feature requests from comma-separated flag.
+    if (n_vertices_list.size() == 1 && n_graphs > 1) {
+      n_vertices_list.resize(n_graphs, n_vertices_list[0]);
+    }
+    if (out_deg_list.size() == 1 && n_graphs > 1) {
+      out_deg_list.resize(n_graphs, out_deg_list[0]);
+    }
+    if (n_vertices_list.size() != n_graphs || out_deg_list.size() != n_graphs) {
+      std::cerr << "Error: -n and -deg must have either 1 value or exactly "
+                << n_graphs << " values." << std::endl;
+      return EXIT_FAILURE;
+    }
+
+    // 2. Create task and add synthetic graphs.
+    auto* task = new GraphAggregate(std::vector<std::string>{});
+    for (uint32_t g = 0; g < n_graphs; ++g) {
+      task->AddSyntheticGraph(n_vertices_list[g], out_deg_list[g]);
+    }
+
+    // 3. Build feature requests from comma-separated flag.
     auto prim_names = SplitByComma(FLAGS_prims);
     std::vector<FeatureRequest> requests;
     requests.reserve(prim_names.size());
     for (const auto& name : prim_names) {
-      requests.push_back({AttributeName("score"), 0, true, StringToAggPrim(name)});
+      AggPrim prim = StringToAggPrim(name);
+      // PercentTrue operates on the "flag" attribute; everything else
+      // operates on the "score" attribute in this synthetic demo.
+      const char* attr = (prim == AggPrim::kPercentTrue) ? "flag" : "score";
+      requests.push_back({AttributeName(attr), 0, true, prim});
     }
 
-    // 3. All vertices are pivots.
-    std::vector<uint32_t> pivot_gids(FLAGS_n, 0);
-    std::vector<uint32_t> pivot_vids(FLAGS_n);
-    for (uint32_t i = 0; i < FLAGS_n; ++i) pivot_vids[i] = i;
+    // 4. All vertices of all graphs are pivots.
+    std::vector<uint32_t> pivot_gids;
+    std::vector<uint32_t> pivot_vids;
+    for (uint32_t g = 0; g < n_graphs; ++g) {
+      for (uint32_t v = 0; v < n_vertices_list[g]; ++v) {
+        pivot_gids.push_back(g);
+        pivot_vids.push_back(v);
+      }
+    }
 
-    // 4. Compute features.
+    // 5. Compute features.
     std::vector<FeatureValue> results;
     task->ComputeFeatures(pivot_gids, pivot_vids, requests, &results);
 
-    // 5. Print first few results.
-    uint32_t print_n = std::min<uint32_t>(FLAGS_n, 10);
-    std::cout << "Results (first " << print_n << " vertices):" << std::endl;
-    for (uint32_t v = 0; v < print_n; ++v) {
-      std::cout << "  V" << v << ":";
-      for (size_t r = 0; r < requests.size(); ++r) {
-        const auto& val = results[v * requests.size() + r];
-        std::cout << " " << prim_names[r] << "=" << val.ToDouble();
+    // 6. Print first few results per graph.
+    uint32_t print_n = 5;
+    std::cout << "Results (first " << print_n << " vertices per graph):"
+              << std::endl;
+    size_t global_idx = 0;
+    for (uint32_t g = 0; g < n_graphs; ++g) {
+      std::cout << "  Graph " << g << " (|V|=" << n_vertices_list[g]
+                << ", deg=" << out_deg_list[g] << "):" << std::endl;
+      for (uint32_t v = 0; v < n_vertices_list[g]; ++v, ++global_idx) {
+        if (v >= print_n) continue;
+        std::cout << "    V" << v << ":";
+        for (size_t r = 0; r < requests.size(); ++r) {
+          const auto& val = results[global_idx * requests.size() + r];
+          std::cout << " " << prim_names[r] << "=" << val.ToDouble();
+        }
+        std::cout << std::endl;
       }
-      std::cout << std::endl;
     }
 
     delete task;

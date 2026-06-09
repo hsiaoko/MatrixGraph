@@ -97,7 +97,13 @@ class GraphAggregate : public TaskBase {
   // Test helper: create a synthetic ring graph with n_vertices and
   // out_degree_per_vertex random outgoing edges.  Also fills per-vertex
   // Attributes with two attributes: "score" (float) and "flag" (bool).
+  // Backward-compatible wrapper that clears any existing graphs first.
   __host__ void LoadSyntheticData(uint32_t n_vertices,
+                                  uint32_t out_degree_per_vertex);
+
+  // Add a new synthetic graph to the internal multi-graph list.
+  // Device buffers are invalidated so the next ComputeFeatures will re-transfer.
+  __host__ void AddSyntheticGraph(uint32_t n_vertices,
                                   uint32_t out_degree_per_vertex);
 
  private:

@@ -38,6 +38,10 @@ void matrixgraph_graph_aggregate_destroy(void* handle);
 int matrixgraph_graph_aggregate_load_synthetic(void* handle, uint32_t n_vertices,
                                                  uint32_t out_degree);
 
+/** Add an additional synthetic graph to an existing GraphAggregate handle. */
+int matrixgraph_graph_aggregate_add_synthetic(void* handle, uint32_t n_vertices,
+                                                uint32_t out_degree);
+
 /** Compute features for given pivots and requests.
  *  out_values must be pre-allocated with size n_pivots * n_requests.
  */
