@@ -350,6 +350,82 @@ __host__ void GraphAggregate::ComputeFeatures(
 // ---------------------------------------------------------------------------
 // Synthetic data generation (for testing)
 // ---------------------------------------------------------------------------
+__host__ void GraphAggregate::ComputeAll(
+    const std::vector<uint32_t>& pivot_graph_ids,
+    const std::vector<uint32_t>& pivot_vertex_ids,
+    const kernel::AttributeName& attr_name,
+    bool use_outgoing,
+    std::vector<kernel::AllFeatures>* out_values) {
+  using kernel::AllFeatures;
+  using kernel::ComputeAllFeaturesKernel;
+
+  if (pivot_graph_ids.empty() || pivot_vertex_ids.empty()) {
+    std::cout << "[GraphAggregate::ComputeAll] empty input, skipping."
+              << std::endl;
+    return;
+  }
+
+  // Ensure graph data is on device.
+  if (d_graph_data_array_ == nullptr) {
+    TransferGraphDataToDevice();
+  }
+
+  uint32_t n_pivots = static_cast<uint32_t>(pivot_graph_ids.size());
+
+  // Copy pivots to device.
+  uint32_t* d_pivot_graph_id = nullptr;
+  uint32_t* d_pivot_vertex_id = nullptr;
+  CUDA_CHECK(cudaMalloc(&d_pivot_graph_id, sizeof(uint32_t) * n_pivots));
+  CUDA_CHECK(cudaMalloc(&d_pivot_vertex_id, sizeof(uint32_t) * n_pivots));
+  CUDA_CHECK(cudaMemcpy(d_pivot_graph_id, pivot_graph_ids.data(),
+                        sizeof(uint32_t) * n_pivots, cudaMemcpyHostToDevice));
+  CUDA_CHECK(cudaMemcpy(d_pivot_vertex_id, pivot_vertex_ids.data(),
+                        sizeof(uint32_t) * n_pivots, cudaMemcpyHostToDevice));
+
+  // Determine max_neighbors. For now, use a configurable limit.
+  uint32_t max_neighbors = 4096;
+
+  // Allocate workspace and outputs.
+  kernel::FeatureValue* d_workspace = nullptr;
+  AllFeatures* d_outputs = nullptr;
+  CUDA_CHECK(cudaMalloc(&d_workspace,
+                        sizeof(kernel::FeatureValue) * n_pivots * max_neighbors));
+  CUDA_CHECK(cudaMalloc(&d_outputs, sizeof(AllFeatures) * n_pivots));
+
+  // Launch fused kernel.
+  const uint32_t block_size = 256;
+  const uint32_t grid_size = (n_pivots + block_size - 1) / block_size;
+  ComputeAllFeaturesKernel<<<grid_size, block_size>>>(
+      d_graph_data_array_,
+      d_graph_n_vertices_,
+      d_graph_n_in_edges_,
+      d_graph_n_out_edges_,
+      d_vertex_attrs_array_,
+      d_pivot_graph_id,
+      d_pivot_vertex_id,
+      n_pivots,
+      attr_name,
+      use_outgoing,
+      d_workspace,
+      max_neighbors,
+      d_outputs);
+  CUDA_CHECK(cudaDeviceSynchronize());
+
+  // Copy back if requested.
+  if (out_values != nullptr) {
+    out_values->resize(n_pivots);
+    CUDA_CHECK(cudaMemcpy(out_values->data(), d_outputs,
+                          sizeof(AllFeatures) * n_pivots,
+                          cudaMemcpyDeviceToHost));
+  }
+
+  // Cleanup temporary device memory.
+  cudaFree(d_pivot_graph_id);
+  cudaFree(d_pivot_vertex_id);
+  cudaFree(d_workspace);
+  cudaFree(d_outputs);
+}
+
 __host__ void GraphAggregate::LoadSyntheticData(uint32_t n_vertices,
                                                 uint32_t out_degree_per_vertex) {
   // Clear everything and start fresh for backward compatibility.

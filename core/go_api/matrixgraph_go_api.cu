@@ -1,17 +1,21 @@
 #include "go_api/matrixgraph_go_api.h"
+#include "task/gpu_task/compute_features.cuh"
 #include "task/gpu_task/gar_match.cuh"
 #include "task/gpu_task/graph_aggregate.cuh"
 #include "task/gpu_task/subiso.cuh"
 #include "task/gpu_task/kernel/kernel_matrix_ops.cuh"
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
 #include <cuda_runtime.h>
 
 namespace kernel = sics::matrixgraph::core::task::kernel;
 namespace task = sics::matrixgraph::core::task;
 using GraphAggregate = sics::matrixgraph::core::task::GraphAggregate;
+using ComputeFeaturesTask = sics::matrixgraph::core::task::ComputeFeaturesTask;
 using FeatureRequest = sics::matrixgraph::core::task::kernel::FeatureRequest;
 using FeatureValue = sics::matrixgraph::core::task::kernel::FeatureValue;
+using AllFeatures = sics::matrixgraph::core::task::kernel::AllFeatures;
 using AggPrim = sics::matrixgraph::core::task::kernel::AggPrim;
 using AttributeName = sics::matrixgraph::core::data_structures::AttributeName;
 using SubIso = sics::matrixgraph::core::task::SubIso;
@@ -324,6 +328,197 @@ int matrixgraph_graph_aggregate_compute_features(
     out_values[i].f64 = cpp_out[i].f64;
     out_values[i].b = cpp_out[i].b ? 1 : 0;
   }
+  return 0;
+}
+
+namespace {
+
+inline void CopyFeatureValueToC(const FeatureValue& src,
+                                MatrixGraphFeatureValue* dst) {
+  dst->type = static_cast<int32_t>(src.type);
+  dst->i64 = src.i64;
+  dst->f64 = src.f64;
+  dst->b = src.b ? 1 : 0;
+}
+
+inline void CopyAllFeaturesToC(const AllFeatures& src,
+                               MatrixGraphAllFeatures* dst) {
+  CopyFeatureValueToC(src.count, &dst->count);
+  CopyFeatureValueToC(src.count_greater_than_mean, &dst->count_greater_than_mean);
+  CopyFeatureValueToC(src.num_unique, &dst->num_unique);
+  CopyFeatureValueToC(src.sum, &dst->sum);
+  CopyFeatureValueToC(src.mean, &dst->mean);
+  CopyFeatureValueToC(src.variance, &dst->variance);
+  CopyFeatureValueToC(src.std, &dst->std);
+  CopyFeatureValueToC(src.mode, &dst->mode);
+  CopyFeatureValueToC(src.min, &dst->min);
+  CopyFeatureValueToC(src.max, &dst->max);
+  CopyFeatureValueToC(src.median, &dst->median);
+  CopyFeatureValueToC(src.quarter, &dst->quarter);
+  CopyFeatureValueToC(src.quartile3, &dst->quartile3);
+  CopyFeatureValueToC(src.entropy, &dst->entropy);
+  CopyFeatureValueToC(src.percent_true, &dst->percent_true);
+  CopyFeatureValueToC(src.skew, &dst->skew);
+}
+
+}  // namespace
+
+int matrixgraph_graph_aggregate_compute_all(
+    void* handle, const uint32_t* pivot_graph_ids,
+    const uint32_t* pivot_vertex_ids, uint32_t n_pivots,
+    const char* attr_name, uint8_t use_outgoing,
+    MatrixGraphAllFeatures* out_values) {
+  set_device_from_env();
+  auto* task = static_cast<GraphAggregate*>(handle);
+  if (!task || !pivot_graph_ids || !pivot_vertex_ids || !attr_name ||
+      !out_values) {
+    return 1;
+  }
+
+  std::vector<uint32_t> gids(pivot_graph_ids, pivot_graph_ids + n_pivots);
+  std::vector<uint32_t> vids(pivot_vertex_ids, pivot_vertex_ids + n_pivots);
+
+  std::vector<AllFeatures> cpp_out;
+  try {
+    task->ComputeAll(gids, vids, AttributeName(attr_name), use_outgoing != 0,
+                     &cpp_out);
+  } catch (...) {
+    return 1;
+  }
+
+  if (cpp_out.size() != n_pivots) {
+    return 1;
+  }
+
+  for (size_t i = 0; i < cpp_out.size(); ++i) {
+    CopyAllFeaturesToC(cpp_out[i], &out_values[i]);
+  }
+  return 0;
+}
+
+// ---------------------------------------------------------------------------
+// ComputeFeatures C API
+// ---------------------------------------------------------------------------
+
+/**
+ * @brief C API wrapper for ComputeFeaturesTask construction.
+ *
+ * Allocates a task with an empty graph path.  The caller must load a graph
+ * before computing features.
+ */
+void* matrixgraph_compute_features_create(void) {
+  set_device_from_env();
+  try {
+    return new ComputeFeaturesTask("");
+  } catch (...) {
+    return nullptr;
+  }
+}
+
+/**
+ * @brief C API wrapper for ComputeFeaturesTask destruction.
+ */
+void matrixgraph_compute_features_destroy(void* handle) {
+  auto* task = static_cast<ComputeFeaturesTask*>(handle);
+  delete task;
+}
+
+/**
+ * @brief C API wrapper for ComputeFeaturesTask::LoadGraph().
+ */
+int matrixgraph_compute_features_load_graph(void* handle,
+                                            const char* graph_path) {
+  set_device_from_env();
+  auto* task = static_cast<ComputeFeaturesTask*>(handle);
+  if (!task || !graph_path) return 1;
+  try {
+    task->LoadGraph(graph_path);
+  } catch (...) {
+    return 1;
+  }
+  return 0;
+}
+
+/**
+ * @brief C API wrapper for ComputeFeaturesTask::LoadAttributes().
+ */
+int matrixgraph_compute_features_load_attributes(
+    void* handle, uint32_t n_columns,
+    const ComputeFeaturesAttributeColumn* columns) {
+  set_device_from_env();
+  auto* task = static_cast<ComputeFeaturesTask*>(handle);
+  if (!task || (n_columns > 0 && !columns)) return 1;
+  try {
+    task->LoadAttributes(n_columns, columns);
+  } catch (...) {
+    return 1;
+  }
+  return 0;
+}
+
+/**
+ * @brief C API wrapper for ComputeFeaturesTask::LoadLabels().
+ */
+int matrixgraph_compute_features_load_labels(void* handle,
+                                             const uint32_t* labels,
+                                             uint32_t n) {
+  set_device_from_env();
+  auto* task = static_cast<ComputeFeaturesTask*>(handle);
+  if (!task || (n > 0 && !labels)) return 1;
+  try {
+    task->LoadLabels(labels, n);
+  } catch (...) {
+    return 1;
+  }
+  return 0;
+}
+
+/**
+ * @brief C API wrapper for ComputeFeaturesTask::Compute().
+ *
+ * Copies the plan, navigators, conditions and pivots into std::vectors, runs
+ * the computation, and copies the results into the caller-provided
+ * @p out_values buffer.
+ */
+int matrixgraph_compute_features_compute(
+    void* handle, const uint32_t* pivot_vertex_ids, uint32_t n_pivots,
+    const MatrixGraphPlanNode* plan, uint32_t n_plan_nodes,
+    const MatrixGraphPlanNode* navs, uint32_t n_navs,
+    const MatrixGraphCondNode* conds, uint32_t n_conds,
+    const int32_t* output_expr_indices, uint32_t n_outputs,
+    MatrixGraphFeatureValue* out_values) {
+  set_device_from_env();
+  auto* task = static_cast<ComputeFeaturesTask*>(handle);
+  if (!task || !pivot_vertex_ids || !plan || !output_expr_indices ||
+      !out_values) {
+    return 1;
+  }
+
+  std::vector<uint32_t> vids(pivot_vertex_ids, pivot_vertex_ids + n_pivots);
+  std::vector<MatrixGraphPlanNode> cpp_plan(plan, plan + n_plan_nodes);
+  std::vector<MatrixGraphPlanNode> cpp_navs;
+  if (navs != nullptr) {
+    cpp_navs.assign(navs, navs + n_navs);
+  }
+  std::vector<int32_t> cpp_outputs(output_expr_indices,
+                                   output_expr_indices + n_outputs);
+  std::vector<MatrixGraphCondNode> cpp_conds;
+  if (conds != nullptr && n_conds > 0) {
+    cpp_conds.assign(conds, conds + n_conds);
+  }
+
+  std::vector<MatrixGraphFeatureValue> cpp_out;
+  try {
+    cpp_out = task->Compute(vids, cpp_plan, cpp_navs, cpp_conds, cpp_outputs);
+  } catch (...) {
+    return 1;
+  }
+
+  if (cpp_out.size() != static_cast<size_t>(n_pivots) * n_outputs) {
+    return 1;
+  }
+  std::memcpy(out_values, cpp_out.data(),
+              sizeof(MatrixGraphFeatureValue) * cpp_out.size());
   return 0;
 }
 

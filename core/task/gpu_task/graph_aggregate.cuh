@@ -80,6 +80,16 @@ class GraphAggregate : public TaskBase {
       const std::vector<kernel::FeatureRequest>& requests,
       std::vector<kernel::FeatureValue>* out_values = nullptr);
 
+  // Fused compute-all: produce all aggregation primitives for each pivot in a
+  // single kernel launch.  Much faster than calling ComputeFeatures with one
+  // request per primitive because shared work (sum, mean, sort) is done once.
+  __host__ void ComputeAll(
+      const std::vector<uint32_t>& pivot_graph_ids,
+      const std::vector<uint32_t>& pivot_vertex_ids,
+      const kernel::AttributeName& attr_name,
+      bool use_outgoing,
+      std::vector<kernel::AllFeatures>* out_values);
+
   // Accessors
   __host__ size_t GetNumGraphs() const { return graphs_.size(); }
   __host__ const ImmutableCSR& GetGraph(size_t idx) const { return *graphs_[idx]; }

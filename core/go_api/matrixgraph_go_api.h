@@ -5,8 +5,15 @@
 extern "C" {
 #endif
 
-/** C API for Go CGO: all pointers are host memory. Returns 0 on success, non-zero on error. */
+/**
+ * @file matrixgraph_go_api.h
+ * @brief C API exported for Go CGO and other foreign-language callers.
+ *
+ * All pointers passed to these functions are host memory unless otherwise
+ * noted.  Functions generally return 0 on success and non-zero on error.
+ */
 #include <stdint.h>
+#include "core/task/gpu_task/compute_features_types.h"
 
 // ---------------------------------------------------------------------------
 // GraphAggregate feature computation
@@ -18,15 +25,6 @@ typedef struct {
   uint8_t use_outgoing;
   int32_t prim;  // AggPrim enum value
 } MatrixGraphFeatureRequest;
-
-typedef struct {
-  int32_t type;  // ValueType
-  union {
-    int64_t i64;
-    double f64;
-    uint8_t b;
-  };
-} MatrixGraphFeatureValue;
 
 /** Create a GraphAggregate handle. Returns opaque pointer (or NULL on failure). */
 void* matrixgraph_graph_aggregate_create(void);
@@ -50,6 +48,38 @@ int matrixgraph_graph_aggregate_compute_features(
     const uint32_t* pivot_vertex_ids, uint32_t n_pivots,
     const MatrixGraphFeatureRequest* requests, uint32_t n_requests,
     MatrixGraphFeatureValue* out_values);
+
+/** Output container for the fused compute-all kernel.
+ *  Mirrors kernel::AllFeatures field-for-field.
+ */
+typedef struct {
+  MatrixGraphFeatureValue count;
+  MatrixGraphFeatureValue count_greater_than_mean;
+  MatrixGraphFeatureValue num_unique;
+  MatrixGraphFeatureValue sum;
+  MatrixGraphFeatureValue mean;
+  MatrixGraphFeatureValue variance;
+  MatrixGraphFeatureValue std;
+  MatrixGraphFeatureValue mode;
+  MatrixGraphFeatureValue min;
+  MatrixGraphFeatureValue max;
+  MatrixGraphFeatureValue median;
+  MatrixGraphFeatureValue quarter;
+  MatrixGraphFeatureValue quartile3;
+  MatrixGraphFeatureValue entropy;
+  MatrixGraphFeatureValue percent_true;
+  MatrixGraphFeatureValue skew;
+} MatrixGraphAllFeatures;
+
+/** Fused compute-all: produce every aggregation primitive for each pivot
+ *  in a single kernel launch.  out_values must be pre-allocated with size
+ *  n_pivots.  attr_name is a null-terminated attribute name.
+ */
+int matrixgraph_graph_aggregate_compute_all(
+    void* handle, const uint32_t* pivot_graph_ids,
+    const uint32_t* pivot_vertex_ids, uint32_t n_pivots,
+    const char* attr_name, uint8_t use_outgoing,
+    MatrixGraphAllFeatures* out_values);
 
 /** C = A * B (row-major). A: m×k, B: k×n, C: m×n. */
 int matrixgraph_matmult(const float* A, const float* B, float* C, int m, int k, int n);
@@ -119,6 +149,97 @@ int matrixgraph_gar_match(
  *   out_headers_flat[max_result_tables * max_result_cols]
  *   out_data_flat   [max_result_tables * max_result_rows * max_result_cols]
  */
+// ---------------------------------------------------------------------------
+// ComputeFeatures task C API
+// ---------------------------------------------------------------------------
+
+/**
+ * @brief Create a ComputeFeaturesTask handle.
+ *
+ * The returned opaque pointer must be released with
+ * matrixgraph_compute_features_destroy().  Returns NULL if the handle could
+ * not be allocated.
+ */
+void* matrixgraph_compute_features_create(void);
+
+/**
+ * @brief Destroy a ComputeFeaturesTask handle and free all associated GPU
+ *        memory.
+ *
+ * @param handle Handle returned by matrixgraph_compute_features_create().
+ *               Passing NULL is safe and is a no-op.
+ */
+void matrixgraph_compute_features_destroy(void* handle);
+
+/**
+ * @brief Load a graph from a MatrixGraph CSR directory path.
+ *
+ * The path is expected to contain the files written by ImmutableCSR::Write().
+ * Must be called before loading attributes or computing features.
+ *
+ * @return 0 on success, non-zero on error.
+ */
+int matrixgraph_compute_features_load_graph(void* handle, const char* graph_path);
+
+/**
+ * @brief Load columnar per-vertex attributes.
+ *
+ * Each column must have exactly one value per graph vertex.  Calls are
+ * cumulative: attributes from earlier calls are preserved.  The `values`
+ * pointers only need to remain valid for the duration of this call.
+ *
+ * @return 0 on success, non-zero on error.
+ */
+int matrixgraph_compute_features_load_attributes(
+    void* handle, uint32_t n_columns,
+    const ComputeFeaturesAttributeColumn* columns);
+
+/**
+ * @brief Load optional per-vertex labels.
+ *
+ * Labels enable label filtering in NeighborNav (nav.target_label) and will be
+ * required by pattern navigators in future phases.
+ *
+ * @param labels uint32_t array of length @p n.
+ * @param n      Number of vertices (must match the graph).
+ * @return 0 on success, non-zero on error.
+ */
+int matrixgraph_compute_features_load_labels(void* handle,
+                                             const uint32_t* labels,
+                                             uint32_t n);
+
+/**
+ * @brief Evaluate the flat expression plan for the given pivots.
+ *
+ * All plan/navigator/condition/pivot data are copied to temporary device
+ * buffers for this call.  The graph, attributes and labels loaded earlier are
+ * reused.
+ *
+ * @param handle              Task handle.
+ * @param pivot_vertex_ids    Array of pivot vertex ids (host memory).
+ * @param n_pivots            Length of @p pivot_vertex_ids.
+ * @param plan                Flat expression plan (host memory).
+ * @param n_plan_nodes        Length of @p plan.
+ * @param navs                Flat navigator plan (host memory).  May be NULL
+ *                            if @p n_navs == 0.
+ * @param n_navs              Length of @p navs.
+ * @param conds               Flat condition array (host memory).  May be NULL
+ *                            if @p n_conds == 0.
+ * @param n_conds             Length of @p conds.
+ * @param output_expr_indices Indices into @p plan that should be emitted.
+ * @param n_outputs           Length of @p output_expr_indices.
+ * @param out_values          Pre-allocated output buffer of size
+ *                            n_pivots * n_outputs (host memory).
+ * @return 0 on success, non-zero on error.
+ */
+int matrixgraph_compute_features_compute(
+    void* handle, const uint32_t* pivot_vertex_ids, uint32_t n_pivots,
+    const MatrixGraphPlanNode* plan, uint32_t n_plan_nodes,
+    const MatrixGraphPlanNode* navs, uint32_t n_navs,
+    const MatrixGraphCondNode* conds, uint32_t n_conds,
+    const int32_t* output_expr_indices, uint32_t n_outputs,
+    MatrixGraphFeatureValue* out_values);
+
 int matrixgraph_subiso(
     uint32_t p_num_vertices, uint32_t p_num_in_edges, uint32_t p_num_out_edges,
     uint32_t p_max_vid, uint32_t p_min_vid, const uint8_t* p_csr_data,

@@ -10,7 +10,7 @@ For a **single YAML summary** of a CSR dataset (|V|, |E|, degree stats, approxim
 
 ## Go API (`go_api/`)
 
-CGO bindings for `libmatrixgraph_goapi.so` — matrix ops, GraphAggregate feature computation, and SubIso (GPU WOJ).
+CGO bindings for `libmatrixgraph_goapi.so` — matrix ops, GraphAggregate feature computation, ComputeFeatures flexible expression evaluation, and SubIso (GPU WOJ).
 
 **[Go API docs →](go_api/README.md)**
 
@@ -33,6 +33,8 @@ Shipped executables are built as `<name>_exec` from `apps/`. Full table, build h
 | `subiso_exec` | [SubIso (GPU)](apps/subiso_gpu.md) |
 | `cpu_subiso_exec` | [SubIso (CPU)](apps/cpu_subiso.md) |
 | `gar_match_exec` | [GARMatch](apps/gar_match.md) |
+| `graph_aggregate_exec` | [GraphAggregate](apps/graph_aggregate.md) |
+| `compute_features_exec` | [ComputeFeatures](apps/compute_features.md) |
 
 ---
 

@@ -57,8 +57,16 @@ import (
 | `matrixgraph_transpose` | `Transpose` | Matrix transpose B = Aᵀ |
 | `matrixgraph_graph_aggregate_create` | `GraphAggregateCreate` | Create a GraphAggregate handle |
 | `matrixgraph_graph_aggregate_destroy` | `GraphAggregateDestroy` | Destroy the handle |
-| `matrixgraph_graph_aggregate_load_synthetic` | `GraphAggregateLoadSynthetic` | Load a synthetic ring graph |
+| `matrixgraph_graph_aggregate_load_synthetic` | `GraphAggregateLoadSynthetic` | Load a synthetic ring graph (clears existing) |
+| `matrixgraph_graph_aggregate_add_synthetic` | `GraphAggregateAddSynthetic` | Add an additional synthetic graph (multi-graph) |
 | `matrixgraph_graph_aggregate_compute_features` | `GraphAggregateComputeFeatures` | Compute per-vertex aggregated features |
+| `matrixgraph_graph_aggregate_compute_all` | `GraphAggregateComputeAll` | Fused compute-all primitives in one kernel launch |
+| `matrixgraph_compute_features_create` | `ComputeFeaturesCreate` | Create a ComputeFeatures handle |
+| `matrixgraph_compute_features_destroy` | `ComputeFeaturesDestroy` | Destroy the handle |
+| `matrixgraph_compute_features_load_graph` | `ComputeFeaturesLoadGraph` | Load a MatrixGraph CSR graph |
+| `matrixgraph_compute_features_load_attributes` | `ComputeFeaturesLoadAttributes` | Load per-vertex attribute columns |
+| `matrixgraph_compute_features_load_labels` | `ComputeFeaturesLoadLabels` | Load per-vertex labels (optional) |
+| `matrixgraph_compute_features_compute` | `ComputeFeaturesCompute` | Evaluate a flat expression plan |
 | `matrixgraph_subiso` | `SubIso` | GPU subgraph isomorphism (WOJ) |
 | `matrixgraph_gar_match` | `GARMatch` | Graph association rule matching (stub) |
 
@@ -169,23 +177,28 @@ typedef struct {
 } MatrixGraphFeatureValue;
 ```
 
+> The C `union` means `i64`, `f64`, and `b` share the same 8-byte slot.  Go wrappers must mirror this layout exactly (see `FeatureValue` below).
+
 ### AggPrim values
 
 | Value | Name | Output type |
 |-------|------|-------------|
 | `0` | `kCount` | `int64` |
+| `1` | `kCountGreaterThanMean` | `int64` |
+| `2` | `kNumUnique` | `int64` |
 | `3` | `kSum` | `float64` |
 | `4` | `kMean` | `float64` |
-| `10`| `kMin` | `float64` |
-| `11`| `kMax` | `float64` |
-| `12`| `kMedian` | `float64` |
-| `13`| `kQuarter` | `float64` |
-| `14`| `kQuartile3` | `float64` |
-| `7` | `kVariance` | `float64` |
-| `8` | `kStd` | `float64` |
-| `15`| `kPercentTrue` | `float64` |
-| `16`| `kSkew` | `float64` |
-| `1` | `kCountGreaterThanMean` | `int64` |
+| `5` | `kVariance` | `float64` |
+| `6` | `kStd` | `float64` |
+| `7` | `kMode` | `float64` |
+| `8` | `kMin` | `float64` |
+| `9` | `kMax` | `float64` |
+| `10`| `kMedian` | `float64` |
+| `11`| `kQuarter` | `float64` |
+| `12`| `kQuartile3` | `float64` |
+| `13`| `kEntropy` | `float64` |
+| `14`| `kPercentTrue` | `float64` |
+| `15`| `kSkew` | `float64` |
 
 ### Go example — synthetic graph + feature computation
 
@@ -206,13 +219,22 @@ import (
 type AggPrim int32
 
 const (
-    AggCount  AggPrim = 0
-    AggSum    AggPrim = 3
-    AggMean   AggPrim = 4
-    AggMin    AggPrim = 10
-    AggMax    AggPrim = 11
-    AggStd    AggPrim = 8
-    AggPercentTrue AggPrim = 15
+    AggCount                AggPrim = 0
+    AggCountGreaterThanMean AggPrim = 1
+    AggNumUnique            AggPrim = 2
+    AggSum                  AggPrim = 3
+    AggMean                 AggPrim = 4
+    AggVariance             AggPrim = 5
+    AggStd                  AggPrim = 6
+    AggMode                 AggPrim = 7
+    AggMin                  AggPrim = 8
+    AggMax                  AggPrim = 9
+    AggMedian               AggPrim = 10
+    AggQuarter              AggPrim = 11
+    AggQuartile3            AggPrim = 12
+    AggEntropy              AggPrim = 13
+    AggPercentTrue          AggPrim = 14
+    AggSkew                 AggPrim = 15
 )
 
 func GraphAggregateCreate() unsafe.Pointer {
@@ -240,12 +262,26 @@ type FeatureRequest struct {
     Prim          int32
 }
 
-// FeatureValue mirrors the C struct.
+// FeatureValue mirrors the C union layout:
+//   int32_t type;  // 4 bytes
+//   char padding[4];
+//   union { int64_t i64; double f64; uint8_t b; };  // 8 bytes
 type FeatureValue struct {
     Type int32
-    I64  int64
-    F64  float64
-    B    uint8
+    _    [4]byte
+    raw  [8]byte
+}
+
+func (v FeatureValue) I64() int64 {
+    return *(*int64)(unsafe.Pointer(&v.raw[0]))
+}
+
+func (v FeatureValue) F64() float64 {
+    return *(*float64)(unsafe.Pointer(&v.raw[0]))
+}
+
+func (v FeatureValue) B() uint8 {
+    return v.raw[0]
 }
 
 func GraphAggregateComputeFeatures(
@@ -278,6 +314,15 @@ func GraphAggregateComputeFeatures(
 }
 
 // --- usage ---
+func GraphAggregateAddSynthetic(h unsafe.Pointer, nVertices, outDeg uint32) error {
+    ret := C.matrixgraph_graph_aggregate_add_synthetic(
+        h, C.uint32_t(nVertices), C.uint32_t(outDeg))
+    if ret != 0 {
+        return fmt.Errorf("add_synthetic failed")
+    }
+    return nil
+}
+
 func ExampleGraphAggregate() {
     h := GraphAggregateCreate()
     defer GraphAggregateDestroy(h)
@@ -310,10 +355,142 @@ func ExampleGraphAggregate() {
     for v := 0; v < 5; v++ {
         base := v * len(reqs)
         fmt.Printf("V%d: Mean=%.3f Count=%d PctTrue=%.3f\n",
-            v, results[base].F64, results[base+1].I64, results[base+2].F64)
+            v, results[base].F64(), results[base+1].I64(), results[base+2].F64())
+    }
+}
+
+// Multi-graph example
+func ExampleGraphAggregateMultiGraph() {
+    h := GraphAggregateCreate()
+    defer GraphAggregateDestroy(h)
+
+    // Graph 0: 100 vertices, deg 3
+    GraphAggregateLoadSynthetic(h, 100, 3)
+    // Graph 1: 200 vertices, deg 4
+    GraphAggregateAddSynthetic(h, 200, 4)
+
+    var pivots, gids []uint32
+    for v := 0; v < 100; v++ {
+        gids = append(gids, 0)
+        pivots = append(pivots, uint32(v))
+    }
+    for v := 0; v < 200; v++ {
+        gids = append(gids, 1)
+        pivots = append(pivots, uint32(v))
+    }
+
+    reqs := []FeatureRequest{{Prim: int32(AggMean), UseOutgoing: 1}}
+    copy(reqs[0].AttrName[:], "score")
+
+    results, err := GraphAggregateComputeFeatures(h, gids, pivots, reqs)
+    if err != nil {
+        panic(err)
+    }
+    fmt.Printf("Graph0 V0 Mean=%.3f, Graph1 V0 Mean=%.3f\n",
+        results[0].F64(), results[100].F64())
+}
+
+// AllFeatures mirrors the C struct returned by the fused compute-all kernel.
+type AllFeatures struct {
+    Count                FeatureValue
+    CountGreaterThanMean FeatureValue
+    NumUnique            FeatureValue
+    Sum                  FeatureValue
+    Mean                 FeatureValue
+    Variance             FeatureValue
+    Std                  FeatureValue
+    Mode                 FeatureValue
+    Min                  FeatureValue
+    Max                  FeatureValue
+    Median               FeatureValue
+    Quarter              FeatureValue
+    Quartile3            FeatureValue
+    Entropy              FeatureValue
+    PercentTrue          FeatureValue
+    Skew                 FeatureValue
+}
+
+func GraphAggregateComputeAll(
+    h unsafe.Pointer,
+    pivotGraphIDs, pivotVertexIDs []uint32,
+    attrName string,
+    useOutgoing bool,
+) ([]AllFeatures, error) {
+
+    nPivots := len(pivotGraphIDs)
+    if len(pivotVertexIDs) != nPivots {
+        return nil, fmt.Errorf("pivot id count mismatch")
+    }
+
+    cAttrName := C.CString(attrName)
+    defer C.free(unsafe.Pointer(cAttrName))
+
+    out := make([]AllFeatures, nPivots)
+
+    var u8 uint8
+    if useOutgoing {
+        u8 = 1
+    }
+
+    ret := C.matrixgraph_graph_aggregate_compute_all(
+        h,
+        (*C.uint32_t)(unsafe.Pointer(&pivotGraphIDs[0])),
+        (*C.uint32_t)(unsafe.Pointer(&pivotVertexIDs[0])),
+        C.uint32_t(nPivots),
+        cAttrName,
+        C.uint8_t(u8),
+        (*C.MatrixGraphAllFeatures)(unsafe.Pointer(&out[0])),
+    )
+    if ret != 0 {
+        return nil, fmt.Errorf("compute_all failed")
+    }
+    return out, nil
+}
+
+func ExampleGraphAggregateComputeAll() {
+    h := GraphAggregateCreate()
+    defer GraphAggregateDestroy(h)
+
+    GraphAggregateLoadSynthetic(h, 100, 3)
+
+    pivots := make([]uint32, 100)
+    gids := make([]uint32, 100)
+    for i := 0; i < 100; i++ {
+        pivots[i] = uint32(i)
+    }
+
+    results, err := GraphAggregateComputeAll(h, gids, pivots, "score", true)
+    if err != nil {
+        panic(err)
+    }
+
+    for v := 0; v < 3; v++ {
+        r := results[v]
+        fmt.Printf("V%d: count=%d sum=%.3f mean=%.3f std=%.3f median=%.3f skew=%.6f\n",
+            v, r.Count.I64(), r.Sum.F64(), r.Mean.F64(), r.Std.F64(), r.Median.F64(), r.Skew.F64())
     }
 }
 ```
+
+---
+
+## ComputeFeatures
+
+`ComputeFeatures` evaluates arbitrary feature-expression plans on a GPU.  It is
+more flexible than `GraphAggregate`: it supports nested aggregations,
+arithmetic transformations, and conditional navigator filters.
+
+See the dedicated page for the full C API and a Go example:
+
+**[ComputeFeatures Go API →](compute_features.md)**
+
+The high-level workflow is:
+
+1. `matrixgraph_compute_features_create`
+2. `matrixgraph_compute_features_load_graph`
+3. `matrixgraph_compute_features_load_attributes` (and optionally `load_labels`)
+4. `matrixgraph_compute_features_compute`
+5. `matrixgraph_compute_features_destroy`
 
 ---
 

@@ -112,6 +112,35 @@ __device__ inline void DeviceSortValues(FeatureValue* arr, uint32_t n);
 __device__ inline FeatureValue ApplyAggPrim(AggPrim prim, FeatureValue* values, uint32_t n);
 
 // ---------------------------------------------------------------------------
+// AllFeatures: fused output container for compute_all
+// ---------------------------------------------------------------------------
+struct AllFeatures {
+  FeatureValue count;
+  FeatureValue count_greater_than_mean;
+  FeatureValue num_unique;
+  FeatureValue sum;
+  FeatureValue mean;
+  FeatureValue variance;
+  FeatureValue std;
+  FeatureValue mode;
+  FeatureValue min;
+  FeatureValue max;
+  FeatureValue median;
+  FeatureValue quarter;
+  FeatureValue quartile3;
+  FeatureValue entropy;
+  FeatureValue percent_true;
+  FeatureValue skew;
+};
+
+// ---------------------------------------------------------------------------
+// Fused aggregation: compute all primitives in one pass over the value list.
+// The caller owns the input buffer; values may be reordered (sorted in-place).
+// ---------------------------------------------------------------------------
+__device__ inline AllFeatures ComputeAllFeaturesFromValues(FeatureValue* values,
+                                                           uint32_t n);
+
+// ---------------------------------------------------------------------------
 // FeatureRequest
 // ---------------------------------------------------------------------------
 struct FeatureRequest {
@@ -138,6 +167,22 @@ __global__ void ComputeFeaturesKernel(
     FeatureValue* d_workspace,                  // [n_pivots * max_neighbors]
     uint32_t max_neighbors,
     FeatureValue* d_outputs);                   // [n_pivots * n_requests]
+
+// Fused kernel: one pass over neighbors produces all aggregation primitives.
+__global__ void ComputeAllFeaturesKernel(
+    const uint8_t* const* graph_data_buffers,   // [n_graphs]
+    const uint32_t* graph_n_vertices,           // [n_graphs]
+    const uint32_t* graph_n_in_edges,           // [n_graphs]
+    const uint32_t* graph_n_out_edges,          // [n_graphs]
+    const Attributes* const* vertex_attrs,      // [n_graphs][n_vertices]
+    const uint32_t* pivot_graph_id,             // [n_pivots]
+    const uint32_t* pivot_vertex_id,            // [n_pivots]
+    uint32_t n_pivots,
+    AttributeName attr_name,                    // target attribute to aggregate
+    bool use_outgoing,                          // true = outgoing neighbors
+    FeatureValue* d_workspace,                  // [n_pivots * max_neighbors]
+    uint32_t max_neighbors,
+    AllFeatures* d_outputs);                    // [n_pivots]
 
 }  // namespace kernel
 }  // namespace task

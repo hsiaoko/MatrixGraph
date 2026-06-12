@@ -28,6 +28,11 @@ DEFINE_string(prims, "Mean,Sum,Count,PercentTrue",
               " (e.g., Mean,Sum,Count,Min,Max,Variance,Std,Median,"
               "PercentTrue,CountGreaterThanMean)");
 
+// Fused compute-all mode: compute every primitive in a single kernel launch.
+DEFINE_bool(compute_all, false,
+            "If true, ignore -prims and compute all aggregation primitives "
+            "in one fused kernel launch.");
+
 // System configuration
 DEFINE_string(
     scheduler, "CHBL",
@@ -36,6 +41,7 @@ DEFINE_string(
 using sics::matrixgraph::core::components::scheduler::SchedulerType;
 using sics::matrixgraph::core::task::GraphAggregate;
 using sics::matrixgraph::core::task::kernel::AggPrim;
+using sics::matrixgraph::core::task::kernel::AllFeatures;
 using sics::matrixgraph::core::task::kernel::FeatureRequest;
 using sics::matrixgraph::core::task::kernel::FeatureValue;
 using sics::matrixgraph::core::data_structures::AttributeName;
@@ -102,6 +108,8 @@ void PrintConfig() {
   std::cout << "Vertices per graph: " << FLAGS_n << std::endl;
   std::cout << "Out-degree per graph: " << FLAGS_deg << std::endl;
   std::cout << "Primitives: " << FLAGS_prims << std::endl;
+  std::cout << "ComputeAll: " << (FLAGS_compute_all ? "true" : "false")
+            << std::endl;
   std::cout << "Scheduler: " << FLAGS_scheduler << std::endl;
   std::cout << "=====================================\n" << std::endl;
 }
@@ -143,7 +151,7 @@ int main(int argc, char* argv[]) {
       task->AddSyntheticGraph(n_vertices_list[g], out_deg_list[g]);
     }
 
-    // 3. Build feature requests from comma-separated flag.
+    // 3. Build feature requests from comma-separated flag (or use fused mode).
     auto prim_names = SplitByComma(FLAGS_prims);
     std::vector<FeatureRequest> requests;
     requests.reserve(prim_names.size());
@@ -166,10 +174,46 @@ int main(int argc, char* argv[]) {
     }
 
     // 5. Compute features.
-    std::vector<FeatureValue> results;
-    task->ComputeFeatures(pivot_gids, pivot_vids, requests, &results);
+    if (FLAGS_compute_all) {
+      std::vector<AllFeatures> all_results;
+      task->ComputeAll(pivot_gids, pivot_vids, AttributeName("score"), true,
+                       &all_results);
 
-    // 6. Print first few results per graph.
+      // 6. Print first few fused results per graph.
+      uint32_t print_n = 5;
+      std::cout << "Fused ComputeAll results (first " << print_n
+                << " vertices per graph):" << std::endl;
+      size_t global_idx = 0;
+      for (uint32_t g = 0; g < n_graphs; ++g) {
+        std::cout << "  Graph " << g << " (|V|=" << n_vertices_list[g]
+                  << ", deg=" << out_deg_list[g] << "):" << std::endl;
+        for (uint32_t v = 0; v < n_vertices_list[g]; ++v, ++global_idx) {
+          if (v >= print_n) continue;
+          const auto& a = all_results[global_idx];
+          std::cout << "    V" << v
+                    << ": count=" << a.count.i64
+                    << " count_gtm=" << a.count_greater_than_mean.i64
+                    << " num_unique=" << a.num_unique.i64
+                    << " sum=" << a.sum.ToDouble()
+                    << " mean=" << a.mean.ToDouble()
+                    << " variance=" << a.variance.ToDouble()
+                    << " std=" << a.std.ToDouble()
+                    << " mode=" << a.mode.ToDouble()
+                    << " min=" << a.min.ToDouble()
+                    << " max=" << a.max.ToDouble()
+                    << " median=" << a.median.ToDouble()
+                    << " q1=" << a.quarter.ToDouble()
+                    << " q3=" << a.quartile3.ToDouble()
+                    << " entropy=" << a.entropy.ToDouble()
+                    << " percent_true=" << a.percent_true.ToDouble()
+                    << " skew=" << a.skew.ToDouble() << std::endl;
+        }
+      }
+    } else {
+      std::vector<FeatureValue> results;
+      task->ComputeFeatures(pivot_gids, pivot_vids, requests, &results);
+
+      // 6. Print first few results per graph.
     uint32_t print_n = 5;
     std::cout << "Results (first " << print_n << " vertices per graph):"
               << std::endl;
@@ -186,6 +230,7 @@ int main(int argc, char* argv[]) {
         }
         std::cout << std::endl;
       }
+    }
     }
 
     delete task;

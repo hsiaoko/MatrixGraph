@@ -8,6 +8,7 @@
 
 using sics::matrixgraph::core::task::GraphAggregate;
 using sics::matrixgraph::core::task::kernel::AggPrim;
+using sics::matrixgraph::core::task::kernel::AllFeatures;
 using sics::matrixgraph::core::task::kernel::FeatureRequest;
 using sics::matrixgraph::core::task::kernel::FeatureValue;
 using sics::matrixgraph::core::data_structures::AttributeName;
@@ -113,6 +114,86 @@ int main() {
   if (pass) {
     std::cout << "[GraphAggregate Synthetic Test] PASSED (" << n_vertices
               << " vertices, " << n_req << " requests)" << std::endl;
+  } else {
+    return 1;
+  }
+
+  // -------------------------------------------------------------------------
+  // Fused compute_all test: verify it matches the per-request results above.
+  //
+  // Note: ComputeFeatures uses "score" for numeric prims and "flag" for
+  // PercentTrue.  ComputeAll aggregates a single attribute at a time, so we
+  // test "score" against the numeric requests and "flag" separately for the
+  // boolean PercentTrue primitive.
+  // -------------------------------------------------------------------------
+  std::vector<AllFeatures> all_results;
+  task.ComputeAll(pivot_gids, pivot_vids, AttributeName("score"), true,
+                  &all_results);
+
+  bool all_pass = true;
+  for (uint32_t v = 0; v + out_deg < n_vertices; ++v) {
+    uint32_t base = v * n_req;
+    const AllFeatures& a = all_results[v];
+
+    auto check_all = [&](const char* name, double expected,
+                         const FeatureValue& actual) {
+      if (!float_eq(expected, actual.ToDouble())) {
+        std::cerr << "FAIL compute_all " << name << " at v=" << v
+                  << " expected=" << expected << " got=" << actual.ToDouble()
+                  << std::endl;
+        all_pass = false;
+        return false;
+      }
+      return true;
+    };
+
+    if (!check_all("sum", results[base + 0].ToDouble(), a.sum)) break;
+    if (!check_all("min", results[base + 1].ToDouble(), a.min)) break;
+    if (!check_all("max", results[base + 2].ToDouble(), a.max)) break;
+    if (!check_all("mean", results[base + 3].ToDouble(), a.mean)) break;
+    if (!check_all("variance", results[base + 4].ToDouble(), a.variance)) break;
+    if (!check_all("std", results[base + 5].ToDouble(), a.std)) break;
+    if (!check_all("median", results[base + 6].ToDouble(), a.median)) break;
+    if (results[base + 7].i64 != a.count_greater_than_mean.i64) {
+      std::cerr << "FAIL compute_all count_gtm at v=" << v
+                << " expected=" << results[base + 7].i64
+                << " got=" << a.count_greater_than_mean.i64 << std::endl;
+      all_pass = false;
+      break;
+    }
+    if (results[base + 8].i64 != a.count.i64) {
+      std::cerr << "FAIL compute_all count at v=" << v
+                << " expected=" << results[base + 8].i64
+                << " got=" << a.count.i64 << std::endl;
+      all_pass = false;
+      break;
+    }
+    // percent_true on a non-bool attribute is defined as 0.
+    if (!check_all("percent_true", 0.0, a.percent_true)) break;
+  }
+
+  if (!all_pass) return 1;
+
+  // Test ComputeAll on the bool attribute "flag" for PercentTrue.
+  std::vector<AllFeatures> flag_results;
+  task.ComputeAll(pivot_gids, pivot_vids, AttributeName("flag"), true,
+                  &flag_results);
+  for (uint32_t v = 0; v + out_deg < n_vertices; ++v) {
+    uint32_t base = v * n_req;
+    double expected_pct = results[base + 9].ToDouble();
+    if (!float_eq(expected_pct, flag_results[v].percent_true.ToDouble())) {
+      std::cerr << "FAIL compute_all flag percent_true at v=" << v
+                << " expected=" << expected_pct
+                << " got=" << flag_results[v].percent_true.ToDouble()
+                << std::endl;
+      all_pass = false;
+      break;
+    }
+  }
+
+  if (all_pass) {
+    std::cout << "[GraphAggregate ComputeAll Test] PASSED (" << n_vertices
+              << " vertices)" << std::endl;
     return 0;
   }
   return 1;

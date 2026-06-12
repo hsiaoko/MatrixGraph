@@ -11,6 +11,7 @@
 #include "core/task/gpu_task/subiso.cuh"
 #include "core/task/gpu_task/wcc.cuh"
 #include "core/task/gpu_task/graph_aggregate.cuh"
+#include "core/task/gpu_task/compute_features.cuh"
 #include "core/task/cpu_task/diameter.h"
 #include "core/task/cpu_task/skew.h"
 
@@ -92,6 +93,12 @@ void MatrixGraph::Run(TaskType task_type, TaskBase* task_ptr) {
     case common::kGraphAggregate: {
       std::cout << "[GraphAggregate]" << std::endl;
       auto task = reinterpret_cast<task::GraphAggregate*>(task_ptr);
+      task->Run();
+      break;
+    }
+    case common::kComputeFeatures: {
+      std::cout << "[ComputeFeatures]" << std::endl;
+      auto task = reinterpret_cast<task::ComputeFeaturesTask*>(task_ptr);
       task->Run();
       break;
     }

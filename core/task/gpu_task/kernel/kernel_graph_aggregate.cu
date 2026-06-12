@@ -225,6 +225,144 @@ __device__ inline FeatureValue ApplyAggPrim(AggPrim prim, FeatureValue* values, 
 }
 
 // ---------------------------------------------------------------------------
+// Fused aggregation: compute all primitives in one pass over the value list.
+// Reuses the shared sort for all order-dependent primitives.
+// The input buffer is reordered (sorted in-place) when n > 0.
+// ---------------------------------------------------------------------------
+__device__ inline AllFeatures ComputeAllFeaturesFromValues(FeatureValue* values,
+                                                           uint32_t n) {
+  AllFeatures r;
+  if (n == 0) {
+    FeatureValue invalid = MakeInvalidValue();
+    r.count = MakeIntValue(0);            // Count on empty list is 0.
+    r.count_greater_than_mean = invalid;
+    r.num_unique = invalid;
+    r.sum = invalid;
+    r.mean = invalid;
+    r.variance = invalid;
+    r.std = invalid;
+    r.mode = invalid;
+    r.min = invalid;
+    r.max = invalid;
+    r.median = invalid;
+    r.quarter = invalid;
+    r.quartile3 = invalid;
+    r.entropy = invalid;
+    r.percent_true = invalid;
+    r.skew = invalid;
+    return r;
+  }
+
+  // Pass 1: count, sum, min, max, percent_true in one traversal.
+  double sum = 0.0;
+  uint32_t true_count = 0;
+  FeatureValue minv = values[0];
+  FeatureValue maxv = values[0];
+  for (uint32_t i = 0; i < n; ++i) {
+    double x = values[i].ToDouble();
+    sum += x;
+    if (values[i].Compare(minv) < 0) minv = values[i];
+    if (values[i].Compare(maxv) > 0) maxv = values[i];
+    if (values[i].type == ValueType::kBool && values[i].b) ++true_count;
+  }
+  double mean = sum / static_cast<double>(n);
+
+  // Pass 2: variance and count-greater-than-mean.
+  double var_sum = 0.0;
+  uint32_t count_gtm = 0;
+  for (uint32_t i = 0; i < n; ++i) {
+    double diff = values[i].ToDouble() - mean;
+    var_sum += diff * diff;
+    if (values[i].ToDouble() > mean) ++count_gtm;
+  }
+  double variance = var_sum / static_cast<double>(n);
+  double stdv = sqrt(variance);
+
+  // Pass 3: skew (requires mean and std).  Match AggSkew: undefined when
+  // the standard deviation is zero.
+  double skew_sum = 0.0;
+  bool skew_valid = (stdv != 0.0);
+  if (skew_valid) {
+    for (uint32_t i = 0; i < n; ++i) {
+      double z = (values[i].ToDouble() - mean) / stdv;
+      skew_sum += z * z * z;
+    }
+  }
+
+  // Pass 4: single sort for all order-dependent primitives.
+  DeviceSortValues(values, n);
+
+  // Median: upper median (values[n/2]), matching featurelib.
+  FeatureValue median = values[n / 2];
+
+  // Mode, num_unique, entropy from sorted run-length scan.
+  FeatureValue mode = values[0];
+  uint32_t max_run = 1;
+  uint32_t curr_run = 1;
+  uint32_t uniq = 1;
+  double entropy = 0.0;
+  for (uint32_t i = 1; i < n; ++i) {
+    if (values[i].Compare(values[i - 1]) == 0) {
+      ++curr_run;
+    } else {
+      double p = static_cast<double>(curr_run) / static_cast<double>(n);
+      entropy -= p * log2(p);
+      ++uniq;
+      curr_run = 1;
+    }
+    if (curr_run > max_run) {
+      max_run = curr_run;
+      mode = values[i];
+    }
+  }
+  // Account for the final run.
+  double p = static_cast<double>(curr_run) / static_cast<double>(n);
+  entropy -= p * log2(p);
+
+  // Quartiles: linear interpolation at position 0.25*(n-1) and 0.75*(n-1).
+  FeatureValue q1;
+  FeatureValue q3;
+  if (n == 1) {
+    q1 = values[0];
+    q3 = values[0];
+  } else {
+    double pos1 = 0.25 * static_cast<double>(n - 1);
+    uint32_t l1 = static_cast<uint32_t>(floor(pos1));
+    uint32_t u1 = static_cast<uint32_t>(ceil(pos1));
+    double w1 = pos1 - static_cast<double>(l1);
+    double v1 = values[l1].ToDouble() * (1.0 - w1) + values[u1].ToDouble() * w1;
+    q1 = MakeFloatValue(v1);
+
+    double pos3 = 0.75 * static_cast<double>(n - 1);
+    uint32_t l3 = static_cast<uint32_t>(floor(pos3));
+    uint32_t u3 = static_cast<uint32_t>(ceil(pos3));
+    double w3 = pos3 - static_cast<double>(l3);
+    double v3 = values[l3].ToDouble() * (1.0 - w3) + values[u3].ToDouble() * w3;
+    q3 = MakeFloatValue(v3);
+  }
+
+  r.count = MakeIntValue(static_cast<int64_t>(n));
+  r.count_greater_than_mean = MakeIntValue(static_cast<int64_t>(count_gtm));
+  r.num_unique = MakeIntValue(static_cast<int64_t>(uniq));
+  r.sum = MakeFloatValue(sum);
+  r.mean = MakeFloatValue(mean);
+  r.variance = MakeFloatValue(variance);
+  r.std = MakeFloatValue(stdv);
+  r.mode = mode;
+  r.min = minv;
+  r.max = maxv;
+  r.median = median;
+  r.quarter = q1;
+  r.quartile3 = q3;
+  r.entropy = MakeFloatValue(entropy);
+  r.percent_true = MakeFloatValue(static_cast<double>(true_count) /
+                                  static_cast<double>(n));
+  r.skew = skew_valid ? MakeFloatValue(skew_sum / static_cast<double>(n))
+                      : MakeInvalidValue();
+  return r;
+}
+
+// ---------------------------------------------------------------------------
 // Collect neighbor attribute values for a pivot
 // ---------------------------------------------------------------------------
 __device__ inline uint32_t CollectNeighborValues(
@@ -327,6 +465,48 @@ __global__ void ComputeFeaturesKernel(
 
     d_outputs[tid * n_requests + req_idx] = result;
   }
+}
+
+// ---------------------------------------------------------------------------
+// Fused kernel: compute all aggregation primitives in one launch.
+// ---------------------------------------------------------------------------
+__global__ void ComputeAllFeaturesKernel(
+    const uint8_t* const* graph_data_buffers,
+    const uint32_t* graph_n_vertices,
+    const uint32_t* graph_n_in_edges,
+    const uint32_t* graph_n_out_edges,
+    const Attributes* const* vertex_attrs,
+    const uint32_t* pivot_graph_id,
+    const uint32_t* pivot_vertex_id,
+    uint32_t n_pivots,
+    AttributeName attr_name,
+    bool use_outgoing,
+    FeatureValue* d_workspace,
+    uint32_t max_neighbors,
+    AllFeatures* d_outputs) {
+  uint32_t tid = blockIdx.x * blockDim.x + threadIdx.x;
+  if (tid >= n_pivots) return;
+
+  uint32_t gid = pivot_graph_id[tid];
+  uint32_t vid = pivot_vertex_id[tid];
+
+  const uint8_t* graph_data = graph_data_buffers[gid];
+  uint32_t n_vertices = graph_n_vertices[gid];
+  const Attributes* vattrs = vertex_attrs[gid];
+
+  FeatureValue* my_workspace = d_workspace + tid * max_neighbors;
+
+  FeatureRequest req;
+  req.attr_name = attr_name;
+  req.neighbor_label = 0;
+  req.use_outgoing = use_outgoing;
+
+  uint32_t n_collected = CollectNeighborValues(
+      graph_data, n_vertices,
+      graph_n_in_edges[gid], graph_n_out_edges[gid],
+      vattrs, vid, req, my_workspace, max_neighbors);
+
+  d_outputs[tid] = ComputeAllFeaturesFromValues(my_workspace, n_collected);
 }
 
 }  // namespace kernel

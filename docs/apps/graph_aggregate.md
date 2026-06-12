@@ -2,17 +2,19 @@
 
 ## Overview
 
-GPU **per-vertex feature aggregation** over a synthetic directed ring graph. Each vertex has two synthetic attributes — `"score"` (`float64`) and `"flag"` (`bool`) — and the binary computes aggregated neighbor features for every vertex in parallel.
+GPU **per-vertex feature aggregation** over one or more synthetic directed ring graphs. Each vertex has two synthetic attributes — `"score"` (`float64`) and `"flag"` (`bool`) — and the binary computes aggregated neighbor features for every vertex in parallel.
 
-This app is primarily a **demonstration / test harness** for the `GraphAggregate` task class (`core/task/gpu_task/graph_aggregate.cuh`). It loads data in-memory (no external graph file required) and prints the first 10 vertices’ results.
+This app is primarily a **demonstration / test harness** for the `GraphAggregate` task class (`core/task/gpu_task/graph_aggregate.cuh`). It loads data in-memory (no external graph file required) and prints the first few vertices’ results per graph.
 
 ## Parameters
 
 | Flag | Description |
 |------|-------------|
-| `-n` | Number of vertices in the synthetic graph (default `100`). |
-| `-deg` | Out-degree per vertex (default `3`). Each vertex `v` has outgoing edges to `(v+1) … (v+deg) mod n`. |
+| `-n_graphs` | Number of synthetic graphs to create (default `1`). |
+| `-n` | Number of vertices per graph. **Comma-separated list** when `-n_graphs > 1`, e.g. `-n "100,200,300"`. A single value is reused for all graphs. |
+| `-deg` | Out-degree per vertex per graph. **Comma-separated list** when `-n_graphs > 1`, e.g. `-deg "3,4,5"`. A single value is reused for all graphs. |
 | `-prims` | Comma-separated list of aggregation primitives to compute (see table below). Default: `Mean,Sum,Count,PercentTrue`. |
+| `-compute_all` | If `true`, ignore `-prims` and compute **all** primitives in one fused kernel launch (`ComputeAll`). Default: `false`. |
 | `-scheduler` | `CHBL` (default), `EvenSplit`, or `RoundRobin`. |
 
 ### Supported primitives
@@ -33,9 +35,9 @@ This app is primarily a **demonstration / test harness** for the `GraphAggregate
 
 > By default every request targets `"score"` **except** `PercentTrue`, which targets `"flag"`.
 
-## Example
+## Examples
 
-### Basic — 100 vertices, out-degree 3, four primitives
+### Single graph — 100 vertices, out-degree 3
 
 ```bash
 ./bin/graph_aggregate_exec -n 100 -deg 3 -prims "Mean,Sum,Count,PercentTrue"
@@ -44,49 +46,70 @@ This app is primarily a **demonstration / test harness** for the `GraphAggregate
 Output:
 ```
 === GraphAggregate Configuration ===
-Vertices: 100
-Out-degree: 3
+Graphs: 1
+Vertices per graph: 100
+Out-degree per graph: 3
 Primitives: Mean,Sum,Count,PercentTrue
 Scheduler: CHBL
 =====================================
 
 Scheduler: CHBL.
-[GraphAggregate] Loading synthetic data: 100 vertices, out-degree=3
-[GraphAggregate] Synthetic data ready.
+[GraphAggregate] Adding synthetic graph: 100 vertices, out-degree=3
+[GraphAggregate] Synthetic graph 0 ready.
 [GraphAggregate] Graph data transferred to device (1 graph(s))
-Results (first 10 vertices):
-  V0: Mean=1 Sum=3 Count=3 PercentTrue=0.333333
-  V1: Mean=1.5 Sum=4.5 Count=3 PercentTrue=0.666667
-  V2: Mean=2 Sum=6 Count=3 PercentTrue=0.333333
-  ...
+Results (first 5 vertices per graph):
+  Graph 0 (|V|=100, deg=3):
+    V0: Mean=1 Sum=3 Count=3 PercentTrue=0.333333
+    V1: Mean=1.5 Sum=4.5 Count=3 PercentTrue=0.666667
+    ...
 ```
 
-### Extended statistics — 1 000 vertices, out-degree 5
+### Multi-graph — 3 graphs with different sizes
+
+```bash
+./bin/graph_aggregate_exec -n_graphs 3 -n "10,20,50" -deg "3,4,5" \
+  -prims "Mean,Count,Variance"
+```
+
+Output shows results for graph 0 (10 vertices, deg 3), graph 1 (20 vertices, deg 4), and graph 2 (50 vertices, deg 5).
+
+### Multi-graph — same size for all graphs
+
+```bash
+./bin/graph_aggregate_exec -n_graphs 3 -n 100 -deg 3 \
+  -prims "Mean,Min,Max,Std,PercentTrue"
+```
+
+The single values `-n 100` and `-deg 3` are automatically reused for all 3 graphs.
+
+### Extended statistics
 
 ```bash
 ./bin/graph_aggregate_exec -n 1000 -deg 5 \
   -prims "Mean,Min,Max,Variance,Std,Median,PercentTrue,CountGreaterThanMean"
 ```
 
-### All available primitives
+### Fused compute-all
 
 ```bash
-./bin/graph_aggregate_exec -n 100 -deg 3 \
-  -prims "Count,Sum,Mean,Min,Max,Median,Mode,NumUnique,Entropy,Quarter,Quartile3,PercentTrue,Skew,Variance,Std,CountGreaterThanMean"
+./bin/graph_aggregate_exec -n 1000 -deg 5 -compute_all=true
 ```
+
+This launches a single fused kernel (`ComputeAllFeaturesKernel`) that produces all 15 aggregation primitives for every pivot at once.  It avoids redundant neighbor collection, mean/variance recalculation, and sorting that would occur when calling `ComputeFeatures` once per primitive.
 
 ## How it works
 
-1. **Synthetic graph generation** (`GraphAggregate::LoadSyntheticData`):
+1. **Synthetic graph generation** (`GraphAggregate::AddSyntheticGraph`):
    - Builds a directed ring where each vertex `v` points to `(v+1) … (v+deg) mod n`.
    - Fills per-vertex attributes:
      - `"score"` = `v * 0.5`
      - `"flag"`  = `v % 2 == 0`
-2. **Device transfer** — CSR buffers and attribute HashMaps are copied to GPU.
+   - Each call appends a new graph; device buffers are invalidated and re-transferred on the next `ComputeFeatures`.
+2. **Device transfer** — CSR buffers and attribute HashMaps for *all* graphs are copied to GPU.
 3. **Feature kernel** (`ComputeFeaturesKernel`) — one CUDA thread per pivot vertex:
    - Collects neighbor values via CSR outgoing-edge traversal.
    - Applies the requested `AggPrim` and writes a `FeatureValue`.
-4. **Host print** — the app copies results back and prints the first 10 vertices.
+4. **Host print** — the app copies results back and prints the first 5 vertices per graph.
 
 ## Source
 
