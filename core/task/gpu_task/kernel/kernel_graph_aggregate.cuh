@@ -134,6 +134,17 @@ struct AllFeatures {
 };
 
 // ---------------------------------------------------------------------------
+// Cooperative kernel configuration.
+// ---------------------------------------------------------------------------
+constexpr uint32_t kGraphAggregateBlockSize = 256;
+
+// Returns the dynamic shared memory bytes required for one block given the
+// per-pivot neighbor cap.  The layout stores a small shared header, CUB
+// temporary storage, and sorted indices; actual neighbor FeatureValues live
+// in the global workspace.
+__host__ size_t ComputeGraphAggregateSharedMemSize(uint32_t max_neighbors);
+
+// ---------------------------------------------------------------------------
 // Fused aggregation: compute all primitives in one pass over the value list.
 // The caller owns the input buffer; values may be reordered (sorted in-place).
 // ---------------------------------------------------------------------------
@@ -152,35 +163,35 @@ struct FeatureRequest {
 
 // ---------------------------------------------------------------------------
 // Kernel declaration
+//
+// Single-graph variant: the task now owns one ImmutableCSR, so the kernels no
+// longer need graph-id indexing.  All pointers are device memory for that one
+// graph.
 // ---------------------------------------------------------------------------
 __global__ void ComputeFeaturesKernel(
-    const uint8_t* const* graph_data_buffers,   // [n_graphs]
-    const uint32_t* graph_n_vertices,           // [n_graphs]
-    const uint32_t* graph_n_in_edges,           // [n_graphs]
-    const uint32_t* graph_n_out_edges,          // [n_graphs]
-    const Attributes* const* vertex_attrs,      // [n_graphs][n_vertices]
-    const uint32_t* pivot_graph_id,             // [n_pivots]
-    const uint32_t* pivot_vertex_id,            // [n_pivots]
+    const uint8_t* graph_data,                  // single CSR buffer
+    uint32_t n_vertices,
+    uint32_t n_in_edges,
+    uint32_t n_out_edges,
+    const Attributes* vertex_attrs,             // [n_vertices]
+    const uint32_t* pivot_vertex_ids,           // [n_pivots]
     uint32_t n_pivots,
     const FeatureRequest* requests,             // [n_requests]
     uint32_t n_requests,
-    FeatureValue* d_workspace,                  // [n_pivots * max_neighbors]
     uint32_t max_neighbors,
     FeatureValue* d_outputs);                   // [n_pivots * n_requests]
 
 // Fused kernel: one pass over neighbors produces all aggregation primitives.
 __global__ void ComputeAllFeaturesKernel(
-    const uint8_t* const* graph_data_buffers,   // [n_graphs]
-    const uint32_t* graph_n_vertices,           // [n_graphs]
-    const uint32_t* graph_n_in_edges,           // [n_graphs]
-    const uint32_t* graph_n_out_edges,          // [n_graphs]
-    const Attributes* const* vertex_attrs,      // [n_graphs][n_vertices]
-    const uint32_t* pivot_graph_id,             // [n_pivots]
-    const uint32_t* pivot_vertex_id,            // [n_pivots]
+    const uint8_t* graph_data,                  // single CSR buffer
+    uint32_t n_vertices,
+    uint32_t n_in_edges,
+    uint32_t n_out_edges,
+    const Attributes* vertex_attrs,             // [n_vertices]
+    const uint32_t* pivot_vertex_ids,           // [n_pivots]
     uint32_t n_pivots,
     AttributeName attr_name,                    // target attribute to aggregate
     bool use_outgoing,                          // true = outgoing neighbors
-    FeatureValue* d_workspace,                  // [n_pivots * max_neighbors]
     uint32_t max_neighbors,
     AllFeatures* d_outputs);                    // [n_pivots]
 

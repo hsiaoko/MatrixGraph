@@ -163,3 +163,22 @@ set_target_properties(matrixgraph_goapi PROPERTIES
 target_compile_options(matrixgraph_goapi PRIVATE
         $<$<COMPILE_LANGUAGE:CUDA>:-UUSE_AVX2>
 )
+
+#######################
+# Standalone GraphAggregate test (no gtest dependency)
+#######################
+add_executable(graph_aggregate_test task/gpu_task/graph_aggregate_test.cu)
+target_link_libraries(graph_aggregate_test PRIVATE matrixgraph_core cudart)
+target_include_directories(graph_aggregate_test PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}
+        ${PROJECT_ROOT_DIR}
+        ${CMAKE_CUDA_TOOLKIT_INCLUDE_DIRECTORIES}
+)
+set_target_properties(graph_aggregate_test PROPERTIES
+        RUNTIME_OUTPUT_DIRECTORY ${PROJECT_ROOT_DIR}/bin
+        CUDA_SEPARABLE_COMPILATION ON
+        POSITION_INDEPENDENT_CODE ON
+)
+target_compile_options(graph_aggregate_test PRIVATE
+        $<$<COMPILE_LANGUAGE:CUDA>:-UUSE_AVX2>
+)

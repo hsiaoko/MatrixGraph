@@ -245,7 +245,7 @@ int matrixgraph_gar_match(
 void* matrixgraph_graph_aggregate_create(void) {
   set_device_from_env();
   try {
-    return new GraphAggregate(std::vector<std::string>{});
+    return new GraphAggregate();
   } catch (...) {
     return nullptr;
   }
@@ -270,14 +270,13 @@ int matrixgraph_graph_aggregate_load_synthetic(void* handle,
   return 0;
 }
 
-int matrixgraph_graph_aggregate_add_synthetic(void* handle,
-                                              uint32_t n_vertices,
-                                              uint32_t out_degree) {
+int matrixgraph_graph_aggregate_set_num_streams(void* handle,
+                                                uint32_t n_streams) {
   set_device_from_env();
   auto* task = static_cast<GraphAggregate*>(handle);
   if (!task) return 1;
   try {
-    task->AddSyntheticGraph(n_vertices, out_degree);
+    task->SetNumStreams(n_streams);
   } catch (...) {
     return 1;
   }
@@ -285,18 +284,15 @@ int matrixgraph_graph_aggregate_add_synthetic(void* handle,
 }
 
 int matrixgraph_graph_aggregate_compute_features(
-    void* handle, const uint32_t* pivot_graph_ids,
-    const uint32_t* pivot_vertex_ids, uint32_t n_pivots,
+    void* handle, const uint32_t* pivot_vertex_ids, uint32_t n_pivots,
     const MatrixGraphFeatureRequest* requests, uint32_t n_requests,
     MatrixGraphFeatureValue* out_values) {
   set_device_from_env();
   auto* task = static_cast<GraphAggregate*>(handle);
-  if (!task || !pivot_graph_ids || !pivot_vertex_ids || !requests ||
-      !out_values) {
+  if (!task || !pivot_vertex_ids || !requests || !out_values) {
     return 1;
   }
 
-  std::vector<uint32_t> gids(pivot_graph_ids, pivot_graph_ids + n_pivots);
   std::vector<uint32_t> vids(pivot_vertex_ids, pivot_vertex_ids + n_pivots);
 
   std::vector<FeatureRequest> cpp_reqs;
@@ -313,7 +309,7 @@ int matrixgraph_graph_aggregate_compute_features(
 
   std::vector<FeatureValue> cpp_out;
   try {
-    task->ComputeFeatures(gids, vids, cpp_reqs, &cpp_out);
+    cpp_out = task->ComputeFeatures(vids, cpp_reqs);
   } catch (...) {
     return 1;
   }
@@ -364,24 +360,21 @@ inline void CopyAllFeaturesToC(const AllFeatures& src,
 }  // namespace
 
 int matrixgraph_graph_aggregate_compute_all(
-    void* handle, const uint32_t* pivot_graph_ids,
-    const uint32_t* pivot_vertex_ids, uint32_t n_pivots,
+    void* handle, const uint32_t* pivot_vertex_ids, uint32_t n_pivots,
     const char* attr_name, uint8_t use_outgoing,
     MatrixGraphAllFeatures* out_values) {
   set_device_from_env();
   auto* task = static_cast<GraphAggregate*>(handle);
-  if (!task || !pivot_graph_ids || !pivot_vertex_ids || !attr_name ||
-      !out_values) {
+  if (!task || !pivot_vertex_ids || !attr_name || !out_values) {
     return 1;
   }
 
-  std::vector<uint32_t> gids(pivot_graph_ids, pivot_graph_ids + n_pivots);
   std::vector<uint32_t> vids(pivot_vertex_ids, pivot_vertex_ids + n_pivots);
 
   std::vector<AllFeatures> cpp_out;
   try {
-    task->ComputeAll(gids, vids, AttributeName(attr_name), use_outgoing != 0,
-                     &cpp_out);
+    cpp_out = task->ComputeAll(vids, AttributeName(attr_name),
+                               use_outgoing != 0);
   } catch (...) {
     return 1;
   }

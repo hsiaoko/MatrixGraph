@@ -57,8 +57,8 @@ import (
 | `matrixgraph_transpose` | `Transpose` | Matrix transpose B = Aᵀ |
 | `matrixgraph_graph_aggregate_create` | `GraphAggregateCreate` | Create a GraphAggregate handle |
 | `matrixgraph_graph_aggregate_destroy` | `GraphAggregateDestroy` | Destroy the handle |
-| `matrixgraph_graph_aggregate_load_synthetic` | `GraphAggregateLoadSynthetic` | Load a synthetic ring graph (clears existing) |
-| `matrixgraph_graph_aggregate_add_synthetic` | `GraphAggregateAddSynthetic` | Add an additional synthetic graph (multi-graph) |
+| `matrixgraph_graph_aggregate_load_synthetic` | `GraphAggregateLoadSynthetic` | Load a synthetic ring graph |
+| `matrixgraph_graph_aggregate_set_num_streams` | `GraphAggregateSetNumStreams` | Configure CUDA stream parallelism |
 | `matrixgraph_graph_aggregate_compute_features` | `GraphAggregateComputeFeatures` | Compute per-vertex aggregated features |
 | `matrixgraph_graph_aggregate_compute_all` | `GraphAggregateComputeAll` | Fused compute-all primitives in one kernel launch |
 | `matrixgraph_compute_features_create` | `ComputeFeaturesCreate` | Create a ComputeFeatures handle |
@@ -150,12 +150,16 @@ int matrixgraph_transpose(const float* A, float* B, int m, int n);
 
 ## GraphAggregate
 
-GraphAggregate computes aggregated neighbor features for a set of pivot vertices. A typical workflow is:
+GraphAggregate computes aggregated neighbor features for a set of pivot vertices over a **single graph**. A typical workflow is:
 
-1. `create`
-2. `load_synthetic`
-3. `compute_features`
-4. `destroy`
+1. (optional) Set `MATRIXGRAPH_CUDA_DEVICES` / `MATRIXGRAPH_CUDA_ALL_DEVICES` for multi-GPU.
+2. `create`
+3. (optional) `set_num_streams`
+4. `load_synthetic`
+5. `compute_features` / `compute_all`
+6. `destroy`
+
+> Multi-graph support was removed in the simplified interface; create one handle per graph if needed. The task supports multiple GPUs via the standard MatrixGraph device-selection environment variables.
 
 ### C Types
 
@@ -290,17 +294,16 @@ func GraphAggregateComputeFeatures(
     requests []FeatureRequest,
 ) ([]FeatureValue, error) {
 
-    nPivots := len(pivotGraphIDs)
+    nPivots := len(pivotVertexIDs)
     nReq := len(requests)
-    if len(pivotVertexIDs) != nPivots {
-        return nil, fmt.Errorf("pivot id count mismatch")
+    if nPivots == 0 || nReq == 0 {
+        return nil, fmt.Errorf("empty pivots or requests")
     }
 
     out := make([]FeatureValue, nPivots*nReq)
 
     ret := C.matrixgraph_graph_aggregate_compute_features(
         h,
-        (*C.uint32_t)(unsafe.Pointer(&pivotGraphIDs[0])),
         (*C.uint32_t)(unsafe.Pointer(&pivotVertexIDs[0])),
         C.uint32_t(nPivots),
         (*C.MatrixGraphFeatureRequest)(unsafe.Pointer(&requests[0])),
@@ -313,12 +316,18 @@ func GraphAggregateComputeFeatures(
     return out, nil
 }
 
+// --- Multi-GPU note ---
+// Set MATRIXGRAPH_CUDA_DEVICES (or MATRIXGRAPH_CUDA_ALL_DEVICES=1) in the
+// process environment before creating the handle. The GraphAggregate task
+// reads the device list at construction time and replicates the graph and
+// attributes to each selected GPU.
+
 // --- usage ---
-func GraphAggregateAddSynthetic(h unsafe.Pointer, nVertices, outDeg uint32) error {
-    ret := C.matrixgraph_graph_aggregate_add_synthetic(
-        h, C.uint32_t(nVertices), C.uint32_t(outDeg))
+func GraphAggregateSetNumStreams(h unsafe.Pointer, nStreams uint32) error {
+    ret := C.matrixgraph_graph_aggregate_set_num_streams(
+        h, C.uint32_t(nStreams))
     if ret != 0 {
-        return fmt.Errorf("add_synthetic failed")
+        return fmt.Errorf("set_num_streams failed")
     }
     return nil
 }
@@ -327,12 +336,14 @@ func ExampleGraphAggregate() {
     h := GraphAggregateCreate()
     defer GraphAggregateDestroy(h)
 
+    // Optional: use 4 CUDA streams for pivot-batch parallelism.
+    GraphAggregateSetNumStreams(h, 4)
+
     if err := GraphAggregateLoadSynthetic(h, 100, 3); err != nil {
         panic(err)
     }
 
     pivots := make([]uint32, 100)
-    gids := make([]uint32, 100)
     for i := 0; i < 100; i++ {
         pivots[i] = uint32(i)
     }
@@ -342,12 +353,11 @@ func ExampleGraphAggregate() {
         {Prim: int32(AggCount), UseOutgoing: 1},    // count
         {Prim: int32(AggPercentTrue), UseOutgoing: 1}, // percent true
     }
-    // attr_name defaults to "score" if first request, "flag" if second, etc.
     copy(reqs[0].AttrName[:], "score")
     copy(reqs[1].AttrName[:], "score")
     copy(reqs[2].AttrName[:], "flag")
 
-    results, err := GraphAggregateComputeFeatures(h, gids, pivots, reqs)
+    results, err := GraphAggregateComputeFeatures(h, pivots, reqs)
     if err != nil {
         panic(err)
     }
@@ -357,37 +367,6 @@ func ExampleGraphAggregate() {
         fmt.Printf("V%d: Mean=%.3f Count=%d PctTrue=%.3f\n",
             v, results[base].F64(), results[base+1].I64(), results[base+2].F64())
     }
-}
-
-// Multi-graph example
-func ExampleGraphAggregateMultiGraph() {
-    h := GraphAggregateCreate()
-    defer GraphAggregateDestroy(h)
-
-    // Graph 0: 100 vertices, deg 3
-    GraphAggregateLoadSynthetic(h, 100, 3)
-    // Graph 1: 200 vertices, deg 4
-    GraphAggregateAddSynthetic(h, 200, 4)
-
-    var pivots, gids []uint32
-    for v := 0; v < 100; v++ {
-        gids = append(gids, 0)
-        pivots = append(pivots, uint32(v))
-    }
-    for v := 0; v < 200; v++ {
-        gids = append(gids, 1)
-        pivots = append(pivots, uint32(v))
-    }
-
-    reqs := []FeatureRequest{{Prim: int32(AggMean), UseOutgoing: 1}}
-    copy(reqs[0].AttrName[:], "score")
-
-    results, err := GraphAggregateComputeFeatures(h, gids, pivots, reqs)
-    if err != nil {
-        panic(err)
-    }
-    fmt.Printf("Graph0 V0 Mean=%.3f, Graph1 V0 Mean=%.3f\n",
-        results[0].F64(), results[100].F64())
 }
 
 // AllFeatures mirrors the C struct returned by the fused compute-all kernel.
@@ -417,9 +396,9 @@ func GraphAggregateComputeAll(
     useOutgoing bool,
 ) ([]AllFeatures, error) {
 
-    nPivots := len(pivotGraphIDs)
-    if len(pivotVertexIDs) != nPivots {
-        return nil, fmt.Errorf("pivot id count mismatch")
+    nPivots := len(pivotVertexIDs)
+    if nPivots == 0 {
+        return nil, fmt.Errorf("empty pivots")
     }
 
     cAttrName := C.CString(attrName)
@@ -434,7 +413,6 @@ func GraphAggregateComputeAll(
 
     ret := C.matrixgraph_graph_aggregate_compute_all(
         h,
-        (*C.uint32_t)(unsafe.Pointer(&pivotGraphIDs[0])),
         (*C.uint32_t)(unsafe.Pointer(&pivotVertexIDs[0])),
         C.uint32_t(nPivots),
         cAttrName,
@@ -454,12 +432,11 @@ func ExampleGraphAggregateComputeAll() {
     GraphAggregateLoadSynthetic(h, 100, 3)
 
     pivots := make([]uint32, 100)
-    gids := make([]uint32, 100)
     for i := 0; i < 100; i++ {
         pivots[i] = uint32(i)
     }
 
-    results, err := GraphAggregateComputeAll(h, gids, pivots, "score", true)
+    results, err := GraphAggregateComputeAll(h, pivots, "score", true)
     if err != nil {
         panic(err)
     }

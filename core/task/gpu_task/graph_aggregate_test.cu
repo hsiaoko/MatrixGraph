@@ -25,11 +25,10 @@ int main() {
   const uint32_t out_deg = 3;
 
   // 1. Create task and load synthetic data.
-  GraphAggregate task({});
+  GraphAggregate task;
   task.LoadSyntheticData(n_vertices, out_deg);
 
   // 2. All vertices are pivots.
-  std::vector<uint32_t> pivot_gids(n_vertices, 0);
   std::vector<uint32_t> pivot_vids(n_vertices);
   for (uint32_t i = 0; i < n_vertices; ++i) pivot_vids[i] = i;
 
@@ -48,8 +47,8 @@ int main() {
   const uint32_t n_req = requests.size();
 
   // 4. Run feature computation.
-  std::vector<FeatureValue> results;
-  task.ComputeFeatures(pivot_gids, pivot_vids, requests, &results);
+  std::vector<FeatureValue> results =
+      task.ComputeFeatures(pivot_vids, requests);
 
   // 5. Verify vertices without wrap-around (v + out_deg < n_vertices).
   bool pass = true;
@@ -120,15 +119,9 @@ int main() {
 
   // -------------------------------------------------------------------------
   // Fused compute_all test: verify it matches the per-request results above.
-  //
-  // Note: ComputeFeatures uses "score" for numeric prims and "flag" for
-  // PercentTrue.  ComputeAll aggregates a single attribute at a time, so we
-  // test "score" against the numeric requests and "flag" separately for the
-  // boolean PercentTrue primitive.
   // -------------------------------------------------------------------------
-  std::vector<AllFeatures> all_results;
-  task.ComputeAll(pivot_gids, pivot_vids, AttributeName("score"), true,
-                  &all_results);
+  std::vector<AllFeatures> all_results =
+      task.ComputeAll(pivot_vids, AttributeName("score"), true);
 
   bool all_pass = true;
   for (uint32_t v = 0; v + out_deg < n_vertices; ++v) {
@@ -175,9 +168,8 @@ int main() {
   if (!all_pass) return 1;
 
   // Test ComputeAll on the bool attribute "flag" for PercentTrue.
-  std::vector<AllFeatures> flag_results;
-  task.ComputeAll(pivot_gids, pivot_vids, AttributeName("flag"), true,
-                  &flag_results);
+  std::vector<AllFeatures> flag_results =
+      task.ComputeAll(pivot_vids, AttributeName("flag"), true);
   for (uint32_t v = 0; v + out_deg < n_vertices; ++v) {
     uint32_t base = v * n_req;
     double expected_pct = results[base + 9].ToDouble();

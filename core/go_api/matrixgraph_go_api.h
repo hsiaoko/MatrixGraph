@@ -36,16 +36,18 @@ void matrixgraph_graph_aggregate_destroy(void* handle);
 int matrixgraph_graph_aggregate_load_synthetic(void* handle, uint32_t n_vertices,
                                                  uint32_t out_degree);
 
-/** Add an additional synthetic graph to an existing GraphAggregate handle. */
-int matrixgraph_graph_aggregate_add_synthetic(void* handle, uint32_t n_vertices,
-                                                uint32_t out_degree);
+/** Configure the number of CUDA streams used for compute parallelism.
+ *  Must be called before the first compute call.  n_streams=0 leaves the
+ *  default (MATRIXGRAPH_CUDA_STREAMS env, or 2).
+ */
+int matrixgraph_graph_aggregate_set_num_streams(void* handle,
+                                                  uint32_t n_streams);
 
 /** Compute features for given pivots and requests.
  *  out_values must be pre-allocated with size n_pivots * n_requests.
  */
 int matrixgraph_graph_aggregate_compute_features(
-    void* handle, const uint32_t* pivot_graph_ids,
-    const uint32_t* pivot_vertex_ids, uint32_t n_pivots,
+    void* handle, const uint32_t* pivot_vertex_ids, uint32_t n_pivots,
     const MatrixGraphFeatureRequest* requests, uint32_t n_requests,
     MatrixGraphFeatureValue* out_values);
 
@@ -76,8 +78,7 @@ typedef struct {
  *  n_pivots.  attr_name is a null-terminated attribute name.
  */
 int matrixgraph_graph_aggregate_compute_all(
-    void* handle, const uint32_t* pivot_graph_ids,
-    const uint32_t* pivot_vertex_ids, uint32_t n_pivots,
+    void* handle, const uint32_t* pivot_vertex_ids, uint32_t n_pivots,
     const char* attr_name, uint8_t use_outgoing,
     MatrixGraphAllFeatures* out_values);
 

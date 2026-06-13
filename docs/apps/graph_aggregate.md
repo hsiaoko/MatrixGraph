@@ -2,20 +2,23 @@
 
 ## Overview
 
-GPU **per-vertex feature aggregation** over one or more synthetic directed ring graphs. Each vertex has two synthetic attributes — `"score"` (`float64`) and `"flag"` (`bool`) — and the binary computes aggregated neighbor features for every vertex in parallel.
+GPU **per-vertex feature aggregation** over a single graph. The app supports two input modes:
 
-This app is primarily a **demonstration / test harness** for the `GraphAggregate` task class (`core/task/gpu_task/graph_aggregate.cuh`). It loads data in-memory (no external graph file required) and prints the first few vertices’ results per graph.
+1. **Synthetic mode** (default): builds a directed ring with `n` vertices and out-degree `deg`, and fills two synthetic attributes — `"score"` (`float64`) and `"flag"` (`bool`).
+2. **Real graph mode** (`-g <csr_dir>`): loads an existing MatrixGraph CSR directory and injects the same synthetic `"score"` / `"flag"` attributes for demonstration.
+
+The binary computes aggregated neighbor features for **every vertex in the graph** in parallel. It is primarily a **demonstration / test harness** for the `GraphAggregate` task class (`core/task/gpu_task/graph_aggregate.cuh`).
 
 ## Parameters
 
 | Flag | Description |
 |------|-------------|
-| `-n_graphs` | Number of synthetic graphs to create (default `1`). |
-| `-n` | Number of vertices per graph. **Comma-separated list** when `-n_graphs > 1`, e.g. `-n "100,200,300"`. A single value is reused for all graphs. |
-| `-deg` | Out-degree per vertex per graph. **Comma-separated list** when `-n_graphs > 1`, e.g. `-deg "3,4,5"`. A single value is reused for all graphs. |
-| `-prims` | Comma-separated list of aggregation primitives to compute (see table below). Default: `Mean,Sum,Count,PercentTrue`. |
+| `-g` | Path to an existing MatrixGraph CSR directory. When set, `-n` and `-deg` are ignored and all graph vertices become pivots. |
+| `-n` | Number of vertices in the synthetic graph (default `100`). Only used when `-g` is empty. |
+| `-deg` | Out-degree per vertex (default `3`). Only used when `-g` is empty. |
+| `-prims` | Comma-separated list of aggregation primitives to compute (see table below). Default: `Mean,Sum,Count,PercentTrue`. Ignored when `-compute_all` is `true`. |
 | `-compute_all` | If `true`, ignore `-prims` and compute **all** primitives in one fused kernel launch (`ComputeAll`). Default: `false`. |
-| `-scheduler` | `CHBL` (default), `EvenSplit`, or `RoundRobin`. |
+| `-n_streams` | Number of CUDA streams to use per GPU for pivot-batch parallelism. `0` (default) uses `MATRIXGRAPH_CUDA_STREAMS` env or falls back to `2`. |
 
 ### Supported primitives
 
@@ -35,9 +38,21 @@ This app is primarily a **demonstration / test harness** for the `GraphAggregate
 
 > By default every request targets `"score"` **except** `PercentTrue`, which targets `"flag"`.
 
+## Multi-GPU
+
+`graph_aggregate_exec` automatically uses the devices selected by `MATRIXGRAPH_CUDA_DEVICES` (or the other MatrixGraph device-selection rules). Each GPU gets a full replica of the graph and attributes; pivots are split evenly across GPUs and further partitioned across streams per GPU.
+
+```bash
+# Use GPUs 2 and 3
+MATRIXGRAPH_CUDA_DEVICES=2,3 ./bin/graph_aggregate_exec -g data/csr/ -compute_all
+
+# Use all visible GPUs
+MATRIXGRAPH_CUDA_ALL_DEVICES=1 ./bin/graph_aggregate_exec -g data/csr/ -compute_all
+```
+
 ## Examples
 
-### Single graph — 100 vertices, out-degree 3
+### Synthetic graph — 100 vertices, out-degree 3
 
 ```bash
 ./bin/graph_aggregate_exec -n 100 -deg 3 -prims "Mean,Sum,Count,PercentTrue"
@@ -46,41 +61,32 @@ This app is primarily a **demonstration / test harness** for the `GraphAggregate
 Output:
 ```
 === GraphAggregate Configuration ===
-Graphs: 1
-Vertices per graph: 100
-Out-degree per graph: 3
+Vertices: 100
+Out-degree: 3
 Primitives: Mean,Sum,Count,PercentTrue
-Scheduler: CHBL
+ComputeAll: false
+Streams: 0 (0 means use env/default)
 =====================================
 
-Scheduler: CHBL.
 [GraphAggregate] Adding synthetic graph: 100 vertices, out-degree=3
-[GraphAggregate] Synthetic graph 0 ready.
-[GraphAggregate] Graph data transferred to device (1 graph(s))
-Results (first 5 vertices per graph):
-  Graph 0 (|V|=100, deg=3):
-    V0: Mean=1 Sum=3 Count=3 PercentTrue=0.333333
-    V1: Mean=1.5 Sum=4.5 Count=3 PercentTrue=0.666667
-    ...
+[GraphAggregate] Graph data replicated to 1 GPU(s) (5208 bytes each)
+[GraphAggregate] Loaded 2 attribute column(s) on 1 GPU(s)
+Results (first 5 vertices):
+  V0: Mean=1 Sum=3 Count=3 PercentTrue=0.333333
+  V1: Mean=1.5 Sum=4.5 Count=3 PercentTrue=0.666667
+  ...
 ```
 
-### Multi-graph — 3 graphs with different sizes
+### Real CSR graph
 
 ```bash
-./bin/graph_aggregate_exec -n_graphs 3 -n "10,20,50" -deg "3,4,5" \
-  -prims "Mean,Count,Variance"
+# Convert CSV to CSR first (see docs/tools/GraphConverter.md)
+./bin/tools/graph_converter -i data/graph.csv -o data/csr/ \
+  -convert_mode edgelistcsv2csrbin
+
+# Run aggregation on the real graph
+./bin/graph_aggregate_exec -g data/csr/ -compute_all
 ```
-
-Output shows results for graph 0 (10 vertices, deg 3), graph 1 (20 vertices, deg 4), and graph 2 (50 vertices, deg 5).
-
-### Multi-graph — same size for all graphs
-
-```bash
-./bin/graph_aggregate_exec -n_graphs 3 -n 100 -deg 3 \
-  -prims "Mean,Min,Max,Std,PercentTrue"
-```
-
-The single values `-n 100` and `-deg 3` are automatically reused for all 3 graphs.
 
 ### Extended statistics
 
@@ -95,21 +101,34 @@ The single values `-n 100` and `-deg 3` are automatically reused for all 3 graph
 ./bin/graph_aggregate_exec -n 1000 -deg 5 -compute_all=true
 ```
 
-This launches a single fused kernel (`ComputeAllFeaturesKernel`) that produces all 15 aggregation primitives for every pivot at once.  It avoids redundant neighbor collection, mean/variance recalculation, and sorting that would occur when calling `ComputeFeatures` once per primitive.
+This launches the fused kernel (`ComputeAllFeaturesKernel`) that produces all 15 aggregation primitives for every pivot at once. It avoids redundant neighbor collection, mean/variance recalculation, and sorting that would occur when calling `ComputeFeatures` once per primitive.
+
+### Stream parallelism
+
+Use 4 CUDA streams per GPU to process pivot batches concurrently:
+
+```bash
+./bin/graph_aggregate_exec -n 100000 -deg 5 -n_streams 4 -compute_all
+```
+
+Or via environment variable:
+
+```bash
+MATRIXGRAPH_CUDA_STREAMS=4 ./bin/graph_aggregate_exec -n 100000 -deg 5 -compute_all
+```
 
 ## How it works
 
-1. **Synthetic graph generation** (`GraphAggregate::AddSyntheticGraph`):
-   - Builds a directed ring where each vertex `v` points to `(v+1) … (v+deg) mod n`.
-   - Fills per-vertex attributes:
-     - `"score"` = `v * 0.5`
-     - `"flag"`  = `v % 2 == 0`
-   - Each call appends a new graph; device buffers are invalidated and re-transferred on the next `ComputeFeatures`.
-2. **Device transfer** — CSR buffers and attribute HashMaps for *all* graphs are copied to GPU.
-3. **Feature kernel** (`ComputeFeaturesKernel`) — one CUDA thread per pivot vertex:
-   - Collects neighbor values via CSR outgoing-edge traversal.
-   - Applies the requested `AggPrim` and writes a `FeatureValue`.
-4. **Host print** — the app copies results back and prints the first 5 vertices per graph.
+1. **Graph loading**:
+   - Synthetic mode: `GraphAggregate::LoadSyntheticData` builds a directed ring where each vertex `v` points to `(v+1) … (v+deg) mod n`.
+   - Real graph mode: `GraphAggregate::LoadGraph` reads a MatrixGraph CSR directory (`meta.yaml`, `graphs/0.bin`, `label/0.bin`).
+2. **Synthetic attributes**: per-vertex `"score" = v * 0.5` and `"flag" = (v % 2 == 0)` are loaded via `GraphAggregate::LoadAttributes`.
+3. **Device transfer**: the CSR buffer and per-vertex attribute HashMap are replicated to every selected GPU.
+4. **Multi-GPU + stream parallelism**: pivots are split across GPUs, and each GPU's chunk is further split across CUDA streams.
+5. **Feature kernels**: one CUDA block per pivot vertex. All 256 threads in the block cooperatively collect neighbor values and compute reductions / sorting in shared memory.
+   - `ComputeFeaturesKernel` applies one primitive per request.
+   - `ComputeAllFeaturesKernel` computes every primitive in one pass over the neighbor list.
+6. **Host print**: the app copies results back and prints the first 5 vertices.
 
 ## Source
 
@@ -121,3 +140,4 @@ This launches a single fused kernel (`ComputeAllFeaturesKernel`) that produces a
 
 - [Applications index](README.md)
 - [Go API — GraphAggregate](../go_api/README.md#graphaggregate)
+- [GPU environment variables](../MATRIXGRAPH_ENV.md)
