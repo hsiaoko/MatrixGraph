@@ -69,6 +69,14 @@ import (
 | `matrixgraph_compute_features_compute` | `ComputeFeaturesCompute` | Evaluate a flat expression plan |
 | `matrixgraph_subiso` | `SubIso` | GPU subgraph isomorphism (WOJ) |
 | `matrixgraph_gar_match` | `GARMatch` | Graph association rule matching (stub) |
+| `matrixgraph_execute_agg_prim_create` | `ExecuteAggPrimCreate` | Create an ExecuteAggPrim handle |
+| `matrixgraph_execute_agg_prim_destroy` | `ExecuteAggPrimDestroy` | Destroy the handle |
+| `matrixgraph_execute_agg_prim_set_num_streams` | `ExecuteAggPrimSetNumStreams` | Configure CUDA stream parallelism |
+| `matrixgraph_execute_agg_prim_compute` | `ExecuteAggPrimCompute` | Single list + single primitive |
+| `matrixgraph_execute_agg_prim_compute_all` | `ExecuteAggPrimComputeAll` | Single list + all primitives |
+| `matrixgraph_execute_agg_prim_compute_batch` | `ExecuteAggPrimComputeBatch` | Batch of lists + single primitive |
+| `matrixgraph_execute_agg_prim_compute_batch_multi_prim` | `ExecuteAggPrimComputeBatchMultiPrim` | Batch of lists + multiple primitives |
+| `matrixgraph_execute_agg_prim_compute_all_batch` | `ExecuteAggPrimComputeAllBatch` | Batch of lists + all primitives |
 
 ---
 
@@ -468,6 +476,261 @@ The high-level workflow is:
 3. `matrixgraph_compute_features_load_attributes` (and optionally `load_labels`)
 4. `matrixgraph_compute_features_compute`
 5. `matrixgraph_compute_features_destroy`
+
+---
+
+## ExecuteAggPrim
+
+`ExecuteAggPrim` computes aggregation primitives (`Sum`, `Mean`, `Median`, `Max`, `Variance`, `Skew`, `Entropy`, …) over flat value lists. Unlike `GraphAggregate`, it does **not** need a graph; you pass the input values directly.
+
+### Value types
+
+`ExecuteAggPrim` uses the same `MatrixGraphFeatureValue` layout as `GraphAggregate`. The `type` field follows `MatrixGraphValueType`:
+
+| Value | Type | Read with |
+|-------|------|-----------|
+| `1` | `MG_VALUE_INT` | `.I64()` |
+| `2` | `MG_VALUE_FLOAT64` | `.F64()` |
+| `3` | `MG_VALUE_BOOL` | `.B()` |
+| `5` | `MG_VALUE_TIME` | `.I64()` |
+| `6` | `MG_VALUE_FLOAT32` | `.F64()` (promote) |
+
+> `Min`, `Max`, `Median`, `Mode`, and `DFeat` are **passthrough** primitives: their output type matches the input type. If you pass integers, `Min`/`Max` return `MG_VALUE_INT`.
+
+### Primitive ids
+
+| Value | Name |
+|-------|------|
+| `0` | `MG_EXEC_AGG_COUNT` |
+| `1` | `MG_EXEC_AGG_SUM` |
+| `2` | `MG_EXEC_AGG_MEAN` |
+| `3` | `MG_EXEC_AGG_MEDIAN` |
+| `4` | `MG_EXEC_AGG_MODE` |
+| `5` | `MG_EXEC_AGG_MAX` |
+| `6` | `MG_EXEC_AGG_MIN` |
+| `7` | `MG_EXEC_AGG_VARIANCE` |
+| `8` | `MG_EXEC_AGG_STD` |
+| `9` | `MG_EXEC_AGG_SKEW` |
+| `10` | `MG_EXEC_AGG_ENTROPY` |
+| `11` | `MG_EXEC_AGG_NUM_UNIQUE` |
+| `12` | `MG_EXEC_AGG_PERCENT_TRUE` |
+| `13` | `MG_EXEC_AGG_QUARTER` |
+| `14` | `MG_EXEC_AGG_QUARTILE3` |
+| `15` | `MG_EXEC_AGG_COUNT_GREATER_THAN_MEAN` |
+| `16` | `MG_EXEC_AGG_DFEAT` |
+
+### Go example
+
+```go
+package matrixgraph
+
+/*
+#cgo LDFLAGS: -L${SRCDIR}/../../../lib -lmatrixgraph_goapi -lcudart
+#cgo CFLAGS: -I${SRCDIR}/../../../core/go_api
+#include "matrixgraph_go_api.h"
+*/
+import "C"
+import (
+    "fmt"
+    "unsafe"
+)
+
+// AggPrim mirrors MatrixGraphExecuteAggPrim.
+type AggPrim int32
+
+const (
+    ExecAggCount                AggPrim = 0
+    ExecAggSum                  AggPrim = 1
+    ExecAggMean                 AggPrim = 2
+    ExecAggMedian               AggPrim = 3
+    ExecAggMode                 AggPrim = 4
+    ExecAggMax                  AggPrim = 5
+    ExecAggMin                  AggPrim = 6
+    ExecAggVariance             AggPrim = 7
+    ExecAggStd                  AggPrim = 8
+    ExecAggSkew                 AggPrim = 9
+    ExecAggEntropy              AggPrim = 10
+    ExecAggNumUnique            AggPrim = 11
+    ExecAggPercentTrue          AggPrim = 12
+    ExecAggQuarter              AggPrim = 13
+    ExecAggQuartile3            AggPrim = 14
+    ExecAggCountGreaterThanMean AggPrim = 15
+    ExecAggDFeat                AggPrim = 16
+)
+
+// FeatureValue mirrors MatrixGraphFeatureValue.
+// Layout: int32 type; 4 bytes padding; union { int64; double; int32 }.
+type FeatureValue struct {
+    Type int32
+    _    [4]byte
+    raw  [8]byte
+}
+
+func (v FeatureValue) I64() int64 {
+    return *(*int64)(unsafe.Pointer(&v.raw[0]))
+}
+
+func (v FeatureValue) F64() float64 {
+    return *(*float64)(unsafe.Pointer(&v.raw[0]))
+}
+
+func (v FeatureValue) B() bool {
+    return v.raw[0] != 0
+}
+
+func MakeIntFeatureValue(v int64) FeatureValue {
+    var r FeatureValue
+    r.Type = 1 // MG_VALUE_INT
+    *(*int64)(unsafe.Pointer(&r.raw[0])) = v
+    return r
+}
+
+func MakeFloat64FeatureValue(v float64) FeatureValue {
+    var r FeatureValue
+    r.Type = 2 // MG_VALUE_FLOAT64
+    *(*float64)(unsafe.Pointer(&r.raw[0])) = v
+    return r
+}
+
+func ExecuteAggPrimCreate() unsafe.Pointer {
+    return C.matrixgraph_execute_agg_prim_create()
+}
+
+func ExecuteAggPrimDestroy(h unsafe.Pointer) {
+    C.matrixgraph_execute_agg_prim_destroy(h)
+}
+
+func ExecuteAggPrimSetNumStreams(h unsafe.Pointer, nStreams uint32) error {
+    ret := C.matrixgraph_execute_agg_prim_set_num_streams(
+        h, C.uint32_t(nStreams))
+    if ret != 0 {
+        return fmt.Errorf("set_num_streams failed")
+    }
+    return nil
+}
+
+func ExecuteAggPrimCompute(
+    h unsafe.Pointer, prim AggPrim, values []FeatureValue) (FeatureValue, error) {
+    var out FeatureValue
+    if len(values) == 0 {
+        return out, fmt.Errorf("empty input")
+    }
+    ret := C.matrixgraph_execute_agg_prim_compute(
+        h, C.int32_t(prim),
+        (*C.MatrixGraphFeatureValue)(unsafe.Pointer(&values[0])),
+        C.uint32_t(len(values)),
+        (*C.MatrixGraphFeatureValue)(unsafe.Pointer(&out)))
+    if ret != 0 {
+        return out, fmt.Errorf("compute failed")
+    }
+    return out, nil
+}
+
+func ExecuteAggPrimComputeBatch(
+    h unsafe.Pointer, prim AggPrim, lists [][]FeatureValue) ([]FeatureValue, error) {
+    nLists := len(lists)
+    if nLists == 0 {
+        return nil, fmt.Errorf("empty input")
+    }
+
+    offsets := make([]uint32, nLists+1)
+    var flat []FeatureValue
+    for i, lst := range lists {
+        offsets[i] = uint32(len(flat))
+        flat = append(flat, lst...)
+    }
+    offsets[nLists] = uint32(len(flat))
+
+    out := make([]FeatureValue, nLists)
+    ret := C.matrixgraph_execute_agg_prim_compute_batch(
+        h, C.int32_t(prim),
+        (*C.MatrixGraphFeatureValue)(unsafe.Pointer(&flat[0])),
+        (*C.uint32_t)(unsafe.Pointer(&offsets[0])),
+        C.uint32_t(nLists),
+        (*C.MatrixGraphFeatureValue)(unsafe.Pointer(&out[0])))
+    if ret != 0 {
+        return nil, fmt.Errorf("compute_batch failed")
+    }
+    return out, nil
+}
+
+func ExecuteAggPrimComputeBatchMultiPrim(
+    h unsafe.Pointer, lists [][]FeatureValue, prims []AggPrim) ([][]FeatureValue, error) {
+    nLists := len(lists)
+    nPrims := len(prims)
+    if nLists == 0 || nPrims == 0 {
+        return nil, fmt.Errorf("empty input")
+    }
+
+    offsets := make([]uint32, nLists+1)
+    var flat []FeatureValue
+    for i, lst := range lists {
+        offsets[i] = uint32(len(flat))
+        flat = append(flat, lst...)
+    }
+    offsets[nLists] = uint32(len(flat))
+
+    primIds := make([]int32, nPrims)
+    for i, p := range prims {
+        primIds[i] = int32(p)
+    }
+
+    flatOut := make([]FeatureValue, nLists*nPrims)
+    ret := C.matrixgraph_execute_agg_prim_compute_batch_multi_prim(
+        h,
+        (*C.MatrixGraphFeatureValue)(unsafe.Pointer(&flat[0])),
+        (*C.uint32_t)(unsafe.Pointer(&offsets[0])),
+        C.uint32_t(nLists),
+        (*C.int32_t)(unsafe.Pointer(&primIds[0])),
+        C.uint32_t(nPrims),
+        (*C.MatrixGraphFeatureValue)(unsafe.Pointer(&flatOut[0])))
+    if ret != 0 {
+        return nil, fmt.Errorf("compute_batch_multi_prim failed")
+    }
+
+    out := make([][]FeatureValue, nLists)
+    for i := 0; i < nLists; i++ {
+        out[i] = make([]FeatureValue, nPrims)
+        copy(out[i], flatOut[i*nPrims:(i+1)*nPrims])
+    }
+    return out, nil
+}
+
+func ExampleExecuteAggPrim() {
+    h := ExecuteAggPrimCreate()
+    defer ExecuteAggPrimDestroy(h)
+
+    ExecuteAggPrimSetNumStreams(h, 2)
+
+    lists := [][]FeatureValue{
+        {MakeIntFeatureValue(1), MakeIntFeatureValue(2), MakeIntFeatureValue(3)},
+        {MakeIntFeatureValue(4), MakeIntFeatureValue(5), MakeIntFeatureValue(6), MakeIntFeatureValue(7)},
+    }
+
+    results, err := ExecuteAggPrimComputeBatchMultiPrim(
+        h, lists, []AggPrim{ExecAggSum, ExecAggMean, ExecAggCount, ExecAggMin, ExecAggMax})
+    if err != nil {
+        panic(err)
+    }
+
+    for i, row := range results {
+        fmt.Printf("list[%d] Sum=%.0f Mean=%.1f Count=%d Min=%.0f Max=%.0f\n",
+            i, row[0].F64(), row[1].F64(), row[2].I64(), row[3].F64(), row[4].F64())
+    }
+}
+```
+
+### Batch layout
+
+For the batch APIs, concatenate all list entries into one flat `FeatureValue` array and provide `offsets` of length `n_lists+1`:
+
+```
+list[0] = flat[ offsets[0] .. offsets[1]-1 ]
+list[1] = flat[ offsets[1] .. offsets[2]-1 ]
+...
+```
+
+`ComputeBatchMultiPrim` returns a flat row-major array of shape `[n_lists][n_primitives]`.
 
 ---
 

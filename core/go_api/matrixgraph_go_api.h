@@ -82,6 +82,116 @@ int matrixgraph_graph_aggregate_compute_all(
     const char* attr_name, uint8_t use_outgoing,
     MatrixGraphAllFeatures* out_values);
 
+// ---------------------------------------------------------------------------
+// ExecuteAggPrim (value-list aggregation primitives)
+// ---------------------------------------------------------------------------
+
+/**
+ * @brief Aggregation primitive ids for ExecuteAggPrim.
+ *
+ * These values match the ordering of AggPrim in execute_agg_prim.cuh, which is
+ * different from the ordering used by GraphAggregate/ComputeFeatures.
+ */
+enum MatrixGraphExecuteAggPrim {
+  MG_EXEC_AGG_COUNT = 0,
+  MG_EXEC_AGG_SUM = 1,
+  MG_EXEC_AGG_MEAN = 2,
+  MG_EXEC_AGG_MEDIAN = 3,
+  MG_EXEC_AGG_MODE = 4,
+  MG_EXEC_AGG_MAX = 5,
+  MG_EXEC_AGG_MIN = 6,
+  MG_EXEC_AGG_VARIANCE = 7,
+  MG_EXEC_AGG_STD = 8,
+  MG_EXEC_AGG_SKEW = 9,
+  MG_EXEC_AGG_ENTROPY = 10,
+  MG_EXEC_AGG_NUM_UNIQUE = 11,
+  MG_EXEC_AGG_PERCENT_TRUE = 12,
+  MG_EXEC_AGG_QUARTER = 13,
+  MG_EXEC_AGG_QUARTILE3 = 14,
+  MG_EXEC_AGG_COUNT_GREATER_THAN_MEAN = 15,
+  MG_EXEC_AGG_DFEAT = 16,
+};
+
+/** Output container for ExecuteAggPrim::ComputeAll(). Mirrors AllFeatures. */
+typedef struct {
+  MatrixGraphFeatureValue count;
+  MatrixGraphFeatureValue sum;
+  MatrixGraphFeatureValue mean;
+  MatrixGraphFeatureValue median;
+  MatrixGraphFeatureValue mode;
+  MatrixGraphFeatureValue max;
+  MatrixGraphFeatureValue min;
+  MatrixGraphFeatureValue variance;
+  MatrixGraphFeatureValue std;
+  MatrixGraphFeatureValue skew;
+  MatrixGraphFeatureValue entropy;
+  MatrixGraphFeatureValue num_unique;
+  MatrixGraphFeatureValue percent_true;
+  MatrixGraphFeatureValue quarter;
+  MatrixGraphFeatureValue quartile3;
+  MatrixGraphFeatureValue count_greater_than_mean;
+  MatrixGraphFeatureValue dfeat;
+} MatrixGraphExecuteAllFeatures;
+
+/** Create an ExecuteAggPrim handle. */
+void* matrixgraph_execute_agg_prim_create(void);
+
+/** Destroy an ExecuteAggPrim handle. */
+void matrixgraph_execute_agg_prim_destroy(void* handle);
+
+/** Configure CUDA stream parallelism. n_streams=0 leaves the default (2). */
+int matrixgraph_execute_agg_prim_set_num_streams(void* handle,
+                                                   uint32_t n_streams);
+
+/**
+ * @brief Compute a single primitive on a single value list.
+ * @param prim     One of MG_EXEC_AGG_*.
+ * @param values   Host array of n input values.
+ * @param n        Number of input values.
+ * @param out      Pre-allocated output value.
+ */
+int matrixgraph_execute_agg_prim_compute(void* handle, int32_t prim,
+                                         const MatrixGraphFeatureValue* values,
+                                         uint32_t n,
+                                         MatrixGraphFeatureValue* out);
+
+/**
+ * @brief Compute all primitives on a single value list.
+ */
+int matrixgraph_execute_agg_prim_compute_all(
+    void* handle, const MatrixGraphFeatureValue* values, uint32_t n,
+    MatrixGraphExecuteAllFeatures* out);
+
+/**
+ * @brief Compute a single primitive on a batch of value lists.
+ *
+ * flat_values contains all list entries concatenated. offsets has length
+ * n_lists+1; list i occupies flat_values[offsets[i] .. offsets[i+1]-1].
+ * out must be pre-allocated with n_lists entries.
+ */
+int matrixgraph_execute_agg_prim_compute_batch(
+    void* handle, int32_t prim, const MatrixGraphFeatureValue* flat_values,
+    const uint32_t* offsets, uint32_t n_lists, MatrixGraphFeatureValue* out);
+
+/**
+ * @brief Compute multiple primitives on a batch of value lists.
+ *
+ * prims is an array of n_primitives MG_EXEC_AGG_* ids. The output is row-major:
+ * out[i * n_primitives + j] is the j-th primitive applied to the i-th list.
+ */
+int matrixgraph_execute_agg_prim_compute_batch_multi_prim(
+    void* handle, const MatrixGraphFeatureValue* flat_values,
+    const uint32_t* offsets, uint32_t n_lists, const int32_t* prims,
+    uint32_t n_primitives, MatrixGraphFeatureValue* out);
+
+/**
+ * @brief Compute all primitives on a batch of value lists.
+ */
+int matrixgraph_execute_agg_prim_compute_all_batch(
+    void* handle, const MatrixGraphFeatureValue* flat_values,
+    const uint32_t* offsets, uint32_t n_lists,
+    MatrixGraphExecuteAllFeatures* out);
+
 /** C = A * B (row-major). A: m×k, B: k×n, C: m×n. */
 int matrixgraph_matmult(const float* A, const float* B, float* C, int m, int k, int n);
 

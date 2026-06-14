@@ -1,5 +1,6 @@
 #include "go_api/matrixgraph_go_api.h"
 #include "task/gpu_task/compute_features.cuh"
+#include "task/gpu_task/execute_agg_prim.cuh"
 #include "task/gpu_task/gar_match.cuh"
 #include "task/gpu_task/graph_aggregate.cuh"
 #include "task/gpu_task/subiso.cuh"
@@ -19,6 +20,10 @@ using AllFeatures = sics::matrixgraph::core::task::kernel::AllFeatures;
 using AggPrim = sics::matrixgraph::core::task::kernel::AggPrim;
 using AttributeName = sics::matrixgraph::core::data_structures::AttributeName;
 using SubIso = sics::matrixgraph::core::task::SubIso;
+using ExecuteAggPrim = sics::matrixgraph::core::task::ExecuteAggPrim;
+using ExecuteFeatureValue = sics::matrixgraph::core::task::FeatureValue;
+using ExecuteAllFeatures = sics::matrixgraph::core::task::AllFeatures;
+using ExecuteAggPrimEnum = sics::matrixgraph::core::task::AggPrim;
 
 namespace {
 
@@ -385,6 +390,323 @@ int matrixgraph_graph_aggregate_compute_all(
 
   for (size_t i = 0; i < cpp_out.size(); ++i) {
     CopyAllFeaturesToC(cpp_out[i], &out_values[i]);
+  }
+  return 0;
+}
+
+// ---------------------------------------------------------------------------
+// ExecuteAggPrim C API
+// ---------------------------------------------------------------------------
+
+namespace {
+
+using CppValueType = sics::matrixgraph::core::data_structures::ValueType;
+
+inline CppValueType ToCppValueType(int32_t mg_type) {
+  switch (mg_type) {
+    case MG_VALUE_INT:
+      return CppValueType::kInt;
+    case MG_VALUE_FLOAT64:
+      return CppValueType::kFloat64;
+    case MG_VALUE_BOOL:
+      return CppValueType::kBool;
+    case MG_VALUE_TIME:
+      return CppValueType::kTime;
+    case MG_VALUE_FLOAT32:
+      return CppValueType::kFloat32;
+    case MG_VALUE_INVALID:
+    default:
+      return CppValueType::kInvalid;
+  }
+}
+
+inline int32_t ToMgValueType(CppValueType cpp_type) {
+  switch (cpp_type) {
+    case CppValueType::kInt:
+      return MG_VALUE_INT;
+    case CppValueType::kFloat64:
+      return MG_VALUE_FLOAT64;
+    case CppValueType::kBool:
+      return MG_VALUE_BOOL;
+    case CppValueType::kTime:
+      return MG_VALUE_TIME;
+    case CppValueType::kFloat32:
+      return MG_VALUE_FLOAT32;
+    case CppValueType::kInvalid:
+    default:
+      return MG_VALUE_INVALID;
+  }
+}
+
+inline ExecuteFeatureValue ToExecuteFeatureValue(
+    const MatrixGraphFeatureValue& v) {
+  ExecuteFeatureValue r{};
+  r.type = ToCppValueType(v.type);
+  switch (r.type) {
+    case CppValueType::kInt:
+    case CppValueType::kTime:
+      r.i64 = v.i64;
+      break;
+    case CppValueType::kFloat64:
+    case CppValueType::kFloat32:
+      r.f64 = v.f64;
+      break;
+    case CppValueType::kBool:
+      r.b = v.b != 0;
+      break;
+    default:
+      r.i64 = v.i64;
+      break;
+  }
+  return r;
+}
+
+inline MatrixGraphFeatureValue ToMatrixGraphFeatureValue(
+    const ExecuteFeatureValue& v) {
+  MatrixGraphFeatureValue r;
+  r.type = ToMgValueType(v.type);
+  switch (v.type) {
+    case CppValueType::kInt:
+    case CppValueType::kTime:
+      r.i64 = v.i64;
+      break;
+    case CppValueType::kFloat64:
+    case CppValueType::kFloat32:
+      r.f64 = v.f64;
+      break;
+    case CppValueType::kBool:
+      r.b = v.b ? 1 : 0;
+      break;
+    default:
+      r.i64 = v.i64;
+      break;
+  }
+  return r;
+}
+
+inline ExecuteAggPrimEnum ToExecuteAggPrimEnum(int32_t v) {
+  switch (v) {
+    case MG_EXEC_AGG_COUNT:
+      return ExecuteAggPrimEnum::kCount;
+    case MG_EXEC_AGG_SUM:
+      return ExecuteAggPrimEnum::kSum;
+    case MG_EXEC_AGG_MEAN:
+      return ExecuteAggPrimEnum::kMean;
+    case MG_EXEC_AGG_MEDIAN:
+      return ExecuteAggPrimEnum::kMedian;
+    case MG_EXEC_AGG_MODE:
+      return ExecuteAggPrimEnum::kMode;
+    case MG_EXEC_AGG_MAX:
+      return ExecuteAggPrimEnum::kMax;
+    case MG_EXEC_AGG_MIN:
+      return ExecuteAggPrimEnum::kMin;
+    case MG_EXEC_AGG_VARIANCE:
+      return ExecuteAggPrimEnum::kVariance;
+    case MG_EXEC_AGG_STD:
+      return ExecuteAggPrimEnum::kStd;
+    case MG_EXEC_AGG_SKEW:
+      return ExecuteAggPrimEnum::kSkew;
+    case MG_EXEC_AGG_ENTROPY:
+      return ExecuteAggPrimEnum::kEntropy;
+    case MG_EXEC_AGG_NUM_UNIQUE:
+      return ExecuteAggPrimEnum::kNumUnique;
+    case MG_EXEC_AGG_PERCENT_TRUE:
+      return ExecuteAggPrimEnum::kPercentTrue;
+    case MG_EXEC_AGG_QUARTER:
+      return ExecuteAggPrimEnum::kQuarter;
+    case MG_EXEC_AGG_QUARTILE3:
+      return ExecuteAggPrimEnum::kQuartile3;
+    case MG_EXEC_AGG_COUNT_GREATER_THAN_MEAN:
+      return ExecuteAggPrimEnum::kCountGreaterThanMean;
+    case MG_EXEC_AGG_DFEAT:
+      return ExecuteAggPrimEnum::kDFeat;
+  }
+  return ExecuteAggPrimEnum::kCount;
+}
+
+inline void CopyExecuteAllFeaturesToC(const ExecuteAllFeatures& src,
+                                      MatrixGraphExecuteAllFeatures* dst) {
+  dst->count = ToMatrixGraphFeatureValue(src.count);
+  dst->sum = ToMatrixGraphFeatureValue(src.sum);
+  dst->mean = ToMatrixGraphFeatureValue(src.mean);
+  dst->median = ToMatrixGraphFeatureValue(src.median);
+  dst->mode = ToMatrixGraphFeatureValue(src.mode);
+  dst->max = ToMatrixGraphFeatureValue(src.max);
+  dst->min = ToMatrixGraphFeatureValue(src.min);
+  dst->variance = ToMatrixGraphFeatureValue(src.variance);
+  dst->std = ToMatrixGraphFeatureValue(src.std);
+  dst->skew = ToMatrixGraphFeatureValue(src.skew);
+  dst->entropy = ToMatrixGraphFeatureValue(src.entropy);
+  dst->num_unique = ToMatrixGraphFeatureValue(src.num_unique);
+  dst->percent_true = ToMatrixGraphFeatureValue(src.percent_true);
+  dst->quarter = ToMatrixGraphFeatureValue(src.quarter);
+  dst->quartile3 = ToMatrixGraphFeatureValue(src.quartile3);
+  dst->count_greater_than_mean =
+      ToMatrixGraphFeatureValue(src.count_greater_than_mean);
+  dst->dfeat = ToMatrixGraphFeatureValue(src.dfeat);
+}
+
+std::vector<std::vector<ExecuteFeatureValue>> BuildExecuteValueLists(
+    const MatrixGraphFeatureValue* flat_values, const uint32_t* offsets,
+    uint32_t n_lists) {
+  std::vector<std::vector<ExecuteFeatureValue>> lists(n_lists);
+  for (uint32_t i = 0; i < n_lists; ++i) {
+    uint32_t begin = offsets[i];
+    uint32_t end = offsets[i + 1];
+    lists[i].reserve(end - begin);
+    for (uint32_t j = begin; j < end; ++j) {
+      lists[i].push_back(ToExecuteFeatureValue(flat_values[j]));
+    }
+  }
+  return lists;
+}
+
+}  // namespace
+
+void* matrixgraph_execute_agg_prim_create(void) {
+  set_device_from_env();
+  try {
+    return new ExecuteAggPrim();
+  } catch (...) {
+    return nullptr;
+  }
+}
+
+void matrixgraph_execute_agg_prim_destroy(void* handle) {
+  auto* task = static_cast<ExecuteAggPrim*>(handle);
+  delete task;
+}
+
+int matrixgraph_execute_agg_prim_set_num_streams(void* handle,
+                                                   uint32_t n_streams) {
+  set_device_from_env();
+  auto* task = static_cast<ExecuteAggPrim*>(handle);
+  if (!task) return 1;
+  try {
+    task->SetNumStreams(n_streams);
+  } catch (...) {
+    return 1;
+  }
+  return 0;
+}
+
+int matrixgraph_execute_agg_prim_compute(void* handle, int32_t prim,
+                                         const MatrixGraphFeatureValue* values,
+                                         uint32_t n,
+                                         MatrixGraphFeatureValue* out) {
+  set_device_from_env();
+  auto* task = static_cast<ExecuteAggPrim*>(handle);
+  if (!task || !values || !out) return 1;
+
+  std::vector<ExecuteFeatureValue> cpp_values;
+  cpp_values.reserve(n);
+  for (uint32_t i = 0; i < n; ++i) {
+    cpp_values.push_back(ToExecuteFeatureValue(values[i]));
+  }
+
+  ExecuteFeatureValue cpp_out;
+  try {
+    cpp_out = task->Compute(ToExecuteAggPrimEnum(prim), cpp_values.data(), n);
+  } catch (...) {
+    return 1;
+  }
+  *out = ToMatrixGraphFeatureValue(cpp_out);
+  return 0;
+}
+
+int matrixgraph_execute_agg_prim_compute_all(
+    void* handle, const MatrixGraphFeatureValue* values, uint32_t n,
+    MatrixGraphExecuteAllFeatures* out) {
+  set_device_from_env();
+  auto* task = static_cast<ExecuteAggPrim*>(handle);
+  if (!task || !values || !out) return 1;
+
+  std::vector<ExecuteFeatureValue> cpp_values;
+  cpp_values.reserve(n);
+  for (uint32_t i = 0; i < n; ++i) {
+    cpp_values.push_back(ToExecuteFeatureValue(values[i]));
+  }
+
+  ExecuteAllFeatures cpp_out;
+  try {
+    cpp_out = task->ComputeAll(cpp_values.data(), n);
+  } catch (...) {
+    return 1;
+  }
+  CopyExecuteAllFeaturesToC(cpp_out, out);
+  return 0;
+}
+
+int matrixgraph_execute_agg_prim_compute_batch(
+    void* handle, int32_t prim, const MatrixGraphFeatureValue* flat_values,
+    const uint32_t* offsets, uint32_t n_lists, MatrixGraphFeatureValue* out) {
+  set_device_from_env();
+  auto* task = static_cast<ExecuteAggPrim*>(handle);
+  if (!task || !flat_values || !offsets || !out) return 1;
+
+  auto lists = BuildExecuteValueLists(flat_values, offsets, n_lists);
+  std::vector<ExecuteFeatureValue> cpp_out;
+  try {
+    cpp_out = task->ComputeBatch(ToExecuteAggPrimEnum(prim), lists);
+  } catch (...) {
+    return 1;
+  }
+  if (cpp_out.size() != n_lists) return 1;
+  for (uint32_t i = 0; i < n_lists; ++i) {
+    out[i] = ToMatrixGraphFeatureValue(cpp_out[i]);
+  }
+  return 0;
+}
+
+int matrixgraph_execute_agg_prim_compute_batch_multi_prim(
+    void* handle, const MatrixGraphFeatureValue* flat_values,
+    const uint32_t* offsets, uint32_t n_lists, const int32_t* prims,
+    uint32_t n_primitives, MatrixGraphFeatureValue* out) {
+  set_device_from_env();
+  auto* task = static_cast<ExecuteAggPrim*>(handle);
+  if (!task || !flat_values || !offsets || !prims || !out) return 1;
+
+  auto lists = BuildExecuteValueLists(flat_values, offsets, n_lists);
+  std::vector<ExecuteAggPrimEnum> cpp_prims;
+  cpp_prims.reserve(n_primitives);
+  for (uint32_t i = 0; i < n_primitives; ++i) {
+    cpp_prims.push_back(ToExecuteAggPrimEnum(prims[i]));
+  }
+
+  std::vector<std::vector<ExecuteFeatureValue>> cpp_out;
+  try {
+    cpp_out = task->ComputeBatchMultiPrim(lists, cpp_prims);
+  } catch (...) {
+    return 1;
+  }
+  if (cpp_out.size() != n_lists) return 1;
+  for (uint32_t i = 0; i < n_lists; ++i) {
+    if (cpp_out[i].size() != n_primitives) return 1;
+    for (uint32_t j = 0; j < n_primitives; ++j) {
+      out[i * n_primitives + j] = ToMatrixGraphFeatureValue(cpp_out[i][j]);
+    }
+  }
+  return 0;
+}
+
+int matrixgraph_execute_agg_prim_compute_all_batch(
+    void* handle, const MatrixGraphFeatureValue* flat_values,
+    const uint32_t* offsets, uint32_t n_lists,
+    MatrixGraphExecuteAllFeatures* out) {
+  set_device_from_env();
+  auto* task = static_cast<ExecuteAggPrim*>(handle);
+  if (!task || !flat_values || !offsets || !out) return 1;
+
+  auto lists = BuildExecuteValueLists(flat_values, offsets, n_lists);
+  std::vector<ExecuteAllFeatures> cpp_out;
+  try {
+    cpp_out = task->ComputeAllBatch(lists);
+  } catch (...) {
+    return 1;
+  }
+  if (cpp_out.size() != n_lists) return 1;
+  for (uint32_t i = 0; i < n_lists; ++i) {
+    CopyExecuteAllFeaturesToC(cpp_out[i], &out[i]);
   }
   return 0;
 }
