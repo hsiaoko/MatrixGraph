@@ -35,6 +35,7 @@ Shipped executables are built as `<name>_exec` from `apps/`. Full table, build h
 | `gar_match_exec` | [GARMatch](apps/gar_match.md) |
 | `graph_aggregate_exec` | [GraphAggregate](apps/graph_aggregate.md) |
 | `compute_features_exec` | [ComputeFeatures](apps/compute_features.md) |
+| `execute_agg_prim_exec` | [ExecuteAggPrim](apps/execute_agg_prim.md) |
 
 ---
 

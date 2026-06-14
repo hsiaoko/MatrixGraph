@@ -182,3 +182,22 @@ set_target_properties(graph_aggregate_test PROPERTIES
 target_compile_options(graph_aggregate_test PRIVATE
         $<$<COMPILE_LANGUAGE:CUDA>:-UUSE_AVX2>
 )
+
+#######################
+# ExecuteAggPrim test (no gtest dependency)
+#######################
+add_executable(execute_agg_prim_test task/gpu_task/execute_agg_prim_test.cu)
+target_link_libraries(execute_agg_prim_test PRIVATE matrixgraph_core cudart)
+target_include_directories(execute_agg_prim_test PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}
+        ${PROJECT_ROOT_DIR}
+        ${CMAKE_CUDA_TOOLKIT_INCLUDE_DIRECTORIES}
+)
+set_target_properties(execute_agg_prim_test PROPERTIES
+        RUNTIME_OUTPUT_DIRECTORY ${PROJECT_ROOT_DIR}/bin
+        CUDA_SEPARABLE_COMPILATION ON
+        POSITION_INDEPENDENT_CODE ON
+)
+target_compile_options(execute_agg_prim_test PRIVATE
+        $<$<COMPILE_LANGUAGE:CUDA>:-UUSE_AVX2>
+)

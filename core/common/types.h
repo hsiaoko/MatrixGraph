@@ -58,6 +58,7 @@ enum TaskType {
   kGEMV,
   kGraphAggregate,
   kComputeFeatures,
+  kExecuteAggPrim,
   // Other types.
 };
 

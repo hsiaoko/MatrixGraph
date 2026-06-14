@@ -14,6 +14,7 @@ Executables are built as `<name>_exec` from `apps/<name>.{cpp,cu}` (see `apps/CM
 | `cpu_subiso_exec` | [SubIso (CPU)](cpu_subiso.md) | Subgraph isomorphism (CPU, VF3 / ML filter) |
 | `gar_match_exec` | [GARMatch](gar_match.md) | Graph association rule matching (GPU, ArangoDB) |
 | `graph_aggregate_exec` | [GraphAggregate](graph_aggregate.md) | Per-vertex feature aggregation demo (GPU, synthetic) |
+| `execute_agg_prim_exec` | [ExecuteAggPrim](execute_agg_prim.md) | Standalone aggregation primitive harness (GPU, value lists) |
 
 ## Build
 
@@ -25,9 +26,40 @@ cmake --build . --target wcc_exec bfs_exec pagerank_exec diameter_exec skew_exec
 
 Or build all app targets via the `apps` project.
 
-## Typical inputs
+## How to add a new app
 
-CSR datasets produced by [GraphConverter](../tools/GraphConverter.md) (`edgelistbin2csrbin` or tiled variants) match what most of these apps expect under `-g` / `-p` paths. See each app’s doc for flags.
+The `apps/` directory is auto-discovered by `apps/CMakeLists.txt`:
+
+```cmake
+file(GLOB appfiles
+    "${CMAKE_CURRENT_SOURCE_DIR}/*.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/*.cu")
+
+foreach (appfile ${appfiles})
+    get_filename_component(app ${appfile} NAME_WE)
+    add_executable("${app}_exec" ${appfile})
+    target_link_libraries("${app}_exec" PUBLIC gflags::gflags matrixgraph_core)
+    ...
+endforeach ()
+```
+
+To submit a new app:
+
+1. Place your source file at `apps/<my_app>.cpp` (or `.cu` if it uses CUDA).
+2. Link against `gflags::gflags` for CLI flags and `matrixgraph_core` for graph / task utilities.
+3. Include `${PROJECT_ROOT_DIR}` and `${CMAKE_CUDA_TOOLKIT_INCLUDE_DIRECTORIES}` if you need CUDA headers.
+4. Re-run CMake so the glob picks up the new file:
+
+```bash
+cd build && cmake ..
+cmake --build . --target <my_app>_exec
+```
+
+5. Add a matching doc page at `docs/apps/<my_app>.md` and link it from this `README.md` and from `docs/README.md`.
+
+> Avoid modifying `apps/CMakeLists.txt` for simple additions — the glob already handles new `.cpp` / `.cu` files. Only edit CMake when you need extra link dependencies, custom compile flags, or conditional builds.
+
+## Typical inputs
 
 ## One-shot feature export
 
