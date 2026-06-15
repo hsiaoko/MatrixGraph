@@ -298,7 +298,7 @@ func (v FeatureValue) B() uint8 {
 
 func GraphAggregateComputeFeatures(
     h unsafe.Pointer,
-    pivotGraphIDs, pivotVertexIDs []uint32,
+    pivotVertexIDs []uint32,
     requests []FeatureRequest,
 ) ([]FeatureValue, error) {
 
@@ -399,7 +399,7 @@ type AllFeatures struct {
 
 func GraphAggregateComputeAll(
     h unsafe.Pointer,
-    pivotGraphIDs, pivotVertexIDs []uint32,
+    pivotVertexIDs []uint32,
     attrName string,
     useOutgoing bool,
 ) ([]AllFeatures, error) {
@@ -519,7 +519,41 @@ The high-level workflow is:
 | `15` | `MG_EXEC_AGG_COUNT_GREATER_THAN_MEAN` |
 | `16` | `MG_EXEC_AGG_DFEAT` |
 
-### Go example
+### C API
+
+```c
+void* matrixgraph_execute_agg_prim_create(void);
+void  matrixgraph_execute_agg_prim_destroy(void* handle);
+
+int matrixgraph_execute_agg_prim_set_num_streams(void* handle, uint32_t n_streams);
+
+int matrixgraph_execute_agg_prim_compute(
+    void* handle, int32_t prim,
+    const MatrixGraphFeatureValue* values, uint32_t n,
+    MatrixGraphFeatureValue* out);
+
+int matrixgraph_execute_agg_prim_compute_all(
+    void* handle, const MatrixGraphFeatureValue* values, uint32_t n,
+    MatrixGraphExecuteAllFeatures* out);
+
+int matrixgraph_execute_agg_prim_compute_batch(
+    void* handle, int32_t prim,
+    const MatrixGraphFeatureValue* flat_values, const uint32_t* offsets,
+    uint32_t n_lists, MatrixGraphFeatureValue* out);
+
+int matrixgraph_execute_agg_prim_compute_batch_multi_prim(
+    void* handle,
+    const MatrixGraphFeatureValue* flat_values, const uint32_t* offsets,
+    uint32_t n_lists, const int32_t* prims, uint32_t n_primitives,
+    MatrixGraphFeatureValue* out);
+
+int matrixgraph_execute_agg_prim_compute_all_batch(
+    void* handle,
+    const MatrixGraphFeatureValue* flat_values, const uint32_t* offsets,
+    uint32_t n_lists, MatrixGraphExecuteAllFeatures* out);
+```
+
+### Go wrappers
 
 ```go
 package matrixgraph
@@ -696,6 +730,72 @@ func ExecuteAggPrimComputeBatchMultiPrim(
     return out, nil
 }
 
+// ExecuteAllFeatures mirrors MatrixGraphExecuteAllFeatures.
+type ExecuteAllFeatures struct {
+    Count                FeatureValue
+    Sum                  FeatureValue
+    Mean                 FeatureValue
+    Median               FeatureValue
+    Mode                 FeatureValue
+    Max                  FeatureValue
+    Min                  FeatureValue
+    Variance             FeatureValue
+    Std                  FeatureValue
+    Skew                 FeatureValue
+    Entropy              FeatureValue
+    NumUnique            FeatureValue
+    PercentTrue          FeatureValue
+    Quarter              FeatureValue
+    Quartile3            FeatureValue
+    CountGreaterThanMean FeatureValue
+    DFeat                FeatureValue
+}
+
+func ExecuteAggPrimComputeAll(
+    h unsafe.Pointer, values []FeatureValue) (ExecuteAllFeatures, error) {
+    var out ExecuteAllFeatures
+    if len(values) == 0 {
+        return out, fmt.Errorf("empty input")
+    }
+    ret := C.matrixgraph_execute_agg_prim_compute_all(
+        h,
+        (*C.MatrixGraphFeatureValue)(unsafe.Pointer(&values[0])),
+        C.uint32_t(len(values)),
+        (*C.MatrixGraphExecuteAllFeatures)(unsafe.Pointer(&out)))
+    if ret != 0 {
+        return out, fmt.Errorf("compute_all failed")
+    }
+    return out, nil
+}
+
+func ExecuteAggPrimComputeAllBatch(
+    h unsafe.Pointer, lists [][]FeatureValue) ([]ExecuteAllFeatures, error) {
+    nLists := len(lists)
+    if nLists == 0 {
+        return nil, fmt.Errorf("empty input")
+    }
+
+    offsets := make([]uint32, nLists+1)
+    var flat []FeatureValue
+    for i, lst := range lists {
+        offsets[i] = uint32(len(flat))
+        flat = append(flat, lst...)
+    }
+    offsets[nLists] = uint32(len(flat))
+
+    out := make([]ExecuteAllFeatures, nLists)
+    ret := C.matrixgraph_execute_agg_prim_compute_all_batch(
+        h,
+        (*C.MatrixGraphFeatureValue)(unsafe.Pointer(&flat[0])),
+        (*C.uint32_t)(unsafe.Pointer(&offsets[0])),
+        C.uint32_t(nLists),
+        (*C.MatrixGraphExecuteAllFeatures)(unsafe.Pointer(&out[0])))
+    if ret != 0 {
+        return nil, fmt.Errorf("compute_all_batch failed")
+    }
+    return out, nil
+}
+
 func ExampleExecuteAggPrim() {
     h := ExecuteAggPrimCreate()
     defer ExecuteAggPrimDestroy(h)
@@ -718,6 +818,26 @@ func ExampleExecuteAggPrim() {
             i, row[0].F64(), row[1].F64(), row[2].I64(), row[3].F64(), row[4].F64())
     }
 }
+
+func ExampleExecuteAggPrimComputeAllBatch() {
+    h := ExecuteAggPrimCreate()
+    defer ExecuteAggPrimDestroy(h)
+
+    lists := [][]FeatureValue{
+        {MakeIntFeatureValue(1), MakeIntFeatureValue(2), MakeIntFeatureValue(3)},
+        {MakeIntFeatureValue(4), MakeIntFeatureValue(5), MakeIntFeatureValue(6), MakeIntFeatureValue(7)},
+    }
+
+    results, err := ExecuteAggPrimComputeAllBatch(h, lists)
+    if err != nil {
+        panic(err)
+    }
+
+    for i, all := range results {
+        fmt.Printf("list[%d] count=%d sum=%.0f mean=%.1f median=%.1f\n",
+            i, all.Count.I64(), all.Sum.F64(), all.Mean.F64(), all.Median.F64())
+    }
+}
 ```
 
 ### Batch layout
@@ -730,7 +850,13 @@ list[1] = flat[ offsets[1] .. offsets[2]-1 ]
 ...
 ```
 
-`ComputeBatchMultiPrim` returns a flat row-major array of shape `[n_lists][n_primitives]`.
+Output shapes:
+
+| API | Output shape |
+|-----|--------------|
+| `ComputeBatch` | `[n_lists]` |
+| `ComputeBatchMultiPrim` | `[n_lists][n_primitives]` |
+| `ComputeAllBatch` | `[n_lists]` of `ExecuteAllFeatures` |
 
 ---
 

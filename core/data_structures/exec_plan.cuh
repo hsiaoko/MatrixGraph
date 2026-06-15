@@ -85,7 +85,9 @@ class ExecutionPlan {
     output_in_edges.reserve(p.get_max_vid());
 
     for (int root = 0; root < p.get_num_vertices(); root++) {
-      DFSTraverse(root++, visited, p, output, output_in_edges, 0, depth_);
+      if (!visited.GetBit(root)) {
+        DFSTraverse(root, visited, p, output, output_in_edges, 0, depth_);
+      }
     }
 
     sequential_exec_path_in_edges_ = new UnifiedOwnedBufferVertexID();

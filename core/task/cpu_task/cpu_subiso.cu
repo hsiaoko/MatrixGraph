@@ -693,8 +693,7 @@ static void DFSExtend(
     const ExecutionPlan& exec_plan, const std::vector<Matrix>& m_vec,
     const std::vector<UnifiedOwnedBufferFloat*>& m_unified_buffer_vec,
     VertexID level, VertexID pre_v_idx, VertexID v_idx,
-    std::vector<BitmapOwnership>& matches_src_visited_vec,
-    std::vector<BitmapOwnership>& matches_visited_vec,
+    std::vector<std::unordered_set<uint64_t>>& matches_visited_pairs,
     LocalMatches* local_matches, bool match) {
   // 基础检查
   if (level > exec_plan.get_depth()) {
@@ -732,14 +731,13 @@ static void DFSExtend(
         return;
       }
 
-      if (matches_visited_vec[i].GetBit(v_idx) &&
-          matches_src_visited_vec[i].GetBit(pre_v_idx)) {
+      uint64_t pair_key = (static_cast<uint64_t>(pre_v_idx) << 32) |
+                          static_cast<uint64_t>(v_idx);
+      if (matches_visited_pairs[i].count(pair_key)) {
         return;
-      } else {
-        matches_visited_vec[i].SetBit(v_idx);
-        matches_src_visited_vec[i].SetBit(pre_v_idx);
-        extend_tag = true;
       }
+      matches_visited_pairs[i].insert(pair_key);
+      extend_tag = true;
 
       local_matches->size[i]++;
       if (pre_v_idx != kMaxVertexID) {
@@ -758,8 +756,7 @@ static void DFSExtend(
       VertexID neighbor = v.outgoing_edges[nbr_idx];
 
       DFSExtend(p, g, exec_plan, m_vec, m_unified_buffer_vec, level + 1, v_idx,
-                neighbor, matches_src_visited_vec, matches_visited_vec,
-                local_matches, match);
+                neighbor, matches_visited_pairs, local_matches, match);
     }
   }
 
@@ -788,42 +785,32 @@ static inline void Enumerating(
         return local_matches;
       });
 
-  std::vector<std::vector<BitmapOwnership>> matches_visited_vec_vec;
-  matches_visited_vec_vec.resize(parallelism);
-  std::vector<std::vector<BitmapOwnership>> matches_src_visited_vec_vec;
-  matches_src_visited_vec_vec.resize(parallelism);
-
-  std::generate(matches_visited_vec_vec.begin(), matches_visited_vec_vec.end(),
-                [&p, &g, &exec_plan]() {
-                  std::vector<BitmapOwnership> visited_vec;
-                  visited_vec.resize(exec_plan.get_n_edges(),
-                                     g.get_num_vertices());
-                  return visited_vec;
-                });
-
-  std::generate(matches_src_visited_vec_vec.begin(),
-                matches_src_visited_vec_vec.end(), [&p, &g, &exec_plan]() {
-                  std::vector<BitmapOwnership> visited_src_vec;
-                  visited_src_vec.resize(exec_plan.get_n_edges(),
-                                         g.get_num_vertices());
-                  return visited_src_vec;
+  std::vector<std::vector<std::unordered_set<uint64_t>>>
+      matches_visited_pairs_vec;
+  matches_visited_pairs_vec.resize(parallelism);
+  std::generate(matches_visited_pairs_vec.begin(),
+                matches_visited_pairs_vec.end(), [&exec_plan]() {
+                  return std::vector<std::unordered_set<uint64_t>>(
+                      exec_plan.get_n_edges());
                 });
 
   std::cout << "Enumerating" << std::endl;
   ParForEach(worker.begin(), worker.end(),
       [step, &mtx, &p, &g, &exec_plan, &m_vec, &m_unified_buffer_vec, &matches,
-       &local_matches_vec, &matches_visited_vec_vec,
-       &matches_src_visited_vec_vec](auto w) {
-        auto& matches_visited_vec = matches_visited_vec_vec[w];
-        auto& matches_src_visited_vec = matches_src_visited_vec_vec[w];
+       &local_matches_vec, &matches_visited_pairs_vec](auto w) {
+        auto& matches_visited_pairs = matches_visited_pairs_vec[w];
 
         auto& local_matches = local_matches_vec[w];
 
         for (VertexID v_idx = w; v_idx < g.get_num_vertices(); v_idx += step) {
+          for (auto _ = 0; _ < exec_plan.get_n_edges(); _++) {
+            matches_visited_pairs[_].clear();
+          }
+
           bool match = false;
           DFSExtend(p, g, exec_plan, m_vec, m_unified_buffer_vec, 0,
-                    kMaxVertexID, v_idx, matches_src_visited_vec,
-                    matches_visited_vec, &local_matches, match);
+                    kMaxVertexID, v_idx, matches_visited_pairs, &local_matches,
+                    match);
 
           {
             bool is_match = true;
@@ -864,16 +851,14 @@ static inline void Enumerating(
                    sizeof(VertexID) * exec_plan.get_n_edges());
           }
         }
-        for (auto _ = 0; _ < exec_plan.get_n_edges(); _++) {
-          matches_src_visited_vec[_].Clear();
-          matches_visited_vec[_].Clear();
-        }
       });
 }
 
 static bool ValidateWeft(const ImmutableCSR& p, const ImmutableCSR& g,
                          const ExecutionPlan& exec_plan, Matches* matches,
-                         VertexID weft_id, size_t max_nodes = 1000000, size_t max_ms_per_weft = 10) {
+                         VertexID weft_id, size_t max_nodes = 1000000,
+                         size_t max_ms_per_weft = 10,
+                         std::vector<VertexID>* out_mapping = nullptr) {
   auto n_pattern_vertices = p.get_num_vertices();
   auto n_edges = matches->get_n_vertices();
 
@@ -1026,6 +1011,7 @@ static bool ValidateWeft(const ImmutableCSR& p, const ImmutableCSR& g,
         std::chrono::steady_clock::now() - dfs_start_time).count();
     if (elapsed_ms > (long long)max_ms_per_weft) return false;
     if (depth == n_pattern_vertices) {
+      bool ok = true;
       for (VertexID u_local = 0; u_local < n_pattern_vertices; ++u_local) {
         auto u = p.GetVertexByLocalID(u_local);
         for (VertexID nbr_idx = 0; nbr_idx < u.outdegree; ++nbr_idx) {
@@ -1033,11 +1019,19 @@ static bool ValidateWeft(const ImmutableCSR& p, const ImmutableCSR& g,
           if (u_local >= nbr_local) continue;
           VertexID v_u_local = g.GetLocalIDByGlobalID(mapping[u_local]);
           VertexID v_nbr_local = g.GetLocalIDByGlobalID(mapping[nbr_local]);
-          if (v_u_local >= g.get_num_vertices() || v_nbr_local >= g.get_num_vertices()) return false;
-          if (!g.IsConnected(v_u_local, v_nbr_local)) return false;
+          if (v_u_local >= g.get_num_vertices() || v_nbr_local >= g.get_num_vertices()) {
+            ok = false;
+            break;
+          }
+          if (!g.IsConnected(v_u_local, v_nbr_local)) {
+            ok = false;
+            break;
+          }
         }
+        if (!ok) break;
       }
-      return true;
+      if (ok && out_mapping) *out_mapping = mapping;
+      return ok;
     }
 
     VertexID u_local = order[depth];
@@ -1083,6 +1077,55 @@ static bool ValidateWeft(const ImmutableCSR& p, const ImmutableCSR& g,
   return dfs(0);
 }
 
+// After a weft is validated, replace its coarse candidate supersets with the
+// exact edge mapping found by ValidateWeft. This makes the stored candidates
+// correspond one-to-one to the pattern edges under the discovered isomorphism.
+static void RewriteWeftWithMapping(const ImmutableCSR& p, Matches* matches,
+                                   VertexID weft_id,
+                                   const std::vector<VertexID>& mapping) {
+  auto n_edges = matches->get_n_vertices();
+  auto max_n_local_weft = matches->get_max_n_local_weft();
+  auto data_ptr = matches->get_matches_data_ptr();
+  auto offset_ptr = matches->GetVCandidateOffsetPtr();
+  auto header = matches->GetHeader();
+
+  for (VertexID i = 0; i < n_edges; i++) {
+    auto h = header[i];
+    VertexID u_src_local = (h.first == kMaxVertexID)
+                               ? kMaxVertexID
+                               : p.GetLocalIDByGlobalID(h.first);
+    VertexID u_dst_local = (h.second == kMaxVertexID)
+                               ? kMaxVertexID
+                               : p.GetLocalIDByGlobalID(h.second);
+
+    VertexID src = 0;
+    VertexID dst = 0;
+    if (u_src_local == kMaxVertexID) {
+      // Root edge convention: src is unused, dst is the mapped root vertex.
+      src = 0;
+      dst = mapping[u_dst_local];
+    } else {
+      src = mapping[u_src_local];
+      dst = mapping[u_dst_local];
+    }
+
+    size_t base = static_cast<size_t>(weft_id) * n_edges * 2 *
+                      max_n_local_weft +
+                  i * 2 * max_n_local_weft;
+    data_ptr[base] = src;
+    data_ptr[base + 1] = dst;
+
+    // Clear any extra candidates that may have been stored for this edge.
+    for (VertexID c = 1; c < max_n_local_weft; c++) {
+      data_ptr[base + 2 * c] = kMaxVertexID;
+      data_ptr[base + 2 * c + 1] = kMaxVertexID;
+    }
+
+    offset_ptr[weft_id * (n_edges + 1) + i] = i;
+  }
+  offset_ptr[weft_id * (n_edges + 1) + n_edges] = n_edges;
+}
+
 static void ValidateMatching(const ImmutableCSR& p, const ImmutableCSR& g,
                              const ExecutionPlan& exec_plan, Matches* matches,
                              VertexID max_wefts =
@@ -1097,9 +1140,13 @@ static void ValidateMatching(const ImmutableCSR& p, const ImmutableCSR& g,
   for (VertexID weft_id = 0; weft_id < limit; weft_id++) {
     if (matches->get_invalid_match_ptr()->GetBit(weft_id)) continue;
     checked_count++;
-    if (!ValidateWeft(p, g, exec_plan, matches, weft_id)) {
+    std::vector<VertexID> mapping;
+    if (!ValidateWeft(p, g, exec_plan, matches, weft_id, 1000000, 10,
+                      &mapping)) {
       matches->get_invalid_match_ptr()->SetBit(weft_id);
       invalid_count++;
+    } else {
+      RewriteWeftWithMapping(p, matches, weft_id, mapping);
     }
     auto elapsed_sec = std::chrono::duration_cast<std::chrono::seconds>(
         std::chrono::steady_clock::now() - global_start).count();

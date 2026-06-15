@@ -93,31 +93,23 @@ class Matches {
 
       for (auto i = 0; i < n_vertices_; i++) {
         auto v_candidate_offset =
-            GetVCandidateOffsetPtr()[weft_id * (n_vertices_) + i];
-        // auto v_candidate_size = GetWeftSizePtr()[weft_id * (n_vertices_) +
-        // i];
+            GetVCandidateOffsetPtr()[weft_id * (n_vertices_ + 1) + i];
         auto v_candidate_size =
-            GetVCandidateOffsetPtr()[weft_id * (n_vertices_) + i + 1] -
-            GetVCandidateOffsetPtr()[weft_id * (n_vertices_) + i];
+            GetVCandidateOffsetPtr()[weft_id * (n_vertices_ + 1) + i + 1] -
+            GetVCandidateOffsetPtr()[weft_id * (n_vertices_ + 1) + i];
         std::cout << "\t " << header_[i].first << "->" << header_[i].second
                   << " offset:" << v_candidate_offset
                   << " size: " << v_candidate_size << ": ";
         for (VertexID candidate_id = 0; candidate_id < v_candidate_size;
              candidate_id++) {
-          if (*(matches_data_.GetPtr() +
-                weft_id * n_vertices_ * 2 * max_n_local_weft_ +
-                i * 2 * max_n_local_weft_ + 2 * candidate_id) != kMaxVertexID &&
-              *(matches_data_.GetPtr() +
-                weft_id * n_vertices_ * 2 * max_n_local_weft_ +
-                i * 2 * max_n_local_weft_ + 2 * candidate_id) != kMaxVertexID) {
-            std::cout << *(matches_data_.GetPtr() +
-                           weft_id * n_vertices_ * 2 * max_n_local_weft_ +
-                           i * 2 * max_n_local_weft_ + 2 * candidate_id)
-                      << "->"
-                      << *(matches_data_.GetPtr() +
-                           weft_id * n_vertices_ * 2 * max_n_local_weft_ +
-                           i * 2 * max_n_local_weft_ + 2 * candidate_id + 1)
-                      << ",";
+          auto src = *(matches_data_.GetPtr() +
+                       weft_id * n_vertices_ * 2 * max_n_local_weft_ +
+                       i * 2 * max_n_local_weft_ + 2 * candidate_id);
+          auto dst = *(matches_data_.GetPtr() +
+                       weft_id * n_vertices_ * 2 * max_n_local_weft_ +
+                       i * 2 * max_n_local_weft_ + 2 * candidate_id + 1);
+          if (src != kMaxVertexID && dst != kMaxVertexID) {
+            std::cout << src << "->" << dst << ",";
           }
         }
         std::cout << std::endl;
@@ -177,11 +169,9 @@ class Matches {
       auto tag = false;
       size_t weft_matches_count = 1;
       for (auto i = 0; i < n_vertices_; i++) {
-        auto v_candidate_offset =
-            GetVCandidateOffsetPtr()[weft_id * (n_vertices_) + i];
         auto v_candidate_size =
-            GetVCandidateOffsetPtr()[weft_id * (n_vertices_) + i + 1] -
-            GetVCandidateOffsetPtr()[weft_id * (n_vertices_) + i];
+            GetVCandidateOffsetPtr()[weft_id * (n_vertices_ + 1) + i + 1] -
+            GetVCandidateOffsetPtr()[weft_id * (n_vertices_ + 1) + i];
 
         size_t tmp_count = 0;
         for (VertexID candidate_id = 0; candidate_id < v_candidate_size;
@@ -210,20 +200,17 @@ class Matches {
 
   void UpdateInvalidMatches() {
     for (VertexID weft_id = 0; weft_id < *weft_count_.GetPtr(); weft_id++) {
+      if (invalid_match_->GetBit(weft_id)) continue;
+
       for (auto i = 0; i < n_vertices_; i++) {
-        auto v_candidate_offset =
-            GetVCandidateOffsetPtr()[weft_id * (n_vertices_) + i];
-        if (v_candidate_offset == 0) {
-          invalid_match_->SetBit(weft_id);
-          return;
-        }
-      }
-      for (auto i = 0; i < n_vertices_; i++) {
-        auto v_candidate_offset =
-            GetVCandidateOffsetPtr()[weft_id * (n_vertices_) + i];
         auto v_candidate_size =
-            GetVCandidateOffsetPtr()[weft_id * (n_vertices_) + i + 1] -
-            GetVCandidateOffsetPtr()[weft_id * (n_vertices_) + i];
+            GetVCandidateOffsetPtr()[weft_id * (n_vertices_ + 1) + i + 1] -
+            GetVCandidateOffsetPtr()[weft_id * (n_vertices_ + 1) + i];
+        if (v_candidate_size == 0) {
+          invalid_match_->SetBit(weft_id);
+          break;
+        }
+
         auto invalid_count = 0;
         for (VertexID candidate_id = 0; candidate_id < v_candidate_size;
              candidate_id++) {
