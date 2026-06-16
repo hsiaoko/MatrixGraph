@@ -1570,24 +1570,24 @@ void CPUSubIso::Run() {
   auto end_time = std::chrono::system_clock::now();
 
   std::cout << "Data loading time: "
-            << std::chrono::duration_cast<std::chrono::milliseconds>(
+            << std::chrono::duration_cast<std::chrono::microseconds>(
                    start_time_1 - start_time_0)
                        .count() /
-                   (float)CLOCKS_PER_SEC
+                   1000000.0
             << " sec" << std::endl;
 
   std::cout << "Matching time: "
-            << std::chrono::duration_cast<std::chrono::milliseconds>(
+            << std::chrono::duration_cast<std::chrono::microseconds>(
                    end_time - start_time_1)
                        .count() /
-                   (float)CLOCKS_PER_SEC
+                   1000000.0
             << " sec" << std::endl;
 
   std::cout << "Total execution time: "
-            << std::chrono::duration_cast<std::chrono::milliseconds>(
+            << std::chrono::duration_cast<std::chrono::microseconds>(
                    end_time - start_time_0)
                        .count() /
-                   (float)CLOCKS_PER_SEC
+                   1000000.0
             << " sec" << std::endl;
 }
 
