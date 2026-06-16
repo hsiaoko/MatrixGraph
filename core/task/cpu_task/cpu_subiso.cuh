@@ -36,7 +36,8 @@ class CPUSubIso : public CPUTaskBase {
             const std::string& matrix_path3 = "",
             const std::string& matrix_path4 = "",
             const std::string& matrix_path5 = "",
-            const std::string& matrix_path6 = "")
+            const std::string& matrix_path6 = "",
+            const std::string& reject_output_path = "")
       : pattern_path_(pattern_path),
         data_graph_path_(data_graph_path),
         output_path_(output_path),
@@ -46,7 +47,8 @@ class CPUSubIso : public CPUTaskBase {
         matrix_path3_(matrix_path3),
         matrix_path4_(matrix_path4),
         matrix_path5_(matrix_path5),
-        matrix_path6_(matrix_path6) {}
+        matrix_path6_(matrix_path6),
+        reject_output_path_(reject_output_path) {}
 
   void Run();
 
@@ -84,6 +86,7 @@ class CPUSubIso : public CPUTaskBase {
   const std::string matrix_path6_;
 
   const std::string output_path_;
+  const std::string reject_output_path_;
   const int num_threads_;
 
   VertexLabel* label_p_ = nullptr;

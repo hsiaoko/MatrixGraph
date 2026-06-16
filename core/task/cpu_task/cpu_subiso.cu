@@ -1,6 +1,8 @@
 #include <algorithm>
 #include <atomic>
 #include <chrono>
+#include <cstdint>
+#include <fstream>
 #include <functional>
 #include <unordered_set>
 #include "core/util/execution_policy.h"
@@ -61,6 +63,12 @@ using sics::matrixgraph::core::common::kMaxNumLocalWeft;
 using sics::matrixgraph::core::common::kMaxNumWeft;
 using sics::matrixgraph::core::common::kMaxMatchTableRows;
 using sics::matrixgraph::core::common::kMaxVertexID;
+using sics::matrixgraph::core::common::kSubIsoMaxBacktrackNodes;
+using sics::matrixgraph::core::common::kSubIsoMaxMsPerWeft;
+using sics::matrixgraph::core::common::kSubIsoMaxValidateWefts;
+using sics::matrixgraph::core::common::kSubIsoValidateMatchingTimeoutSec;
+using sics::matrixgraph::core::common::kSubIsoProgressPrintInterval;
+using sics::matrixgraph::core::common::kSubIsoLocalMatchesSizeBuffer;
 using BitmapNoOwnerShip = sics::matrixgraph::core::util::BitmapNoOwnerShip;
 using sics::matrixgraph::core::common::kDefaultHeapCapacity;
 
@@ -71,6 +79,42 @@ static int gnn_filter_count = 0;
 static int nlc_filter_count = 0;
 static int ip_filter_count = 0;
 static int index_filter_count = 0;
+
+// Global rejection collector for -reject_output.  Empty path means disabled.
+// When enabled, ValidateWeft appends rejected (u,v) pairs encoded as
+// (uint64_t(u) << 32) | uint64_t(v).  Kept global to avoid threading a pointer
+// through every static helper; access is sequential because ValidateMatching
+// processes wefts one at a time.
+static std::string g_reject_output_path;
+static std::vector<uint64_t> g_rejected_pairs;
+
+static inline void RecordRejectedPair(VertexID u, VertexID v) {
+  if (g_reject_output_path.empty()) return;
+  g_rejected_pairs.push_back((static_cast<uint64_t>(u) << 32) |
+                             static_cast<uint64_t>(v));
+}
+
+static void WriteRejectedPairs() {
+  if (g_reject_output_path.empty()) return;
+  std::ofstream out(g_reject_output_path);
+  if (!out) {
+    std::cerr << "[CPUSubIso] Failed to open reject output: "
+              << g_reject_output_path << std::endl;
+    return;
+  }
+  std::sort(g_rejected_pairs.begin(), g_rejected_pairs.end());
+  g_rejected_pairs.erase(
+      std::unique(g_rejected_pairs.begin(), g_rejected_pairs.end()),
+      g_rejected_pairs.end());
+  for (auto encoded : g_rejected_pairs) {
+    VertexID u = static_cast<VertexID>(encoded >> 32);
+    VertexID v = static_cast<VertexID>(encoded & 0xFFFFFFFFu);
+    out << u << ',' << v << '\n';
+  }
+  out.close();
+  std::cout << "[CPUSubIso] Wrote " << g_rejected_pairs.size()
+            << " rejected (u,v) pairs to " << g_reject_output_path << std::endl;
+}
 
 static std::hash<int> hasher;
 
@@ -184,16 +228,6 @@ static void SimdSquaredDifference(const float* __restrict v_a,
   }
 }
 
-static inline bool LabelDegreeFilter(VertexID u_idx, VertexID v_idx,
-                                     const ImmutableCSR& p,
-                                     const ImmutableCSR& g) {
-  auto u_label = p.GetVLabelBasePointer()[u_idx];
-  auto v_label = g.GetVLabelBasePointer()[v_idx];
-  return u_label == v_label &&
-         g.GetOutDegreeByLocalID(v_idx) >= p.GetOutDegreeByLocalID(u_idx) &&
-         g.GetInDegreeByLocalID(v_idx) >= p.GetInDegreeByLocalID(u_idx);
-}
-
 static inline bool LabelFilter(VertexID u_idx, VertexID v_idx,
                                const ImmutableCSR& p, const ImmutableCSR& g) {
   auto u_label = p.GetVLabelBasePointer()[u_idx];
@@ -201,16 +235,29 @@ static inline bool LabelFilter(VertexID u_idx, VertexID v_idx,
   return u_label == v_label;
 }
 
+static inline bool LabelDegreeFilter(VertexID u_idx, VertexID v_idx,
+                                     const ImmutableCSR& p,
+                                     const ImmutableCSR& g) {
+    return true;
+  auto u_label = p.GetVLabelBasePointer()[u_idx];
+  auto v_label = g.GetVLabelBasePointer()[v_idx];
+  return u_label == v_label &&
+         g.GetOutDegreeByLocalID(v_idx) >= p.GetOutDegreeByLocalID(u_idx) &&
+         g.GetInDegreeByLocalID(v_idx) >= p.GetInDegreeByLocalID(u_idx);
+}
+
+
 static bool NeighborLabelCounterFilter(VertexID u_idx, VertexID v_idx,
                                        const ImmutableCSR& p,
                                        const ImmutableCSR& g) {
+   return true;
   return g_filter_cache[v_idx].all_neighbor_label_count >=
          p_filter_cache[u_idx].all_neighbor_label_count;
 }
 
 static bool MinWiseIPFilter(VertexID u_idx, VertexID v_idx,
                               const ImmutableCSR& p, const ImmutableCSR& g) {
-  //return true;
+  return true;
   auto u_label = p.GetVLabelBasePointer()[u_idx];
   auto v_label = g.GetVLabelBasePointer()[v_idx];
   if (u_label != v_label) return false;
@@ -227,6 +274,7 @@ static bool MinWiseIPFilter(VertexID u_idx, VertexID v_idx,
 
 static bool KMinWiseIPFilter(VertexID u_idx, VertexID v_idx,
                              const ImmutableCSR& p, const ImmutableCSR& g) {
+  return true;
   auto u_label = p.GetVLabelBasePointer()[u_idx];
   auto v_label = g.GetVLabelBasePointer()[v_idx];
   if (u_label != v_label) return false;
@@ -322,22 +370,38 @@ static bool KMinWiseIPFilter(VertexID u_idx, VertexID v_idx,
 }
 
 static bool Filter(VertexID u_idx, VertexID v_idx, const ImmutableCSR& p,
-                   const ImmutableCSR& g) {
+                   const ImmutableCSR& g,
+                   std::vector<uint64_t>* rejected_pairs = nullptr) {
   if (u_idx == kMaxVertexID) return false;
   if (v_idx == kMaxVertexID) return false;
   if (!LabelFilter(u_idx, v_idx, p, g)) {
     __sync_fetch_and_add(&label_filter_count, 1);
     __sync_fetch_and_add(&filter_count, 1);
+    if (rejected_pairs) {
+      rejected_pairs->push_back(
+          (static_cast<uint64_t>(u_idx) << 32) |
+          static_cast<uint64_t>(g.GetGloablIDBasePointer()[v_idx]));
+    }
     return false;
    }
   if (!LabelDegreeFilter(u_idx, v_idx, p, g)) {
     __sync_fetch_and_add(&label_degree_filter_count, 1);
     __sync_fetch_and_add(&filter_count, 1);
+    if (rejected_pairs) {
+      rejected_pairs->push_back(
+          (static_cast<uint64_t>(u_idx) << 32) |
+          static_cast<uint64_t>(g.GetGloablIDBasePointer()[v_idx]));
+    }
     return false;
   }
   if (!NeighborLabelCounterFilter(u_idx, v_idx, p, g)) {
     __sync_fetch_and_add(&nlc_filter_count, 1);
     __sync_fetch_and_add(&filter_count, 1);
+    if (rejected_pairs) {
+      rejected_pairs->push_back(
+          (static_cast<uint64_t>(u_idx) << 32) |
+          static_cast<uint64_t>(g.GetGloablIDBasePointer()[v_idx]));
+    }
     return false;
   }
 
@@ -347,7 +411,8 @@ static bool Filter(VertexID u_idx, VertexID v_idx, const ImmutableCSR& p,
 static bool MatrixFilter(
     VertexID u_idx, VertexID v_idx, const ImmutableCSR& p,
     const ImmutableCSR& g, const std::vector<Matrix>& m_vec,
-    const std::vector<UnifiedOwnedBufferFloat*>& m_unified_buffer_vec) {
+    const std::vector<UnifiedOwnedBufferFloat*>& m_unified_buffer_vec,
+    std::vector<uint64_t>* rejected_pairs = nullptr) {
   if (0 == m_vec.size()) return true;
   auto vec_len = m_vec[0].get_y();
 
@@ -380,6 +445,11 @@ static bool MatrixFilter(
   MatrixOpsKernelWrapper::CPUSigmoid(z2, 1, 1);
 
   if (z2[0] < 0.1) {
+    if (rejected_pairs) {
+      rejected_pairs->push_back(
+          (static_cast<uint64_t>(u_idx) << 32) |
+          static_cast<uint64_t>(g.GetGloablIDBasePointer()[v_idx]));
+    }
     return false;
   }
 
@@ -666,22 +736,32 @@ static bool IsFeasible(
     const std::vector<Matrix>& m_vec,
     const std::vector<UnifiedOwnedBufferFloat*>& m_unified_buffer_vec,
     VertexID u_src, VertexID u_dst, VertexID v_src, VertexID v_dst,
-    LocalMatches* localMatches) {
+    LocalMatches* localMatches, std::vector<uint64_t>* rejected_pairs = nullptr) {
   if (u_src == kMaxVertexID && v_src == kMaxVertexID) {
     return true;
   }
   if (u_src == kMaxVertexID && v_src != kMaxVertexID) return false;
   if (v_src == kMaxVertexID && u_src != kMaxVertexID) return false;
 
-  if (!Filter(u_src, v_src, p, g)) return false;
-  if (!Filter(u_dst, v_dst, p, g)) return false;
+  if (!Filter(u_src, v_src, p, g, rejected_pairs)) return false;
+  if (!Filter(u_dst, v_dst, p, g, rejected_pairs)) return false;
 
   if (!KMinWiseIPFilter(u_dst, v_dst, p, g)) {
     __sync_fetch_and_add(&ip_filter_count, 1);
+    if (rejected_pairs) {
+      rejected_pairs->push_back(
+          (static_cast<uint64_t>(u_dst) << 32) |
+          static_cast<uint64_t>(g.GetGloablIDBasePointer()[v_dst]));
+    }
     return false;
   }
   if (!KMinWiseIPFilter(u_src, v_src, p, g)) {
     __sync_fetch_and_add(&ip_filter_count, 1);
+    if (rejected_pairs) {
+      rejected_pairs->push_back(
+          (static_cast<uint64_t>(u_src) << 32) |
+          static_cast<uint64_t>(g.GetGloablIDBasePointer()[v_src]));
+    }
     return false;
   }
 
@@ -694,7 +774,8 @@ static void DFSExtend(
     const std::vector<UnifiedOwnedBufferFloat*>& m_unified_buffer_vec,
     VertexID level, VertexID pre_v_idx, VertexID v_idx,
     std::vector<std::unordered_set<uint64_t>>& matches_visited_pairs,
-    LocalMatches* local_matches, bool match) {
+    LocalMatches* local_matches, bool match,
+    std::vector<uint64_t>* rejected_pairs = nullptr) {
   // 基础检查
   if (level > exec_plan.get_depth()) {
     return;
@@ -718,14 +799,15 @@ static void DFSExtend(
     //}
 
     if (level == 1) {
-      if (!MatrixFilter(u_src, pre_v_idx, p, g, m_vec, m_unified_buffer_vec)) {
+      if (!MatrixFilter(u_src, pre_v_idx, p, g, m_vec, m_unified_buffer_vec,
+                        rejected_pairs)) {
         __sync_fetch_and_add(&gnn_filter_count, 1);
         continue;
       }
     }
 
     if (IsFeasible(p, g, m_vec, m_unified_buffer_vec, u_src, u_dst, pre_v_idx,
-                   v_idx, local_matches)) {
+                   v_idx, local_matches, rejected_pairs)) {
       VertexID offset = local_matches->size[i];
       if (offset >= kMaxNumLocalWeft) {
         return;
@@ -756,7 +838,8 @@ static void DFSExtend(
       VertexID neighbor = v.outgoing_edges[nbr_idx];
 
       DFSExtend(p, g, exec_plan, m_vec, m_unified_buffer_vec, level + 1, v_idx,
-                neighbor, matches_visited_pairs, local_matches, match);
+                neighbor, matches_visited_pairs, local_matches, match,
+                rejected_pairs);
     }
   }
 
@@ -781,7 +864,8 @@ static inline void Enumerating(
         LocalMatches local_matches;
         local_matches.data =
             new VertexID[exec_plan.get_n_edges() * 2 * kMaxNumLocalWeft]();
-        local_matches.size = new VertexID[exec_plan.get_n_edges() + 10]();
+        local_matches.size =
+            new VertexID[exec_plan.get_n_edges() + kSubIsoLocalMatchesSizeBuffer]();
         return local_matches;
       });
 
@@ -794,13 +878,21 @@ static inline void Enumerating(
                       exec_plan.get_n_edges());
                 });
 
+  std::vector<std::vector<uint64_t>> rejected_pairs_vec;
+  if (!g_reject_output_path.empty()) {
+    rejected_pairs_vec.resize(parallelism);
+  }
+
   std::cout << "Enumerating" << std::endl;
   ParForEach(worker.begin(), worker.end(),
       [step, &mtx, &p, &g, &exec_plan, &m_vec, &m_unified_buffer_vec, &matches,
-       &local_matches_vec, &matches_visited_pairs_vec](auto w) {
+       &local_matches_vec, &matches_visited_pairs_vec, &rejected_pairs_vec](
+          auto w) {
         auto& matches_visited_pairs = matches_visited_pairs_vec[w];
 
         auto& local_matches = local_matches_vec[w];
+        std::vector<uint64_t>* thread_rejected_pairs =
+            rejected_pairs_vec.empty() ? nullptr : &rejected_pairs_vec[w];
 
         for (VertexID v_idx = w; v_idx < g.get_num_vertices(); v_idx += step) {
           for (auto _ = 0; _ < exec_plan.get_n_edges(); _++) {
@@ -810,7 +902,7 @@ static inline void Enumerating(
           bool match = false;
           DFSExtend(p, g, exec_plan, m_vec, m_unified_buffer_vec, 0,
                     kMaxVertexID, v_idx, matches_visited_pairs, &local_matches,
-                    match);
+                    match, thread_rejected_pairs);
 
           {
             bool is_match = true;
@@ -852,12 +944,22 @@ static inline void Enumerating(
           }
         }
       });
+
+  if (!rejected_pairs_vec.empty()) {
+    size_t total = 0;
+    for (const auto& v : rejected_pairs_vec) total += v.size();
+    g_rejected_pairs.reserve(g_rejected_pairs.size() + total);
+    for (auto& v : rejected_pairs_vec) {
+      g_rejected_pairs.insert(g_rejected_pairs.end(), v.begin(), v.end());
+    }
+  }
 }
 
 static bool ValidateWeft(const ImmutableCSR& p, const ImmutableCSR& g,
                          const ExecutionPlan& exec_plan, Matches* matches,
-                         VertexID weft_id, size_t max_nodes = 1000000,
-                         size_t max_ms_per_weft = 10,
+                         VertexID weft_id,
+                         size_t max_nodes = kSubIsoMaxBacktrackNodes,
+                         size_t max_ms_per_weft = kSubIsoMaxMsPerWeft,
                          std::vector<VertexID>* out_mapping = nullptr) {
   auto n_pattern_vertices = p.get_num_vertices();
   auto n_edges = matches->get_n_vertices();
@@ -1035,10 +1137,18 @@ static bool ValidateWeft(const ImmutableCSR& p, const ImmutableCSR& g,
     }
 
     VertexID u_local = order[depth];
+    VertexID u_global = p.GetGlobalIDByLocalID(u_local);
     for (VertexID v_global : cand_vec[u_local]) {
+      if (v_global == kMaxVertexID) continue;
       VertexID v_local = g.GetLocalIDByGlobalID(v_global);
-      if (v_local >= g.get_num_vertices()) continue;
-      if (used[v_local]) continue;
+      if (v_local >= g.get_num_vertices()) {
+        RecordRejectedPair(u_global, v_global);
+        continue;
+      }
+      if (used[v_local]) {
+        RecordRejectedPair(u_global, v_global);
+        continue;
+      }
 
       bool valid = true;
       auto u = p.GetVertexByLocalID(u_local);
@@ -1063,7 +1173,10 @@ static bool ValidateWeft(const ImmutableCSR& p, const ImmutableCSR& g,
           break;
         }
       }
-      if (!valid) continue;
+      if (!valid) {
+        RecordRejectedPair(u_global, v_global);
+        continue;
+      }
 
       mapping[u_local] = v_global;
       used[v_local] = true;
@@ -1141,7 +1254,8 @@ static void ValidateMatching(const ImmutableCSR& p, const ImmutableCSR& g,
     if (matches->get_invalid_match_ptr()->GetBit(weft_id)) continue;
     checked_count++;
     std::vector<VertexID> mapping;
-    if (!ValidateWeft(p, g, exec_plan, matches, weft_id, 1000000, 10,
+    if (!ValidateWeft(p, g, exec_plan, matches, weft_id,
+                      kSubIsoMaxBacktrackNodes, kSubIsoMaxMsPerWeft,
                       &mapping)) {
       matches->get_invalid_match_ptr()->SetBit(weft_id);
       invalid_count++;
@@ -1150,12 +1264,14 @@ static void ValidateMatching(const ImmutableCSR& p, const ImmutableCSR& g,
     }
     auto elapsed_sec = std::chrono::duration_cast<std::chrono::seconds>(
         std::chrono::steady_clock::now() - global_start).count();
-    if (elapsed_sec > 10) {
-      std::cout << "\tValidateMatching timed out after 10 sec at weft "
+    if (elapsed_sec > kSubIsoValidateMatchingTimeoutSec) {
+      std::cout << "\tValidateMatching timed out after "
+                << kSubIsoValidateMatchingTimeoutSec << " sec at weft "
                 << weft_id << "." << std::endl;
       break;
     }
-    if ((checked_count) % 10 == 0 || weft_id + 1 == limit) {
+    if ((checked_count) % kSubIsoProgressPrintInterval == 0 ||
+        weft_id + 1 == limit) {
       std::cout << "\t  Progress: " << checked_count << "/" << limit
                 << " checked, " << invalid_count << " invalid so far."
                 << std::endl;
@@ -1312,7 +1428,7 @@ void CPUSubIso::RecursiveMatching(
   VertexID max_validate_wefts =
       (validate_env && std::string(validate_env) == "1")
           ? std::numeric_limits<VertexID>::max()
-          : 100;
+          : kSubIsoMaxValidateWefts;
   ValidateMatching(p, g, exec_plan, &matches, max_validate_wefts);
   matches.UpdateInvalidMatches();
 
@@ -1437,8 +1553,15 @@ void CPUSubIso::Run() {
   LoadData();
   auto start_time_1 = std::chrono::system_clock::now();
 
+  g_reject_output_path = reject_output_path_;
+  g_rejected_pairs.clear();
+
   // WOJMatching(p_, g_, m_vec_);
   RecursiveMatching(p_, g_, m_vec_, m_unified_buffer_vec_);
+
+  WriteRejectedPairs();
+  g_reject_output_path.clear();
+
   std::cout << "=== Filter Counts ===" << std::endl;
   std::cout << "Total Filters:      " << filter_count << std::endl;
   std::cout << "Label Filters:      " << label_filter_count << std::endl;
