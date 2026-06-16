@@ -238,7 +238,6 @@ static inline bool LabelFilter(VertexID u_idx, VertexID v_idx,
 static inline bool LabelDegreeFilter(VertexID u_idx, VertexID v_idx,
                                      const ImmutableCSR& p,
                                      const ImmutableCSR& g) {
-    return true;
   auto u_label = p.GetVLabelBasePointer()[u_idx];
   auto v_label = g.GetVLabelBasePointer()[v_idx];
   return u_label == v_label &&
@@ -250,14 +249,12 @@ static inline bool LabelDegreeFilter(VertexID u_idx, VertexID v_idx,
 static bool NeighborLabelCounterFilter(VertexID u_idx, VertexID v_idx,
                                        const ImmutableCSR& p,
                                        const ImmutableCSR& g) {
-   return true;
   return g_filter_cache[v_idx].all_neighbor_label_count >=
          p_filter_cache[u_idx].all_neighbor_label_count;
 }
 
 static bool MinWiseIPFilter(VertexID u_idx, VertexID v_idx,
                               const ImmutableCSR& p, const ImmutableCSR& g) {
-  return true;
   auto u_label = p.GetVLabelBasePointer()[u_idx];
   auto v_label = g.GetVLabelBasePointer()[v_idx];
   if (u_label != v_label) return false;
@@ -274,7 +271,6 @@ static bool MinWiseIPFilter(VertexID u_idx, VertexID v_idx,
 
 static bool KMinWiseIPFilter(VertexID u_idx, VertexID v_idx,
                              const ImmutableCSR& p, const ImmutableCSR& g) {
-  return true;
   auto u_label = p.GetVLabelBasePointer()[u_idx];
   auto v_label = g.GetVLabelBasePointer()[v_idx];
   if (u_label != v_label) return false;
