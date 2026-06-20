@@ -219,7 +219,7 @@ static __forceinline__ __device__ bool LabelDegreeFilter(
   VertexID* in_degree_g = globalid_g + params.n_vertices_g;
   VertexID* out_degree_g = in_degree_g + params.n_vertices_g;
 
-  VertexLabel v_label = params.v_label_g[globalid_g[v_idx]];
+  VertexLabel v_label = params.v_label_g[v_idx];
   VertexLabel u_label = params.v_label_p[u_idx];
 
   return u_label == v_label && out_degree_g[v_idx] >= out_degree_p[u_idx] &&
@@ -632,7 +632,7 @@ static __global__ void WOJFilterVCKernel(ParametersFilter params) {
 
   VertexID* global_y_offset_ptr = params.woj_matches.get_y_offset_ptr();
   VertexID* data_ptr = params.woj_matches.get_data_ptr();
-  const VertexID x_stride = params.woj_matches.get_x_offset();
+  const VertexID x_stride = params.woj_matches.get_x();
   const VertexID max_table_rows =
       x_stride ? (params.n_edges_p * kMaxMatchTableRows) / x_stride : 0;
 
@@ -690,6 +690,9 @@ static __noinline__ __global__ void WOJJoinKernel(ParametersJoin params) {
   VertexID* left_data = params.left_woj_matches.get_data_ptr();
   VertexID* right_data = params.right_woj_matches.get_data_ptr();
   VertexID* output_data = params.output_woj_matches.get_data_ptr();
+  VertexID left_x = params.left_woj_matches.get_x();
+  VertexID right_x = params.right_woj_matches.get_x();
+  VertexID output_x = params.output_woj_matches.get_x();
   VertexID left_x_offset = params.left_woj_matches.get_x_offset();
   VertexID right_x_offset = params.right_woj_matches.get_x_offset();
   VertexID output_x_offset = params.output_woj_matches.get_x_offset();
@@ -706,7 +709,7 @@ static __noinline__ __global__ void WOJJoinKernel(ParametersJoin params) {
        left_data_offset < params.left_woj_matches.get_y_offset();
        left_data_offset += step) {
     VertexID target =
-        left_data[left_x_offset * left_data_offset + params.left_hash_idx];
+        left_data[left_x * left_data_offset + params.left_hash_idx];
 
     // if (visited.GetBit(target) == 0) {
     //   atomicAdd(params.jump_count, 1);
@@ -722,23 +725,23 @@ static __noinline__ __global__ void WOJJoinKernel(ParametersJoin params) {
       VertexID right_walker = right_data_offset;
 
       while (left_walker >= 0 && left_walker < right_y_offset &&
-             right_data[left_walker * right_x_offset + params.right_hash_idx] ==
+             right_data[left_walker * right_x + params.right_hash_idx] ==
                  target) {
         // Write direct on the global memory.
         auto global_offset = atomicAdd(global_offset_ptr, 1);
-        if (global_offset > kMaxMatchTableRows / output_x_offset) break;
+        if (global_offset >= params.output_woj_matches.get_y()) break;
 
-        memcpy(output_data + global_offset * output_x_offset,
-               left_data + left_data_offset * left_x_offset,
+        memcpy(output_data + global_offset * output_x,
+               left_data + left_data_offset * left_x,
                sizeof(VertexID) * left_x_offset);
 
         VertexID write_col = 0;
         for (VertexID right_col_idx = 0; right_col_idx < right_x_offset;
              right_col_idx++) {
           if (right_col_idx == params.right_hash_idx) continue;
-          *(output_data + global_offset * output_x_offset + left_x_offset +
+          *(output_data + global_offset * output_x + left_x_offset +
             write_col) =
-              right_data[left_walker * right_x_offset + right_col_idx];
+              right_data[left_walker * right_x + right_col_idx];
           write_col++;
         }
 
@@ -747,23 +750,23 @@ static __noinline__ __global__ void WOJJoinKernel(ParametersJoin params) {
 
       while (
           right_walker >= 0 && right_walker < right_y_offset &&
-          right_data[right_walker * right_x_offset + params.right_hash_idx] ==
+          right_data[right_walker * right_x + params.right_hash_idx] ==
               target) {
         // Write direct on the global memory.
         auto global_offset = atomicAdd(global_offset_ptr, 1);
-        if (global_offset > kMaxMatchTableRows / output_x_offset) break;
+        if (global_offset >= params.output_woj_matches.get_y()) break;
 
-        memcpy(output_data + global_offset * output_x_offset,
-               left_data + left_data_offset * left_x_offset,
+        memcpy(output_data + global_offset * output_x,
+               left_data + left_data_offset * left_x,
                sizeof(VertexID) * left_x_offset);
 
         VertexID write_col = 0;
         for (VertexID right_col_idx = 0; right_col_idx < right_x_offset;
              right_col_idx++) {
           if (right_col_idx == params.right_hash_idx) continue;
-          *(output_data + global_offset * output_x_offset + left_x_offset +
+          *(output_data + global_offset * output_x + left_x_offset +
             write_col) =
-              right_data[right_walker * right_x_offset + right_col_idx];
+              right_data[right_walker * right_x + right_col_idx];
           write_col++;
         }
 
@@ -1032,7 +1035,7 @@ void SortWojJoinInputs(const std::vector<WOJMatches*>& input_woj_matches_vec) {
     for (VertexID __ = 0; __ < input_woj_matches_vec[_]->get_x_offset(); __++) {
       if (header_visited.GetBit(header_ptr[__]) && sort_tag == false) {
         MergeSort(sort_stream, input_woj_matches_vec[_]->get_data_ptr(), __,
-                  input_woj_matches_vec[_]->get_x_offset(),
+                  input_woj_matches_vec[_]->get_x(),
                   input_woj_matches_vec[_]->get_y_offset(), row_bytes,
                   sort_scratch);
         sort_tag = true;
@@ -1095,7 +1098,7 @@ void PrefetchWojJoinTables(
 bool WojBushyJoinEnabled() {
   const char* e = std::getenv("MG_WOJ_BUSHY_JOIN");
   if (e == nullptr || e[0] == '\0') {
-    return true;
+    return false;
   }
   return e[0] == '1';
 }
@@ -1134,11 +1137,8 @@ void RunBinaryJoinOnDevice(const WOJExecutionPlan& exec_plan,
   WOJMatches* const R = right_woj_matches;
   WOJMatches* Out = output_woj_matches;
 
-  for (int step = 0; step < 64; ++step) {
-    auto join_keys = L->GetJoinKey(*R);
-    if (join_keys.first == kMaxVertexID || join_keys.second == kMaxVertexID) {
-      break;
-    }
+  auto join_keys = L->GetJoinKey(*R);
+  if (join_keys.first != kMaxVertexID && join_keys.second != kMaxVertexID) {
     visited_bm.ClearAsync(stream);
     jump_visited_bm.ClearAsync(stream);
     *jump_count = 0;
@@ -1162,15 +1162,6 @@ void RunBinaryJoinOnDevice(const WOJExecutionPlan& exec_plan,
     if (err != cudaSuccess) {
       CUDA_CHECK(err);
     }
-
-    if (Out->get_y_offset() == 0) {
-      break;
-    }
-    if (Out->get_x_offset() == Out->get_x()) {
-      break;
-    }
-    std::swap(L, Out);
-    Out->Clear();
   }
 
   cudaFree(jump_count);
@@ -1186,7 +1177,7 @@ std::vector<WOJMatches*> ExecuteBushyPairwiseRound(
   std::vector<WOJMatches*> outs(npairs);
   for (size_t k = 0; k < npairs; ++k) {
     outs[k] = new WOJMatches();
-    outs[k]->Init(exec_plan.get_n_edges_p(), kMaxMatchTableRows);
+    outs[k]->Init(exec_plan.get_n_vertices_p(), kMaxMatchTableRows);
   }
   const VertexID nd =
       std::max(static_cast<VertexID>(1), exec_plan.get_n_devices());
@@ -1276,14 +1267,14 @@ std::vector<WOJMatches*> WOJSubIsoKernelWrapper::Join(
             << std::endl;
 
   auto src_matches_vec =
-      input_woj_matches_vec[0]->SplitAndCopy(n_join_stripes);
+      input_woj_matches_vec[0]->SplitAndCopy(n_join_stripes, exec_plan.get_n_vertices_p());
 
   std::vector<WOJMatches*> output_woj_matches_vec;
   output_woj_matches_vec.resize(static_cast<size_t>(n_join_stripes));
 
   for (VertexID _ = 0; _ < n_join_stripes; _++) {
     output_woj_matches_vec[_] = new WOJMatches();
-    output_woj_matches_vec[_]->Init(exec_plan.get_n_edges_p(), kMaxMatchTableRows);
+    output_woj_matches_vec[_]->Init(exec_plan.get_n_vertices_p(), kMaxMatchTableRows);
   }
 
   // Init Streams
@@ -1403,13 +1394,20 @@ std::vector<WOJMatches*> WOJSubIsoKernelWrapper::Join(
             if (err != cudaSuccess) CUDA_CHECK(err);
             // output_woj_matches_vec[s]->Print();
 
+            // Debug removed.
+
             if (output_woj_matches_vec[s]->get_y_offset() == 0) {
               break;
             }
 
+            bool is_last_iteration =
+                (_ == input_woj_matches_vec.size() - 1);
             if (output_woj_matches_vec[s]->get_x_offset() ==
-                output_woj_matches_vec[s]->get_x()) {
-              return;
+                    output_woj_matches_vec[s]->get_x() ||
+                is_last_iteration) {
+              // Final result already resides in output_woj_matches_vec[s].
+              if (!is_last_iteration) return;
+              break;
             } else {
               std::swap(left_woj_matches, output_woj_matches_vec[s]);
               output_woj_matches_vec[s]->Clear();

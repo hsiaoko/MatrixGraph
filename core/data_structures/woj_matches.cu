@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <cassert>
 
 #include "core/common/consts.h"
@@ -32,7 +33,7 @@ VertexID WOJMatches::BinarySearch(VertexID search_col, VertexID target) const {
   int left = 0;
   int right = get_y_offset() - 1;
   int mid = 0;
-  VertexID x = get_x_offset();
+  VertexID x = get_x();
   while (left <= right) {
     mid = left + (right - left) / 2;
     if (data_[mid * x + search_col] == target)
@@ -60,7 +61,8 @@ void WOJMatches::SetHeader(const VertexID* left_header, VertexID left_offset_x,
   }
 }
 
-std::vector<WOJMatches*> WOJMatches::SplitAndCopy(VertexID n_partitions) {
+std::vector<WOJMatches*> WOJMatches::SplitAndCopy(VertexID n_partitions,
+                                                    VertexID x) {
   std::vector<WOJMatches*> splitted_data;
   splitted_data.resize(n_partitions);
 
@@ -68,21 +70,33 @@ std::vector<WOJMatches*> WOJMatches::SplitAndCopy(VertexID n_partitions) {
   VertexID remainder = get_y_offset() % n_partitions;
 
   VertexID count = 0;
+  VertexID alloc_x = (x > 0) ? x : x_;
   for (VertexID _ = 0; _ < n_partitions; _++) {
     VertexID partition_size =
         base_size + (_ == n_partitions - 1 ? remainder : 0);
     splitted_data[_] = new WOJMatches();
-    splitted_data[_]->Init(x_, y_);
+    splitted_data[_]->Init(alloc_x, y_);
     splitted_data[_]->SetYOffset(partition_size);
     splitted_data[_]->SetXOffset(get_x_offset());
 
-    CUDA_CHECK(cudaMemcpy(splitted_data[_]->get_data_ptr(),
-                          get_data_ptr() + count * get_x_offset(),
-                          sizeof(VertexID) * partition_size * get_x_offset(),
-                          cudaMemcpyDefault));
+    if (alloc_x == x_) {
+      CUDA_CHECK(cudaMemcpy(splitted_data[_]->get_data_ptr(),
+                            get_data_ptr() + count * get_x(),
+                            sizeof(VertexID) * partition_size * get_x(),
+                            cudaMemcpyDefault));
+    } else {
+      // Reorganize rows from old stride x_ to new stride alloc_x.
+      for (VertexID row = 0; row < partition_size; row++) {
+        for (VertexID col = 0; col < get_x_offset(); col++) {
+          splitted_data[_]->get_data_ptr()[row * alloc_x + col] =
+              get_data_ptr()[(count + row) * x_ + col];
+        }
+      }
+    }
 
     CUDA_CHECK(cudaMemcpy(splitted_data[_]->get_header_ptr(), get_header_ptr(),
-                          sizeof(VertexID) * x_, cudaMemcpyDefault));
+                          sizeof(VertexID) * std::min(x_, alloc_x),
+                          cudaMemcpyDefault));
     count += partition_size;
   }
   return splitted_data;

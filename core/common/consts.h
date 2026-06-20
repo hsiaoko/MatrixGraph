@@ -35,7 +35,7 @@ static const uint64_t kSubIsoProgressPrintInterval = 10;
 static const uint64_t kSubIsoLocalMatchesSizeBuffer = 10;
 
 // WOJ Filter+Join only: max rows in each `WOJMatches` table (`Init(..., y)`).
-static const uint64_t kMaxMatchTableRows = 1 << 27;
+static const uint64_t kMaxMatchTableRows = 1 << 28;
 
 static const uint32_t kSharedMemorySize = 1024;
 static const uint32_t kGridDim = 512;
