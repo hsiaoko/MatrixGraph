@@ -37,7 +37,12 @@ class CPUSubIso : public CPUTaskBase {
             const std::string& matrix_path4 = "",
             const std::string& matrix_path5 = "",
             const std::string& matrix_path6 = "",
-            const std::string& reject_output_path = "")
+            const std::string& reject_output_path = "",
+            int filter_hop = 1, int filter_k = 3,
+            bool enable_min_wise_filter = true,
+            bool enable_label_degree_filter = true,
+            bool enable_nlc_filter = true,
+            bool enable_matching_order = true)
       : pattern_path_(pattern_path),
         data_graph_path_(data_graph_path),
         output_path_(output_path),
@@ -48,7 +53,13 @@ class CPUSubIso : public CPUTaskBase {
         matrix_path4_(matrix_path4),
         matrix_path5_(matrix_path5),
         matrix_path6_(matrix_path6),
-        reject_output_path_(reject_output_path) {}
+        reject_output_path_(reject_output_path),
+        filter_hop_(filter_hop),
+        filter_k_(filter_k),
+        enable_min_wise_filter_(enable_min_wise_filter),
+        enable_label_degree_filter_(enable_label_degree_filter),
+        enable_nlc_filter_(enable_nlc_filter),
+        enable_matching_order_(enable_matching_order) {}
 
   void Run();
 
@@ -88,6 +99,12 @@ class CPUSubIso : public CPUTaskBase {
   const std::string output_path_;
   const std::string reject_output_path_;
   const int num_threads_;
+  const int filter_hop_;
+  const int filter_k_;
+  const bool enable_min_wise_filter_;
+  const bool enable_label_degree_filter_;
+  const bool enable_nlc_filter_;
+  const bool enable_matching_order_;
 
   VertexLabel* label_p_ = nullptr;
   VertexLabel* label_g_ = nullptr;

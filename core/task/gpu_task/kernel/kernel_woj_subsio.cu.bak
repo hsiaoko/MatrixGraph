@@ -8,10 +8,6 @@
 #include <thread>
 #include <vector>
 
-#include <thrust/device_ptr.h>
-#include <thrust/execution_policy.h>
-#include <thrust/scan.h>
-
 #include "core/common/consts.h"
 #include "core/common/host_algorithms.cuh"
 #include "core/common/types.h"
@@ -203,33 +199,6 @@ struct ParametersJoin {
   uint64_t* right_visited_data;
   uint64_t* jump_visited_data;
   VertexID* jump_count;
-};
-
-struct ParametersHashJoin {
-  VertexID left_y;
-  VertexID left_x;
-  VertexID left_x_offset;
-  VertexID right_x;
-  VertexID right_x_offset;
-  VertexID output_x;
-  VertexID output_max_y;
-  VertexID left_hash_idx;
-  VertexID right_hash_idx;
-  VertexID* left_data;
-  VertexID* right_data;
-  VertexID* output_data;
-  const VertexID* key_start;
-  const VertexID* key_count;
-  const VertexID* match_offset;
-};
-
-struct SatAdd {
-  VertexID cap;
-  __host__ __device__ SatAdd(VertexID c) : cap(c) {}
-  __host__ __device__ VertexID operator()(VertexID a, VertexID b) const {
-    VertexID sum = a + b;
-    return sum > cap || sum < a ? cap : sum;
-  }
 };
 
 static __forceinline__ __device__ bool LabelFilter(
@@ -814,120 +783,6 @@ static __noinline__ __global__ void WOJJoinKernel(ParametersJoin params) {
   // }
 }
 
-// ---------------------------------------------------------------------------
-// Hash-join kernels for WOJ Join.
-// Right table must be sorted by its join-key column.
-// We build key_start/key_count arrays indexed by the join-key value (a vertex
-// id in [0, n_vertices_g)), then do a two-pass join with a saturating prefix
-// sum. This eliminates per-output atomicAdd.
-// ---------------------------------------------------------------------------
-static __global__ void BuildKeyStartKernel(const VertexID* right_data,
-                                           VertexID right_x,
-                                           VertexID right_hash_idx,
-                                           VertexID right_y,
-                                           VertexID* key_start) {
-  unsigned int tid = blockIdx.x * blockDim.x + threadIdx.x;
-  unsigned int step = blockDim.x * gridDim.x;
-  for (VertexID i = tid; i < right_y; i += step) {
-    VertexID key = right_data[i * right_x + right_hash_idx];
-    if (i == 0) {
-      key_start[key] = 0;
-    } else {
-      VertexID prev_key = right_data[(i - 1) * right_x + right_hash_idx];
-      if (key != prev_key) {
-        key_start[key] = i;
-      }
-    }
-  }
-}
-
-static __global__ void BuildKeyCountKernel(const VertexID* right_data,
-                                           VertexID right_x,
-                                           VertexID right_hash_idx,
-                                           VertexID right_y,
-                                           const VertexID* key_start,
-                                           VertexID* key_count) {
-  unsigned int tid = blockIdx.x * blockDim.x + threadIdx.x;
-  unsigned int step = blockDim.x * gridDim.x;
-  for (VertexID i = tid; i < right_y; i += step) {
-    VertexID key = right_data[i * right_x + right_hash_idx];
-    bool is_last = (i + 1 == right_y);
-    if (is_last) {
-      VertexID start = key_start[key];
-      key_count[key] = i - start + 1;
-    } else {
-      VertexID next_key = right_data[(i + 1) * right_x + right_hash_idx];
-      if (key != next_key) {
-        VertexID start = key_start[key];
-        key_count[key] = i - start + 1;
-      }
-    }
-  }
-}
-
-static __global__ void HashJoinCountKernel(const VertexID* left_data,
-                                           VertexID left_x,
-                                           VertexID left_hash_idx,
-                                           VertexID left_y,
-                                           const VertexID* key_count,
-                                           VertexID* match_count) {
-  unsigned int tid = blockIdx.x * blockDim.x + threadIdx.x;
-  unsigned int step = blockDim.x * gridDim.x;
-  for (VertexID i = tid; i < left_y; i += step) {
-    VertexID key = left_data[i * left_x + left_hash_idx];
-    match_count[i] = key_count[key];
-  }
-}
-
-static __global__ void HashJoinWriteKernel(ParametersHashJoin params) {
-  unsigned int tid = blockIdx.x * blockDim.x + threadIdx.x;
-  unsigned int step = blockDim.x * gridDim.x;
-
-  const VertexID output_x = params.output_x;
-  const VertexID output_max_y = params.output_max_y;
-  const VertexID left_x = params.left_x;
-  const VertexID left_x_offset = params.left_x_offset;
-  const VertexID right_x = params.right_x;
-  const VertexID right_x_offset = params.right_x_offset;
-  const VertexID left_hash_idx = params.left_hash_idx;
-  const VertexID right_hash_idx = params.right_hash_idx;
-  const VertexID* key_start = params.key_start;
-  const VertexID* key_count = params.key_count;
-  const VertexID* match_offset = params.match_offset;
-  const VertexID* left_data = params.left_data;
-  const VertexID* right_data = params.right_data;
-  VertexID* output_data = params.output_data;
-
-  for (VertexID i = tid; i < params.left_y; i += step) {
-    VertexID key = left_data[i * left_x + left_hash_idx];
-    VertexID count = key_count[key];
-    if (count == 0) continue;
-
-    VertexID base = match_offset[i];
-    if (base >= output_max_y) continue;
-
-    VertexID right_begin = key_start[key];
-    for (VertexID j = 0; j < count; ++j) {
-      uint64_t out_idx64 = static_cast<uint64_t>(base) + j;
-      if (out_idx64 >= output_max_y) break;
-      VertexID out_idx = static_cast<VertexID>(out_idx64);
-
-      VertexID* out_row = output_data + out_idx * output_x;
-      // Copy left columns.
-      for (VertexID c = 0; c < left_x_offset; ++c) {
-        out_row[c] = left_data[i * left_x + c];
-      }
-      // Copy right columns except the join key.
-      VertexID write_col = left_x_offset;
-      VertexID right_row = right_begin + j;
-      for (VertexID c = 0; c < right_x_offset; ++c) {
-        if (c == right_hash_idx) continue;
-        out_row[write_col++] = right_data[right_row * right_x + c];
-      }
-    }
-  }
-}
-
 std::vector<WOJMatches*> WOJSubIsoKernelWrapper::Filter(
     const WOJExecutionPlan& exec_plan, const ImmutableCSR& p,
     const ImmutableCSR& g) {
@@ -1152,7 +1007,7 @@ void SortWojJoinInputs(const std::vector<WOJMatches*>& input_woj_matches_vec) {
   size_t max_row_bytes = 0;
   for (auto* t : input_woj_matches_vec) {
     const size_t b = sizeof(VertexID) * static_cast<size_t>(t->get_x()) *
-                     static_cast<size_t>(t->get_y_offset());
+                     static_cast<size_t>(t->get_y());
     if (b > max_row_bytes) {
       max_row_bytes = b;
     }
@@ -1175,8 +1030,8 @@ void SortWojJoinInputs(const std::vector<WOJMatches*>& input_woj_matches_vec) {
     bool sort_tag = false;
     auto header_ptr = input_woj_matches_vec[_]->get_header_ptr();
     const size_t row_bytes =
-        sizeof(VertexID) * static_cast<size_t>(input_woj_matches_vec[_]->get_x()) *
-        static_cast<size_t>(input_woj_matches_vec[_]->get_y_offset());
+        sizeof(VertexID) * static_cast<size_t>(input_woj_matches_vec[_]->get_y()) *
+        static_cast<size_t>(input_woj_matches_vec[_]->get_x());
     for (VertexID __ = 0; __ < input_woj_matches_vec[_]->get_x_offset(); __++) {
       if (header_visited.GetBit(header_ptr[__]) && sort_tag == false) {
         MergeSort(sort_stream, input_woj_matches_vec[_]->get_data_ptr(), __,
@@ -1222,7 +1077,7 @@ void PrefetchWojJoinTables(
   for (auto* t : input_woj_matches_vec) {
     const size_t data_bytes =
         sizeof(VertexID) * static_cast<size_t>(t->get_x()) *
-        static_cast<size_t>(t->get_y_offset());
+        static_cast<size_t>(t->get_y());
     const size_t header_bytes =
         sizeof(VertexID) * static_cast<size_t>(t->get_x());
     chunks.push_back({static_cast<void*>(t->get_data_ptr()), data_bytes});
@@ -1262,122 +1117,54 @@ bool AdjacentPairsAllJoinable(const std::vector<WOJMatches*>& cur) {
   return true;
 }
 
-// Hash join on two WOJMatches tables. The right table must be sorted by its
-// join-key column. This function sets output_woj_matches's header and y_offset.
-void RunHashJoinOnDevice(const WOJExecutionPlan& exec_plan,
-                         WOJMatches* left_woj_matches,
-                         WOJMatches* right_woj_matches,
-                         WOJMatches* output_woj_matches, dim3 dimGrid,
-                         dim3 dimBlock, int logical_gpu, cudaStream_t stream) {
-  cudaSetDevice(exec_plan.CudaDeviceId(logical_gpu));
-
-  auto join_keys = left_woj_matches->GetJoinKey(*right_woj_matches);
-  if (join_keys.first == kMaxVertexID || join_keys.second == kMaxVertexID) {
-    output_woj_matches->SetYOffset(0);
-    return;
-  }
-
-  output_woj_matches->SetHeader(
-      left_woj_matches->get_header_ptr(),
-      left_woj_matches->get_x_offset(), right_woj_matches->get_header_ptr(),
-      right_woj_matches->get_x_offset(), join_keys);
-
-  const VertexID n_vertices_g = exec_plan.get_n_vertices_g();
-  const VertexID right_y = right_woj_matches->get_y_offset();
-  const VertexID left_y = left_woj_matches->get_y_offset();
-  const VertexID output_max_y = output_woj_matches->get_y();
-
-  VertexID* d_key_start = nullptr;
-  VertexID* d_key_count = nullptr;
-  CUDA_CHECK(cudaMallocManaged(&d_key_start,
-                               sizeof(VertexID) * (n_vertices_g + 1)));
-  CUDA_CHECK(cudaMallocManaged(&d_key_count,
-                               sizeof(VertexID) * (n_vertices_g + 1)));
-  CUDA_CHECK(cudaMemset(d_key_start, 0xFF,
-                        sizeof(VertexID) * (n_vertices_g + 1)));
-  CUDA_CHECK(cudaMemset(d_key_count, 0,
-                        sizeof(VertexID) * (n_vertices_g + 1)));
-
-  if (right_y > 0) {
-    BuildKeyStartKernel<<<dimGrid, dimBlock, 0, stream>>>(
-        right_woj_matches->get_data_ptr(), right_woj_matches->get_x(),
-        join_keys.second, right_y, d_key_start);
-    BuildKeyCountKernel<<<dimGrid, dimBlock, 0, stream>>>(
-        right_woj_matches->get_data_ptr(), right_woj_matches->get_x(),
-        join_keys.second, right_y, d_key_start, d_key_count);
-  }
-
-  VertexID* d_match_count = nullptr;
-  VertexID* d_match_offset = nullptr;
-  VertexID total_output_rows = 0;
-
-  if (left_y > 0) {
-    CUDA_CHECK(cudaMalloc(&d_match_count, sizeof(VertexID) * left_y));
-    CUDA_CHECK(cudaMalloc(&d_match_offset, sizeof(VertexID) * left_y));
-
-    HashJoinCountKernel<<<dimGrid, dimBlock, 0, stream>>>(
-        left_woj_matches->get_data_ptr(), left_woj_matches->get_x(),
-        join_keys.first, left_y, d_key_count, d_match_count);
-
-    thrust::exclusive_scan(thrust::cuda::par.on(stream), d_match_count,
-                           d_match_count + left_y, d_match_offset,
-                           static_cast<VertexID>(0), SatAdd(output_max_y));
-
-    VertexID h_last_offset = 0;
-    VertexID h_last_count = 0;
-    CUDA_CHECK(cudaMemcpyAsync(&h_last_offset, d_match_offset + (left_y - 1),
-                               sizeof(VertexID), cudaMemcpyDeviceToHost,
-                               stream));
-    CUDA_CHECK(cudaMemcpyAsync(&h_last_count, d_match_count + (left_y - 1),
-                               sizeof(VertexID), cudaMemcpyDeviceToHost,
-                               stream));
-    CUDA_CHECK(cudaStreamSynchronize(stream));
-    uint64_t total64 = static_cast<uint64_t>(h_last_offset) + h_last_count;
-    total_output_rows =
-        total64 > output_max_y ? output_max_y : static_cast<VertexID>(total64);
-    output_woj_matches->SetYOffset(total_output_rows);
-
-    if (total_output_rows > 0) {
-      ParametersHashJoin params{
-          .left_y = left_y,
-          .left_x = left_woj_matches->get_x(),
-          .left_x_offset = left_woj_matches->get_x_offset(),
-          .right_x = right_woj_matches->get_x(),
-          .right_x_offset = right_woj_matches->get_x_offset(),
-          .output_x = output_woj_matches->get_x(),
-          .output_max_y = output_max_y,
-          .left_hash_idx = join_keys.first,
-          .right_hash_idx = join_keys.second,
-          .left_data = left_woj_matches->get_data_ptr(),
-          .right_data = right_woj_matches->get_data_ptr(),
-          .output_data = output_woj_matches->get_data_ptr(),
-          .key_start = d_key_start,
-          .key_count = d_key_count,
-          .match_offset = d_match_offset};
-      HashJoinWriteKernel<<<dimGrid, dimBlock, 0, stream>>>(params);
-    }
-  } else {
-    output_woj_matches->SetYOffset(0);
-  }
-
-  CUDA_CHECK(cudaStreamSynchronize(stream));
-
-  if (d_match_count != nullptr) CUDA_CHECK(cudaFree(d_match_count));
-  if (d_match_offset != nullptr) CUDA_CHECK(cudaFree(d_match_offset));
-  if (d_key_start != nullptr) CUDA_CHECK(cudaFree(d_key_start));
-  if (d_key_count != nullptr) CUDA_CHECK(cudaFree(d_key_count));
-}
-
 void RunBinaryJoinOnDevice(const WOJExecutionPlan& exec_plan,
                            WOJMatches* left_woj_matches,
                            WOJMatches* right_woj_matches,
                            WOJMatches* output_woj_matches, dim3 dimGrid,
                            dim3 dimBlock, int logical_gpu) {
+  cudaSetDevice(exec_plan.CudaDeviceId(logical_gpu));
   cudaStream_t stream{};
   CUDA_CHECK(cudaStreamCreate(&stream));
-  RunHashJoinOnDevice(exec_plan, left_woj_matches, right_woj_matches,
-                      output_woj_matches, dimGrid, dimBlock, logical_gpu,
-                      stream);
+  VertexID* jump_count = nullptr;
+  CUDA_CHECK(cudaMallocManaged(&jump_count, sizeof(VertexID)));
+
+  HostKernelBitmap visited_bm;
+  HostKernelBitmap jump_visited_bm;
+  visited_bm.Init(exec_plan.get_n_vertices_g());
+  jump_visited_bm.Init(exec_plan.get_n_vertices_g());
+
+  WOJMatches* L = left_woj_matches;
+  WOJMatches* const R = right_woj_matches;
+  WOJMatches* Out = output_woj_matches;
+
+  auto join_keys = L->GetJoinKey(*R);
+  if (join_keys.first != kMaxVertexID && join_keys.second != kMaxVertexID) {
+    visited_bm.ClearAsync(stream);
+    jump_visited_bm.ClearAsync(stream);
+    *jump_count = 0;
+
+    Out->SetHeader(L->get_header_ptr(), L->get_x_offset(), R->get_header_ptr(),
+                   R->get_x_offset(), join_keys);
+
+    ParametersJoin params{.n_vertices_g = exec_plan.get_n_vertices_g(),
+                          .left_woj_matches = *L,
+                          .right_woj_matches = *R,
+                          .output_woj_matches = *Out,
+                          .left_hash_idx = join_keys.first,
+                          .right_hash_idx = join_keys.second,
+                          .right_visited_data = visited_bm.GetPtr(),
+                          .jump_visited_data = jump_visited_bm.GetPtr(),
+                          .jump_count = jump_count};
+
+    WOJJoinKernel<<<dimGrid, dimBlock, 0, stream>>>(params);
+    cudaStreamSynchronize(stream);
+    cudaError_t err = cudaGetLastError();
+    if (err != cudaSuccess) {
+      CUDA_CHECK(err);
+    }
+  }
+
+  cudaFree(jump_count);
   CUDA_CHECK(cudaStreamDestroy(stream));
 }
 
@@ -1440,16 +1227,13 @@ std::vector<WOJMatches*> WOJSubIsoKernelWrapper::Join(
     const WOJExecutionPlan& exec_plan,
     const std::vector<WOJMatches*>& input_woj_matches_vec) {
   std::cout << " --- Join --- " << std::endl;
-  auto join_t0 = std::chrono::system_clock::now();
 
   // Join Tables.
   dim3 dimBlock(WojLaunchBlockDim());
   dim3 dimGrid(WojLaunchGridDim());
 
   SortWojJoinInputs(input_woj_matches_vec);
-  auto join_t1 = std::chrono::system_clock::now();
   PrefetchWojJoinTables(input_woj_matches_vec);
-  auto join_t2 = std::chrono::system_clock::now();
   if (WojBushyJoinEnabled() && input_woj_matches_vec.size() >= 2) {
     std::vector<WOJMatches*> bushy_tables;
     bushy_tables.reserve(input_woj_matches_vec.size());
@@ -1499,7 +1283,7 @@ std::vector<WOJMatches*> WOJSubIsoKernelWrapper::Join(
 
   std::cout << "[WOJ Join] one stream per split stripe s in [0, "
             << p_streams_vec.size()
-            << "); device = CudaDeviceId(s % N); HashJoinWriteKernel on that stripe's stream"
+            << "); device = CudaDeviceId(s % N); WOJJoinKernel on that stripe's stream"
             << std::endl;
   for (size_t s = 0; s < p_streams_vec.size(); ++s) {
     const int logical =
@@ -1509,13 +1293,28 @@ std::vector<WOJMatches*> WOJSubIsoKernelWrapper::Join(
               << " cudaDevice=" << cuda_dev << std::endl;
   }
 
+  std::vector<HostKernelBitmap> visited_bm_vec;
+  visited_bm_vec.resize(p_streams_vec.size() * exec_plan.get_n_edges_p());
+
+  std::vector<HostKernelBitmap> jump_visited_bm_vec;
+  jump_visited_bm_vec.resize(p_streams_vec.size() * exec_plan.get_n_edges_p());
+
+  VertexID* jump_count_ptr;
+  CUDA_CHECK(cudaMallocManaged(
+      &jump_count_ptr,
+      sizeof(VertexID) * p_streams_vec.size() * exec_plan.get_n_edges_p()));
+  CUDA_CHECK(cudaMemset(
+      jump_count_ptr, 0,
+      sizeof(VertexID) * p_streams_vec.size() * exec_plan.get_n_edges_p()));
+
   // Join candidates: one left-deep chain per stripe; stripes are scheduled across
   // join_workers host threads (see WojJoinHostWorkerCount).
   RunHostStripeParallel(
       join_workers,
       [join_workers, n_join_stripes, &dimBlock, &dimGrid, &exec_plan,
        &p_streams_vec, &src_matches_vec, &input_woj_matches_vec,
-       &output_woj_matches_vec](size_t w) {
+       &output_woj_matches_vec, &visited_bm_vec, &jump_visited_bm_vec,
+       &jump_count_ptr](size_t w) {
         for (VertexID s = static_cast<VertexID>(w); s < n_join_stripes;
              s += static_cast<VertexID>(join_workers)) {
           const int logical = static_cast<int>(
@@ -1530,9 +1329,72 @@ std::vector<WOJMatches*> WOJSubIsoKernelWrapper::Join(
           for (VertexID _ = 1; _ < input_woj_matches_vec.size(); _++) {
             auto right_woj_matches = input_woj_matches_vec[_];
 
-            RunHashJoinOnDevice(exec_plan, left_woj_matches, right_woj_matches,
-                                output_woj_matches_vec[s], dimGrid, dimBlock,
-                                logical, stream);
+            auto join_keys = left_woj_matches->GetJoinKey(*right_woj_matches);
+
+            visited_bm_vec[s * exec_plan.get_n_edges_p() + _].Init(
+                exec_plan.get_n_vertices_g());
+            visited_bm_vec[s * exec_plan.get_n_edges_p() + _].ClearAsync(
+                stream);
+            uint64_t* visited_data =
+                visited_bm_vec[s * exec_plan.get_n_edges_p() + _].GetPtr();
+
+            jump_visited_bm_vec[s * exec_plan.get_n_edges_p() + _].Init(
+                exec_plan.get_n_vertices_g());
+            jump_visited_bm_vec[s * exec_plan.get_n_edges_p() + _].ClearAsync(
+                stream);
+            uint64_t* jump_visited_data =
+                jump_visited_bm_vec[s * exec_plan.get_n_edges_p() + _].GetPtr();
+
+            ParametersWedgeFilter wedge_filter_params{
+                .n_vertices_g = exec_plan.get_n_vertices_g(),
+                .woj_matches = *right_woj_matches,
+                .hash_idx = join_keys.second,
+                .visited_data = visited_data};
+
+            // GetVisitedByKeyKernel<<<dimGrid, dimBlock, 0, stream>>>(
+            //     wedge_filter_params);
+
+            cudaError_t err = cudaGetLastError();
+            if (err != cudaSuccess) {
+              CUDA_CHECK(err);
+            }
+            auto local_matches = new WOJMatches();
+            // local_matches->CopyDataAsync(*right_woj_matches, stream);
+
+            if (join_keys.first == kMaxVertexID ||
+                join_keys.second == kMaxVertexID)
+              continue;
+
+            output_woj_matches_vec[s]->SetHeader(
+                left_woj_matches->get_header_ptr(),
+                left_woj_matches->get_x_offset(),
+                right_woj_matches->get_header_ptr(),
+                right_woj_matches->get_x_offset(), join_keys);
+
+            auto* jump_count =
+                jump_count_ptr + s * exec_plan.get_n_edges_p() + _;
+
+            ParametersJoin params{
+                .n_vertices_g = exec_plan.get_n_vertices_g(),
+                .left_woj_matches = *left_woj_matches,
+                //                    .right_woj_matches = *local_matches,
+                .right_woj_matches = *right_woj_matches,
+                .output_woj_matches = *output_woj_matches_vec[s],
+                .left_hash_idx = join_keys.first,
+                .right_hash_idx = join_keys.second,
+                .right_visited_data = visited_data,
+                .jump_visited_data = jump_visited_data,
+                .jump_count = jump_count};
+
+            WOJJoinKernel<<<dimGrid, dimBlock, 0, stream>>>(params);
+
+            cudaStreamSynchronize(stream);
+
+            err = cudaGetLastError();
+            if (err != cudaSuccess) CUDA_CHECK(err);
+            // output_woj_matches_vec[s]->Print();
+
+            // Debug removed.
 
             if (output_woj_matches_vec[s]->get_y_offset() == 0) {
               break;
@@ -1548,8 +1410,7 @@ std::vector<WOJMatches*> WOJSubIsoKernelWrapper::Join(
               break;
             } else {
               std::swap(left_woj_matches, output_woj_matches_vec[s]);
-              output_woj_matches_vec[s]->SetYOffset(0);
-              output_woj_matches_vec[s]->SetXOffset(0);
+              output_woj_matches_vec[s]->Clear();
             }
           }
         }
@@ -1574,20 +1435,21 @@ std::vector<WOJMatches*> WOJSubIsoKernelWrapper::Join(
         }
       });
 
-  auto join_t3 = std::chrono::system_clock::now();
-
-  auto us = [](auto a, auto b) {
-    return std::chrono::duration_cast<std::chrono::microseconds>(b - a)
-               .count() /
-           (double)CLOCKS_PER_SEC;
-  };
-  std::cout << "[WOJ Join] breakdown: sort=" << us(join_t0, join_t1)
-            << " prefetch=" << us(join_t1, join_t2)
-            << " join_loop=" << us(join_t2, join_t3)
-            << " total=" << us(join_t0, join_t3) << std::endl;
-
   std::cout << "[WOJ Join] finished" << std::endl;
 
+  for (VertexID eid = 1; eid < (exec_plan.get_n_edges_p() - 1); eid++) {
+    VertexID count = 0;
+    VertexID element_count = 0;
+    for (VertexID _ = 0; _ < p_streams_vec.size(); _++) {
+      count += jump_count_ptr[_ * exec_plan.get_n_edges_p() + eid];
+      element_count =
+          jump_visited_bm_vec[_ * exec_plan.get_n_edges_p() + eid].Count();
+    }
+    std::cout << " join eid: " << eid << " jump compute " << count
+              << " jump n_elements " << element_count << std::endl;
+  }
+
+  cudaFree(jump_count_ptr);
   return output_woj_matches_vec;
 }
 

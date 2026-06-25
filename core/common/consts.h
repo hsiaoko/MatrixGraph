@@ -29,7 +29,7 @@ static const uint64_t kMaxNumWeft = 1 << 16;
 // SubIso validation/backtracking tuning knobs.
 static const uint64_t kSubIsoMaxBacktrackNodes = 1000000;
 static const uint64_t kSubIsoMaxMsPerWeft = 10;
-static const uint64_t kSubIsoMaxValidateWefts = 100;
+static const uint64_t kSubIsoMaxValidateWefts = 65536;
 static const uint64_t kSubIsoValidateMatchingTimeoutSec = 10;
 static const uint64_t kSubIsoProgressPrintInterval = 10;
 static const uint64_t kSubIsoLocalMatchesSizeBuffer = 10;

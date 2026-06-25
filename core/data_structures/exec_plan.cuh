@@ -1,7 +1,10 @@
 #ifndef MATRIXGRAPH_CORE_TASK_KERNEL_DATA_STRUCTURES_EXEC_PLAN_CUH_
 #define MATRIXGRAPH_CORE_TASK_KERNEL_DATA_STRUCTURES_EXEC_PLAN_CUH_
 
+#include <algorithm>
+#include <numeric>
 #include <queue>
+#include <vector>
 
 #include "core/common/consts.h"
 #include "core/common/types.h"
@@ -12,6 +15,7 @@
 #include "core/data_structures/unified_buffer.cuh"
 #include "core/util/bitmap_no_ownership.h"
 #include "core/util/bitmap_ownership.h"
+#include "core/task/cpu_task/pattern_vertex_order.cuh"
 
 namespace sics {
 namespace matrixgraph {
@@ -34,6 +38,8 @@ class ExecutionPlan {
  public:
   ExecutionPlan() = default;
 
+  void SetUseCostModelOrder(bool use) { use_cost_model_order_ = use; }
+
   ~ExecutionPlan() {
     delete sequential_exec_path_;
     delete sequential_exec_path_in_edges_;
@@ -46,7 +52,8 @@ class ExecutionPlan {
   void DFSTraverse(VertexID vid, BitmapNoOwnerShip& visited_src,
                    const ImmutableCSR& g, std::vector<VertexID>& output,
                    std::vector<VertexID>& output_in_edges, VertexID depth,
-                   VertexID& max_depth) {
+                   VertexID& max_depth,
+                   const std::vector<VertexID>& rank_by_local_id) {
     max_depth = std::max(depth, max_depth);
     if (visited_src.GetBit(vid)) {
       return;
@@ -57,15 +64,22 @@ class ExecutionPlan {
     auto globalid = g.GetGlobalIDByLocalID(vid);
     output.emplace_back(globalid);
 
-    for (VertexID i = 0; i < u.outdegree; i++) {
-      VertexID neighbor = u.outgoing_edges[i];
+    // Visit outgoing neighbors in order of pruning power (best first).
+    std::vector<VertexID> neighbors(u.outgoing_edges,
+                                    u.outgoing_edges + u.outdegree);
+    std::stable_sort(neighbors.begin(), neighbors.end(),
+                     [&rank_by_local_id](VertexID a, VertexID b) {
+                       return rank_by_local_id[a] < rank_by_local_id[b];
+                     });
+
+    for (VertexID neighbor : neighbors) {
       auto neighbor_global = g.GetGlobalIDByLocalID(neighbor);
 
       output_in_edges.emplace_back(globalid);
       output_in_edges.emplace_back(neighbor_global);
 
       DFSTraverse(neighbor, visited_src, g, output, output_in_edges, depth + 1,
-                  max_depth);
+                  max_depth, rank_by_local_id);
     }
   }
 
@@ -73,20 +87,77 @@ class ExecutionPlan {
                                          const ImmutableCSR& g) {
     n_vertices_ = p.get_num_vertices();
 
-    // BitmapOwnership visited(p.get_max_vid());
+    // Compute pruning-power order using the one-min filter cost model.
+    auto order = sics::matrixgraph::core::task::PatternVertexOrder::ComputeOrder(
+        p, g);
+    std::vector<VertexID> rank_by_local_id(n_vertices_);
+    for (VertexID i = 0; i < n_vertices_; ++i) {
+      rank_by_local_id[order[i]] = i;
+    }
+
+    // Pick the strongest-filtering vertex that can reach all vertices via
+    // outgoing edges as the single root.  This preserves the matching
+    // algorithm's assumption of one root edge.
+    auto reaches_all = [&p](VertexID root) {
+      std::vector<bool> visited(p.get_num_vertices(), false);
+      std::vector<VertexID> stack;
+      stack.push_back(root);
+      visited[root] = true;
+      size_t count = 0;
+      while (!stack.empty()) {
+        VertexID u = stack.back();
+        stack.pop_back();
+        ++count;
+        auto out_degree = p.GetOutDegreeByLocalID(u);
+        auto out_edges = p.GetOutgoingEdgesByLocalID(u);
+        for (VertexID i = 0; i < out_degree; ++i) {
+          VertexID v = out_edges[i];
+          if (!visited[v]) {
+            visited[v] = true;
+            stack.push_back(v);
+          }
+        }
+      }
+      return count == p.get_num_vertices();
+    };
+
+    VertexID root = kMaxVertexID;
+    for (VertexID candidate : order) {
+      if (reaches_all(candidate)) {
+        root = candidate;
+        break;
+      }
+    }
+    if (root == kMaxVertexID) {
+      // Fall back to original local id 0 if no vertex reaches everyone.
+      root = 0;
+    }
+
+    if (!use_cost_model_order_) {
+      // Default local-id order: no cost-model sorting, root at local id 0.
+      std::iota(order.begin(), order.end(), 0);
+      std::iota(rank_by_local_id.begin(), rank_by_local_id.end(), 0);
+      root = 0;
+    }
+
     uint64_t* visited_data = new uint64_t[WORD_OFFSET(p.get_max_vid())]();
     BitmapNoOwnerShip visited(p.get_max_vid(), visited_data);
     visited.Clear();
 
-    auto global_vid = p.GetGlobalIDByLocalID(0);
     std::vector<VertexID> output;
     std::vector<VertexID> output_in_edges;
     output.reserve(p.get_max_vid());
     output_in_edges.reserve(p.get_max_vid());
 
-    for (int root = 0; root < p.get_num_vertices(); root++) {
-      if (!visited.GetBit(root)) {
-        DFSTraverse(root, visited, p, output, output_in_edges, 0, depth_);
+    // Start from the chosen best root, then continue with any remaining
+    // unvisited vertices in pruning order (mirrors original multi-root DFS
+    // while still prioritizing high-pruning vertices).
+    DFSTraverse(root, visited, p, output, output_in_edges, 0, depth_,
+                rank_by_local_id);
+    for (VertexID candidate : order) {
+      if (!visited.GetBit(candidate)) {
+        DFSTraverse(candidate, visited, p, output, output_in_edges, 0, depth_,
+                    rank_by_local_id);
       }
     }
 
@@ -103,7 +174,7 @@ class ExecutionPlan {
 
     sequential_exec_path_in_edges_->GetPtr()[0] = kMaxVertexID;
     sequential_exec_path_in_edges_->GetPtr()[1] =
-        sequential_exec_path_->GetPtr()[0];
+        p.GetGlobalIDByLocalID(root);
     cudaMemcpy(sequential_exec_path_->GetPtr(), output.data(),
                sizeof(VertexID) * output.size(), cudaMemcpyHostToHost);
     cudaMemcpy(sequential_exec_path_in_edges_->GetPtr() + 2,
@@ -119,7 +190,7 @@ class ExecutionPlan {
     exec_path_in_edges_ = new VertexID[n_edges_ * 2]();
 
     exec_path_in_edges_[0] = kMaxVertexID;
-    exec_path_in_edges_[1] = sequential_exec_path_->GetPtr()[0];
+    exec_path_in_edges_[1] = p.GetGlobalIDByLocalID(root);
 
     memcpy(exec_path_, output.data(), sizeof(VertexID) * p.get_num_vertices());
     memcpy(exec_path_in_edges_ + 2, output_in_edges.data(),
@@ -185,6 +256,8 @@ class ExecutionPlan {
   }
 
  public:
+  bool use_cost_model_order_ = true;
+
   UnifiedOwnedBufferVertexID* sequential_exec_path_ = nullptr;
   UnifiedOwnedBufferVertexID* sequential_exec_path_in_edges_ = nullptr;
   UnifiedOwnedBufferVertexID* inverted_index_of_sequential_exec_path_ = nullptr;

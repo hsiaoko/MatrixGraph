@@ -7,6 +7,7 @@
 #include <list>
 #include <utility>
 
+#include "core/common/consts.h"
 #include "core/common/types.h"
 #include "core/common/yaml_config.h"
 #include "core/components/scheduler/scheduler.h"
@@ -19,7 +20,21 @@ DEFINE_string(g, "", "Path to the data graph file (required)");
 DEFINE_string(m1, "", "Path to the matrix of pattern graph embedding");
 DEFINE_string(m2, "", "Path to the matrix of data graph embedding");
 DEFINE_string(o, "", "Path for output results (required)");
+DEFINE_string(reject_output, "",
+              "Path to write rejected (u,v) candidates, empty disables it");
 DEFINE_int32(t, 72, "Number of CPU threads to use (default: 1)");
+DEFINE_int32(filter_hop, 1,
+             "Number of hops for min-wise filter neighbor collection (default: 1)");
+DEFINE_int32(filter_k, 3,
+             "Number of minimum hash values (k) for k-min-wise filter (default: 3)");
+DEFINE_bool(disable_min_wise_filter, false,
+            "Disable min-wise IP filter");
+DEFINE_bool(disable_label_degree_filter, false,
+            "Disable label-degree filter");
+DEFINE_bool(disable_nlc_filter, false,
+            "Disable neighbor-label-counter filter");
+DEFINE_bool(disable_matching_order, false,
+            "Disable cost-model-based matching order (use default local-id DFS)");
 
 // System configuration
 DEFINE_string(
@@ -56,6 +71,19 @@ bool ValidateParameters() {
               << std::endl;
     is_valid = false;
   }
+  if (FLAGS_filter_hop < 1) {
+    std::cerr << "Error: filter_hop (--filter_hop) must be at least 1"
+              << std::endl;
+    is_valid = false;
+  }
+  if (FLAGS_filter_k < 1 ||
+      static_cast<uint32_t>(FLAGS_filter_k) >
+          sics::matrixgraph::core::common::kDefaultHeapCapacity) {
+    std::cerr << "Error: filter_k (--filter_k) must be in [1, "
+              << sics::matrixgraph::core::common::kDefaultHeapCapacity << "]"
+              << std::endl;
+    is_valid = false;
+  }
 
   return is_valid;
 }
@@ -67,7 +95,21 @@ void PrintConfig() {
   std::cout << "Matrix 1: " << FLAGS_m1 << std::endl;
   std::cout << "Matrix 2: " << FLAGS_m2 << std::endl;
   std::cout << "Output Path: " << FLAGS_o << std::endl;
+  std::cout << "Reject Output Path: " << FLAGS_reject_output << std::endl;
   std::cout << "Num Threads: " << FLAGS_t << std::endl;
+  std::cout << "Filter Hop: " << FLAGS_filter_hop << std::endl;
+  std::cout << "Filter K: " << FLAGS_filter_k << std::endl;
+  std::cout << "Min-Wise Filter: "
+            << (FLAGS_disable_min_wise_filter ? "disabled" : "enabled")
+            << std::endl;
+  std::cout << "Label-Degree Filter: "
+            << (FLAGS_disable_label_degree_filter ? "disabled" : "enabled")
+            << std::endl;
+  std::cout << "NLC Filter: "
+            << (FLAGS_disable_nlc_filter ? "disabled" : "enabled") << std::endl;
+  std::cout << "Matching Order: "
+            << (FLAGS_disable_matching_order ? "default" : "cost-model")
+            << std::endl;
   std::cout << "Scheduler: " << FLAGS_scheduler << std::endl;
   std::cout << "==============================\n" << std::endl;
 }
@@ -93,8 +135,11 @@ int main(int argc, char* argv[]) {
     auto scheduler_type = Scheduler2Enum(FLAGS_scheduler);
     sics::matrixgraph::core::MatrixGraph system(scheduler_type);
 
-    auto* task =
-        new CPUSubIso(FLAGS_p, FLAGS_g, FLAGS_o, FLAGS_t, FLAGS_m1, FLAGS_m2);
+    auto* task = new CPUSubIso(
+        FLAGS_p, FLAGS_g, FLAGS_o, FLAGS_t, FLAGS_m1, FLAGS_m2, "", "", "",
+        "", FLAGS_reject_output, FLAGS_filter_hop, FLAGS_filter_k,
+        !FLAGS_disable_min_wise_filter, !FLAGS_disable_label_degree_filter,
+        !FLAGS_disable_nlc_filter, !FLAGS_disable_matching_order);
     system.Run(sics::matrixgraph::core::common::kCPUSubIso, task);
     delete task;
 

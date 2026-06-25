@@ -80,6 +80,10 @@ static int nlc_filter_count = 0;
 static int ip_filter_count = 0;
 static int index_filter_count = 0;
 
+static bool g_enable_min_wise_filter = true;
+static bool g_enable_label_degree_filter = true;
+static bool g_enable_nlc_filter = true;
+
 // Global rejection collector for -reject_output.  Empty path means disabled.
 // When enabled, ValidateWeft appends rejected (u,v) pairs encoded as
 // (uint64_t(u) << 32) | uint64_t(v).  Kept global to avoid threading a pointer
@@ -133,8 +137,122 @@ struct VertexFilterCache {
 static std::vector<VertexFilterCache> p_filter_cache;
 static std::vector<VertexFilterCache> g_filter_cache;
 
+// Thread-local visited timestamp buffer for ell-hop BFS.  One buffer per
+// thread; it is resized on first use and reused across vertices.
+static thread_local std::vector<uint32_t> tl_filter_visited;
+static thread_local uint32_t tl_filter_stamp = 0;
+
+static inline void EnsureVisitedBuffer(VertexID n) {
+  if (tl_filter_visited.size() < n) {
+    tl_filter_visited.assign(n, 0);
+  }
+  // Stamp overflow is practically impossible (2^32 BFS per thread), but
+  // guard against it anyway.
+  if (__builtin_expect(++tl_filter_stamp == 0, 0)) {
+    std::fill(tl_filter_visited.begin(), tl_filter_visited.end(), 0);
+    tl_filter_stamp = 1;
+  }
+}
+
+// Collect labels of vertices reachable within `hop` steps following outgoing
+// edges of `src`.  Updates `bitmap`, `hash_freq` and `min_hash`.
+static void CollectEllHopOutLabels(const ImmutableCSR& csr, VertexID src,
+                                   int hop, MiniKernelBitmap& bitmap,
+                                   uint32_t hash_freq[16],
+                                   VertexID& min_hash) {
+  auto n = csr.get_num_vertices();
+  EnsureVisitedBuffer(n);
+  const uint32_t stamp = tl_filter_stamp;
+  std::vector<std::pair<VertexID, int>> queue;
+  queue.reserve(64);
+
+  auto init_degree = csr.GetOutDegreeByLocalID(src);
+  auto init_edges = csr.GetOutgoingEdgesByLocalID(src);
+  for (VertexID i = 0; i < init_degree; ++i) {
+    VertexID nbr = init_edges[i];
+    if (tl_filter_visited[nbr] != stamp) {
+      tl_filter_visited[nbr] = stamp;
+      queue.emplace_back(nbr, 1);
+    }
+  }
+
+  for (size_t head = 0; head < queue.size(); ++head) {
+    VertexID cur = queue[head].first;
+    int dist = queue[head].second;
+
+    VertexLabel lbl = csr.GetVLabelBasePointer()[cur];
+    bitmap.SetBit(lbl);
+    VertexID h = HashTable(lbl);
+    if (h < 16) {
+      hash_freq[h]++;
+      min_hash = min_hash < h ? min_hash : h;
+    }
+
+    if (dist < hop) {
+      auto cur_degree = csr.GetOutDegreeByLocalID(cur);
+      auto cur_edges = csr.GetOutgoingEdgesByLocalID(cur);
+      for (VertexID i = 0; i < cur_degree; ++i) {
+        VertexID nxt = cur_edges[i];
+        if (tl_filter_visited[nxt] != stamp) {
+          tl_filter_visited[nxt] = stamp;
+          queue.emplace_back(nxt, dist + 1);
+        }
+      }
+    }
+  }
+}
+
+// Collect labels of vertices reachable within `hop` steps following incoming
+// edges of `src`.
+static void CollectEllHopInLabels(const ImmutableCSR& csr, VertexID src,
+                                  int hop, MiniKernelBitmap& bitmap,
+                                  uint32_t hash_freq[16],
+                                  VertexID& min_hash) {
+  auto n = csr.get_num_vertices();
+  EnsureVisitedBuffer(n);
+  const uint32_t stamp = tl_filter_stamp;
+  std::vector<std::pair<VertexID, int>> queue;
+  queue.reserve(64);
+
+  auto init_degree = csr.GetInDegreeByLocalID(src);
+  auto init_edges = csr.GetIncomingEdgesByLocalID(src);
+  for (VertexID i = 0; i < init_degree; ++i) {
+    VertexID nbr = init_edges[i];
+    if (tl_filter_visited[nbr] != stamp) {
+      tl_filter_visited[nbr] = stamp;
+      queue.emplace_back(nbr, 1);
+    }
+  }
+
+  for (size_t head = 0; head < queue.size(); ++head) {
+    VertexID cur = queue[head].first;
+    int dist = queue[head].second;
+
+    VertexLabel lbl = csr.GetVLabelBasePointer()[cur];
+    bitmap.SetBit(lbl);
+    VertexID h = HashTable(lbl);
+    if (h < 16) {
+      hash_freq[h]++;
+      min_hash = min_hash < h ? min_hash : h;
+    }
+
+    if (dist < hop) {
+      auto cur_degree = csr.GetInDegreeByLocalID(cur);
+      auto cur_edges = csr.GetIncomingEdgesByLocalID(cur);
+      for (VertexID i = 0; i < cur_degree; ++i) {
+        VertexID nxt = cur_edges[i];
+        if (tl_filter_visited[nxt] != stamp) {
+          tl_filter_visited[nxt] = stamp;
+          queue.emplace_back(nxt, dist + 1);
+        }
+      }
+    }
+  }
+}
+
 static void BuildFilterCache(const ImmutableCSR& csr,
-                             std::vector<VertexFilterCache>& cache) {
+                             std::vector<VertexFilterCache>& cache,
+                             int hop, int k) {
   auto n = csr.get_num_vertices();
   cache.resize(n);
 
@@ -144,62 +262,42 @@ static void BuildFilterCache(const ImmutableCSR& csr,
   auto step = worker.size();
 
   ParForEach(worker.begin(), worker.end(),
-      [step, n, &csr, &cache](auto w) {
+      [step, n, hop, k, &csr, &cache](auto w) {
         for (VertexID v = w; v < n; v += step) {
           auto& fc = cache[v];
 
-          // Out edges.
+          // Out edges (ell-hop).
           MiniKernelBitmap out_bitmap(32);
           out_bitmap.Clear();
           uint32_t hash_freq[16] = {0};
           VertexID out_min = kMaxVertexID;
 
-          auto out_degree = csr.GetOutDegreeByLocalID(v);
-          auto out_edges = csr.GetOutgoingEdgesByLocalID(v);
-          for (VertexID i = 0; i < out_degree; ++i) {
-            VertexID nbr = out_edges[i];
-            VertexLabel lbl = csr.GetVLabelBasePointer()[nbr];
-            out_bitmap.SetBit(lbl);
-            VertexID h = HashTable(lbl);
-            if (h < 16) {
-              hash_freq[h]++;
-              out_min = out_min < h ? out_min : h;
-            }
-          }
+          CollectEllHopOutLabels(csr, v, hop, out_bitmap, hash_freq, out_min);
           fc.out_neighbor_label_count = out_bitmap.Count();
           fc.out_min_hash = out_min;
 
           uint32_t filled = 0;
-          for (uint32_t h = 0; h < 16 && filled < kDefaultHeapCapacity; ++h) {
+          for (uint32_t h = 0; h < 16 && filled < static_cast<uint32_t>(k);
+               ++h) {
             if (hash_freq[h] > 0) {
               fc.out_k_min_data[filled++] = h;
             }
           }
           fc.out_k_min_size = filled;
 
-          // In edges.
+          // In edges (ell-hop).
           MiniKernelBitmap in_bitmap(32);
           in_bitmap.Clear();
           memset(hash_freq, 0, sizeof(hash_freq));
           VertexID in_min = kMaxVertexID;
 
-          auto in_degree = csr.GetInDegreeByLocalID(v);
-          auto in_edges = csr.GetIncomingEdgesByLocalID(v);
-          for (VertexID i = 0; i < in_degree; ++i) {
-            VertexID nbr = in_edges[i];
-            VertexLabel lbl = csr.GetVLabelBasePointer()[nbr];
-            in_bitmap.SetBit(lbl);
-            VertexID h = HashTable(lbl);
-            if (h < 16) {
-              hash_freq[h]++;
-              in_min = in_min < h ? in_min : h;
-            }
-          }
+          CollectEllHopInLabels(csr, v, hop, in_bitmap, hash_freq, in_min);
           fc.in_neighbor_label_count = in_bitmap.Count();
           fc.in_min_hash = in_min;
 
           filled = 0;
-          for (uint32_t h = 0; h < 16 && filled < kDefaultHeapCapacity; ++h) {
+          for (uint32_t h = 0; h < 16 && filled < static_cast<uint32_t>(k);
+               ++h) {
             if (hash_freq[h] > 0) {
               fc.in_k_min_data[filled++] = h;
             }
@@ -380,7 +478,7 @@ static bool Filter(VertexID u_idx, VertexID v_idx, const ImmutableCSR& p,
     }
     return false;
    }
-  if (!LabelDegreeFilter(u_idx, v_idx, p, g)) {
+  if (g_enable_label_degree_filter && !LabelDegreeFilter(u_idx, v_idx, p, g)) {
     __sync_fetch_and_add(&label_degree_filter_count, 1);
     __sync_fetch_and_add(&filter_count, 1);
     if (rejected_pairs) {
@@ -390,7 +488,7 @@ static bool Filter(VertexID u_idx, VertexID v_idx, const ImmutableCSR& p,
     }
     return false;
   }
-  if (!NeighborLabelCounterFilter(u_idx, v_idx, p, g)) {
+  if (g_enable_nlc_filter && !NeighborLabelCounterFilter(u_idx, v_idx, p, g)) {
     __sync_fetch_and_add(&nlc_filter_count, 1);
     __sync_fetch_and_add(&filter_count, 1);
     if (rejected_pairs) {
@@ -742,7 +840,7 @@ static bool IsFeasible(
   if (!Filter(u_src, v_src, p, g, rejected_pairs)) return false;
   if (!Filter(u_dst, v_dst, p, g, rejected_pairs)) return false;
 
-  if (!KMinWiseIPFilter(u_dst, v_dst, p, g)) {
+  if (g_enable_min_wise_filter && !KMinWiseIPFilter(u_dst, v_dst, p, g)) {
     __sync_fetch_and_add(&ip_filter_count, 1);
     if (rejected_pairs) {
       rejected_pairs->push_back(
@@ -751,7 +849,7 @@ static bool IsFeasible(
     }
     return false;
   }
-  if (!KMinWiseIPFilter(u_src, v_src, p, g)) {
+  if (g_enable_min_wise_filter && !KMinWiseIPFilter(u_src, v_src, p, g)) {
     __sync_fetch_and_add(&ip_filter_count, 1);
     if (rejected_pairs) {
       rejected_pairs->push_back(
@@ -1395,6 +1493,7 @@ void CPUSubIso::RecursiveMatching(
 
   // Generate Execution Plan...
   ExecutionPlan exec_plan;
+  exec_plan.SetUseCostModelOrder(enable_matching_order_);
   exec_plan.GenerateDFSExecutionPlan(p, g);
 
   exec_plan.Print();
@@ -1488,9 +1587,13 @@ void CPUSubIso::LoadData() {
 
   g_.Read(data_graph_path_);
 
-  std::cout << "[CPUSubIso] Building filter caches ..." << std::endl;
-  BuildFilterCache(p_, p_filter_cache);
-  BuildFilterCache(g_, g_filter_cache);
+  std::cout << "[CPUSubIso] Building filter caches (hop=" << filter_hop_
+            << ", k=" << filter_k_ << ") ..." << std::endl;
+  g_enable_min_wise_filter = enable_min_wise_filter_;
+  g_enable_label_degree_filter = enable_label_degree_filter_;
+  g_enable_nlc_filter = enable_nlc_filter_;
+  BuildFilterCache(p_, p_filter_cache, filter_hop_, filter_k_);
+  BuildFilterCache(g_, g_filter_cache, filter_hop_, filter_k_);
 
   auto* g_vlabel = g_.GetVLabelBasePointer();
   auto* p_vlabel = p_.GetVLabelBasePointer();
