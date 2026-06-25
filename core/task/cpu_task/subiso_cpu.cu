@@ -24,7 +24,7 @@
 #include "core/data_structures/unified_buffer.cuh"
 #include "core/data_structures/woj_exec_plan.cuh"
 #include "core/data_structures/woj_matches.cuh"
-#include "core/task/cpu_task/cpu_subiso.cuh"
+#include "core/task/cpu_task/subiso_cpu.cuh"
 #include "core/task/gpu_task/kernel/algorithms/hash.cuh"
 #include "core/task/gpu_task/kernel/algorithms/sort.cuh"
 #include "core/task/gpu_task/matrix_ops.cuh"
@@ -102,7 +102,7 @@ static void WriteRejectedPairs() {
   if (g_reject_output_path.empty()) return;
   std::ofstream out(g_reject_output_path);
   if (!out) {
-    std::cerr << "[CPUSubIso] Failed to open reject output: "
+    std::cerr << "[SubIsoCPU] Failed to open reject output: "
               << g_reject_output_path << std::endl;
     return;
   }
@@ -116,7 +116,7 @@ static void WriteRejectedPairs() {
     out << u << ',' << v << '\n';
   }
   out.close();
-  std::cout << "[CPUSubIso] Wrote " << g_rejected_pairs.size()
+  std::cout << "[SubIsoCPU] Wrote " << g_rejected_pairs.size()
             << " rejected (u,v) pairs to " << g_reject_output_path << std::endl;
 }
 
@@ -1479,7 +1479,7 @@ static void Checking(const ImmutableCSR& p, const ImmutableCSR& g,
   }
 }
 
-void CPUSubIso::RecursiveMatching(
+void SubIsoCPU::RecursiveMatching(
     const ImmutableCSR& p, const ImmutableCSR& g,
     const std::vector<Matrix>& m_vec,
     const std::vector<UnifiedOwnedBufferFloat*>& m_unified_buffer_vec) {
@@ -1544,10 +1544,17 @@ void CPUSubIso::RecursiveMatching(
                        .count() /
                    (float)CLOCKS_PER_SEC
             << " sec" << std::endl;
-  if (output_path_ != "") matches.Write(output_path_);
+  if (output_path_ != "") {
+    matches.Write(output_path_);
+    std::cout << "[RecursiveMatching] Materialized matches to: " << output_path_
+              << std::endl;
+  } else {
+    std::cout << "[RecursiveMatching] Count-only mode; no output written"
+              << std::endl;
+  }
 }
 
-void CPUSubIso::WOJMatching(
+void SubIsoCPU::WOJMatching(
     const ImmutableCSR& p, const ImmutableCSR& g,
     const std::vector<Matrix>& m_vec,
     const std::vector<UnifiedOwnedBufferFloat*>& m_unified_buffer_vec) {
@@ -1580,14 +1587,14 @@ void CPUSubIso::WOJMatching(
             << " sec" << std::endl;
 }
 
-void CPUSubIso::LoadData() {
-  std::cout << "[CPUSubIso] LoadData() ..." << std::endl;
+void SubIsoCPU::LoadData() {
+  std::cout << "[SubIsoCPU] LoadData() ..." << std::endl;
 
   p_.Read(pattern_path_);
 
   g_.Read(data_graph_path_);
 
-  std::cout << "[CPUSubIso] Building filter caches (hop=" << filter_hop_
+  std::cout << "[SubIsoCPU] Building filter caches (hop=" << filter_hop_
             << ", k=" << filter_k_ << ") ..." << std::endl;
   g_enable_min_wise_filter = enable_min_wise_filter_;
   g_enable_label_degree_filter = enable_label_degree_filter_;
@@ -1647,7 +1654,7 @@ void CPUSubIso::LoadData() {
   }
 }
 
-void CPUSubIso::Run() {
+void SubIsoCPU::Run() {
   auto start_time_0 = std::chrono::system_clock::now();
   LoadData();
   auto start_time_1 = std::chrono::system_clock::now();

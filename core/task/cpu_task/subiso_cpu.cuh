@@ -1,5 +1,5 @@
-#ifndef MATRIXGRAPH_CORE_TASK_CPU_SUBISO_CUH_
-#define MATRIXGRAPH_CORE_TASK_CPU_SUBISO_CUH_
+#ifndef MATRIXGRAPH_CORE_TASK_SUBISO_CPU_CUH_
+#define MATRIXGRAPH_CORE_TASK_SUBISO_CPU_CUH_
 
 #include <string>
 #include <thread>
@@ -17,7 +17,7 @@ namespace matrixgraph {
 namespace core {
 namespace task {
 
-class CPUSubIso : public CPUTaskBase {
+class SubIsoCPU : public CPUTaskBase {
  private:
   using VertexID = sics::matrixgraph::core::common::VertexID;
   using GraphID = sics::matrixgraph::core::common::GraphID;
@@ -29,7 +29,7 @@ class CPUSubIso : public CPUTaskBase {
       sics::matrixgraph::core::data_structures::UnifiedOwnedBuffer<float>;
 
  public:
-  CPUSubIso(const std::string& pattern_path, const std::string& data_graph_path,
+  SubIsoCPU(const std::string& pattern_path, const std::string& data_graph_path,
             const std::string& output_path, int num_threads,
             const std::string& matrix_path1 = "",
             const std::string& matrix_path2 = "",
@@ -115,4 +115,4 @@ class CPUSubIso : public CPUTaskBase {
 }  // namespace matrixgraph
 }  // namespace sics
 
-#endif  // MATRIXGRAPH_CORE_TASK_CPU_SUBISO_CUH_
+#endif  // MATRIXGRAPH_CORE_TASK_SUBISO_CPU_CUH_

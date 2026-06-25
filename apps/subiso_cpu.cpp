@@ -1,4 +1,4 @@
-#include "core/task/cpu_task/cpu_subiso.cuh"
+#include "core/task/cpu_task/subiso_cpu.cuh"
 
 #include <gflags/gflags.h>
 
@@ -19,7 +19,9 @@ DEFINE_string(p, "", "Path to the pattern graph file (required)");
 DEFINE_string(g, "", "Path to the data graph file (required)");
 DEFINE_string(m1, "", "Path to the matrix of pattern graph embedding");
 DEFINE_string(m2, "", "Path to the matrix of data graph embedding");
-DEFINE_string(o, "", "Path for output results (required)");
+DEFINE_string(o, "",
+              "Path for output results; if empty, only the match count is "
+              "reported (default: empty = count-only)");
 DEFINE_string(reject_output, "",
               "Path to write rejected (u,v) candidates, empty disables it");
 DEFINE_int32(t, 72, "Number of CPU threads to use (default: 1)");
@@ -42,7 +44,7 @@ DEFINE_string(
     "Scheduler type (options: CHBL, EvenSplit, RoundRobin, default: CHBL)");
 
 using sics::matrixgraph::core::components::scheduler::SchedulerType;
-using sics::matrixgraph::core::task::CPUSubIso;
+using sics::matrixgraph::core::task::SubIsoCPU;
 
 SchedulerType Scheduler2Enum(const std::string& s) {
   if (s == "EvenSplit")
@@ -94,7 +96,8 @@ void PrintConfig() {
   std::cout << "Data Graph: " << FLAGS_g << std::endl;
   std::cout << "Matrix 1: " << FLAGS_m1 << std::endl;
   std::cout << "Matrix 2: " << FLAGS_m2 << std::endl;
-  std::cout << "Output Path: " << FLAGS_o << std::endl;
+  std::cout << "Output Path: "
+            << (FLAGS_o.empty() ? "(none, count-only)" : FLAGS_o) << std::endl;
   std::cout << "Reject Output Path: " << FLAGS_reject_output << std::endl;
   std::cout << "Num Threads: " << FLAGS_t << std::endl;
   std::cout << "Filter Hop: " << FLAGS_filter_hop << std::endl;
@@ -119,13 +122,13 @@ int main(int argc, char* argv[]) {
       "CPU Subgraph Isomorphism computation using MatrixGraph\n"
       "Usage: " +
       std::string(argv[0]) +
-      " -p <pattern_path> -g <graph_path> -e <edge_list> -o <output_path> "
+      " -p <pattern_path> -g <graph_path> [-o <output_path>] "
       "[-t <num_threads>] [options]");
 
   gflags::ParseCommandLineFlags(&argc, &argv, true);
 
   if (!ValidateParameters()) {
-    gflags::ShowUsageWithFlagsRestrict(argv[0], "apps/cpu_subiso.cu");
+    gflags::ShowUsageWithFlagsRestrict(argv[0], "apps/subiso_cpu.cpp");
     return EXIT_FAILURE;
   }
 
@@ -135,12 +138,12 @@ int main(int argc, char* argv[]) {
     auto scheduler_type = Scheduler2Enum(FLAGS_scheduler);
     sics::matrixgraph::core::MatrixGraph system(scheduler_type);
 
-    auto* task = new CPUSubIso(
+    auto* task = new SubIsoCPU(
         FLAGS_p, FLAGS_g, FLAGS_o, FLAGS_t, FLAGS_m1, FLAGS_m2, "", "", "",
         "", FLAGS_reject_output, FLAGS_filter_hop, FLAGS_filter_k,
         !FLAGS_disable_min_wise_filter, !FLAGS_disable_label_degree_filter,
         !FLAGS_disable_nlc_filter, !FLAGS_disable_matching_order);
-    system.Run(sics::matrixgraph::core::common::kCPUSubIso, task);
+    system.Run(sics::matrixgraph::core::common::kSubIsoCPU, task);
     delete task;
 
   } catch (const std::exception& e) {

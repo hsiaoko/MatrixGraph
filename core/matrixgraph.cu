@@ -2,7 +2,8 @@
 #include <ctime>
 
 #include "core/matrixgraph.cuh"
-#include "core/task/cpu_task/cpu_subiso.cuh"
+#include "core/task/cpu_task/subiso_cpu.cuh"
+#include "core/task/cpu_task/lftj_subiso.cuh"
 #include "core/task/gpu_task/bfs.cuh"
 #include "core/task/gpu_task/gemm.cuh"
 #include "core/task/gpu_task/pagerank.cuh"
@@ -122,9 +123,15 @@ void MatrixGraph::Run(TaskType task_type, CPUTaskBase* task_ptr) {
 
   auto prepare_end_time = std::chrono::system_clock::now();
   switch (task_type) {
-    case common::kCPUSubIso: {
+    case common::kSubIsoCPU: {
       std::cout << "[SubIso Query]" << std::endl;
-      auto task = reinterpret_cast<task::CPUSubIso*>(task_ptr);
+      auto task = reinterpret_cast<task::SubIsoCPU*>(task_ptr);
+      task->Run();
+      break;
+    }
+    case common::kLFTJSubIso: {
+      std::cout << "[LFTJ SubIso Query]" << std::endl;
+      auto task = reinterpret_cast<task::LFTJSubIso*>(task_ptr);
       task->Run();
       break;
     }
