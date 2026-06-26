@@ -1,4 +1,4 @@
-# SubIso — CPU (`cpu_subiso_exec`)
+# SubIso — CPU (`subiso_cpu_exec`)
 
 ## Overview
 
@@ -15,6 +15,7 @@ CPU subgraph isomorphism application supporting VF3 and ML-enhanced filtering. F
 |-----------|-------------|
 | `-p` | Pattern graph CSR directory |
 | `-g` | Data graph CSR directory |
+| `-o` | Output file path for materialized matches; if omitted, only the match count is reported |
 | `-m1` | Pattern embedding directory |
 | `-m2` | Data graph embedding directory |
 | `-m3` | MLP layer 1 weights directory |
@@ -30,25 +31,32 @@ CPU subgraph isomorphism application supporting VF3 and ML-enhanced filtering. F
 
 ## Output
 
-Subgraph isomorphism matches (format depends on application output configuration).
+- **Without `-o`**: count-only mode; only `N Matches` is printed, no files are written.
+- **With `-o`**: full matches are materialized and written to the specified directory (format depends on application output configuration).
 
 ## Source
 
-`core/task/cpu_task/cpu_subiso.cu`  
-`apps/cpu_subiso.cpp`
+`core/task/cpu_task/subiso_cpu.cu`  
+`apps/subiso_cpu.cpp`
 
 ## Examples
 
-**VF3 only:**
+**VF3 only, count-only:**
 
 ```bash
-./bin/cpu_subiso_exec -p <pattern_csr_dir> -g <data_csr_dir>
+./bin/subiso_cpu_exec -p <pattern_csr_dir> -g <data_csr_dir>
+```
+
+**VF3 only, materialize matches:**
+
+```bash
+./bin/subiso_cpu_exec -p <pattern_csr_dir> -g <data_csr_dir> -o <output_file>
 ```
 
 **With ML filter:**
 
 ```bash
-./bin/cpu_subiso_exec \
+./bin/subiso_cpu_exec \
   -p <pattern_csr_dir> -g <data_csr_dir> \
   -m1 <pattern_embedding_dir> -m2 <data_embedding_dir> \
   -m3 <mlp_w1_dir> -m4 <mlp_b1_dir> \

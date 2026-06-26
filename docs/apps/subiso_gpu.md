@@ -2,7 +2,7 @@
 
 ## Overview
 
-**Subgraph isomorphism** on the GPU (`core/task/gpu_task/subiso.cu`). Separate from the CPU VF3 / ML pipeline ([SubIso (CPU)](cpu_subiso.md)).
+**Subgraph isomorphism** on the GPU (`core/task/gpu_task/subiso.cu`). Separate from the CPU VF3 / ML pipeline ([SubIso (CPU)](subiso_cpu.md)).
 
 ## Parameters
 
@@ -32,5 +32,5 @@ CUDA device list, WOJ launch dims (`MG_SUBISO_GRID` / `MG_SUBISO_BLOCK`), and re
 
 ## See also
 
-- [SubIso (CPU)](cpu_subiso.md) — `cpu_subiso_exec`
+- [SubIso (CPU)](subiso_cpu.md) — `subiso_cpu_exec`
 - [Applications index](README.md)

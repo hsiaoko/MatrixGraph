@@ -31,7 +31,9 @@ Shipped executables are built as `<name>_exec` from `apps/`. Full table, build h
 | `skew_exec` | [Skew](apps/skew.md) |
 | `gemm_exec` | [GEMM](apps/gemm.md) |
 | `subiso_exec` | [SubIso (GPU)](apps/subiso_gpu.md) |
-| `cpu_subiso_exec` | [SubIso (CPU)](apps/cpu_subiso.md) |
+| `subiso_cpu_exec` | [SubIso (CPU)](apps/subiso_cpu.md) |
+| `lftj_subiso_cpu_exec` | [LFTJ SubIso](apps/lftj_subiso.md) |
+| `lftj_subiso_exec` | [LFTJ SubIso](apps/lftj_subiso.md) |
 | `gar_match_exec` | [GARMatch](apps/gar_match.md) |
 | `graph_aggregate_exec` | [GraphAggregate](apps/graph_aggregate.md) |
 | `compute_features_exec` | [ComputeFeatures](apps/compute_features.md) |

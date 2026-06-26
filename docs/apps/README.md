@@ -11,7 +11,9 @@ Executables are built as `<name>_exec` from `apps/<name>.{cpp,cu}` (see `apps/CM
 | `skew_exec` | [Skew](skew.md) | skew ≈ d_hat / d_bar (CPU; same d_hat sampling as Diameter) |
 | `gemm_exec` | [GEMM](gemm.md) | Tiled graph/matrix pipeline (GPU) |
 | `subiso_exec` | [SubIso (GPU)](subiso_gpu.md) | Subgraph isomorphism (GPU) |
-| `cpu_subiso_exec` | [SubIso (CPU)](cpu_subiso.md) | Subgraph isomorphism (CPU, VF3 / ML filter) |
+| `subiso_cpu_exec` | [SubIso (CPU)](subiso_cpu.md) | Subgraph isomorphism (CPU, VF3 / ML filter) |
+| `lftj_subiso_cpu_exec` | [LFTJ SubIso](lftj_subiso.md) | Subgraph isomorphism (CPU, LFTJ exact enumeration) |
+| `lftj_subiso_exec` | [LFTJ SubIso](lftj_subiso.md) | Same, through MatrixGraph scheduler |
 | `gar_match_exec` | [GARMatch](gar_match.md) | Graph association rule matching (GPU, ArangoDB) |
 | `graph_aggregate_exec` | [GraphAggregate](graph_aggregate.md) | Per-vertex feature aggregation demo (GPU, synthetic) |
 | `execute_agg_prim_exec` | [ExecuteAggPrim](execute_agg_prim.md) | Standalone aggregation primitive harness (GPU, value lists) |
@@ -21,7 +23,7 @@ Executables are built as `<name>_exec` from `apps/<name>.{cpp,cu}` (see `apps/CM
 From the project build directory (after `cmake ..`):
 
 ```bash
-cmake --build . --target wcc_exec bfs_exec pagerank_exec diameter_exec skew_exec gemm_exec subiso_exec cpu_subiso_exec gar_match_exec
+cmake --build . --target wcc_exec bfs_exec pagerank_exec diameter_exec skew_exec gemm_exec subiso_exec subiso_cpu_exec lftj_subiso_cpu_exec lftj_subiso_exec gar_match_exec
 ```
 
 Or build all app targets via the `apps` project.
