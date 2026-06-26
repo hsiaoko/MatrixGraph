@@ -26,6 +26,9 @@ DEFINE_int32(filter_hop, 1,
 DEFINE_int32(filter_k, 3,
              "Number of minimum hash values (k) for k-min-wise filter "
              "(default: 3)");
+DEFINE_bool(disable_matching_order, false,
+            "Disable greedy matching order and use natural order 0,1,2,... "
+            "(default: false)");
 
 static bool ValidateParameters() {
   bool ok = true;
@@ -48,7 +51,7 @@ int main(int argc, char** argv) {
       std::string(argv[0]) +
       " -p <pattern_dir> -g <graph_dir> [-t <threads>] [-o <output>] "
       "[-limit <n>] [-canonical] [-disable_min_wise_filter] "
-      "[-filter_hop <hop>] [-filter_k <k>]");
+      "[-filter_hop <hop>] [-filter_k <k>] [-disable_matching_order]");
   gflags::ParseCommandLineFlags(&argc, &argv, true);
 
   if (!ValidateParameters()) {
@@ -82,12 +85,16 @@ int main(int argc, char** argv) {
             << std::endl;
   std::cout << "Filter Hop: " << FLAGS_filter_hop << std::endl;
   std::cout << "Filter K: " << FLAGS_filter_k << std::endl;
+  std::cout << "Matching Order: "
+            << (FLAGS_disable_matching_order ? "natural" : "greedy")
+            << std::endl;
   std::cout << "==========================================\n" << std::endl;
 
   try {
     sics::matrixgraph::core::task::LFTJSubIso task(
         FLAGS_p, FLAGS_g, FLAGS_o, num_threads, FLAGS_limit, FLAGS_canonical,
-        !FLAGS_disable_min_wise_filter, FLAGS_filter_hop, FLAGS_filter_k);
+        !FLAGS_disable_min_wise_filter, FLAGS_filter_hop, FLAGS_filter_k,
+        FLAGS_disable_matching_order);
     task.Run();
   } catch (const std::exception& e) {
     std::cerr << "Error: " << e.what() << std::endl;

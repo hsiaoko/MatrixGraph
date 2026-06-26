@@ -33,7 +33,8 @@ class LFTJSubIso : public CPUTaskBase {
              const std::string& output_path, int num_threads,
              uint64_t output_limit = std::numeric_limits<uint64_t>::max(),
              bool canonical = false, bool enable_min_wise_filter = true,
-             int filter_hop = 1, int filter_k = 3)
+             int filter_hop = 1, int filter_k = 3,
+             bool disable_matching_order = false)
       : pattern_path_(pattern_path),
         data_graph_path_(data_graph_path),
         output_path_(output_path),
@@ -42,7 +43,8 @@ class LFTJSubIso : public CPUTaskBase {
         canonical_(canonical),
         enable_min_wise_filter_(enable_min_wise_filter),
         filter_hop_(filter_hop),
-        filter_k_(filter_k) {}
+        filter_k_(filter_k),
+        disable_matching_order_(disable_matching_order) {}
 
   void Run();
 
@@ -127,6 +129,10 @@ class LFTJSubIso : public CPUTaskBase {
   int filter_k_ = 3;
   std::vector<MinWiseFilterCache> p_min_wise_cache_;
   std::vector<MinWiseFilterCache> g_min_wise_cache_;
+
+  // If true, use the natural vertex order (0,1,2,...) instead of the greedy
+  // matching order. This is expected to degrade performance.
+  bool disable_matching_order_ = false;
 
   // Materialized embeddings, stored row-major. Only populated when
   // output_path_ is non-empty.

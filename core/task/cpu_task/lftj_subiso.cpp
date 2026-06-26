@@ -167,58 +167,66 @@ void LFTJSubIso::ComputeMatchingOrder() {
   VertexID pn = pattern_.get_num_vertices();
   order_.clear();
   order_.reserve(pn);
-  std::vector<bool> selected(pn, false);
 
-  // Start with the pattern vertex having the smallest candidate set.
-  VertexID start = 0;
-  size_t min_size = std::numeric_limits<size_t>::max();
-  for (VertexID u = 0; u < pn; ++u) {
-    if (candidates_[u].size() < min_size) {
-      min_size = candidates_[u].size();
-      start = u;
-    }
-  }
-  order_.push_back(start);
-  selected[start] = true;
-
-  const VertexLabel* plabels = pattern_.GetVLabelBasePointer();
-
-  // Greedily pick the vertex with the most edges to already-selected vertices.
-  while (order_.size() < pn) {
-    int max_edges = -1;
-    VertexID chosen = 0;
-    size_t chosen_size = std::numeric_limits<size_t>::max();
-    int chosen_label_freq = -1;
+  if (disable_matching_order_) {
+    // Natural order: 0, 1, 2, ... (expected to degrade performance).
     for (VertexID u = 0; u < pn; ++u) {
-      if (selected[u]) continue;
-      int edges_to_selected = 0;
-      int label_freq = 0;
-      for (VertexID s : order_) {
-        if (std::binary_search(pattern_adj_[u].begin(), pattern_adj_[u].end(),
-                               s)) {
-          ++edges_to_selected;
-        }
-        if (plabels[s] == plabels[u]) ++label_freq;
-      }
-      size_t csize = candidates_[u].size();
-      if (edges_to_selected > max_edges ||
-          (edges_to_selected == max_edges && csize < chosen_size) ||
-          (edges_to_selected == max_edges && csize == chosen_size &&
-           label_freq > chosen_label_freq) ||
-          (edges_to_selected == max_edges && csize == chosen_size &&
-           label_freq == chosen_label_freq &&
-           pattern_adj_[u].size() > pattern_adj_[chosen].size())) {
-        max_edges = edges_to_selected;
-        chosen = u;
-        chosen_size = csize;
-        chosen_label_freq = label_freq;
+      order_.push_back(u);
+    }
+  } else {
+    std::vector<bool> selected(pn, false);
+
+    // Start with the pattern vertex having the smallest candidate set.
+    VertexID start = 0;
+    size_t min_size = std::numeric_limits<size_t>::max();
+    for (VertexID u = 0; u < pn; ++u) {
+      if (candidates_[u].size() < min_size) {
+        min_size = candidates_[u].size();
+        start = u;
       }
     }
-    order_.push_back(chosen);
-    selected[chosen] = true;
+    order_.push_back(start);
+    selected[start] = true;
+
+    const VertexLabel* plabels = pattern_.GetVLabelBasePointer();
+
+    // Greedily pick the vertex with the most edges to already-selected vertices.
+    while (order_.size() < pn) {
+      int max_edges = -1;
+      VertexID chosen = 0;
+      size_t chosen_size = std::numeric_limits<size_t>::max();
+      int chosen_label_freq = -1;
+      for (VertexID u = 0; u < pn; ++u) {
+        if (selected[u]) continue;
+        int edges_to_selected = 0;
+        int label_freq = 0;
+        for (VertexID s : order_) {
+          if (std::binary_search(pattern_adj_[u].begin(), pattern_adj_[u].end(),
+                                 s)) {
+            ++edges_to_selected;
+          }
+          if (plabels[s] == plabels[u]) ++label_freq;
+        }
+        size_t csize = candidates_[u].size();
+        if (edges_to_selected > max_edges ||
+            (edges_to_selected == max_edges && csize < chosen_size) ||
+            (edges_to_selected == max_edges && csize == chosen_size &&
+             label_freq > chosen_label_freq) ||
+            (edges_to_selected == max_edges && csize == chosen_size &&
+             label_freq == chosen_label_freq &&
+             pattern_adj_[u].size() > pattern_adj_[chosen].size())) {
+          max_edges = edges_to_selected;
+          chosen = u;
+          chosen_size = csize;
+          chosen_label_freq = label_freq;
+        }
+      }
+      order_.push_back(chosen);
+      selected[chosen] = true;
+    }
   }
 
-  // Build backward-neighbor lists and order_pos.
+  // Build backward-neighbor lists and order_pos (shared).
   order_pos_.assign(pn, 0);
   for (VertexID i = 0; i < pn; ++i) order_pos_[order_[i]] = i;
 
