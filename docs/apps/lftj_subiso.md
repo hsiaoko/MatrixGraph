@@ -2,8 +2,8 @@
 
 CPU-only subgraph-isomorphism enumerator based on a Leapfrog-Trie-Join
 (LFTJ) style depth-first search. It supports exact counting, optional
-materialization, a greedy matching order, and a k-min-wise label-hash
-pre-filter.
+materialization, a greedy matching order, and several pre-filters
+(label-degree / LDF, neighborhood-label-count / NLC, and k-min-wise).
 
 ## Source files
 
@@ -41,6 +41,8 @@ cmake --build . --target lftj_subiso_cpu_exec lftj_subiso_exec -j$(nproc)
 | `-filter_hop` | 1 | Hop distance for min-wise neighbor signature |
 | `-filter_k` | 3 | Number of minimum hash values kept by k-min-wise filter |
 | `-disable_matching_order` | false | Use natural order `0,1,2,...` instead of the greedy matching order |
+| `-disable_ldf_filter` | true | Disable label-degree filter (directed out/in degree check). **Default disabled** because LFTJ matches undirected edges; only enable (set to `false`) for symmetric/directed CSR data |
+| `-disable_nlc_filter` | false | Disable neighborhood-label-count filter |
 
 ## Output
 
@@ -63,13 +65,20 @@ At the end of a run the following counters are printed:
 === Filter Counts ===
 Label Filters:      N
 Degree Filters:     N
+LDF Filters:        N
+NLC Filters:        N
 Min-Wise Filters:   N
 Intersection Prune: N
 ```
 
 - `Label Filters`: data vertices discarded because their label differs from
   the pattern vertex.
-- `Degree Filters`: data vertices discarded because their degree is too low.
+- `Degree Filters`: data vertices discarded because their undirected degree
+  is too low.
+- `LDF Filters`: data vertices discarded because their directed out-degree
+  or in-degree is too low (label-degree filter).
+- `NLC Filters`: data vertices discarded because they have fewer distinct
+  neighbor labels than the pattern vertex (neighborhood-label-count filter).
 - `Min-Wise Filters`: data vertices discarded by the k-min-wise
   label-hash pre-filter.
 - `Intersection Prune`: candidate vertices removed by backward-neighbor
@@ -92,12 +101,12 @@ Intersection Prune: N
   -o /tmp/lftj_matches.bin
 ```
 
-**Disable min-wise filter and use canonical mode:**
+**Disable all pre-filters and use canonical mode:**
 
 ```bash
 ./bin/lftj_subiso_cpu_exec \
   -p <pattern_csr_dir>/ -g <data_csr_dir>/ -t 1 \
-  -disable_min_wise_filter -canonical
+  -disable_min_wise_filter -disable_ldf_filter -disable_nlc_filter -canonical
 ```
 
 **Run through the MatrixGraph scheduler:**
@@ -111,9 +120,12 @@ Intersection Prune: N
 
 - The greedy matching order (`-disable_matching_order=false`) usually gives
   the best performance.
-- The k-min-wise filter is enabled by default. It can dramatically reduce
-  the DFS search space on some patterns/datasets, but adds a one-time
-  signature-building cost.
+- The NLC and k-min-wise filters are enabled by default. LDF is **disabled by
+  default** because LFTJ matches undirected edges; it is only sound when the
+  CSR graph is symmetric (undirected stored as bidirectional directed edges).
+  Use `-disable_ldf_filter=false` to enable LDF for symmetric/directed data.
+- All filters add one-time preprocessing cost but can dramatically reduce the
+  DFS search space.
 - The scheduler version (`lftj_subiso_exec`) has slightly higher overhead
   than the stand-alone binary (`lftj_subiso_cpu_exec`) because it goes
   through the `MatrixGraph` task dispatch path.

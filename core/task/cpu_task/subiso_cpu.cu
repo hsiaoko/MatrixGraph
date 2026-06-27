@@ -1364,12 +1364,12 @@ static void ValidateMatching(const ImmutableCSR& p, const ImmutableCSR& g,
                 << weft_id << "." << std::endl;
       break;
     }
-    if ((checked_count) % kSubIsoProgressPrintInterval == 0 ||
-        weft_id + 1 == limit) {
-      std::cout << "\t  Progress: " << checked_count << "/" << limit
-                << " checked, " << invalid_count << " invalid so far."
-                << std::endl;
-    }
+    // if ((checked_count) % kSubIsoProgressPrintInterval == 0 ||
+    //     weft_id + 1 == limit) {
+    //   std::cout << "\t  Progress: " << checked_count << "/" << limit
+    //             << " checked, " << invalid_count << " invalid so far."
+    //             << std::endl;
+    // }
   }
   std::cout << "\tValidateMatching done. Checked " << checked_count
             << " wefts, invalidated " << invalid_count << "." << std::endl;

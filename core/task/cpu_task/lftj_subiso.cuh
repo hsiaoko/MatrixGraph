@@ -34,17 +34,22 @@ class LFTJSubIso : public CPUTaskBase {
              uint64_t output_limit = std::numeric_limits<uint64_t>::max(),
              bool canonical = false, bool enable_min_wise_filter = true,
              int filter_hop = 1, int filter_k = 3,
-             bool disable_matching_order = false)
+             bool disable_matching_order = false,
+             bool enable_ldf_filter = true, bool enable_nlc_filter = true,
+             const std::string& reject_output_path = "")
       : pattern_path_(pattern_path),
         data_graph_path_(data_graph_path),
         output_path_(output_path),
+        reject_output_path_(reject_output_path),
         num_threads_(num_threads),
         output_limit_(output_limit),
         canonical_(canonical),
         enable_min_wise_filter_(enable_min_wise_filter),
         filter_hop_(filter_hop),
         filter_k_(filter_k),
-        disable_matching_order_(disable_matching_order) {}
+        disable_matching_order_(disable_matching_order),
+        enable_ldf_filter_(enable_ldf_filter),
+        enable_nlc_filter_(enable_nlc_filter) {}
 
   void Run();
 
@@ -64,6 +69,10 @@ class LFTJSubIso : public CPUTaskBase {
   // Greedy matching order: maximize backward neighbors, tie-break by smaller
   // candidate set / larger pattern degree.
   void ComputeMatchingOrder();
+
+  // Write filtered (u,v) pairs: data vertices with the same label as pattern
+  // vertex u that did not survive into candidates_[u].
+  void WriteRejectedPairs();
 
   // Depth-first LFTJ enumeration. Returns the number of complete embeddings.
   // When materialize_ is true, also stores every complete embedding in
@@ -120,11 +129,14 @@ class LFTJSubIso : public CPUTaskBase {
   // Filter statistics (reported at the end of Run).
   std::atomic<uint64_t> label_filtered_count_{0};
   std::atomic<uint64_t> degree_filtered_count_{0};
+  std::atomic<uint64_t> ldf_filtered_count_{0};
+  std::atomic<uint64_t> nlc_filtered_count_{0};
   std::atomic<uint64_t> min_wise_filtered_count_{0};
   std::atomic<uint64_t> intersection_pruned_count_{0};
 
-  // Min-wise filter state.
+  // Min-wise / NLC filter state.
   bool enable_min_wise_filter_ = true;
+  bool enable_nlc_filter_ = true;
   int filter_hop_ = 1;
   int filter_k_ = 3;
   std::vector<MinWiseFilterCache> p_min_wise_cache_;
@@ -134,6 +146,11 @@ class LFTJSubIso : public CPUTaskBase {
   // matching order. This is expected to degrade performance.
   bool disable_matching_order_ = false;
 
+  // Label-degree filter (directed out/in degree check, like subiso_cpu).
+  // Disabled by default: LFTJ treats the graph as undirected, so this filter
+  // is only sound when the CSR is symmetric (undirected stored as bidirectional).
+  bool enable_ldf_filter_ = false;
+
   // Materialized embeddings, stored row-major. Only populated when
   // output_path_ is non-empty.
   std::vector<VertexID> materialized_matches_;
@@ -141,6 +158,7 @@ class LFTJSubIso : public CPUTaskBase {
   const std::string pattern_path_;
   const std::string data_graph_path_;
   const std::string output_path_;
+  const std::string reject_output_path_;
   const int num_threads_;
 };
 

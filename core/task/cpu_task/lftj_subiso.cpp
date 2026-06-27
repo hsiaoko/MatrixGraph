@@ -9,6 +9,7 @@
 #include <numeric>
 #include <stack>
 #include <thread>
+#include <unordered_map>
 #include <unordered_set>
 
 namespace sics {
@@ -28,6 +29,9 @@ void LFTJSubIso::Run() {
   BuildUndirectedAdjacency();
   BuildMinWiseFilterCaches();
   BuildCandidateSets();
+  if (!reject_output_path_.empty()) {
+    WriteRejectedPairs();
+  }
   ComputeMatchingOrder();
 
   materialize_ = !output_path_.empty();
@@ -54,6 +58,8 @@ void LFTJSubIso::Run() {
   std::cout << "=== Filter Counts ===" << std::endl;
   std::cout << "Label Filters:      " << label_filtered_count_ << std::endl;
   std::cout << "Degree Filters:     " << degree_filtered_count_ << std::endl;
+  std::cout << "LDF Filters:        " << ldf_filtered_count_ << std::endl;
+  std::cout << "NLC Filters:        " << nlc_filtered_count_ << std::endl;
   std::cout << "Min-Wise Filters:   " << min_wise_filtered_count_ << std::endl;
   std::cout << "Intersection Prune: " << intersection_pruned_count_ << std::endl;
 
@@ -120,7 +126,8 @@ void LFTJSubIso::BuildUndirectedAdjacency() {
 void LFTJSubIso::BuildMinWiseFilterCaches() {
   p_min_wise_cache_.clear();
   g_min_wise_cache_.clear();
-  if (!enable_min_wise_filter_) return;
+  // The cache is needed for both min-wise filter and NLC filter.
+  if (!enable_min_wise_filter_ && !enable_nlc_filter_) return;
 
   BuildMinWiseFilterCache(pattern_, p_min_wise_cache_, filter_hop_, filter_k_);
   BuildMinWiseFilterCache(data_graph_, g_min_wise_cache_, filter_hop_,
@@ -136,10 +143,14 @@ void LFTJSubIso::BuildCandidateSets() {
   candidates_.assign(pn, {});
   label_filtered_count_ = 0;
   degree_filtered_count_ = 0;
+  ldf_filtered_count_ = 0;
+  nlc_filtered_count_ = 0;
   min_wise_filtered_count_ = 0;
   for (VertexID u = 0; u < pn; ++u) {
     VertexLabel u_label = plabels[u];
     VertexID u_deg = pattern_adj_[u].size();
+    VertexID u_out_deg = pattern_.GetOutDegreeByLocalID(u);
+    VertexID u_in_deg = pattern_.GetInDegreeByLocalID(u);
     for (VertexID v = 0; v < dn; ++v) {
       if (dlabels[v] != u_label) {
         ++label_filtered_count_;
@@ -148,6 +159,18 @@ void LFTJSubIso::BuildCandidateSets() {
       VertexID v_deg = data_offsets_[v + 1] - data_offsets_[v];
       if (v_deg < u_deg) {
         ++degree_filtered_count_;
+        continue;
+      }
+      if (enable_ldf_filter_ &&
+          (data_graph_.GetOutDegreeByLocalID(v) < u_out_deg ||
+           data_graph_.GetInDegreeByLocalID(v) < u_in_deg)) {
+        ++ldf_filtered_count_;
+        continue;
+      }
+      if (enable_nlc_filter_ &&
+          g_min_wise_cache_[v].all_neighbor_label_count <
+              p_min_wise_cache_[u].all_neighbor_label_count) {
+        ++nlc_filtered_count_;
         continue;
       }
       if (enable_min_wise_filter_ &&
@@ -161,6 +184,50 @@ void LFTJSubIso::BuildCandidateSets() {
     // Sort by vertex ID for correct binary-search intersection.
     std::sort(candidates_[u].begin(), candidates_[u].end());
   }
+}
+
+void LFTJSubIso::WriteRejectedPairs() {
+  VertexID pn = pattern_.get_num_vertices();
+  VertexID dn = data_graph_.get_num_vertices();
+  const VertexLabel* plabels = pattern_.GetVLabelBasePointer();
+  const VertexLabel* dlabels = data_graph_.GetVLabelBasePointer();
+
+  // Group data vertices by label (sorted by construction since we iterate in
+  // ascending vertex-id order).
+  std::unordered_map<VertexLabel, std::vector<VertexID>> label_to_vertices;
+  label_to_vertices.reserve(pn * 2 + 1);
+  for (VertexID v = 0; v < dn; ++v) {
+    label_to_vertices[dlabels[v]].push_back(v);
+  }
+
+  std::ofstream out(reject_output_path_);
+  if (!out) {
+    std::cerr << "[LFTJSubIso] Failed to open reject output: "
+              << reject_output_path_ << std::endl;
+    return;
+  }
+  out << "u,v\n";
+
+  uint64_t rejected_count = 0;
+  for (VertexID u = 0; u < pn; ++u) {
+    VertexLabel u_label = plabels[u];
+    auto it = label_to_vertices.find(u_label);
+    if (it == label_to_vertices.end()) continue;
+
+    const std::vector<VertexID>& same_label_vertices = it->second;
+    const std::vector<VertexID>& cand = candidates_[u];
+    size_t ci = 0;
+    for (VertexID v : same_label_vertices) {
+      // Advance candidate pointer past any values smaller than v.
+      while (ci < cand.size() && cand[ci] < v) ++ci;
+      if (ci < cand.size() && cand[ci] == v) continue;  // survived filter
+      out << u << ',' << v << '\n';
+      ++rejected_count;
+    }
+  }
+  out.close();
+  std::cout << "[LFTJSubIso] Wrote " << rejected_count
+            << " rejected (u,v) pairs to: " << reject_output_path_ << std::endl;
 }
 
 void LFTJSubIso::ComputeMatchingOrder() {
