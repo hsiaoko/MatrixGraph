@@ -133,11 +133,6 @@ struct AllFeatures {
   FeatureValue skew;
 };
 
-// ---------------------------------------------------------------------------
-// Cooperative kernel configuration.
-// ---------------------------------------------------------------------------
-constexpr uint32_t kGraphAggregateBlockSize = 256;
-
 // Returns the dynamic shared memory bytes required for one block given the
 // per-pivot neighbor cap.  The layout stores a small shared header, CUB
 // temporary storage, and sorted indices; actual neighbor FeatureValues live

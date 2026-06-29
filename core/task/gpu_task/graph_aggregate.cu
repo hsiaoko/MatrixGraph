@@ -8,6 +8,7 @@
 #include <set>
 #include <unordered_map>
 
+#include "core/common/consts.h"
 #include "core/util/cuda_check.cuh"
 #include "core/util/cuda_device.cuh"
 
@@ -880,7 +881,7 @@ __host__ std::vector<kernel::FeatureValue> GraphAggregate::ComputeFeatures(
           gpu_state.streams[s]));
 
       const uint32_t grid_size = sub_chunk_n;
-      ComputeFeaturesKernel<<<grid_size, kernel::kGraphAggregateBlockSize,
+      ComputeFeaturesKernel<<<grid_size, common::kBlockDim,
                               shared_mem_size, gpu_state.streams[s]>>>(
           gpu_state.d_graph_data,
           graph_->get_num_vertices(),
@@ -1032,7 +1033,7 @@ __host__ std::vector<kernel::AllFeatures> GraphAggregate::ComputeAll(
           gpu_state.streams[s]));
 
       const uint32_t grid_size = sub_chunk_n;
-      ComputeAllFeaturesKernel<<<grid_size, kernel::kGraphAggregateBlockSize,
+      ComputeAllFeaturesKernel<<<grid_size, common::kBlockDim,
                                  shared_mem_size, gpu_state.streams[s]>>>(
           gpu_state.d_graph_data,
           graph_->get_num_vertices(),

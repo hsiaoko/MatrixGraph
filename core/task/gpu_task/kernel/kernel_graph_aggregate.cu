@@ -5,6 +5,8 @@
 #include <cmath>
 #include <cfloat>
 
+#include "core/common/consts.h"
+
 namespace sics {
 namespace matrixgraph {
 namespace core {
@@ -692,10 +694,9 @@ namespace task {
 namespace kernel {
 
 __host__ size_t ComputeGraphAggregateSharedMemSize(uint32_t max_neighbors) {
-  constexpr uint32_t kBlockSize = 256;
   // FeatureValue buffer for collected neighbors + uint32 scratch for scans.
   return static_cast<size_t>(max_neighbors) * sizeof(FeatureValue) +
-         static_cast<size_t>(kBlockSize) * sizeof(uint32_t);
+         static_cast<size_t>(common::kBlockDim) * sizeof(uint32_t);
 }
 
 }  // namespace kernel

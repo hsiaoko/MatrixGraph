@@ -5,14 +5,13 @@
 #include <cstring>
 #include <iostream>
 
+#include "core/common/consts.h"
 #include "core/util/cuda_check.cuh"
 
 namespace sics {
 namespace matrixgraph {
 namespace core {
 namespace task {
-
-constexpr uint32_t kExecuteAggPrimBlockSize = 256;
 
 // -----------------------------------------------------------------------------
 // FeatureValue helpers
@@ -76,7 +75,7 @@ namespace kernel {
 // Block reductions
 // -----------------------------------------------------------------------------
 __device__ inline double BlockSum(double val) {
-  __shared__ double sdata[kExecuteAggPrimBlockSize];
+  __shared__ double sdata[common::kBlockDim];
   sdata[threadIdx.x] = val;
   __syncthreads();
   for (int s = blockDim.x / 2; s > 0; s >>= 1) {
@@ -87,7 +86,7 @@ __device__ inline double BlockSum(double val) {
 }
 
 __device__ inline FeatureValue BlockMin(FeatureValue val) {
-  __shared__ FeatureValue sdata[kExecuteAggPrimBlockSize];
+  __shared__ FeatureValue sdata[common::kBlockDim];
   sdata[threadIdx.x] = val;
   __syncthreads();
   for (int s = blockDim.x / 2; s > 0; s >>= 1) {
@@ -101,7 +100,7 @@ __device__ inline FeatureValue BlockMin(FeatureValue val) {
 }
 
 __device__ inline FeatureValue BlockMax(FeatureValue val) {
-  __shared__ FeatureValue sdata[kExecuteAggPrimBlockSize];
+  __shared__ FeatureValue sdata[common::kBlockDim];
   sdata[threadIdx.x] = val;
   __syncthreads();
   for (int s = blockDim.x / 2; s > 0; s >>= 1) {
@@ -355,7 +354,7 @@ __device__ inline FeatureValue BlockAggPercentTrue(const FeatureValue* values,
   for (uint32_t i = threadIdx.x; i < n; i += blockDim.x) {
     if (values[i].type == ValueType::kBool && values[i].b) ++local;
   }
-  __shared__ uint32_t scratch[kExecuteAggPrimBlockSize];
+  __shared__ uint32_t scratch[common::kBlockDim];
   uint32_t total = 0;
   BlockExclusiveScan(local, scratch, &total);
   return MakeFloat64Value(static_cast<double>(total) / static_cast<double>(n));
@@ -383,7 +382,7 @@ __device__ inline FeatureValue BlockAggCountGreaterThanMean(
   for (uint32_t i = threadIdx.x; i < n; i += blockDim.x) {
     if (values[i].ToDouble() > mean) ++local;
   }
-  __shared__ uint32_t scratch[kExecuteAggPrimBlockSize];
+  __shared__ uint32_t scratch[common::kBlockDim];
   uint32_t total = 0;
   BlockExclusiveScan(local, scratch, &total);
   return MakeIntValue(static_cast<int64_t>(total));
@@ -483,7 +482,7 @@ __device__ inline AllFeatures BlockComputeAllFeaturesFromValues(
   FeatureValue minv = BlockMin(local_min);
   FeatureValue maxv = BlockMax(local_max);
 
-  __shared__ uint32_t scratch[kExecuteAggPrimBlockSize];
+  __shared__ uint32_t scratch[common::kBlockDim];
   uint32_t true_total = 0;
   BlockExclusiveScan(local_true, scratch, &true_total);
   double mean = sum / static_cast<double>(n);
@@ -804,7 +803,7 @@ __host__ FeatureValue ExecuteAggPrim::Compute(AggPrim prim,
                         cudaMemcpyHostToDevice));
 
   size_t shared_mem = ComputeSharedMemSize(n);
-  kernel::ComputeAggPrimKernel<<<1, kExecuteAggPrimBlockSize, shared_mem>>>(
+  kernel::ComputeAggPrimKernel<<<1, common::kBlockDim, shared_mem>>>(
       prim, d_values, d_offsets, 0, 1, d_output);
   CUDA_CHECK(cudaGetLastError());
   CUDA_CHECK(cudaDeviceSynchronize());
@@ -859,7 +858,7 @@ __host__ std::vector<FeatureValue> ExecuteAggPrim::ComputeBatch(
     if (begin >= n_lists) break;
     uint32_t end = std::min(begin + chunk_size, n_lists);
     uint32_t count = end - begin;
-    kernel::ComputeAggPrimKernel<<<count, kExecuteAggPrimBlockSize,
+    kernel::ComputeAggPrimKernel<<<count, common::kBlockDim,
                                    shared_mem, streams_[s]>>>(
         prim, d_values, d_offsets, begin, n_lists, d_outputs);
   }
@@ -912,7 +911,7 @@ __host__ AllFeatures ExecuteAggPrim::ComputeAll(const FeatureValue* host_values,
                         cudaMemcpyHostToDevice));
 
   size_t shared_mem = ComputeSharedMemSize(n);
-  kernel::ComputeAllAggPrimsKernel<<<1, kExecuteAggPrimBlockSize, shared_mem>>>(
+  kernel::ComputeAllAggPrimsKernel<<<1, common::kBlockDim, shared_mem>>>(
       d_values, d_offsets, 0, 1, d_output);
   CUDA_CHECK(cudaGetLastError());
   CUDA_CHECK(cudaDeviceSynchronize());
@@ -963,7 +962,7 @@ __host__ std::vector<AllFeatures> ExecuteAggPrim::ComputeAllBatch(
     if (begin >= n_lists) break;
     uint32_t end = std::min(begin + chunk_size, n_lists);
     uint32_t count = end - begin;
-    kernel::ComputeAllAggPrimsKernel<<<count, kExecuteAggPrimBlockSize,
+    kernel::ComputeAllAggPrimsKernel<<<count, common::kBlockDim,
                                        shared_mem, streams_[s]>>>(
         d_values, d_offsets, begin, n_lists, d_outputs);
   }
@@ -1035,7 +1034,7 @@ ExecuteAggPrim::ComputeBatchMultiPrim(
     if (begin >= n_lists) break;
     uint32_t end = std::min(begin + chunk_size, n_lists);
     uint32_t count = end - begin;
-    kernel::ComputeBatchMultiPrimKernel<<<count, kExecuteAggPrimBlockSize,
+    kernel::ComputeBatchMultiPrimKernel<<<count, common::kBlockDim,
                                           shared_mem, streams_[s]>>>(
         d_values, d_offsets, d_prims, n_prims, begin, n_lists, d_outputs);
   }

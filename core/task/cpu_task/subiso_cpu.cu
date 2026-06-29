@@ -1011,7 +1011,10 @@ static inline void Enumerating(
               auto weft_idx =
                   __sync_fetch_and_add(matches->GetWeftCountPtr(), 1);
 
-              if (weft_idx >= kMaxNumWeft - 1) return;
+              if (weft_idx >= kMaxNumWeft - 1) {
+                __sync_fetch_and_sub(matches->GetWeftCountPtr(), 1);
+                return;
+              }
               int weft_size = 0;
               for (int _ = 0; _ < exec_plan.get_n_edges(); _++) {
                 weft_size += local_matches.size[_];
