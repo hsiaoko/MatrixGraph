@@ -459,11 +459,16 @@ GraphFilterAggregate::GraphFilterAggregate(GraphFilterAggregate&& other) noexcep
 
 GraphFilterAggregate& GraphFilterAggregate::operator=(
     GraphFilterAggregate&& other) noexcept {
-  if (this != &other) {
-    DestroyStreams();
-    FreeBuffers();
     n_streams_ = other.n_streams_;
     streams_ = std::move(other.streams_);
+    d_requests_ = std::move(other.d_requests_);
+    requests_cap_ = std::move(other.requests_cap_);
+    d_outputs_ = std::move(other.d_outputs_);
+    outputs_cap_ = std::move(other.outputs_cap_);
+    d_hash_scratch_ = std::move(other.d_hash_scratch_);
+    d_hash_offsets_ = std::move(other.d_hash_offsets_);
+    hash_scratch_cap_ = std::move(other.hash_scratch_cap_);
+    hash_offsets_cap_ = std::move(other.hash_offsets_cap_);
     n_vertices_ = other.n_vertices_;
     n_edges_ = other.n_edges_;
     h_csr_offsets_ = std::move(other.h_csr_offsets_);
@@ -477,39 +482,51 @@ GraphFilterAggregate& GraphFilterAggregate::operator=(
     per_vertex_attrs_ = std::move(other.per_vertex_attrs_);
     d_vertex_attrs_ = other.d_vertex_attrs_;
     column_buffers_ = std::move(other.column_buffers_);
-    d_requests_ = other.d_requests_;
-    requests_cap_ = other.requests_cap_;
-    d_outputs_ = other.d_outputs_;
-    outputs_cap_ = other.outputs_cap_;
-    d_hash_scratch_ = other.d_hash_scratch_;
-    d_hash_offsets_ = other.d_hash_offsets_;
-    hash_scratch_cap_ = other.hash_scratch_cap_;
-    hash_offsets_cap_ = other.hash_offsets_cap_;
 
     other.d_csr_offsets_ = nullptr;
     other.d_csr_edges_ = nullptr;
     other.d_edge_labels_ = nullptr;
     other.d_vertex_labels_ = nullptr;
     other.d_vertex_attrs_ = nullptr;
-    other.d_requests_ = nullptr;
-    other.d_outputs_ = nullptr;
-    other.d_hash_scratch_ = nullptr;
-    other.d_hash_offsets_ = nullptr;
-  }
-  return *this;
+    other.d_requests_.clear();
+    other.requests_cap_.clear();
+    other.d_outputs_.clear();
+    other.outputs_cap_.clear();
+    other.d_hash_scratch_.clear();
+    other.d_hash_offsets_.clear();
+    other.hash_scratch_cap_.clear();
+    other.hash_offsets_cap_.clear();
 }
 
 __host__ void GraphFilterAggregate::SetNumStreams(uint32_t n_streams) {
   if (n_streams == 0) n_streams = 1;
   if (n_streams == n_streams_ && !streams_.empty()) return;
   DestroyStreams();
+  // Clear per-stream buffer state so a stream-count change does not leave
+  // stale pointers/caps behind.
+  d_requests_.clear();
+  d_outputs_.clear();
+  d_hash_offsets_.clear();
+  d_hash_scratch_.clear();
+  requests_cap_.clear();
+  outputs_cap_.clear();
+  hash_offsets_cap_.clear();
+  hash_scratch_cap_.clear();
   n_streams_ = n_streams;
 }
 
 __host__ void GraphFilterAggregate::EnsureStreams() {
-  if (streams_.size() == n_streams_) return;
+  if (streams_.size() == n_streams_ && d_requests_.size() == n_streams_) return;
   DestroyStreams();
   streams_.resize(n_streams_);
+  d_requests_.resize(n_streams_, nullptr);
+  d_outputs_.resize(n_streams_, nullptr);
+  d_hash_offsets_.resize(n_streams_, nullptr);
+  d_hash_scratch_.resize(n_streams_, nullptr);
+  requests_cap_.resize(n_streams_, 0);
+  outputs_cap_.resize(n_streams_, 0);
+  hash_offsets_cap_.resize(n_streams_, 0);
+  hash_scratch_cap_.resize(n_streams_, 0);
   for (uint32_t i = 0; i < n_streams_; ++i) {
     CUDA_CHECK(cudaStreamCreate(&streams_[i]));
   }
@@ -528,27 +545,32 @@ __host__ void GraphFilterAggregate::FreeBuffers() {
   if (d_edge_labels_) cudaFree(d_edge_labels_);
   if (d_vertex_labels_) cudaFree(d_vertex_labels_);
   if (d_vertex_attrs_) cudaFree(d_vertex_attrs_);
-  if (d_requests_) cudaFree(d_requests_);
-  if (d_outputs_) cudaFree(d_outputs_);
-  if (d_hash_scratch_) cudaFree(d_hash_scratch_);
-  if (d_hash_offsets_) cudaFree(d_hash_offsets_);
+  for (FilterAggRequest* p : d_requests_) {
+    if (p) cudaFree(p);
+  }
+  for (FeatureValue* p : d_outputs_) {
+    if (p) cudaFree(p);
+  }
+  for (unsigned long long* p : d_hash_scratch_) {
+    if (p) cudaFree(p);
+  }
+  for (uint32_t* p : d_hash_offsets_) {
+    if (p) cudaFree(p);
+  }
   for (uint8_t* p : column_buffers_) cudaFree(p);
   d_csr_offsets_ = nullptr;
   d_csr_edges_ = nullptr;
   d_edge_labels_ = nullptr;
   d_vertex_labels_ = nullptr;
   d_vertex_attrs_ = nullptr;
-  d_requests_ = nullptr;
-  d_outputs_ = nullptr;
-  d_hash_scratch_ = nullptr;
-  d_hash_offsets_ = nullptr;
-  // Reset capacities so the Ensure* guards reallocate after a reload; otherwise
-  // a second LoadGraphCSR would leave these pointers null while the stale caps
-  // make EnsureRequestBuffers/EnsureScratch skip allocation.
-  requests_cap_ = 0;
-  outputs_cap_ = 0;
-  hash_offsets_cap_ = 0;
-  hash_scratch_cap_ = 0;
+  d_requests_.clear();
+  d_outputs_.clear();
+  d_hash_scratch_.clear();
+  d_hash_offsets_.clear();
+  requests_cap_.clear();
+  outputs_cap_.clear();
+  hash_offsets_cap_.clear();
+  hash_scratch_cap_.clear();
   column_buffers_.clear();
   per_vertex_attrs_.clear();
 }
@@ -676,30 +698,39 @@ __host__ void GraphFilterAggregate::LoadVertexAttributes(
   BuildAttributesFromColumns(n_columns, columns);
 }
 
-__host__ void GraphFilterAggregate::EnsureRequestBuffers(uint32_t n_requests) {
-  if (n_requests <= requests_cap_) return;
-  if (d_requests_) cudaFree(d_requests_);
-  if (d_outputs_) cudaFree(d_outputs_);
-  CUDA_CHECK(cudaMalloc(&d_requests_, sizeof(FilterAggRequest) * n_requests));
-  CUDA_CHECK(cudaMalloc(&d_outputs_, sizeof(FeatureValue) * n_requests));
-  requests_cap_ = n_requests;
-  outputs_cap_ = n_requests;
+__host__ void GraphFilterAggregate::EnsureRequestBuffers(uint32_t stream_idx,
+                                                          uint32_t n_requests) {
+  if (stream_idx >= n_streams_) EnsureStreams();
+  if (n_requests <= requests_cap_[stream_idx]) return;
+  if (d_requests_[stream_idx]) cudaFree(d_requests_[stream_idx]);
+  if (d_outputs_[stream_idx]) cudaFree(d_outputs_[stream_idx]);
+  CUDA_CHECK(
+      cudaMalloc(&d_requests_[stream_idx], sizeof(FilterAggRequest) * n_requests));
+  CUDA_CHECK(
+      cudaMalloc(&d_outputs_[stream_idx], sizeof(FeatureValue) * n_requests));
+  requests_cap_[stream_idx] = n_requests;
+  outputs_cap_[stream_idx] = n_requests;
 }
 
-__host__ void GraphFilterAggregate::EnsureScratch(size_t hash_total) {
-  // hash_offsets is sized per request; we grow it lazily with requests_cap_.
-  if (hash_offsets_cap_ < requests_cap_ + 1) {
-    if (d_hash_offsets_) cudaFree(d_hash_offsets_);
-    CUDA_CHECK(cudaMalloc(&d_hash_offsets_, sizeof(uint32_t) * (requests_cap_ + 1)));
-    hash_offsets_cap_ = requests_cap_ + 1;
+__host__ void GraphFilterAggregate::EnsureScratch(uint32_t stream_idx,
+                                                  size_t hash_total) {
+  if (stream_idx >= n_streams_) EnsureStreams();
+  // hash_offsets is sized per request; we grow it lazily per stream.
+  if (hash_offsets_cap_[stream_idx] < requests_cap_[stream_idx] + 1) {
+    if (d_hash_offsets_[stream_idx]) cudaFree(d_hash_offsets_[stream_idx]);
+    CUDA_CHECK(cudaMalloc(
+        &d_hash_offsets_[stream_idx],
+        sizeof(uint32_t) * (requests_cap_[stream_idx] + 1)));
+    hash_offsets_cap_[stream_idx] = requests_cap_[stream_idx] + 1;
   }
-  // hash_total is the exact number of hash-table slots needed across all
-  // requests (sum of per-request sizes; 0 when no request is NumUnique).
+  // hash_total is the exact number of hash-table slots needed for this chunk.
   if (hash_total == 0) hash_total = 1;
-  if (hash_total > hash_scratch_cap_) {
-    if (d_hash_scratch_) cudaFree(d_hash_scratch_);
-    CUDA_CHECK(cudaMalloc(&d_hash_scratch_, sizeof(unsigned long long) * hash_total));
-    hash_scratch_cap_ = hash_total;
+  if (hash_total > hash_scratch_cap_[stream_idx]) {
+    if (d_hash_scratch_[stream_idx]) cudaFree(d_hash_scratch_[stream_idx]);
+    CUDA_CHECK(cudaMalloc(
+        &d_hash_scratch_[stream_idx],
+        sizeof(unsigned long long) * hash_total));
+    hash_scratch_cap_[stream_idx] = hash_total;
   }
 }
 
@@ -709,77 +740,110 @@ __host__ std::vector<FeatureValue> GraphFilterAggregate::Compute(
   if (requests.empty() || n_vertices_ == 0) return results;
 
   EnsureStreams();
-  EnsureRequestBuffers(static_cast<uint32_t>(requests.size()));
 
-  // Compute per-request hash-table offsets. Only NumUnique needs a hash table;
-  // every other primitive gets zero slots. The table for a NumUnique request is
-  // sized to next_pow2(degree)*2, and the scratch total is the exact sum of
-  // per-request sizes (not max_degree * n_requests, which over-allocates).
-  std::vector<uint32_t> h_hash_offsets(requests.size() + 1);
-  h_hash_offsets[0] = 0;
+  // Precompute per-request hash-slot counts. Only NumUnique needs a hash table.
+  std::vector<uint32_t> per_request_hash_cap(requests.size(), 0);
   for (size_t i = 0; i < requests.size(); ++i) {
-    uint32_t cap = 0;
     if (static_cast<AggPrim>(requests[i].agg_prim) == AggPrim::kNumUnique) {
       uint32_t pid = requests[i].pivot_vertex_id;
       uint32_t deg = 0;
       if (pid < n_vertices_) {
         deg = h_csr_offsets_[pid + 1] - h_csr_offsets_[pid];
       }
-      cap = (deg == 0) ? 1u : NextPowerOfTwo(deg) * 2u;
-    }
-    h_hash_offsets[i + 1] = h_hash_offsets[i] + cap;
-  }
-  EnsureScratch(static_cast<size_t>(h_hash_offsets[requests.size()]));
-
-  CUDA_CHECK(cudaMemcpy(d_hash_offsets_, h_hash_offsets.data(),
-                        sizeof(uint32_t) * h_hash_offsets.size(),
-                        cudaMemcpyHostToDevice));
-
-  // Flatten all conditions and upload them in a single allocation + copy
-  // (instead of one cudaMalloc/cudaMemcpy per request).
-  std::vector<FilterCondition> flat_conditions;
-  std::vector<uint32_t> cond_offsets(requests.size(), 0);
-  for (size_t i = 0; i < requests.size(); ++i) {
-    cond_offsets[i] = static_cast<uint32_t>(flat_conditions.size());
-    for (uint32_t j = 0; j < requests[i].n_conditions; ++j) {
-      flat_conditions.push_back(requests[i].conditions[j]);
+      per_request_hash_cap[i] = (deg == 0) ? 1u : NextPowerOfTwo(deg) * 2u;
     }
   }
 
-  FilterCondition* d_all_conditions = nullptr;
-  if (!flat_conditions.empty()) {
-    CUDA_CHECK(cudaMalloc(&d_all_conditions,
-                          sizeof(FilterCondition) * flat_conditions.size()));
-    CUDA_CHECK(cudaMemcpy(d_all_conditions, flat_conditions.data(),
-                          sizeof(FilterCondition) * flat_conditions.size(),
-                          cudaMemcpyHostToDevice));
-  }
-
-  // Build the device request array with conditions pointing into the single
-  // flattened buffer, then upload it in one copy.
-  std::vector<FilterAggRequest> h_device_requests = requests;
-  for (size_t i = 0; i < h_device_requests.size(); ++i) {
-    h_device_requests[i].conditions =
-        (requests[i].n_conditions > 0) ? (d_all_conditions + cond_offsets[i])
-                                       : nullptr;
-  }
-  CUDA_CHECK(cudaMemcpy(d_requests_, h_device_requests.data(),
-                        sizeof(FilterAggRequest) * requests.size(),
-                        cudaMemcpyHostToDevice));
-
-  FilterAggKernel<<<requests.size(), common::kFilterAggBlockDim, 0, streams_[0]>>>(
-      d_csr_offsets_, d_csr_edges_, d_edge_labels_, d_vertex_labels_,
-      d_vertex_attrs_, d_requests_, static_cast<uint32_t>(requests.size()),
-      d_hash_scratch_, d_hash_offsets_, d_outputs_);
-  CUDA_CHECK(cudaGetLastError());
-  CUDA_CHECK(cudaStreamSynchronize(streams_[0]));
+  const uint32_t total_requests = static_cast<uint32_t>(requests.size());
+  const uint32_t chunk_size =
+      (total_requests + n_streams_ - 1) / n_streams_;
 
   results.resize(requests.size());
-  CUDA_CHECK(cudaMemcpy(results.data(), d_outputs_,
-                        sizeof(FeatureValue) * requests.size(),
-                        cudaMemcpyDeviceToHost));
 
-  if (d_all_conditions) cudaFree(d_all_conditions);
+  // Per-stream temporary condition buffers; freed after all streams finish.
+  std::vector<FilterCondition*> d_chunk_conditions(n_streams_, nullptr);
+
+  for (uint32_t s = 0; s < n_streams_; ++s) {
+    const uint32_t begin = s * chunk_size;
+    if (begin >= total_requests) break;
+    const uint32_t end = std::min(begin + chunk_size, total_requests);
+    const uint32_t count = end - begin;
+
+    // Hash offset prefix sum for this chunk.
+    std::vector<uint32_t> h_hash_offsets(count + 1, 0);
+    h_hash_offsets[0] = 0;
+    size_t chunk_hash_total = 0;
+    for (uint32_t i = 0; i < count; ++i) {
+      uint32_t cap = per_request_hash_cap[begin + i];
+      h_hash_offsets[i + 1] = h_hash_offsets[i] + cap;
+      chunk_hash_total += cap;
+    }
+
+    EnsureRequestBuffers(s, count);
+    EnsureScratch(s, chunk_hash_total);
+
+    CUDA_CHECK(cudaMemcpyAsync(
+        d_hash_offsets_[s], h_hash_offsets.data(),
+        sizeof(uint32_t) * h_hash_offsets.size(), cudaMemcpyHostToDevice,
+        streams_[s]));
+
+    // Flatten conditions for this chunk and upload on the same stream.
+    std::vector<FilterCondition> flat_conditions;
+    std::vector<uint32_t> cond_offsets(count, 0);
+    for (uint32_t i = 0; i < count; ++i) {
+      cond_offsets[i] = static_cast<uint32_t>(flat_conditions.size());
+      const FilterAggRequest& req = requests[begin + i];
+      for (uint32_t j = 0; j < req.n_conditions; ++j) {
+        flat_conditions.push_back(req.conditions[j]);
+      }
+    }
+
+    FilterCondition* d_all_conditions = nullptr;
+    if (!flat_conditions.empty()) {
+      CUDA_CHECK(cudaMalloc(
+          &d_all_conditions,
+          sizeof(FilterCondition) * flat_conditions.size()));
+      CUDA_CHECK(cudaMemcpyAsync(
+          d_all_conditions, flat_conditions.data(),
+          sizeof(FilterCondition) * flat_conditions.size(),
+          cudaMemcpyHostToDevice, streams_[s]));
+      d_chunk_conditions[s] = d_all_conditions;
+    }
+
+    std::vector<FilterAggRequest> h_device_requests;
+    h_device_requests.reserve(count);
+    for (uint32_t i = 0; i < count; ++i) {
+      FilterAggRequest r = requests[begin + i];
+      r.conditions = (r.n_conditions > 0)
+                         ? (d_all_conditions + cond_offsets[i])
+                         : nullptr;
+      h_device_requests.push_back(r);
+    }
+    CUDA_CHECK(cudaMemcpyAsync(
+        d_requests_[s], h_device_requests.data(),
+        sizeof(FilterAggRequest) * count, cudaMemcpyHostToDevice, streams_[s]));
+
+    FilterAggKernel<<<count, common::kFilterAggBlockDim, 0, streams_[s]>>>(
+        d_csr_offsets_, d_csr_edges_, d_edge_labels_, d_vertex_labels_,
+        d_vertex_attrs_, d_requests_[s], count, d_hash_scratch_[s],
+        d_hash_offsets_[s], d_outputs_[s]);
+    CUDA_CHECK(cudaGetLastError());
+
+    CUDA_CHECK(cudaMemcpyAsync(
+        results.data() + begin, d_outputs_[s],
+        sizeof(FeatureValue) * count, cudaMemcpyDeviceToHost, streams_[s]));
+  }
+
+  for (uint32_t s = 0; s < n_streams_; ++s) {
+    if (streams_[s]) {
+      CUDA_CHECK(cudaStreamSynchronize(streams_[s]));
+    }
+  }
+
+  for (FilterCondition* p : d_chunk_conditions) {
+    if (p) cudaFree(p);
+  }
+
   return results;
 }
 

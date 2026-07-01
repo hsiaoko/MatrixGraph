@@ -132,8 +132,8 @@ class GraphFilterAggregate : public TaskBase {
       const GraphAggregateAttributeColumn* columns);
 
   // Reusable device buffers, grown on demand.
-  __host__ void EnsureRequestBuffers(uint32_t n_requests);
-  __host__ void EnsureScratch(size_t hash_total);
+  __host__ void EnsureRequestBuffers(uint32_t stream_idx, uint32_t n_requests);
+  __host__ void EnsureScratch(uint32_t stream_idx, size_t hash_total);
 
   uint32_t n_streams_ = 2;
   std::vector<cudaStream_t> streams_;
@@ -163,18 +163,15 @@ class GraphFilterAggregate : public TaskBase {
   // Per-attribute column buffers (owned by us).
   std::vector<uint8_t*> column_buffers_;
 
-  // Request buffers.
-  FilterAggRequest* d_requests_ = nullptr;
-  uint32_t requests_cap_ = 0;
-  FeatureValue* d_outputs_ = nullptr;
-  uint32_t outputs_cap_ = 0;
-
-  // Per-request scratch for order-dependent primitives (NumUnique hash table).
-  // Layout: request i owns slots [hash_offsets[i], hash_offsets[i+1]).
-  unsigned long long* d_hash_scratch_ = nullptr;
-  uint32_t* d_hash_offsets_ = nullptr;
-  size_t hash_scratch_cap_ = 0;
-  uint32_t hash_offsets_cap_ = 0;
+  // Per-stream request/output/hash scratch buffers.
+  std::vector<FilterAggRequest*> d_requests_;
+  std::vector<FeatureValue*> d_outputs_;
+  std::vector<uint32_t*> d_hash_offsets_;
+  std::vector<unsigned long long*> d_hash_scratch_;
+  std::vector<uint32_t> requests_cap_;
+  std::vector<uint32_t> outputs_cap_;
+  std::vector<uint32_t> hash_offsets_cap_;
+  std::vector<size_t> hash_scratch_cap_;
 };
 
 }  // namespace task
