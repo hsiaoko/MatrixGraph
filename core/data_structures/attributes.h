@@ -60,7 +60,14 @@ struct Attribute {
   uint32_t n_elements = 0;   // total number of primitive elements in data
   const void* data = nullptr;      // pointer to the flat value buffer
   const uint32_t* offsets = nullptr;  // nullptr for scalars; length n_rows + 1 for lists
+  const uint8_t* valid = nullptr;  // nullptr = all valid; else n_rows bytes (1 = valid)
 };
+
+// Whether row `row` of `attr` holds a valid (present) value. A null valid mask
+// means every row is valid.
+__host__ __device__ inline bool IsValidAt(const Attribute& attr, uint32_t row) {
+  return attr.valid == nullptr || attr.valid[row] != 0;
+}
 
 // ---------------------------------------------------------------------------
 // Scalar accessors
