@@ -133,7 +133,7 @@ class GraphFilterAggregate : public TaskBase {
 
   // Reusable device buffers, grown on demand.
   __host__ void EnsureRequestBuffers(uint32_t n_requests);
-  __host__ void EnsureScratch(uint32_t max_degree);
+  __host__ void EnsureScratch(size_t hash_total);
 
   uint32_t n_streams_ = 2;
   std::vector<cudaStream_t> streams_;

@@ -45,6 +45,13 @@ static const uint32_t kBlockDim = 1024;
 static const uint32_t kWarpSize = 32;
 static const uint32_t kLogWarpSize = 5;
 
+// Specialized block dimensions for shared-memory-heavy aggregation kernels.
+// kBlockDim (1024) is the generic default; these are per-kernel tunings.
+static const uint32_t kAllFeaturesBlockDim = 512;    // fused all-primitives kernels
+static const uint32_t kFilterAggBlockDim = 256;      // conditional filter+aggregate
+static const uint32_t kStreamingAggBlockDim = 256;   // streaming reduction primitives
+static const uint32_t kNumUniqueHashBlockDim = 256;  // hash-based unique count
+
 static const uint32_t kDefaultHeapCapacity = 7;
 
 }  // namespace common

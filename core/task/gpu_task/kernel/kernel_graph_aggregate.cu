@@ -662,7 +662,7 @@ __global__ void ComputeFeaturesKernel(
   }
 }
 
-__launch_bounds__(512)
+__launch_bounds__(common::kAllFeaturesBlockDim)
 __global__ void ComputeAllFeaturesKernel(
     const uint8_t* graph_data,
     uint32_t n_vertices,

@@ -218,7 +218,7 @@ __device__ __forceinline__ unsigned long long HashMix64(unsigned long long x) {
 // -----------------------------------------------------------------------------
 // Device kernel: one block per request.
 // -----------------------------------------------------------------------------
-__launch_bounds__(256)
+__launch_bounds__(common::kFilterAggBlockDim)
 __global__ void FilterAggKernel(const EdgeIndex* csr_offsets,
                                 const VertexID* csr_edges,
                                 const uint32_t* edge_labels,
@@ -686,23 +686,20 @@ __host__ void GraphFilterAggregate::EnsureRequestBuffers(uint32_t n_requests) {
   outputs_cap_ = n_requests;
 }
 
-__host__ void GraphFilterAggregate::EnsureScratch(uint32_t max_degree) {
+__host__ void GraphFilterAggregate::EnsureScratch(size_t hash_total) {
   // hash_offsets is sized per request; we grow it lazily with requests_cap_.
   if (hash_offsets_cap_ < requests_cap_ + 1) {
     if (d_hash_offsets_) cudaFree(d_hash_offsets_);
     CUDA_CHECK(cudaMalloc(&d_hash_offsets_, sizeof(uint32_t) * (requests_cap_ + 1)));
     hash_offsets_cap_ = requests_cap_ + 1;
   }
-  // Per-request hash table size = next_pow2(max_degree) * 2. The scratch holds
-  // one such table per request, so the total it must cover is cap *
-  // requests_cap_. Compare against that total (hash_scratch_cap_ stores the
-  // total element count), not the per-request cap.
-  uint32_t cap = (max_degree == 0) ? 1u : NextPowerOfTwo(max_degree) * 2u;
-  size_t needed = static_cast<size_t>(cap) * requests_cap_;
-  if (needed > hash_scratch_cap_) {
+  // hash_total is the exact number of hash-table slots needed across all
+  // requests (sum of per-request sizes; 0 when no request is NumUnique).
+  if (hash_total == 0) hash_total = 1;
+  if (hash_total > hash_scratch_cap_) {
     if (d_hash_scratch_) cudaFree(d_hash_scratch_);
-    CUDA_CHECK(cudaMalloc(&d_hash_scratch_, sizeof(unsigned long long) * needed));
-    hash_scratch_cap_ = needed;
+    CUDA_CHECK(cudaMalloc(&d_hash_scratch_, sizeof(unsigned long long) * hash_total));
+    hash_scratch_cap_ = hash_total;
   }
 }
 
@@ -714,21 +711,25 @@ __host__ std::vector<FeatureValue> GraphFilterAggregate::Compute(
   EnsureStreams();
   EnsureRequestBuffers(static_cast<uint32_t>(requests.size()));
 
-  // Compute per-request hash table offsets based on pivot degree.
+  // Compute per-request hash-table offsets. Only NumUnique needs a hash table;
+  // every other primitive gets zero slots. The table for a NumUnique request is
+  // sized to next_pow2(degree)*2, and the scratch total is the exact sum of
+  // per-request sizes (not max_degree * n_requests, which over-allocates).
   std::vector<uint32_t> h_hash_offsets(requests.size() + 1);
   h_hash_offsets[0] = 0;
-  uint32_t max_degree = 0;
   for (size_t i = 0; i < requests.size(); ++i) {
-    uint32_t pid = requests[i].pivot_vertex_id;
-    uint32_t deg = 0;
-    if (pid < n_vertices_) {
-      deg = h_csr_offsets_[pid + 1] - h_csr_offsets_[pid];
+    uint32_t cap = 0;
+    if (static_cast<AggPrim>(requests[i].agg_prim) == AggPrim::kNumUnique) {
+      uint32_t pid = requests[i].pivot_vertex_id;
+      uint32_t deg = 0;
+      if (pid < n_vertices_) {
+        deg = h_csr_offsets_[pid + 1] - h_csr_offsets_[pid];
+      }
+      cap = (deg == 0) ? 1u : NextPowerOfTwo(deg) * 2u;
     }
-    max_degree = std::max(max_degree, deg);
-    uint32_t cap = (deg == 0) ? 1u : NextPowerOfTwo(deg) * 2u;
     h_hash_offsets[i + 1] = h_hash_offsets[i] + cap;
   }
-  EnsureScratch(max_degree);
+  EnsureScratch(static_cast<size_t>(h_hash_offsets[requests.size()]));
 
   CUDA_CHECK(cudaMemcpy(d_hash_offsets_, h_hash_offsets.data(),
                         sizeof(uint32_t) * h_hash_offsets.size(),
@@ -766,7 +767,7 @@ __host__ std::vector<FeatureValue> GraphFilterAggregate::Compute(
                         sizeof(FilterAggRequest) * requests.size(),
                         cudaMemcpyHostToDevice));
 
-  FilterAggKernel<<<requests.size(), 256, 0, streams_[0]>>>(
+  FilterAggKernel<<<requests.size(), common::kFilterAggBlockDim, 0, streams_[0]>>>(
       d_csr_offsets_, d_csr_edges_, d_edge_labels_, d_vertex_labels_,
       d_vertex_attrs_, d_requests_, static_cast<uint32_t>(requests.size()),
       d_hash_scratch_, d_hash_offsets_, d_outputs_);

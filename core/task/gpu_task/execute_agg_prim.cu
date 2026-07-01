@@ -690,7 +690,7 @@ __global__ void ComputeBatchMultiPrimKernel(const FeatureValue* d_values,
   }
 }
 
-__launch_bounds__(512)
+__launch_bounds__(common::kAllFeaturesBlockDim)
 __global__ void ComputeAllAggPrimsKernel(const FeatureValue* d_values,
                                          const uint32_t* d_offsets,
                                          uint32_t list_offset,
@@ -901,7 +901,7 @@ __device__ __forceinline__ unsigned long long HashMix(unsigned long long x) {
 
 }  // namespace
 
-__launch_bounds__(256)
+__launch_bounds__(common::kStreamingAggBlockDim)
 __global__ void ComputeAggStreamingKernel(const FeatureValue* d_values,
                                           const uint32_t* d_offsets,
                                           const uint32_t* d_list_ids,
@@ -920,7 +920,7 @@ __global__ void ComputeAggStreamingKernel(const FeatureValue* d_values,
   if (threadIdx.x == 0) d_outputs[list] = r;
 }
 
-__launch_bounds__(256)
+__launch_bounds__(common::kNumUniqueHashBlockDim)
 __global__ void ComputeNumUniqueHashKernel(const FeatureValue* d_values,
                                            const uint32_t* d_offsets,
                                            const uint32_t* d_list_ids,
@@ -1285,7 +1285,7 @@ __host__ AllFeatures ExecuteAggPrim::ComputeAll(const FeatureValue* host_values,
   CUDA_CHECK(cudaFuncSetAttribute(kernel::ComputeAllAggPrimsKernel,
                                   cudaFuncAttributeMaxDynamicSharedMemorySize,
                                   static_cast<int>(shared_mem)));
-  kernel::ComputeAllAggPrimsKernel<<<1, 512, shared_mem>>>(
+  kernel::ComputeAllAggPrimsKernel<<<1, common::kAllFeaturesBlockDim, shared_mem>>>(
       d_values, d_offsets, 0, 1, d_output);
   CUDA_CHECK(cudaGetLastError());
   CUDA_CHECK(cudaDeviceSynchronize());
@@ -1340,7 +1340,7 @@ __host__ std::vector<AllFeatures> ExecuteAggPrim::ComputeAllBatch(
     if (begin >= n_lists) break;
     uint32_t end = std::min(begin + chunk_size, n_lists);
     uint32_t count = end - begin;
-    kernel::ComputeAllAggPrimsKernel<<<count, 512,
+    kernel::ComputeAllAggPrimsKernel<<<count, common::kAllFeaturesBlockDim,
                                        shared_mem, streams_[s]>>>(
         d_values, d_offsets, begin, n_lists, d_outputs);
   }
@@ -1571,7 +1571,7 @@ __host__ std::vector<FeatureValue> ExecuteAggPrim::ComputeByPrim(
                           cudaMemcpyHostToDevice));
     CUDA_CHECK(cudaMemcpy(d_prims_, stream_prims.data(), sizeof(AggPrim) * ng,
                           cudaMemcpyHostToDevice));
-    kernel::ComputeAggStreamingKernel<<<ng, 256>>>(
+    kernel::ComputeAggStreamingKernel<<<ng, common::kStreamingAggBlockDim>>>(
         d_values_, d_offsets_, d_ids_, d_prims_, ng, d_outputs_);
     CUDA_CHECK(cudaGetLastError());
     CUDA_CHECK(cudaDeviceSynchronize());
@@ -1596,7 +1596,7 @@ __host__ std::vector<FeatureValue> ExecuteAggPrim::ComputeByPrim(
                           cudaMemcpyHostToDevice));
     CUDA_CHECK(cudaMemcpy(d_hoff_, hoff.data(), sizeof(uint32_t) * (ng + 1),
                           cudaMemcpyHostToDevice));
-    kernel::ComputeNumUniqueHashKernel<<<ng, 256>>>(
+    kernel::ComputeNumUniqueHashKernel<<<ng, common::kNumUniqueHashBlockDim>>>(
         d_values_, d_offsets_, d_ids_, ng, d_hash_, d_hoff_, d_outputs_);
     CUDA_CHECK(cudaGetLastError());
     CUDA_CHECK(cudaDeviceSynchronize());
