@@ -39,7 +39,7 @@ static const uint64_t kMaxMatchTableRows = 1 << 28;
 
 static const uint32_t kSharedMemorySize = 1024;
 static const uint32_t kGridDim = 512;
-static const uint32_t kBlockDim = 256;
+static const uint32_t kBlockDim = 1024;
 // static const uint32_t kGridDim = 64;
 // static const uint32_t kBlockDim = 64;
 static const uint32_t kWarpSize = 32;
