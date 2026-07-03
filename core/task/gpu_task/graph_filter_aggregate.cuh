@@ -31,20 +31,27 @@ struct FilterOperand {
     kAttr = 1,         // read attribute of the pivot vertex
     kPatternAttr = 2,  // read attribute of the neighbor vertex
     kSubtract = 3,     // left_attr - right_attr (both scalar)
+    kAdd = 4,          // left_attr + right_attr (both scalar)
+    kMultiply = 5,     // left_attr * right_attr (both scalar)
+    kDivide = 6,       // left_attr / right_attr (absent when |right| < 1e-6)
+    kStringConst = 7,  // a literal string constant (fixed-length 64-byte char array)
   };
 
   Kind kind = Kind::kConst;
 
-  // For kConst.
+  // For kConst / kStringConst.
   ValueType const_type = ValueType::kInvalid;
   int64_t const_i64 = 0;
   double const_f64 = 0.0;
+  char string_val[64] = {};  // valid when kind == kStringConst
 
-  // For kAttr / kPatternAttr / kSubtract inputs.
+  // For kAttr / kPatternAttr and the first input of the binary ops
+  // (kSubtract / kAdd / kMultiply / kDivide).
   AttributeName attr_name;
   int32_t pattern_position = -1;  // >=0 for PatternAttr inputs
 
-  // For kSubtract: second operand is another attribute/pattern-attr.
+  // For the binary ops (kSubtract / kAdd / kMultiply / kDivide): the second
+  // operand is another attribute/pattern-attr.
   AttributeName sub_attr_name;
   int32_t sub_pattern_position = -1;
 };
@@ -57,6 +64,13 @@ struct FilterCondition {
     kGte,
     kLt,
     kLte,
+    // String similarity predicates. Left and right operands must both be strings;
+    // the predicate returns true when the similarity score is >= the threshold
+    // stored as the right operand's numeric constant value (currently unused on
+    // the host path but reserved for future string-similarity features).
+    kJaro,
+    kJaroWinkler,
+    kJaccard,
   };
 
   Op op = Op::kEq;
@@ -115,8 +129,12 @@ class GraphFilterAggregate : public TaskBase {
       const GraphAggregateAttributeColumn* columns);
 
   // Compute one batch of requests.  Returns one FeatureValue per request.
+  // all_conditions holds the unique conditions referenced by offset; it is
+  // uploaded once and shared by all requests in the batch.
   __host__ std::vector<sics::matrixgraph::core::task::FeatureValue> Compute(
-      const std::vector<FilterAggRequest>& requests);
+      const std::vector<FilterAggRequest>& requests,
+      const FilterCondition* all_conditions = nullptr,
+      size_t n_all_conditions = 0);
 
   __host__ void Run();
 
@@ -172,6 +190,10 @@ class GraphFilterAggregate : public TaskBase {
   std::vector<uint32_t> outputs_cap_;
   std::vector<uint32_t> hash_offsets_cap_;
   std::vector<size_t> hash_scratch_cap_;
+
+  // Shared device condition buffer uploaded once per Compute() call.
+  FilterCondition* d_all_conditions_ = nullptr;
+  size_t all_conditions_cap_ = 0;
 };
 
 }  // namespace task

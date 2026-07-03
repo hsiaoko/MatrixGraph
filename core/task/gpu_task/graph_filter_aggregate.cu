@@ -54,6 +54,171 @@ __device__ const Attribute* FindAttr(const Attributes* attrs,
   return attrs->attr_map.find(name);
 }
 
+// Fixed-length string support: each string attribute column is stored as an
+// array of StringView descriptors pointing at 64-byte fixed-length char arrays.
+// Constants carry their 64-byte string inline in FilterOperand::string_val.
+
+__device__ __forceinline__ bool IsStringOperand(const FilterOperand& op,
+                                                const Attributes* attrs) {
+  if (op.kind == FilterOperand::Kind::kStringConst) return true;
+  if (op.kind == FilterOperand::Kind::kAttr ||
+      op.kind == FilterOperand::Kind::kPatternAttr) {
+    const Attribute* attr = FindAttr(attrs, op.attr_name);
+    return attr != nullptr && attr->type == ValueType::kString;
+  }
+  if (op.kind == FilterOperand::Kind::kSubtract ||
+      op.kind == FilterOperand::Kind::kAdd ||
+      op.kind == FilterOperand::Kind::kMultiply ||
+      op.kind == FilterOperand::Kind::kDivide) {
+    const Attribute* attr = FindAttr(attrs, op.attr_name);
+    return attr != nullptr && attr->type == ValueType::kString;
+  }
+  return false;
+}
+
+__device__ __forceinline__ void ReadOperandString(const FilterOperand& op,
+                                                  const Attributes* attrs,
+                                                  uint32_t pivot_id,
+                                                  uint32_t neighbor_id,
+                                                  char out[64]) {
+  for (int i = 0; i < 64; ++i) out[i] = '\0';
+  if (op.kind == FilterOperand::Kind::kStringConst) {
+    for (int i = 0; i < 64; ++i) out[i] = op.string_val[i];
+    return;
+  }
+  uint32_t row = pivot_id;
+  if (op.kind == FilterOperand::Kind::kPatternAttr) {
+    row = neighbor_id;
+  } else if (op.kind == FilterOperand::Kind::kSubtract ||
+             op.kind == FilterOperand::Kind::kAdd ||
+             op.kind == FilterOperand::Kind::kMultiply ||
+             op.kind == FilterOperand::Kind::kDivide) {
+    row = op.pattern_position >= 0 ? neighbor_id : pivot_id;
+  }
+  const Attribute* attr = FindAttr(attrs, op.attr_name);
+  if (attr && attr->type == ValueType::kString) {
+    StringView sv = sics::matrixgraph::core::data_structures::GetString(*attr, row);
+    uint32_t n = sv.len < 64 ? sv.len : 63;
+    for (uint32_t i = 0; i < n; ++i) out[i] = sv.data[i];
+    out[n] = '\0';
+  }
+}
+
+__device__ __forceinline__ bool StringEqual(const char* a, const char* b) {
+  for (int i = 0; i < 64; ++i) {
+    if (a[i] != b[i]) return false;
+    if (a[i] == '\0') return true;
+  }
+  return true;
+}
+
+__device__ __forceinline__ size_t StringLen(const char* s) {
+  size_t len = 0;
+  for (int i = 0; i < 64 && s[i] != '\0'; ++i) ++len;
+  return len;
+}
+
+__device__ float lev_jaro_ratio(const char* term_l, const char* term_r) {
+  size_t i, j, halflen, trans, match, to;
+  size_t len_l = StringLen(term_l);
+  size_t len_r = StringLen(term_r);
+
+  float result = 0;
+  float md;
+  if (len_r == 0 || len_l == 0) {
+    if (len_l == 0 && len_r == 0) return 1.0f;
+    return 0.0f;
+  }
+
+  const char* a = term_l;
+  const char* b = term_r;
+  if (len_l > len_r) {
+    const char* t = a; a = b; b = t;
+    i = len_l; len_l = len_r; len_r = i;
+  }
+
+  halflen = (len_l + 1) / 2;
+  uint16_t idx[64] = {0};
+  match = 0;
+
+  for (i = 0; i < halflen; ++i) {
+    for (j = 0; j <= i + halflen && j < len_r; ++j) {
+      if (j >= 64) break;
+      if (a[j] == b[i] && !idx[j]) {
+        ++match;
+        idx[j] = match;
+        break;
+      }
+    }
+  }
+  to = len_l + halflen < len_r ? len_l + halflen : len_r;
+  for (i = halflen; i < to; ++i) {
+    size_t start = (i > halflen) ? (i - halflen) : 0;
+    for (j = start; j < len_l; ++j) {
+      if (j >= 64) break;
+      if (a[j] == b[i] && !idx[j]) {
+        ++match;
+        idx[j] = match;
+        break;
+      }
+    }
+  }
+
+  if (!match) {
+    result = 0.0f;
+  } else {
+    i = 0;
+    trans = 0;
+    for (j = 0; j < len_l; ++j) {
+      if (idx[j]) {
+        ++i;
+        if (idx[j] != i) ++trans;
+      }
+    }
+    md = static_cast<float>(match);
+    result = (md / len_l + md / len_r + (md - trans / 2.0f) / md) / 3.0f;
+  }
+  return result;
+}
+
+__device__ double lev_jaro_winkler_ratio(const char* string1,
+                                         const char* string2,
+                                         double pfweight = 0.1) {
+  double j = lev_jaro_ratio(string1, string2);
+  size_t p = 0;
+  size_t len1 = StringLen(string1);
+  size_t len2 = StringLen(string2);
+  size_t m = len1 < len2 ? len1 : len2;
+  for (p = 0; p < m; ++p) {
+    if (string1[p] != string2[p]) break;
+  }
+  j += (1.0 - j) * p * pfweight;
+  return j > 1.0 ? 1.0 : j;
+}
+
+__device__ float jaccard_kernel(const char* term_l, const char* term_r) {
+  char c_diff = 'a' - 'A';
+  bool bm_l[256] = {false};
+  bool bm_r[256] = {false};
+  for (int i = 0; term_l[i] && i < 64; ++i) {
+    int val = term_l[i];
+    if (term_l[i] - 'Z' <= 0) val += c_diff;
+    if (val >= 0 && val < 256) bm_l[val] = true;
+  }
+  for (int i = 0; term_r[i] && i < 64; ++i) {
+    int val = term_r[i];
+    if (term_r[i] - 'Z' <= 0) val += c_diff;
+    if (val >= 0 && val < 256) bm_r[val] = true;
+  }
+  int count_l = 0, count_r = 0;
+  for (int i = 0; i < 256; ++i) {
+    count_l += bm_l[i];
+    count_r += bm_r[i];
+  }
+  if (count_r == 0) return 0.0f;
+  return static_cast<float>(count_l) / static_cast<float>(count_r);
+}
+
 __device__ __forceinline__ double EvalOperand(const FilterOperand& op,
                                               const Attributes* attrs,
                                               uint32_t pivot_id,
@@ -63,6 +228,8 @@ __device__ __forceinline__ double EvalOperand(const FilterOperand& op,
       if (op.const_type == ValueType::kFloat64) return op.const_f64;
       return static_cast<double>(op.const_i64);
     }
+    case FilterOperand::Kind::kStringConst:
+      return 0.0;
     case FilterOperand::Kind::kAttr: {
       const Attribute* attr = FindAttr(attrs, op.attr_name);
       return AttrToDouble(attr, pivot_id);
@@ -71,15 +238,22 @@ __device__ __forceinline__ double EvalOperand(const FilterOperand& op,
       const Attribute* attr = FindAttr(attrs, op.attr_name);
       return AttrToDouble(attr, neighbor_id);
     }
-    case FilterOperand::Kind::kSubtract: {
-      double left = 0.0, right = 0.0;
+    case FilterOperand::Kind::kSubtract:
+    case FilterOperand::Kind::kAdd:
+    case FilterOperand::Kind::kMultiply:
+    case FilterOperand::Kind::kDivide: {
       uint32_t left_row = op.pattern_position >= 0 ? neighbor_id : pivot_id;
       uint32_t right_row = op.sub_pattern_position >= 0 ? neighbor_id : pivot_id;
       const Attribute* la = FindAttr(attrs, op.attr_name);
-      left = AttrToDouble(la, left_row);
+      double left = AttrToDouble(la, left_row);
       const Attribute* ra = FindAttr(attrs, op.sub_attr_name);
-      right = AttrToDouble(ra, right_row);
-      return left - right;
+      double right = AttrToDouble(ra, right_row);
+      switch (op.kind) {
+        case FilterOperand::Kind::kAdd:      return left + right;
+        case FilterOperand::Kind::kMultiply: return left * right;
+        case FilterOperand::Kind::kDivide:   return left / right;
+        default:                             return left - right;  // kSubtract
+      }
     }
   }
   return 0.0;
@@ -121,14 +295,42 @@ __device__ __forceinline__ bool OperandPresent(const FilterOperand& op,
       return AttrPresentAt(attrs, op.attr_name, pivot_id);
     case FilterOperand::Kind::kPatternAttr:
       return AttrPresentAt(attrs, op.attr_name, neighbor_id);
-    case FilterOperand::Kind::kSubtract: {
+    case FilterOperand::Kind::kSubtract:
+    case FilterOperand::Kind::kAdd:
+    case FilterOperand::Kind::kMultiply: {
       uint32_t lrow = op.pattern_position >= 0 ? neighbor_id : pivot_id;
       uint32_t rrow = op.sub_pattern_position >= 0 ? neighbor_id : pivot_id;
       return AttrPresentAt(attrs, op.attr_name, lrow) &&
              AttrPresentAt(attrs, op.sub_attr_name, rrow);
     }
+    case FilterOperand::Kind::kDivide: {
+      // Matches the CPU Divide transform: a division by (near) zero yields an
+      // invalid value, so treat the operand as absent when |right| < 1e-6.
+      uint32_t lrow = op.pattern_position >= 0 ? neighbor_id : pivot_id;
+      uint32_t rrow = op.sub_pattern_position >= 0 ? neighbor_id : pivot_id;
+      if (!AttrPresentAt(attrs, op.attr_name, lrow) ||
+          !AttrPresentAt(attrs, op.sub_attr_name, rrow))
+        return false;
+      const Attribute* ra = FindAttr(attrs, op.sub_attr_name);
+      return fabs(AttrToDouble(ra, rrow)) >= 1e-6;
+    }
   }
   return true;
+}
+
+__device__ __forceinline__ bool ApplyStringOp(FilterCondition::Op op,
+                                               const char left[64],
+                                               const char right[64]) {
+  switch (op) {
+    case FilterCondition::Op::kEq:  return StringEqual(left, right);
+    case FilterCondition::Op::kNeq: return !StringEqual(left, right);
+    // Similarity predicates are not yet emitted by the host path; they default
+    // to a 0.5 threshold so the helper functions are exercised once wired.
+    case FilterCondition::Op::kJaro:        return lev_jaro_ratio(left, right) > 0.5f;
+    case FilterCondition::Op::kJaroWinkler: return lev_jaro_winkler_ratio(left, right) > 0.5;
+    case FilterCondition::Op::kJaccard:     return jaccard_kernel(left, right) > 0.5f;
+    default: return false;
+  }
 }
 
 __device__ __forceinline__ bool EvaluateConditions(
@@ -142,6 +344,15 @@ __device__ __forceinline__ bool EvaluateConditions(
     if (!OperandPresent(c.left, attrs, pivot_id, neighbor_id) ||
         !OperandPresent(c.right, attrs, pivot_id, neighbor_id)) {
       return false;
+    }
+    // String operands bypass numeric evaluation and are compared byte-by-byte.
+    if (IsStringOperand(c.left, attrs) || IsStringOperand(c.right, attrs)) {
+      char left_str[64];
+      char right_str[64];
+      ReadOperandString(c.left, attrs, pivot_id, neighbor_id, left_str);
+      ReadOperandString(c.right, attrs, pivot_id, neighbor_id, right_str);
+      if (!ApplyStringOp(c.op, left_str, right_str)) return false;
+      continue;
     }
     double l = EvalOperand(c.left, attrs, pivot_id, neighbor_id);
     double r = EvalOperand(c.right, attrs, pivot_id, neighbor_id);
@@ -211,6 +422,20 @@ __device__ __forceinline__ unsigned long long HashMix64(unsigned long long x) {
   x = (x ^ (x >> 30)) * 0xBF58476D1CE4E5B9ull;
   x = (x ^ (x >> 27)) * 0x94D049BB133111EBull;
   return x ^ (x >> 31);
+}
+
+// 64-bit FNV-1a hash over a raw byte span.  Never returns kHashEmpty so the
+// per-block hash table can use that value as its "empty" sentinel.
+__device__ __forceinline__ unsigned long long StringHash64(const char* data,
+                                                           uint32_t len) {
+  const unsigned long long kFNVOffset = 14695981039346656037ull;
+  const unsigned long long kFNVPrime = 1099511628211ull;
+  unsigned long long h = kFNVOffset;
+  for (uint32_t i = 0; i < len && i < 64; ++i) {
+    h ^= static_cast<unsigned char>(data[i]);
+    h *= kFNVPrime;
+  }
+  return h == kHashEmpty ? 0ull : h;
 }
 
 }  // namespace
@@ -300,7 +525,13 @@ __global__ void FilterAggKernel(const EdgeIndex* csr_offsets,
 
     // Insert into per-block hash table for NumUnique.
     if (cap > 0) {
-      unsigned long long key = FVHashKey(v);
+      unsigned long long key;
+      if (vtype == ValueType::kString) {
+        StringView sv = sics::matrixgraph::core::data_structures::GetString(*attr, nb);
+        key = StringHash64(sv.data, sv.len);
+      } else {
+        key = FVHashKey(v);
+      }
       if (key == kHashEmpty) {
         atomicExch(&s_has_empty, 1);
       } else {
@@ -363,9 +594,12 @@ __global__ void FilterAggKernel(const EdgeIndex* csr_offsets,
   int final_min_idx = si[0];
   int final_max_idx = si[1];
 
-  // CountGreaterThanMean requires a second pass.
+  // Second pass over the filtered neighbors: CountGreaterThanMean plus the
+  // Variance/Std/Skew moment sums about the mean.
   double mean = (total_count > 0) ? total_sum / static_cast<double>(total_count) : 0.0;
   uint32_t gtm = 0;
+  double sum_sq = 0.0;    // Sum (v-mean)^2
+  double sum_cube = 0.0;  // Sum (v-mean)^3
   for (EdgeIndex eidx = begin + threadIdx.x; eidx < end; eidx += blockDim.x) {
     VertexID nb = csr_edges[eidx];
     if (req.edge_label != 0 && edge_labels && edge_labels[eidx] != req.edge_label)
@@ -380,11 +614,14 @@ __global__ void FilterAggKernel(const EdgeIndex* csr_offsets,
       continue;
     double v = AttrToDouble(attr, nb);
     if (v > mean) ++gtm;
+    double d = v - mean;
+    sum_sq += d * d;
+    sum_cube += d * d * d;
   }
   uint32_t total_gtm = static_cast<uint32_t>(BlockSum(static_cast<double>(gtm), sd) + 0.5);
+  double total_sq = BlockSum(sum_sq, sd);
+  double total_cube = BlockSum(sum_cube, sd);
 
-  // Variance/Std/Skew need more passes; for the first cut keep only the cheap
-  // primitives + NumUnique.  Others return invalid.
   if (threadIdx.x == 0) {
     FeatureValue r = MakeInvalidValue();
     // Empty result set: the CPU ExecuteAggPrim returns Invalid for every
@@ -435,6 +672,23 @@ __global__ void FilterAggKernel(const EdgeIndex* csr_offsets,
       case AggPrim::kCountGreaterThanMean:
         r = MakeIntValue(static_cast<int64_t>(total_gtm));
         break;
+      case AggPrim::kVariance:
+        // Population variance: Sum (v-mean)^2 / n.
+        r = MakeFloat64Value(total_sq / total_count);
+        break;
+      case AggPrim::kStd:
+        r = MakeFloat64Value(sqrt(total_sq / total_count));
+        break;
+      case AggPrim::kSkew: {
+        // Population skew: Sum ((v-mean)/std)^3 / n.  The CPU divides each term
+        // by std, so a (near) zero std makes the whole result invalid.
+        double variance = total_sq / total_count;
+        double std = sqrt(variance);
+        r = (std < 1e-6)
+                ? MakeInvalidValue()
+                : MakeFloat64Value((total_cube / total_count) / (std * std * std));
+        break;
+      }
       default:
         r = MakeInvalidValue();
         break;
@@ -545,6 +799,7 @@ __host__ void GraphFilterAggregate::FreeBuffers() {
   if (d_edge_labels_) cudaFree(d_edge_labels_);
   if (d_vertex_labels_) cudaFree(d_vertex_labels_);
   if (d_vertex_attrs_) cudaFree(d_vertex_attrs_);
+  if (d_all_conditions_) cudaFree(d_all_conditions_);
   for (FilterAggRequest* p : d_requests_) {
     if (p) cudaFree(p);
   }
@@ -563,6 +818,8 @@ __host__ void GraphFilterAggregate::FreeBuffers() {
   d_edge_labels_ = nullptr;
   d_vertex_labels_ = nullptr;
   d_vertex_attrs_ = nullptr;
+  d_all_conditions_ = nullptr;
+  all_conditions_cap_ = 0;
   d_requests_.clear();
   d_outputs_.clear();
   d_hash_scratch_.clear();
@@ -654,18 +911,51 @@ __host__ void GraphFilterAggregate::BuildAttributesFromColumns(
       case ValueType::kBool:
         elem_size = sizeof(uint8_t);
         break;
+      case ValueType::kString:
+        elem_size = sizeof(StringView);
+        break;
       default:
         elem_size = 0;
         break;
     }
 
     if (elem_size > 0) {
-      uint8_t* d_buf = nullptr;
-      CUDA_CHECK(cudaMalloc(&d_buf, elem_size * n_vertices_));
-      CUDA_CHECK(cudaMemcpy(d_buf, columns[c].values, elem_size * n_vertices_,
-                            cudaMemcpyHostToDevice));
-      attrs[c].data = d_buf;
-      column_buffers_.push_back(d_buf);
+      if (attrs[c].type == ValueType::kString) {
+        // String columns from the host are fixed 64-byte char arrays; build a
+        // parallel StringView descriptor array that points into a device char
+        // buffer so the existing GetString accessor works unchanged. Lengths are
+        // computed on the host before the H2D copy.
+        const char* h_chars = reinterpret_cast<const char*>(columns[c].values);
+        uint8_t* d_chars = nullptr;
+        CUDA_CHECK(cudaMalloc(&d_chars, 64 * n_vertices_));
+        CUDA_CHECK(cudaMemcpy(d_chars, h_chars, 64 * n_vertices_,
+                              cudaMemcpyHostToDevice));
+
+        std::vector<StringView> h_views(n_vertices_);
+        const char* d_char_ptr = reinterpret_cast<const char*>(d_chars);
+        for (uint32_t r = 0; r < n_vertices_; ++r) {
+          uint32_t len = 0;
+          for (; len < 64 && h_chars[r * 64 + len] != '\0'; ++len) {}
+          h_views[r].data = d_char_ptr + r * 64;
+          h_views[r].len = len;
+        }
+        StringView* d_views = nullptr;
+        CUDA_CHECK(cudaMalloc(&d_views, sizeof(StringView) * n_vertices_));
+        CUDA_CHECK(cudaMemcpy(d_views, h_views.data(),
+                              sizeof(StringView) * n_vertices_,
+                              cudaMemcpyHostToDevice));
+
+        attrs[c].data = d_views;
+        column_buffers_.push_back(reinterpret_cast<uint8_t*>(d_views));
+        column_buffers_.push_back(d_chars);
+      } else {
+        uint8_t* d_buf = nullptr;
+        CUDA_CHECK(cudaMalloc(&d_buf, elem_size * n_vertices_));
+        CUDA_CHECK(cudaMemcpy(d_buf, columns[c].values, elem_size * n_vertices_,
+                              cudaMemcpyHostToDevice));
+        attrs[c].data = d_buf;
+        column_buffers_.push_back(d_buf);
+      }
 
       if (columns[c].valid) {
         uint8_t* d_valid = nullptr;
@@ -735,11 +1025,29 @@ __host__ void GraphFilterAggregate::EnsureScratch(uint32_t stream_idx,
 }
 
 __host__ std::vector<FeatureValue> GraphFilterAggregate::Compute(
-    const std::vector<FilterAggRequest>& requests) {
+    const std::vector<FilterAggRequest>& requests,
+    const FilterCondition* all_conditions,
+    size_t n_all_conditions) {
   std::vector<FeatureValue> results;
   if (requests.empty() || n_vertices_ == 0) return results;
 
   EnsureStreams();
+
+  // Upload the shared conditions once. Each request's host pointer is replaced
+  // below by a device pointer at the matching offset in d_all_conditions_.
+  if (d_all_conditions_ == nullptr || all_conditions_cap_ < n_all_conditions) {
+    if (d_all_conditions_) cudaFree(d_all_conditions_);
+    all_conditions_cap_ = std::max(size_t(1), n_all_conditions);
+    CUDA_CHECK(cudaMalloc(&d_all_conditions_,
+                         sizeof(FilterCondition) * all_conditions_cap_));
+  }
+  if (n_all_conditions > 0) {
+    CUDA_CHECK(cudaMemcpyAsync(
+        d_all_conditions_, all_conditions,
+        sizeof(FilterCondition) * n_all_conditions,
+        cudaMemcpyHostToDevice, streams_[0]));
+  }
+  CUDA_CHECK(cudaStreamSynchronize(streams_[0]));
 
   // Precompute per-request hash-slot counts. Only NumUnique needs a hash table.
   std::vector<uint32_t> per_request_hash_cap(requests.size(), 0);
@@ -755,23 +1063,44 @@ __host__ std::vector<FeatureValue> GraphFilterAggregate::Compute(
   }
 
   const uint32_t total_requests = static_cast<uint32_t>(requests.size());
-  const uint32_t chunk_size =
-      (total_requests + n_streams_ - 1) / n_streams_;
-
   results.resize(requests.size());
 
-  // Per-stream temporary condition buffers; freed after all streams finish.
-  std::vector<FilterCondition*> d_chunk_conditions(n_streams_, nullptr);
+  // Split requests into memory-bounded chunks. Peak memory is bounded by
+  // n_streams * per-chunk budget; the shared conditions buffer is uploaded once
+  // above and referenced by offset, so it no longer grows with chunk count.
+  std::vector<std::pair<uint32_t, uint32_t>> chunks;
+  {
+    uint32_t begin = 0;
+    while (begin < total_requests) {
+      uint32_t end = begin;
+      size_t slots = 0;
+      while (end < total_requests) {
+        uint32_t cap = per_request_hash_cap[end];
+        if (end > begin &&
+            ((end - begin + 1) > common::kFilterMaxChunkRequests ||
+             slots + cap > common::kFilterMaxChunkHashSlots)) {
+          break;
+        }
+        slots += cap;
+        ++end;
+      }
+      chunks.emplace_back(begin, end);
+      begin = end;
+    }
+  }
 
-  for (uint32_t s = 0; s < n_streams_; ++s) {
-    const uint32_t begin = s * chunk_size;
-    if (begin >= total_requests) break;
-    const uint32_t end = std::min(begin + chunk_size, total_requests);
+  for (size_t ci = 0; ci < chunks.size(); ++ci) {
+    const uint32_t begin = chunks[ci].first;
+    const uint32_t end = chunks[ci].second;
     const uint32_t count = end - begin;
+    const uint32_t s = static_cast<uint32_t>(ci % n_streams_);
+
+    if (ci >= n_streams_) {
+      CUDA_CHECK(cudaStreamSynchronize(streams_[s]));
+    }
 
     // Hash offset prefix sum for this chunk.
     std::vector<uint32_t> h_hash_offsets(count + 1, 0);
-    h_hash_offsets[0] = 0;
     size_t chunk_hash_total = 0;
     for (uint32_t i = 0; i < count; ++i) {
       uint32_t cap = per_request_hash_cap[begin + i];
@@ -787,36 +1116,18 @@ __host__ std::vector<FeatureValue> GraphFilterAggregate::Compute(
         sizeof(uint32_t) * h_hash_offsets.size(), cudaMemcpyHostToDevice,
         streams_[s]));
 
-    // Flatten conditions for this chunk and upload on the same stream.
-    std::vector<FilterCondition> flat_conditions;
-    std::vector<uint32_t> cond_offsets(count, 0);
-    for (uint32_t i = 0; i < count; ++i) {
-      cond_offsets[i] = static_cast<uint32_t>(flat_conditions.size());
-      const FilterAggRequest& req = requests[begin + i];
-      for (uint32_t j = 0; j < req.n_conditions; ++j) {
-        flat_conditions.push_back(req.conditions[j]);
-      }
-    }
-
-    FilterCondition* d_all_conditions = nullptr;
-    if (!flat_conditions.empty()) {
-      CUDA_CHECK(cudaMalloc(
-          &d_all_conditions,
-          sizeof(FilterCondition) * flat_conditions.size()));
-      CUDA_CHECK(cudaMemcpyAsync(
-          d_all_conditions, flat_conditions.data(),
-          sizeof(FilterCondition) * flat_conditions.size(),
-          cudaMemcpyHostToDevice, streams_[s]));
-      d_chunk_conditions[s] = d_all_conditions;
-    }
-
+    // Build device requests: translate host condition pointers into offsets into
+    // the single shared device condition buffer.
     std::vector<FilterAggRequest> h_device_requests;
     h_device_requests.reserve(count);
     for (uint32_t i = 0; i < count; ++i) {
       FilterAggRequest r = requests[begin + i];
-      r.conditions = (r.n_conditions > 0)
-                         ? (d_all_conditions + cond_offsets[i])
-                         : nullptr;
+      if (r.n_conditions > 0 && all_conditions && r.conditions) {
+        size_t offset = r.conditions - all_conditions;
+        r.conditions = d_all_conditions_ + offset;
+      } else {
+        r.conditions = nullptr;
+      }
       h_device_requests.push_back(r);
     }
     CUDA_CHECK(cudaMemcpyAsync(
@@ -838,10 +1149,6 @@ __host__ std::vector<FeatureValue> GraphFilterAggregate::Compute(
     if (streams_[s]) {
       CUDA_CHECK(cudaStreamSynchronize(streams_[s]));
     }
-  }
-
-  for (FilterCondition* p : d_chunk_conditions) {
-    if (p) cudaFree(p);
   }
 
   return results;
