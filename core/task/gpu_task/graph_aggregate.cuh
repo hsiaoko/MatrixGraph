@@ -24,6 +24,7 @@ struct GraphAggregateAttributeColumn {
   int32_t value_type;           // ValueType enum value
   uint32_t n_values;            // must equal number of vertices
   const void* values = nullptr; // host pointer; n_values contiguous entries
+  const uint8_t* valid = nullptr; // host pointer; n_values bytes (1=valid) or null
 };
 
 // GraphAggregate task: per-vertex feature aggregation over a single graph.

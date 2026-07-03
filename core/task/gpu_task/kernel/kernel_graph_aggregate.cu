@@ -23,11 +23,28 @@ using sics::matrixgraph::core::data_structures::GetInt;
 using sics::matrixgraph::core::data_structures::GetFloat64;
 using sics::matrixgraph::core::data_structures::GetBool;
 
-// ---------------------------------------------------------------------------
-// Block-level reductions / scans (assumes blockDim.x <= 256)
-// ---------------------------------------------------------------------------
-__device__ inline double BlockSum(double val) {
-  __shared__ double sdata[256];
+namespace {
+
+struct BlockWorkspace {
+  double* sum_buf;
+  FeatureValue* minmax_buf;
+  uint32_t* scan_buf;
+};
+
+__device__ inline BlockWorkspace GetBlockWorkspace(uint8_t* base, uint32_t max_neighbors) {
+  FeatureValue* shared_buf = reinterpret_cast<FeatureValue*>(base);
+  (void)shared_buf;
+  double* sum_buf = reinterpret_cast<double*>(base + max_neighbors * sizeof(FeatureValue));
+  FeatureValue* minmax_buf = reinterpret_cast<FeatureValue*>(
+      base + max_neighbors * sizeof(FeatureValue) + common::kBlockDim * sizeof(double));
+  uint32_t* scan_buf = reinterpret_cast<uint32_t*>(
+      base + max_neighbors * sizeof(FeatureValue) + common::kBlockDim * sizeof(double) +
+      common::kBlockDim * sizeof(FeatureValue));
+  return {sum_buf, minmax_buf, scan_buf};
+}
+
+__device__ inline double BlockSum(double val, double* sdata) {
+  sdata[threadIdx.x] = val;
   sdata[threadIdx.x] = val;
   __syncthreads();
   for (int s = blockDim.x / 2; s > 0; s >>= 1) {
@@ -37,8 +54,7 @@ __device__ inline double BlockSum(double val) {
   return sdata[0];
 }
 
-__device__ inline FeatureValue BlockMin(FeatureValue val) {
-  __shared__ FeatureValue sdata[256];
+__device__ inline FeatureValue BlockMin(FeatureValue val, FeatureValue* sdata) {
   sdata[threadIdx.x] = val;
   __syncthreads();
   for (int s = blockDim.x / 2; s > 0; s >>= 1) {
@@ -51,8 +67,7 @@ __device__ inline FeatureValue BlockMin(FeatureValue val) {
   return sdata[0];
 }
 
-__device__ inline FeatureValue BlockMax(FeatureValue val) {
-  __shared__ FeatureValue sdata[256];
+__device__ inline FeatureValue BlockMax(FeatureValue val, FeatureValue* sdata) {
   sdata[threadIdx.x] = val;
   __syncthreads();
   for (int s = blockDim.x / 2; s > 0; s >>= 1) {
@@ -65,8 +80,6 @@ __device__ inline FeatureValue BlockMax(FeatureValue val) {
   return sdata[0];
 }
 
-// Exclusive scan of a per-thread uint32_t value.  sdata must have at least
-// blockDim.x entries.  The total sum is returned via *total.
 __device__ inline uint32_t BlockExclusiveScan(uint32_t val,
                                               uint32_t* sdata,
                                               uint32_t* total) {
@@ -83,6 +96,8 @@ __device__ inline uint32_t BlockExclusiveScan(uint32_t val,
   __syncthreads();
   return result;
 }
+
+} // namespace
 
 // ---------------------------------------------------------------------------
 // Block-level bitonic sort in shared memory.  Sorts the first n valid entries;
@@ -222,57 +237,63 @@ __device__ inline FeatureValue BlockAggCount(uint32_t n) {
 }
 
 __device__ inline FeatureValue BlockAggSum(const FeatureValue* values,
-                                           uint32_t n) {
+                                           uint32_t n,
+                                           const BlockWorkspace& ws) {
   if (n == 0) return MakeInvalidValue();
   double local = 0.0;
   for (uint32_t i = threadIdx.x; i < n; i += blockDim.x) {
     local += values[i].ToDouble();
   }
-  return MakeFloatValue(BlockSum(local));
+  return MakeFloatValue(BlockSum(local, ws.sum_buf));
 }
 
 __device__ inline FeatureValue BlockAggMean(const FeatureValue* values,
-                                            uint32_t n) {
+                                            uint32_t n,
+                                            const BlockWorkspace& ws) {
   if (n == 0) return MakeInvalidValue();
-  FeatureValue sum = BlockAggSum(values, n);
+  FeatureValue sum = BlockAggSum(values, n, ws);
   return MakeFloatValue(sum.ToDouble() / static_cast<double>(n));
 }
 
 __device__ inline FeatureValue BlockAggMin(const FeatureValue* values,
-                                           uint32_t n) {
+                                           uint32_t n,
+                                           const BlockWorkspace& ws) {
   if (n == 0) return MakeInvalidValue();
   FeatureValue local = values[0];
   for (uint32_t i = threadIdx.x; i < n; i += blockDim.x) {
     if (values[i].Compare(local) < 0) local = values[i];
   }
-  return BlockMin(local);
+  return BlockMin(local, ws.minmax_buf);
 }
 
 __device__ inline FeatureValue BlockAggMax(const FeatureValue* values,
-                                           uint32_t n) {
+                                           uint32_t n,
+                                           const BlockWorkspace& ws) {
   if (n == 0) return MakeInvalidValue();
   FeatureValue local = values[0];
   for (uint32_t i = threadIdx.x; i < n; i += blockDim.x) {
     if (values[i].Compare(local) > 0) local = values[i];
   }
-  return BlockMax(local);
+  return BlockMax(local, ws.minmax_buf);
 }
 
 __device__ inline FeatureValue BlockAggVariance(const FeatureValue* values,
-                                                uint32_t n) {
+                                                uint32_t n,
+                                                const BlockWorkspace& ws) {
   if (n == 0) return MakeInvalidValue();
-  double mean = BlockAggMean(values, n).ToDouble();
+  double mean = BlockAggMean(values, n, ws).ToDouble();
   double local = 0.0;
   for (uint32_t i = threadIdx.x; i < n; i += blockDim.x) {
     double d = values[i].ToDouble() - mean;
     local += d * d;
   }
-  return MakeFloatValue(BlockSum(local) / static_cast<double>(n));
+  return MakeFloatValue(BlockSum(local, ws.sum_buf) / static_cast<double>(n));
 }
 
 __device__ inline FeatureValue BlockAggStd(const FeatureValue* values,
-                                           uint32_t n) {
-  FeatureValue var = BlockAggVariance(values, n);
+                                           uint32_t n,
+                                           const BlockWorkspace& ws) {
+  FeatureValue var = BlockAggVariance(values, n, ws);
   return MakeFloatValue(sqrt(var.ToDouble()));
 }
 
@@ -385,66 +406,67 @@ __device__ inline FeatureValue BlockAggQuartile3(FeatureValue* values,
 
 __device__ inline FeatureValue BlockAggPercentTrue(const FeatureValue* values,
                                                    uint32_t n,
-                                                   uint32_t* scratch) {
+                                                   const BlockWorkspace& ws) {
   if (n == 0) return MakeInvalidValue();
   uint32_t local = 0;
   for (uint32_t i = threadIdx.x; i < n; i += blockDim.x) {
     if (values[i].type == ValueType::kBool && values[i].b) ++local;
   }
   uint32_t total = 0;
-  BlockExclusiveScan(local, scratch, &total);
+  BlockExclusiveScan(local, ws.scan_buf, &total);
   return MakeFloatValue(static_cast<double>(total) / static_cast<double>(n));
 }
 
 __device__ inline FeatureValue BlockAggSkew(const FeatureValue* values,
-                                            uint32_t n) {
+                                            uint32_t n,
+                                            const BlockWorkspace& ws) {
   if (n == 0) return MakeInvalidValue();
-  double mean = BlockAggMean(values, n).ToDouble();
-  double stdv = BlockAggStd(values, n).ToDouble();
+  double mean = BlockAggMean(values, n, ws).ToDouble();
+  double stdv = BlockAggStd(values, n, ws).ToDouble();
   if (stdv == 0.0) return MakeInvalidValue();
   double local = 0.0;
   for (uint32_t i = threadIdx.x; i < n; i += blockDim.x) {
     double z = (values[i].ToDouble() - mean) / stdv;
     local += z * z * z;
   }
-  return MakeFloatValue(BlockSum(local) / static_cast<double>(n));
+  return MakeFloatValue(BlockSum(local, ws.sum_buf) / static_cast<double>(n));
 }
 
 __device__ inline FeatureValue BlockAggCountGreaterThanMean(FeatureValue* values,
                                                             uint32_t n,
-                                                            uint32_t* scratch) {
+                                                            const BlockWorkspace& ws) {
   if (n == 0) return MakeInvalidValue();
-  double mean = BlockAggMean(values, n).ToDouble();
+  double mean = BlockAggMean(values, n, ws).ToDouble();
   uint32_t local = 0;
   for (uint32_t i = threadIdx.x; i < n; i += blockDim.x) {
     if (values[i].ToDouble() > mean) ++local;
   }
   uint32_t total = 0;
-  BlockExclusiveScan(local, scratch, &total);
+  BlockExclusiveScan(local, ws.scan_buf, &total);
   return MakeIntValue(static_cast<int64_t>(total));
 }
 
 __device__ inline FeatureValue BlockApplyAggPrim(AggPrim prim,
                                                  FeatureValue* values,
                                                  uint32_t n,
-                                                 uint32_t* scratch) {
+                                                 const BlockWorkspace& ws) {
   switch (prim) {
     case AggPrim::kCount:                 return BlockAggCount(n);
-    case AggPrim::kSum:                   return BlockAggSum(values, n);
-    case AggPrim::kMean:                  return BlockAggMean(values, n);
-    case AggPrim::kMin:                   return BlockAggMin(values, n);
-    case AggPrim::kMax:                   return BlockAggMax(values, n);
-    case AggPrim::kVariance:              return BlockAggVariance(values, n);
-    case AggPrim::kStd:                   return BlockAggStd(values, n);
+    case AggPrim::kSum:                   return BlockAggSum(values, n, ws);
+    case AggPrim::kMean:                  return BlockAggMean(values, n, ws);
+    case AggPrim::kMin:                   return BlockAggMin(values, n, ws);
+    case AggPrim::kMax:                   return BlockAggMax(values, n, ws);
+    case AggPrim::kVariance:              return BlockAggVariance(values, n, ws);
+    case AggPrim::kStd:                   return BlockAggStd(values, n, ws);
     case AggPrim::kMedian:                return BlockAggMedian(values, n);
     case AggPrim::kMode:                  return BlockAggMode(values, n);
     case AggPrim::kNumUnique:             return BlockAggNumUnique(values, n);
     case AggPrim::kEntropy:               return BlockAggEntropy(values, n);
     case AggPrim::kQuarter:               return BlockAggQuarter(values, n);
     case AggPrim::kQuartile3:             return BlockAggQuartile3(values, n);
-    case AggPrim::kPercentTrue:           return BlockAggPercentTrue(values, n, scratch);
-    case AggPrim::kSkew:                  return BlockAggSkew(values, n);
-    case AggPrim::kCountGreaterThanMean:  return BlockAggCountGreaterThanMean(values, n, scratch);
+    case AggPrim::kPercentTrue:           return BlockAggPercentTrue(values, n, ws);
+    case AggPrim::kSkew:                  return BlockAggSkew(values, n, ws);
+    case AggPrim::kCountGreaterThanMean:  return BlockAggCountGreaterThanMean(values, n, ws);
     default:                              return MakeInvalidValue();
   }
 }
@@ -455,7 +477,7 @@ __device__ inline FeatureValue BlockApplyAggPrim(AggPrim prim,
 __device__ inline AllFeatures BlockComputeAllFeaturesFromValues(
     FeatureValue* values,
     uint32_t n,
-    uint32_t* scratch) {
+    const BlockWorkspace& ws) {
   AllFeatures r;
   if (n == 0) {
     FeatureValue invalid = MakeInvalidValue();
@@ -490,11 +512,11 @@ __device__ inline AllFeatures BlockComputeAllFeaturesFromValues(
     if (values[i].Compare(local_max) > 0) local_max = values[i];
     if (values[i].type == ValueType::kBool && values[i].b) ++local_true;
   }
-  double sum = BlockSum(local_sum);
-  FeatureValue minv = BlockMin(local_min);
-  FeatureValue maxv = BlockMax(local_max);
+  double sum = BlockSum(local_sum, ws.sum_buf);
+  FeatureValue minv = BlockMin(local_min, ws.minmax_buf);
+  FeatureValue maxv = BlockMax(local_max, ws.minmax_buf);
   uint32_t true_total = 0;
-  BlockExclusiveScan(local_true, scratch, &true_total);
+  BlockExclusiveScan(local_true, ws.scan_buf, &true_total);
   double mean = sum / static_cast<double>(n);
 
   // Pass 2: variance and count-greater-than-mean.
@@ -505,10 +527,10 @@ __device__ inline AllFeatures BlockComputeAllFeaturesFromValues(
     local_var += diff * diff;
     if (values[i].ToDouble() > mean) ++local_gtm;
   }
-  double variance = BlockSum(local_var) / static_cast<double>(n);
+  double variance = BlockSum(local_var, ws.sum_buf) / static_cast<double>(n);
   double stdv = sqrt(variance);
   uint32_t gtm_total = 0;
-  BlockExclusiveScan(local_gtm, scratch, &gtm_total);
+  BlockExclusiveScan(local_gtm, ws.scan_buf, &gtm_total);
 
   // Pass 3: skew.
   double local_skew = 0.0;
@@ -519,7 +541,7 @@ __device__ inline AllFeatures BlockComputeAllFeaturesFromValues(
       local_skew += z * z * z;
     }
   }
-  double skew_sum = BlockSum(local_skew);
+  double skew_sum = BlockSum(local_skew, ws.sum_buf);
 
   // Pass 4: sort once for order-dependent primitives.
   BlockBitonicSort(values, n);
@@ -614,6 +636,7 @@ __global__ void ComputeFeaturesKernel(
   FeatureValue* shared_buf = reinterpret_cast<FeatureValue*>(shared_mem);
   uint32_t* scratch = reinterpret_cast<uint32_t*>(
       shared_mem + max_neighbors * sizeof(FeatureValue));
+  BlockWorkspace ws = GetBlockWorkspace(shared_mem, max_neighbors);
 
   uint32_t pivot_idx = blockIdx.x;
   if (pivot_idx >= n_pivots) return;
@@ -630,7 +653,7 @@ __global__ void ComputeFeaturesKernel(
 
     __syncthreads();
     FeatureValue result = BlockApplyAggPrim(
-        requests[req_idx].prim, shared_buf, n_collected, scratch);
+        requests[req_idx].prim, shared_buf, n_collected, ws);
 
     if (threadIdx.x == 0) {
       d_outputs[pivot_idx * n_requests + req_idx] = result;
@@ -639,6 +662,7 @@ __global__ void ComputeFeaturesKernel(
   }
 }
 
+__launch_bounds__(common::kAllFeaturesBlockDim)
 __global__ void ComputeAllFeaturesKernel(
     const uint8_t* graph_data,
     uint32_t n_vertices,
@@ -655,6 +679,7 @@ __global__ void ComputeAllFeaturesKernel(
   FeatureValue* shared_buf = reinterpret_cast<FeatureValue*>(shared_mem);
   uint32_t* scratch = reinterpret_cast<uint32_t*>(
       shared_mem + max_neighbors * sizeof(FeatureValue));
+  BlockWorkspace ws = GetBlockWorkspace(shared_mem, max_neighbors);
 
   uint32_t pivot_idx = blockIdx.x;
   if (pivot_idx >= n_pivots) return;
@@ -674,7 +699,7 @@ __global__ void ComputeAllFeaturesKernel(
 
   __syncthreads();
   AllFeatures result = BlockComputeAllFeaturesFromValues(
-      shared_buf, n_collected, scratch);
+      shared_buf, n_collected, ws);
 
   if (threadIdx.x == 0) {
     d_outputs[pivot_idx] = result;
@@ -694,8 +719,10 @@ namespace task {
 namespace kernel {
 
 __host__ size_t ComputeGraphAggregateSharedMemSize(uint32_t max_neighbors) {
-  // FeatureValue buffer for collected neighbors + uint32 scratch for scans.
+  // FeatureValue buffer for collected neighbors + scratch for reductions/scans.
   return static_cast<size_t>(max_neighbors) * sizeof(FeatureValue) +
+         static_cast<size_t>(common::kBlockDim) * sizeof(double) +
+         static_cast<size_t>(common::kBlockDim) * sizeof(FeatureValue) +
          static_cast<size_t>(common::kBlockDim) * sizeof(uint32_t);
 }
 
