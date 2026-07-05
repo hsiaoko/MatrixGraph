@@ -62,7 +62,7 @@ static const uint32_t kNumUniqueHashBlockDim = 256;  // hash-based unique count
 static const uint32_t kFilterMaxChunkRequests = 1u << 17;      // 131072 requests/chunk
 static const size_t kFilterMaxChunkHashSlots = 1ull << 25;     // 33.5M NumUnique slots/chunk
 
-static const uint32_t kDefaultHeapCapacity = 7;
+static const uint32_t kDefaultHeapCapacity = 32;
 
 }  // namespace common
 }  // namespace core

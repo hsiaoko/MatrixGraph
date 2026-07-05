@@ -59,6 +59,7 @@ using WOJMatches = sics::matrixgraph::core::data_structures::WOJMatches;
 using MinHeap = sics::matrixgraph::core::task::kernel::MinHeap;
 using BufferUint8 = sics::matrixgraph::core::data_structures::Buffer<uint8_t>;
 using BufferUint32 = sics::matrixgraph::core::data_structures::Buffer<uint32_t>;
+using BufferUint64 = sics::matrixgraph::core::data_structures::Buffer<uint64_t>;
 using BufferVertexID =
     sics::matrixgraph::core::data_structures::Buffer<VertexID>;
 using UnifiedOwnedBufferEdgeIndex =
@@ -69,6 +70,8 @@ using UnifiedOwnedBufferVertexLabel =
     sics::matrixgraph::core::data_structures::UnifiedOwnedBuffer<VertexLabel>;
 using UnifiedOwnedBufferUint8 =
     sics::matrixgraph::core::data_structures::UnifiedOwnedBuffer<uint8_t>;
+using UnifiedOwnedBufferUint64 =
+    sics::matrixgraph::core::data_structures::UnifiedOwnedBuffer<uint64_t>;
 using BufferVertexLabel =
     sics::matrixgraph::core::data_structures::Buffer<VertexLabel>;
 using BufferVertexID =
@@ -182,6 +185,9 @@ struct ParametersFilter {
   uint8_t* data_g = nullptr;
   VertexID* edgelist_g = nullptr;
   VertexLabel* v_label_g = nullptr;
+  uint64_t* bloom_signature_p = nullptr;
+  uint64_t* bloom_signature_g = nullptr;
+  bool enable_bloom_filter = false;
   WOJMatches woj_matches;
   uint64_t* test;
 };
@@ -231,6 +237,35 @@ struct SatAdd {
     return sum > cap || sum < a ? cap : sum;
   }
 };
+
+static __forceinline__ __device__ bool BloomLabelSetFilter(
+    const ParametersFilter& params, VertexID u_idx, VertexID v_idx) {
+  if (!params.enable_bloom_filter) return true;
+
+  VertexID* globalid_p = (VertexID*)(params.data_p);
+  VertexID* in_degree_p = globalid_p + params.n_vertices_p;
+  VertexID* out_degree_p = in_degree_p + params.n_vertices_p;
+  EdgeIndex* in_offset_p = (EdgeIndex*)(out_degree_p + params.n_vertices_p);
+  EdgeIndex* out_offset_p = (EdgeIndex*)(in_offset_p + params.n_vertices_p + 1);
+  EdgeIndex* in_edges_p = (EdgeIndex*)(out_offset_p + params.n_vertices_p + 1);
+  VertexID* out_edges_p = in_edges_p + params.n_edges_p;
+
+  uint64_t u_mask = 0;
+  EdgeIndex u_offset_base = out_offset_p[u_idx];
+  for (VertexID nbr_u_idx = 0; nbr_u_idx < out_degree_p[u_idx]; nbr_u_idx++) {
+    VertexID nbr_u = out_edges_p[u_offset_base + nbr_u_idx];
+    VertexLabel u_label = params.v_label_p[nbr_u];
+    if (u_label < 64) u_mask |= (1ULL << u_label);
+  }
+  u_offset_base = in_offset_p[u_idx];
+  for (VertexID nbr_u_idx = 0; nbr_u_idx < in_degree_p[u_idx]; nbr_u_idx++) {
+    VertexID nbr_u = in_edges_p[u_offset_base + nbr_u_idx];
+    VertexLabel u_label = params.v_label_p[nbr_u];
+    if (u_label < 64) u_mask |= (1ULL << u_label);
+  }
+
+  return (params.bloom_signature_g[v_idx] & u_mask) == u_mask;
+}
 
 static __forceinline__ __device__ bool LabelFilter(
     const ParametersFilter& params, VertexID u_idx, VertexID v_idx) {
@@ -641,7 +676,9 @@ static __forceinline__ __device__ bool Filter(const ParametersFilter& params,
   //    return MinWiseIPFilter(params, u_idx, v_idx);
   //  return KMinWiseIPFilter(params, u_idx, v_idx);
   //  return NeighborLabelCounterFilter(params, u_idx, v_idx);
-  return LabelDegreeFilter(params, u_idx, v_idx);
+  if (!LabelDegreeFilter(params, u_idx, v_idx)) return false;
+  if (!BloomLabelSetFilter(params, u_idx, v_idx)) return false;
+  return true;
   //     return SteadyFilter(params, u_idx, v_idx);
   // if (SteadyFilter(params, u_idx, v_idx)) {
   //  return LabelDegreeFilter(params, u_idx, v_idx);
@@ -1044,6 +1081,59 @@ std::vector<WOJMatches*> WOJSubIsoKernelWrapper::Filter(
   std::vector<UnifiedOwnedBufferVertexLabel> v_label_g_vec;
   v_label_g_vec.resize(exec_plan.get_n_devices());
 
+  // Bloom label-set signatures for pattern and data graph.
+  std::vector<uint64_t> bloom_signature_p_host(p.get_num_vertices(), 0);
+  std::vector<uint64_t> bloom_signature_g_host(g.get_num_vertices(), 0);
+  bool enable_bloom_filter = true;  // default on for GPU WOJ
+  const char* bloom_env = std::getenv("MG_DISABLE_BLOOM_FILTER");
+  if (bloom_env && std::string(bloom_env) == "1") {
+    enable_bloom_filter = false;
+  }
+  if (enable_bloom_filter) {
+    const VertexLabel* plabels = p.GetVLabelBasePointer();
+    auto pn = p.get_num_vertices();
+    for (VertexID u = 0; u < pn; ++u) {
+      uint64_t sig = 0;
+      auto out_deg = p.GetOutDegreeByLocalID(u);
+      auto out_edges = p.GetOutgoingEdgesByLocalID(u);
+      for (VertexID i = 0; i < out_deg; ++i) {
+        VertexLabel lbl = plabels[out_edges[i]];
+        if (lbl < 64) sig |= (1ULL << lbl);
+      }
+      auto in_deg = p.GetInDegreeByLocalID(u);
+      auto in_edges = p.GetIncomingEdgesByLocalID(u);
+      for (VertexID i = 0; i < in_deg; ++i) {
+        VertexLabel lbl = plabels[in_edges[i]];
+        if (lbl < 64) sig |= (1ULL << lbl);
+      }
+      bloom_signature_p_host[u] = sig;
+    }
+
+    const VertexLabel* glabels = g.GetVLabelBasePointer();
+    auto gn = g.get_num_vertices();
+    for (VertexID v = 0; v < gn; ++v) {
+      uint64_t sig = 0;
+      auto out_deg = g.GetOutDegreeByLocalID(v);
+      auto out_edges = g.GetOutgoingEdgesByLocalID(v);
+      for (VertexID i = 0; i < out_deg; ++i) {
+        VertexLabel lbl = glabels[out_edges[i]];
+        if (lbl < 64) sig |= (1ULL << lbl);
+      }
+      auto in_deg = g.GetInDegreeByLocalID(v);
+      auto in_edges = g.GetIncomingEdgesByLocalID(v);
+      for (VertexID i = 0; i < in_deg; ++i) {
+        VertexLabel lbl = glabels[in_edges[i]];
+        if (lbl < 64) sig |= (1ULL << lbl);
+      }
+      bloom_signature_g_host[v] = sig;
+    }
+  }
+
+  std::vector<UnifiedOwnedBufferUint64> bloom_signature_p_vec;
+  std::vector<UnifiedOwnedBufferUint64> bloom_signature_g_vec;
+  bloom_signature_p_vec.resize(exec_plan.get_n_devices());
+  bloom_signature_g_vec.resize(exec_plan.get_n_devices());
+
   for (VertexID _ = 0; _ < exec_plan.get_n_devices(); _++) {
     // data_graph_gpu_vec[_].Init(g);
     // pattern_graph_gpu_vec[_].Init(p);
@@ -1052,6 +1142,16 @@ std::vector<WOJMatches*> WOJSubIsoKernelWrapper::Filter(
     v_label_p_vec[_].Init(v_label_p);
     data_g_vec[_].Init(data_g);
     v_label_g_vec[_].Init(v_label_g);
+    if (enable_bloom_filter) {
+      BufferUint64 bloom_p_buf;
+      bloom_p_buf.data = bloom_signature_p_host.data();
+      bloom_p_buf.size = sizeof(uint64_t) * p.get_num_vertices();
+      bloom_signature_p_vec[_].Init(bloom_p_buf);
+      BufferUint64 bloom_g_buf;
+      bloom_g_buf.data = bloom_signature_g_host.data();
+      bloom_g_buf.size = sizeof(uint64_t) * g.get_num_vertices();
+      bloom_signature_g_vec[_].Init(bloom_g_buf);
+    }
   }
 
   for (VertexID _ = 0; _ < exec_plan.get_n_edges_p(); _++) {
@@ -1069,7 +1169,8 @@ std::vector<WOJMatches*> WOJSubIsoKernelWrapper::Filter(
   RunHostStripeParallel(parallelism,
       [parallelism, &dimGrid, &dimBlock, &exec_plan, &p, &g,
        &exec_path_in_edges_vec, &data_p_vec, &v_label_p_vec, &data_g_vec,
-       &v_label_g_vec, &woj_matches_vec, &p_streams_vec](size_t w) {
+       &v_label_g_vec, &bloom_signature_p_vec, &bloom_signature_g_vec,
+       enable_bloom_filter, &woj_matches_vec, &p_streams_vec](size_t w) {
         for (VertexID _ = static_cast<VertexID>(w);
              _ < exec_plan.get_n_edges_p();
              _ += static_cast<VertexID>(parallelism)) {
@@ -1091,6 +1192,13 @@ std::vector<WOJMatches*> WOJSubIsoKernelWrapper::Filter(
               .data_g = data_g_vec[logical_dev].GetPtr(),
               .edgelist_g = nullptr,
               .v_label_g = v_label_g_vec[logical_dev].GetPtr(),
+              .bloom_signature_p = enable_bloom_filter
+                                      ? bloom_signature_p_vec[logical_dev].GetPtr()
+                                      : nullptr,
+              .bloom_signature_g = enable_bloom_filter
+                                      ? bloom_signature_g_vec[logical_dev].GetPtr()
+                                      : nullptr,
+              .enable_bloom_filter = enable_bloom_filter,
               .woj_matches = *woj_matches_vec[_]};
 
           WOJFilterVCKernel<<<dimGrid, dimBlock, 0, stream>>>(params);

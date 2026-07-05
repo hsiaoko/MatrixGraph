@@ -42,7 +42,11 @@ class SubIsoCPU : public CPUTaskBase {
             bool enable_min_wise_filter = true,
             bool enable_label_degree_filter = true,
             bool enable_nlc_filter = true,
-            bool enable_matching_order = true)
+            bool enable_matching_order = true,
+            bool enable_lpf_filter = true,
+            bool enable_lcf_filter = true,
+            bool enable_bloom_filter = true,
+            bool enable_min_wise_bloom_filter = true)
       : pattern_path_(pattern_path),
         data_graph_path_(data_graph_path),
         output_path_(output_path),
@@ -59,7 +63,11 @@ class SubIsoCPU : public CPUTaskBase {
         enable_min_wise_filter_(enable_min_wise_filter),
         enable_label_degree_filter_(enable_label_degree_filter),
         enable_nlc_filter_(enable_nlc_filter),
-        enable_matching_order_(enable_matching_order) {}
+        enable_matching_order_(enable_matching_order),
+        enable_lpf_filter_(enable_lpf_filter),
+        enable_lcf_filter_(enable_lcf_filter),
+        enable_bloom_filter_(enable_bloom_filter),
+        enable_min_wise_bloom_filter_(enable_min_wise_bloom_filter) {}
 
   void Run();
 
@@ -105,7 +113,12 @@ class SubIsoCPU : public CPUTaskBase {
   const bool enable_label_degree_filter_;
   const bool enable_nlc_filter_;
   const bool enable_matching_order_;
+  const bool enable_lpf_filter_;
+  const bool enable_lcf_filter_;
+  const bool enable_bloom_filter_;
+  const bool enable_min_wise_bloom_filter_;
 
+  bool load_data_ok_ = true;
   VertexLabel* label_p_ = nullptr;
   VertexLabel* label_g_ = nullptr;
 };

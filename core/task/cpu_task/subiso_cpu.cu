@@ -72,17 +72,55 @@ using sics::matrixgraph::core::common::kSubIsoLocalMatchesSizeBuffer;
 using BitmapNoOwnerShip = sics::matrixgraph::core::util::BitmapNoOwnerShip;
 using sics::matrixgraph::core::common::kDefaultHeapCapacity;
 
-static int filter_count = 0;
-static int label_filter_count = 0;
-static int label_degree_filter_count = 0;
-static int gnn_filter_count = 0;
-static int nlc_filter_count = 0;
-static int ip_filter_count = 0;
-static int index_filter_count = 0;
+static int64_t filter_count = 0;
+static int64_t label_filter_count = 0;
+static int64_t label_filter_calls = 0;
+static int64_t label_degree_filter_count = 0;
+static int64_t label_degree_filter_calls = 0;
+static int64_t gnn_filter_count = 0;
+static int64_t nlc_filter_count = 0;
+static int64_t nlc_filter_calls = 0;
+static int64_t runtime_nlc_filter_count = 0;
+static int64_t runtime_nlc_filter_calls = 0;
+static int64_t lpf_filter_count = 0;
+static int64_t lpf_filter_calls = 0;
+static int64_t lcf_filter_count = 0;
+static int64_t ip_filter_count = 0;
+static int64_t ip_filter_calls = 0;
+static int64_t index_filter_count = 0;
+static int64_t bloom_filter_count = 0;
+static int64_t bloom_filter_calls = 0;
+static int64_t min_wise_bloom_filter_count = 0;
+static int64_t min_wise_bloom_filter_calls = 0;
+
+static std::atomic<uint64_t> label_filter_cycles{0};
+static std::atomic<uint64_t> ldf_filter_cycles{0};
+static std::atomic<uint64_t> nlc_filter_cycles{0};
+static std::atomic<uint64_t> runtime_nlc_filter_cycles{0};
+static std::atomic<uint64_t> lpf_filter_cycles{0};
+static std::atomic<uint64_t> ip_filter_cycles{0};
+static std::atomic<uint64_t> bloom_filter_cycles{0};
+static std::atomic<uint64_t> min_wise_bloom_filter_cycles{0};
+
+static bool g_enable_runtime_nlc = true;
+
+static inline uint64_t Rdtsc() {
+#if defined(__x86_64__)
+  uint32_t lo, hi;
+  __asm__ __volatile__("rdtsc" : "=a"(lo), "=d"(hi));
+  return (static_cast<uint64_t>(hi) << 32) | lo;
+#else
+  return 0;
+#endif
+}
 
 static bool g_enable_min_wise_filter = true;
 static bool g_enable_label_degree_filter = true;
 static bool g_enable_nlc_filter = true;
+static bool g_enable_lpf_filter = true;
+static bool g_enable_lcf_filter = true;
+static bool g_enable_bloom_filter = true;
+static bool g_enable_min_wise_bloom_filter = true;
 
 // Global rejection collector for -reject_output.  Empty path means disabled.
 // When enabled, ValidateWeft appends rejected (u,v) pairs encoded as
@@ -132,10 +170,77 @@ struct VertexFilterCache {
   uint32_t in_k_min_size = 0;
   uint32_t out_k_min_data[kDefaultHeapCapacity] = {0};
   uint32_t in_k_min_data[kDefaultHeapCapacity] = {0};
+  // 64-bit bitmap: bit i is set iff the i-th hash bucket is among the k-min
+  // selected labels for out/in neighbors.  Enables O(1) subset check.
+  uint64_t out_k_min_bitmap = 0;
+  uint64_t in_k_min_bitmap = 0;
 };
 
 static std::vector<VertexFilterCache> p_filter_cache;
 static std::vector<VertexFilterCache> g_filter_cache;
+
+// 64-bit Bloom-filter-style signature: bit i is set iff the vertex has a
+// neighbor (1-hop, both in/out) with label i.  Query vertex u can be matched to
+// data vertex v only if every neighbor label of u is present in v's signature.
+static std::vector<uint64_t> p_bloom_signature;
+static std::vector<uint64_t> g_bloom_signature;
+
+static void BuildBloomSignatures(const ImmutableCSR& csr,
+                                 std::vector<uint64_t>& signatures) {
+  auto n = csr.get_num_vertices();
+  signatures.assign(n, 0);
+  const VertexLabel* labels = csr.GetVLabelBasePointer();
+  auto parallelism = std::thread::hardware_concurrency();
+  std::vector<size_t> worker(parallelism);
+  std::iota(worker.begin(), worker.end(), 0);
+  auto step = worker.size();
+
+  ParForEach(worker.begin(), worker.end(),
+      [step, n, &csr, &signatures, labels](auto w) {
+        for (VertexID v = w; v < n; v += step) {
+          uint64_t sig = 0;
+          auto out_deg = csr.GetOutDegreeByLocalID(v);
+          auto out_edges = csr.GetOutgoingEdgesByLocalID(v);
+          for (VertexID i = 0; i < out_deg; ++i) {
+            VertexLabel lbl = labels[out_edges[i]];
+            if (lbl < 64) sig |= (1ULL << lbl);
+          }
+          auto in_deg = csr.GetInDegreeByLocalID(v);
+          auto in_edges = csr.GetIncomingEdgesByLocalID(v);
+          for (VertexID i = 0; i < in_deg; ++i) {
+            VertexLabel lbl = labels[in_edges[i]];
+            if (lbl < 64) sig |= (1ULL << lbl);
+          }
+          signatures[v] = sig;
+        }
+      });
+}
+
+static inline uint64_t PatternVertexNeighborLabelMask(VertexID u_idx,
+                                                      const ImmutableCSR& p) {
+  const VertexLabel* labels = p.GetVLabelBasePointer();
+  uint64_t mask = 0;
+  auto out_deg = p.GetOutDegreeByLocalID(u_idx);
+  auto out_edges = p.GetOutgoingEdgesByLocalID(u_idx);
+  for (VertexID i = 0; i < out_deg; ++i) {
+    VertexLabel lbl = labels[out_edges[i]];
+    if (lbl < 64) mask |= (1ULL << lbl);
+  }
+  auto in_deg = p.GetInDegreeByLocalID(u_idx);
+  auto in_edges = p.GetIncomingEdgesByLocalID(u_idx);
+  for (VertexID i = 0; i < in_deg; ++i) {
+    VertexLabel lbl = labels[in_edges[i]];
+    if (lbl < 64) mask |= (1ULL << lbl);
+  }
+  return mask;
+}
+
+static inline bool BloomLabelSetFilter(VertexID u_idx, VertexID v_idx,
+                                       const ImmutableCSR& p,
+                                       const ImmutableCSR& g) {
+  uint64_t u_mask = PatternVertexNeighborLabelMask(u_idx, p);
+  return (g_bloom_signature[v_idx] & u_mask) == u_mask;
+}
 
 // Thread-local visited timestamp buffer for ell-hop BFS.  One buffer per
 // thread; it is resized on first use and reused across vertices.
@@ -277,13 +382,16 @@ static void BuildFilterCache(const ImmutableCSR& csr,
           fc.out_min_hash = out_min;
 
           uint32_t filled = 0;
+          uint64_t out_k_min_bitmap_local = 0;
           for (uint32_t h = 0; h < 16 && filled < static_cast<uint32_t>(k);
                ++h) {
             if (hash_freq[h] > 0) {
               fc.out_k_min_data[filled++] = h;
+              out_k_min_bitmap_local |= (1ULL << h);
             }
           }
           fc.out_k_min_size = filled;
+          fc.out_k_min_bitmap = out_k_min_bitmap_local;
 
           // In edges (ell-hop).
           MiniKernelBitmap in_bitmap(32);
@@ -296,13 +404,16 @@ static void BuildFilterCache(const ImmutableCSR& csr,
           fc.in_min_hash = in_min;
 
           filled = 0;
+          uint64_t in_k_min_bitmap_local = 0;
           for (uint32_t h = 0; h < 16 && filled < static_cast<uint32_t>(k);
                ++h) {
             if (hash_freq[h] > 0) {
               fc.in_k_min_data[filled++] = h;
+              in_k_min_bitmap_local |= (1ULL << h);
             }
           }
           fc.in_k_min_size = filled;
+          fc.in_k_min_bitmap = in_k_min_bitmap_local;
 
           // All neighbor label count (out | in).
           unsigned all_data = out_bitmap.GetData() | in_bitmap.GetData();
@@ -333,6 +444,74 @@ static inline bool LabelFilter(VertexID u_idx, VertexID v_idx,
   return u_label == v_label;
 }
 
+static inline bool KMinBloomFilter(VertexID u_idx, VertexID v_idx,
+                                   const ImmutableCSR& p,
+                                   const ImmutableCSR& g) {
+  const auto& u_cache = p_filter_cache[u_idx];
+  const auto& v_cache = g_filter_cache[v_idx];
+
+  // Out-edge k-min dominance: equivalent to KMinWiseIPFilter's out-edge loop.
+  uint64_t common = u_cache.out_k_min_bitmap & v_cache.out_k_min_bitmap;
+  uint64_t u_only = u_cache.out_k_min_bitmap ^ common;
+  uint64_t v_only = v_cache.out_k_min_bitmap ^ common;
+  if (u_only != 0) {
+    if (v_only == 0) return false;
+    if (__builtin_ctzll(u_only) < __builtin_ctzll(v_only)) return false;
+  }
+
+  // In-edge k-min dominance.
+  common = u_cache.in_k_min_bitmap & v_cache.in_k_min_bitmap;
+  u_only = u_cache.in_k_min_bitmap ^ common;
+  v_only = v_cache.in_k_min_bitmap ^ common;
+  if (u_only != 0) {
+    if (v_only == 0) return false;
+    if (__builtin_ctzll(u_only) < __builtin_ctzll(v_only)) return false;
+  }
+
+  // Same final count/degree checks as KMinWiseIPFilter.
+  return v_cache.in_neighbor_label_count >= u_cache.in_neighbor_label_count &&
+         v_cache.out_neighbor_label_count >= u_cache.out_neighbor_label_count &&
+         g.GetOutDegreeByLocalID(v_idx) >= p.GetOutDegreeByLocalID(u_idx) &&
+         g.GetInDegreeByLocalID(v_idx) >= p.GetInDegreeByLocalID(u_idx);
+}
+static bool LabelPairFilter(VertexID u_idx, VertexID v_idx,
+                            const ImmutableCSR& p, const ImmutableCSR& g) {
+  // Count neighbor label frequencies of u in the pattern.
+  std::array<int, 32> u_freq = {};
+  auto u_out_deg = p.GetOutDegreeByLocalID(u_idx);
+  auto u_out_edges = p.GetOutgoingEdgesByLocalID(u_idx);
+  for (VertexID i = 0; i < u_out_deg; ++i) {
+    VertexLabel lbl = p.GetVLabelBasePointer()[u_out_edges[i]];
+    if (lbl < 32) ++u_freq[lbl];
+  }
+  auto u_in_deg = p.GetInDegreeByLocalID(u_idx);
+  auto u_in_edges = p.GetIncomingEdgesByLocalID(u_idx);
+  for (VertexID i = 0; i < u_in_deg; ++i) {
+    VertexLabel lbl = p.GetVLabelBasePointer()[u_in_edges[i]];
+    if (lbl < 32) ++u_freq[lbl];
+  }
+
+  // Count neighbor label frequencies of v in the data graph.
+  std::array<int, 32> v_freq = {};
+  auto v_out_deg = g.GetOutDegreeByLocalID(v_idx);
+  auto v_out_edges = g.GetOutgoingEdgesByLocalID(v_idx);
+  for (VertexID i = 0; i < v_out_deg; ++i) {
+    VertexLabel lbl = g.GetVLabelBasePointer()[v_out_edges[i]];
+    if (lbl < 32) ++v_freq[lbl];
+  }
+  auto v_in_deg = g.GetInDegreeByLocalID(v_idx);
+  auto v_in_edges = g.GetIncomingEdgesByLocalID(v_idx);
+  for (VertexID i = 0; i < v_in_deg; ++i) {
+    VertexLabel lbl = g.GetVLabelBasePointer()[v_in_edges[i]];
+    if (lbl < 32) ++v_freq[lbl];
+  }
+
+  for (int lbl = 0; lbl < 32; ++lbl) {
+    if (v_freq[lbl] < u_freq[lbl]) return false;
+  }
+  return true;
+}
+
 static inline bool LabelDegreeFilter(VertexID u_idx, VertexID v_idx,
                                      const ImmutableCSR& p,
                                      const ImmutableCSR& g) {
@@ -347,8 +526,55 @@ static inline bool LabelDegreeFilter(VertexID u_idx, VertexID v_idx,
 static bool NeighborLabelCounterFilter(VertexID u_idx, VertexID v_idx,
                                        const ImmutableCSR& p,
                                        const ImmutableCSR& g) {
-  return g_filter_cache[v_idx].all_neighbor_label_count >=
-         p_filter_cache[u_idx].all_neighbor_label_count;
+  return g_filter_cache[v_idx].out_neighbor_label_count >=
+             p_filter_cache[u_idx].out_neighbor_label_count &&
+         g_filter_cache[v_idx].in_neighbor_label_count >=
+             p_filter_cache[u_idx].in_neighbor_label_count;
+}
+
+static bool RuntimeNLCFilter(VertexID u_idx, VertexID v_idx,
+                             const ImmutableCSR& p, const ImmutableCSR& g) {
+  // Count distinct out-neighbor labels of u.
+  uint32_t u_out_bitmap = 0;
+  auto u_out_deg = p.GetOutDegreeByLocalID(u_idx);
+  auto u_out_edges = p.GetOutgoingEdgesByLocalID(u_idx);
+  for (VertexID i = 0; i < u_out_deg; ++i) {
+    VertexLabel lbl = p.GetVLabelBasePointer()[u_out_edges[i]];
+    if (lbl < 32) u_out_bitmap |= (1u << lbl);
+  }
+
+  // Count distinct in-neighbor labels of u.
+  uint32_t u_in_bitmap = 0;
+  auto u_in_deg = p.GetInDegreeByLocalID(u_idx);
+  auto u_in_edges = p.GetIncomingEdgesByLocalID(u_idx);
+  for (VertexID i = 0; i < u_in_deg; ++i) {
+    VertexLabel lbl = p.GetVLabelBasePointer()[u_in_edges[i]];
+    if (lbl < 32) u_in_bitmap |= (1u << lbl);
+  }
+  int u_out_count = __builtin_popcount(u_out_bitmap);
+  int u_in_count = __builtin_popcount(u_in_bitmap);
+
+  // Count distinct out-neighbor labels of v.
+  uint32_t v_out_bitmap = 0;
+  auto v_out_deg = g.GetOutDegreeByLocalID(v_idx);
+  auto v_out_edges = g.GetOutgoingEdgesByLocalID(v_idx);
+  for (VertexID i = 0; i < v_out_deg; ++i) {
+    VertexLabel lbl = g.GetVLabelBasePointer()[v_out_edges[i]];
+    if (lbl < 32) v_out_bitmap |= (1u << lbl);
+  }
+
+  // Count distinct in-neighbor labels of v.
+  uint32_t v_in_bitmap = 0;
+  auto v_in_deg = g.GetInDegreeByLocalID(v_idx);
+  auto v_in_edges = g.GetIncomingEdgesByLocalID(v_idx);
+  for (VertexID i = 0; i < v_in_deg; ++i) {
+    VertexLabel lbl = g.GetVLabelBasePointer()[v_in_edges[i]];
+    if (lbl < 32) v_in_bitmap |= (1u << lbl);
+  }
+  int v_out_count = __builtin_popcount(v_out_bitmap);
+  int v_in_count = __builtin_popcount(v_in_bitmap);
+
+  return v_out_count >= u_out_count && v_in_count >= u_in_count;
 }
 
 static bool MinWiseIPFilter(VertexID u_idx, VertexID v_idx,
@@ -468,28 +694,14 @@ static bool Filter(VertexID u_idx, VertexID v_idx, const ImmutableCSR& p,
                    std::vector<uint64_t>* rejected_pairs = nullptr) {
   if (u_idx == kMaxVertexID) return false;
   if (v_idx == kMaxVertexID) return false;
-  if (!LabelFilter(u_idx, v_idx, p, g)) {
+
+  auto c0 = Rdtsc();
+  bool label_ok = LabelFilter(u_idx, v_idx, p, g);
+  auto c1 = Rdtsc();
+  label_filter_cycles.fetch_add(c1 - c0);
+  __sync_fetch_and_add(&label_filter_calls, 1);
+  if (!label_ok) {
     __sync_fetch_and_add(&label_filter_count, 1);
-    __sync_fetch_and_add(&filter_count, 1);
-    if (rejected_pairs) {
-      rejected_pairs->push_back(
-          (static_cast<uint64_t>(u_idx) << 32) |
-          static_cast<uint64_t>(g.GetGloablIDBasePointer()[v_idx]));
-    }
-    return false;
-   }
-  if (g_enable_label_degree_filter && !LabelDegreeFilter(u_idx, v_idx, p, g)) {
-    __sync_fetch_and_add(&label_degree_filter_count, 1);
-    __sync_fetch_and_add(&filter_count, 1);
-    if (rejected_pairs) {
-      rejected_pairs->push_back(
-          (static_cast<uint64_t>(u_idx) << 32) |
-          static_cast<uint64_t>(g.GetGloablIDBasePointer()[v_idx]));
-    }
-    return false;
-  }
-  if (g_enable_nlc_filter && !NeighborLabelCounterFilter(u_idx, v_idx, p, g)) {
-    __sync_fetch_and_add(&nlc_filter_count, 1);
     __sync_fetch_and_add(&filter_count, 1);
     if (rejected_pairs) {
       rejected_pairs->push_back(
@@ -499,6 +711,135 @@ static bool Filter(VertexID u_idx, VertexID v_idx, const ImmutableCSR& p,
     return false;
   }
 
+  if (g_enable_label_degree_filter) {
+    auto c2 = Rdtsc();
+    bool ldf_ok = LabelDegreeFilter(u_idx, v_idx, p, g);
+    auto c3 = Rdtsc();
+    ldf_filter_cycles.fetch_add(c3 - c2);
+    __sync_fetch_and_add(&label_degree_filter_calls, 1);
+    if (!ldf_ok) {
+      __sync_fetch_and_add(&label_degree_filter_count, 1);
+      __sync_fetch_and_add(&filter_count, 1);
+      if (rejected_pairs) {
+        rejected_pairs->push_back(
+            (static_cast<uint64_t>(u_idx) << 32) |
+            static_cast<uint64_t>(g.GetGloablIDBasePointer()[v_idx]));
+      }
+      return false;
+    }
+  }
+
+  if (g_enable_nlc_filter) {
+    auto c4 = Rdtsc();
+    bool nlc_ok = NeighborLabelCounterFilter(u_idx, v_idx, p, g);
+    auto c5 = Rdtsc();
+    nlc_filter_cycles.fetch_add(c5 - c4);
+    __sync_fetch_and_add(&nlc_filter_calls, 1);
+    if (!nlc_ok) {
+      __sync_fetch_and_add(&nlc_filter_count, 1);
+      __sync_fetch_and_add(&filter_count, 1);
+      if (rejected_pairs) {
+        rejected_pairs->push_back(
+            (static_cast<uint64_t>(u_idx) << 32) |
+            static_cast<uint64_t>(g.GetGloablIDBasePointer()[v_idx]));
+      }
+      return false;
+    }
+  }
+
+  if (g_enable_runtime_nlc) {
+    auto c_r0 = Rdtsc();
+    bool runtime_nlc_ok = RuntimeNLCFilter(u_idx, v_idx, p, g);
+    auto c_r1 = Rdtsc();
+    runtime_nlc_filter_cycles.fetch_add(c_r1 - c_r0);
+    __sync_fetch_and_add(&runtime_nlc_filter_calls, 1);
+    if (!runtime_nlc_ok) {
+      __sync_fetch_and_add(&runtime_nlc_filter_count, 1);
+      __sync_fetch_and_add(&filter_count, 1);
+      if (rejected_pairs) {
+        rejected_pairs->push_back(
+            (static_cast<uint64_t>(u_idx) << 32) |
+            static_cast<uint64_t>(g.GetGloablIDBasePointer()[v_idx]));
+      }
+      return false;
+    }
+  }
+
+  if (g_enable_lpf_filter) {
+    auto c6 = Rdtsc();
+    bool lpf_ok = LabelPairFilter(u_idx, v_idx, p, g);
+    auto c7 = Rdtsc();
+    lpf_filter_cycles.fetch_add(c7 - c6);
+    __sync_fetch_and_add(&lpf_filter_calls, 1);
+    if (!lpf_ok) {
+      __sync_fetch_and_add(&lpf_filter_count, 1);
+      __sync_fetch_and_add(&filter_count, 1);
+      if (rejected_pairs) {
+        rejected_pairs->push_back(
+            (static_cast<uint64_t>(u_idx) << 32) |
+            static_cast<uint64_t>(g.GetGloablIDBasePointer()[v_idx]));
+      }
+      return false;
+    }
+  }
+
+  if (g_enable_bloom_filter) {
+    auto c8 = Rdtsc();
+    bool bloom_ok = BloomLabelSetFilter(u_idx, v_idx, p, g);
+    auto c9 = Rdtsc();
+    bloom_filter_cycles.fetch_add(c9 - c8);
+    __sync_fetch_and_add(&bloom_filter_calls, 1);
+    if (!bloom_ok) {
+      __sync_fetch_and_add(&bloom_filter_count, 1);
+      __sync_fetch_and_add(&filter_count, 1);
+      if (rejected_pairs) {
+        rejected_pairs->push_back(
+            (static_cast<uint64_t>(u_idx) << 32) |
+            static_cast<uint64_t>(g.GetGloablIDBasePointer()[v_idx]));
+      }
+      return false;
+    }
+  }
+
+  if (g_enable_min_wise_bloom_filter) {
+    auto c10 = Rdtsc();
+    bool min_wise_bloom_ok = KMinBloomFilter(u_idx, v_idx, p, g);
+    auto c11 = Rdtsc();
+    min_wise_bloom_filter_cycles.fetch_add(c11 - c10);
+    __sync_fetch_and_add(&min_wise_bloom_filter_calls, 1);
+    if (!min_wise_bloom_ok) {
+      __sync_fetch_and_add(&min_wise_bloom_filter_count, 1);
+      __sync_fetch_and_add(&filter_count, 1);
+      if (rejected_pairs) {
+        rejected_pairs->push_back(
+            (static_cast<uint64_t>(u_idx) << 32) |
+            static_cast<uint64_t>(g.GetGloablIDBasePointer()[v_idx]));
+      }
+      return false;
+    }
+  }
+
+  return true;
+}
+
+static bool LabelCountFilter(const ImmutableCSR& p, const ImmutableCSR& g) {
+  std::array<int, 32> p_freq = {};
+  std::array<int, 32> g_freq = {};
+  auto pn = p.get_num_vertices();
+  auto gn = g.get_num_vertices();
+  const VertexLabel* plabels = p.GetVLabelBasePointer();
+  const VertexLabel* glabels = g.GetVLabelBasePointer();
+  for (VertexID u = 0; u < pn; ++u) {
+    VertexLabel lbl = plabels[u];
+    if (lbl < 32) ++p_freq[lbl];
+  }
+  for (VertexID v = 0; v < gn; ++v) {
+    VertexLabel lbl = glabels[v];
+    if (lbl < 32) ++g_freq[lbl];
+  }
+  for (int lbl = 0; lbl < 32; ++lbl) {
+    if (g_freq[lbl] < p_freq[lbl]) return false;
+  }
   return true;
 }
 
@@ -840,23 +1181,37 @@ static bool IsFeasible(
   if (!Filter(u_src, v_src, p, g, rejected_pairs)) return false;
   if (!Filter(u_dst, v_dst, p, g, rejected_pairs)) return false;
 
-  if (g_enable_min_wise_filter && !KMinWiseIPFilter(u_dst, v_dst, p, g)) {
-    __sync_fetch_and_add(&ip_filter_count, 1);
-    if (rejected_pairs) {
-      rejected_pairs->push_back(
-          (static_cast<uint64_t>(u_dst) << 32) |
-          static_cast<uint64_t>(g.GetGloablIDBasePointer()[v_dst]));
+  if (g_enable_min_wise_filter) {
+    auto c8 = Rdtsc();
+    bool min_ok_dst = KMinWiseIPFilter(u_dst, v_dst, p, g);
+    auto c9 = Rdtsc();
+    ip_filter_cycles.fetch_add(c9 - c8);
+    __sync_fetch_and_add(&ip_filter_calls, 1);
+    if (!min_ok_dst) {
+      __sync_fetch_and_add(&ip_filter_count, 1);
+      if (rejected_pairs) {
+        rejected_pairs->push_back(
+            (static_cast<uint64_t>(u_dst) << 32) |
+            static_cast<uint64_t>(g.GetGloablIDBasePointer()[v_dst]));
+      }
+      return false;
     }
-    return false;
   }
-  if (g_enable_min_wise_filter && !KMinWiseIPFilter(u_src, v_src, p, g)) {
-    __sync_fetch_and_add(&ip_filter_count, 1);
-    if (rejected_pairs) {
-      rejected_pairs->push_back(
-          (static_cast<uint64_t>(u_src) << 32) |
-          static_cast<uint64_t>(g.GetGloablIDBasePointer()[v_src]));
+  if (g_enable_min_wise_filter) {
+    auto c10 = Rdtsc();
+    bool min_ok_src = KMinWiseIPFilter(u_src, v_src, p, g);
+    auto c11 = Rdtsc();
+    ip_filter_cycles.fetch_add(c11 - c10);
+    __sync_fetch_and_add(&ip_filter_calls, 1);
+    if (!min_ok_src) {
+      __sync_fetch_and_add(&ip_filter_count, 1);
+      if (rejected_pairs) {
+        rejected_pairs->push_back(
+            (static_cast<uint64_t>(u_src) << 32) |
+            static_cast<uint64_t>(g.GetGloablIDBasePointer()[v_src]));
+      }
+      return false;
     }
-    return false;
   }
 
   return true;
@@ -1597,13 +1952,32 @@ void SubIsoCPU::LoadData() {
 
   g_.Read(data_graph_path_);
 
-  std::cout << "[SubIsoCPU] Building filter caches (hop=" << filter_hop_
-            << ", k=" << filter_k_ << ") ..." << std::endl;
   g_enable_min_wise_filter = enable_min_wise_filter_;
   g_enable_label_degree_filter = enable_label_degree_filter_;
   g_enable_nlc_filter = enable_nlc_filter_;
+  g_enable_lpf_filter = enable_lpf_filter_;
+  g_enable_lcf_filter = enable_lcf_filter_;
+  g_enable_bloom_filter = enable_bloom_filter_;
+  g_enable_min_wise_bloom_filter = enable_min_wise_bloom_filter_;
+
+  if (g_enable_lcf_filter && !LabelCountFilter(p_, g_)) {
+    std::cout << "[SubIsoCPU] LCF rejected globally (label count mismatch)."
+              << std::endl;
+    load_data_ok_ = false;
+    return;
+  }
+
+  std::cout << "[SubIsoCPU] Building filter caches (hop=" << filter_hop_
+            << ", k=" << filter_k_ << ") ..." << std::endl;
   BuildFilterCache(p_, p_filter_cache, filter_hop_, filter_k_);
   BuildFilterCache(g_, g_filter_cache, filter_hop_, filter_k_);
+
+  if (g_enable_bloom_filter) {
+    std::cout << "[SubIsoCPU] Building Bloom label-set signatures ..."
+              << std::endl;
+    BuildBloomSignatures(p_, p_bloom_signature);
+    BuildBloomSignatures(g_, g_bloom_signature);
+  }
 
   auto* g_vlabel = g_.GetVLabelBasePointer();
   auto* p_vlabel = p_.GetVLabelBasePointer();
@@ -1665,21 +2039,101 @@ void SubIsoCPU::Run() {
   g_reject_output_path = reject_output_path_;
   g_rejected_pairs.clear();
 
-  // WOJMatching(p_, g_, m_vec_);
-  RecursiveMatching(p_, g_, m_vec_, m_unified_buffer_vec_);
+  if (load_data_ok_) {
+    // WOJMatching(p_, g_, m_vec_);
+    RecursiveMatching(p_, g_, m_vec_, m_unified_buffer_vec_);
+  }
 
   WriteRejectedPairs();
   g_reject_output_path.clear();
 
   std::cout << "=== Filter Counts ===" << std::endl;
   std::cout << "Total Filters:      " << filter_count << std::endl;
-  std::cout << "Label Filters:      " << label_filter_count << std::endl;
+  std::cout << "Label Filters:      " << label_filter_count << " (calls: "
+            << label_filter_calls << ", survivors: "
+            << (label_filter_calls - label_filter_count) << ")" << std::endl;
   std::cout << "Label Degree Filters:      " << label_degree_filter_count
+            << " (calls: " << label_degree_filter_calls << ", survivors: "
+            << (label_degree_filter_calls - label_degree_filter_count)
+            << ")" << std::endl;
+  std::cout << "NLC Filters:        " << nlc_filter_count << " (calls: "
+            << nlc_filter_calls << ", survivors: "
+            << (nlc_filter_calls - nlc_filter_count) << ")" << std::endl;
+  std::cout << "Runtime NLC Filters:" << runtime_nlc_filter_count << " (calls: "
+            << runtime_nlc_filter_calls << ", survivors: "
+            << (runtime_nlc_filter_calls - runtime_nlc_filter_count) << ")"
             << std::endl;
-  std::cout << "NLC Filters:        " << nlc_filter_count << std::endl;
-  std::cout << "IP Filters:        " << ip_filter_count << std::endl;
+  std::cout << "LPF Filters:        " << lpf_filter_count << " (calls: "
+            << lpf_filter_calls << ", survivors: "
+            << (lpf_filter_calls - lpf_filter_count) << ")" << std::endl;
+  std::cout << "Bloom Filters:      " << bloom_filter_count << " (calls: "
+            << bloom_filter_calls << ", survivors: "
+            << (bloom_filter_calls - bloom_filter_count) << ")" << std::endl;
+  std::cout << "Min-Wise Bloom Filters: " << min_wise_bloom_filter_count
+            << " (calls: " << min_wise_bloom_filter_calls << ", survivors: "
+            << (min_wise_bloom_filter_calls - min_wise_bloom_filter_count)
+            << ")" << std::endl;
+  std::cout << "LCF Filters:        " << lcf_filter_count << std::endl;
+  std::cout << "IP Filters:        " << ip_filter_count << " (calls: "
+            << ip_filter_calls << ", survivors: "
+            << (ip_filter_calls - ip_filter_count) << ")" << std::endl;
   std::cout << "GNN Filters:        " << gnn_filter_count << std::endl;
   std::cout << "Index Filters:        " << index_filter_count << std::endl;
+
+  std::cout << "\n=== Filter Survivors & Delta H ===" << std::endl;
+  auto print_survivor_dh = [](const char* name, int64_t calls, int64_t rejects) {
+    if (calls == 0) return;
+    int64_t survivors = calls - rejects;
+    double p = static_cast<double>(rejects) / calls;
+    double dH = -std::log2(1.0 - p);
+    std::cout << name << ": calls=" << calls << ", rejects=" << rejects
+              << ", survivors=" << survivors << ", p=" << p
+              << ", ΔH=" << dH << " bits" << std::endl;
+  };
+  print_survivor_dh("Label", label_filter_calls, label_filter_count);
+  print_survivor_dh("LDF", label_degree_filter_calls,
+                    label_degree_filter_count);
+  print_survivor_dh("NLC", nlc_filter_calls, nlc_filter_count);
+  print_survivor_dh("LPF", lpf_filter_calls, lpf_filter_count);
+  print_survivor_dh("Min-Wise", ip_filter_calls, ip_filter_count);
+  print_survivor_dh("Bloom", bloom_filter_calls, bloom_filter_count);
+  print_survivor_dh("Min-Wise-Bloom", min_wise_bloom_filter_calls,
+                    min_wise_bloom_filter_count);
+
+  auto avg_cycles = [](uint64_t cyc, int64_t cnt) -> double {
+    return cnt > 0 ? static_cast<double>(cyc) / cnt : 0.0;
+  };
+  std::cout << "\n=== Filter Timing (CPU cycles per call) ===" << std::endl;
+  std::cout << "Label:    " << label_filter_cycles.load() << " cycles total, "
+            << avg_cycles(label_filter_cycles.load(), label_filter_count)
+            << " cycles/call" << std::endl;
+  std::cout << "LDF:      " << ldf_filter_cycles.load() << " cycles total, "
+            << avg_cycles(ldf_filter_cycles.load(), label_degree_filter_count)
+            << " cycles/call" << std::endl;
+  std::cout << "NLC:          " << nlc_filter_cycles.load() << " cycles total, "
+            << avg_cycles(nlc_filter_cycles.load(), nlc_filter_count)
+            << " cycles/call" << std::endl;
+  std::cout << "Runtime NLC:  " << runtime_nlc_filter_cycles.load()
+            << " cycles total, "
+            << avg_cycles(runtime_nlc_filter_cycles.load(),
+                         runtime_nlc_filter_count)
+            << " cycles/call" << std::endl;
+  std::cout << "LPF:          " << lpf_filter_cycles.load() << " cycles total, "
+            << avg_cycles(lpf_filter_cycles.load(), lpf_filter_count)
+            << " cycles/call" << std::endl;
+  std::cout << "Bloom:        " << bloom_filter_cycles.load()
+            << " cycles total, "
+            << avg_cycles(bloom_filter_cycles.load(), bloom_filter_count)
+            << " cycles/call" << std::endl;
+  std::cout << "Min-Wise-Bloom: " << min_wise_bloom_filter_cycles.load()
+            << " cycles total, "
+            << avg_cycles(min_wise_bloom_filter_cycles.load(),
+                         min_wise_bloom_filter_count)
+            << " cycles/call" << std::endl;
+  std::cout << "Min-Wise: " << ip_filter_cycles.load() << " cycles total, "
+            << avg_cycles(ip_filter_cycles.load(), ip_filter_count)
+            << " cycles/call" << std::endl;
+
   auto end_time = std::chrono::system_clock::now();
 
   std::cout << "Data loading time: "

@@ -60,7 +60,9 @@ void LFTJSubIso::Run() {
   std::cout << "Degree Filters:     " << degree_filtered_count_ << std::endl;
   std::cout << "LDF Filters:        " << ldf_filtered_count_ << std::endl;
   std::cout << "NLC Filters:        " << nlc_filtered_count_ << std::endl;
+  std::cout << "Bloom Filters:      " << bloom_filtered_count_ << std::endl;
   std::cout << "Min-Wise Filters:   " << min_wise_filtered_count_ << std::endl;
+  std::cout << "Min-Wise Bloom Filters: " << min_wise_bloom_filtered_count_ << std::endl;
   std::cout << "Intersection Prune: " << intersection_pruned_count_ << std::endl;
 
   if (materialize_ && match_count_ > 0) {
@@ -126,12 +128,44 @@ void LFTJSubIso::BuildUndirectedAdjacency() {
 void LFTJSubIso::BuildMinWiseFilterCaches() {
   p_min_wise_cache_.clear();
   g_min_wise_cache_.clear();
+  p_bloom_signature_.clear();
+  g_bloom_signature_.clear();
   // The cache is needed for both min-wise filter and NLC filter.
-  if (!enable_min_wise_filter_ && !enable_nlc_filter_) return;
+  if (!enable_min_wise_filter_ && !enable_nlc_filter_ &&
+      !enable_min_wise_bloom_filter_)
+    return;
 
   BuildMinWiseFilterCache(pattern_, p_min_wise_cache_, filter_hop_, filter_k_);
   BuildMinWiseFilterCache(data_graph_, g_min_wise_cache_, filter_hop_,
                           filter_k_);
+
+  if (enable_bloom_filter_) {
+    auto n_p = pattern_.get_num_vertices();
+    p_bloom_signature_.assign(n_p, 0);
+    const VertexLabel* plabels = pattern_.GetVLabelBasePointer();
+    for (VertexID u = 0; u < n_p; ++u) {
+      uint64_t sig = 0;
+      for (VertexID nbr : pattern_adj_[u]) {
+        VertexLabel lbl = plabels[nbr];
+        if (lbl < 64) sig |= (1ULL << lbl);
+      }
+      p_bloom_signature_[u] = sig;
+    }
+
+    auto n_g = data_graph_.get_num_vertices();
+    g_bloom_signature_.assign(n_g, 0);
+    const VertexLabel* glabels = data_graph_.GetVLabelBasePointer();
+    for (VertexID v = 0; v < n_g; ++v) {
+      uint64_t sig = 0;
+      VertexID deg = data_offsets_[v + 1] - data_offsets_[v];
+      const VertexID* nbrs = data_neighbors_.data() + data_offsets_[v];
+      for (VertexID i = 0; i < deg; ++i) {
+        VertexLabel lbl = glabels[nbrs[i]];
+        if (lbl < 64) sig |= (1ULL << lbl);
+      }
+      g_bloom_signature_[v] = sig;
+    }
+  }
 }
 
 void LFTJSubIso::BuildCandidateSets() {
@@ -145,12 +179,15 @@ void LFTJSubIso::BuildCandidateSets() {
   degree_filtered_count_ = 0;
   ldf_filtered_count_ = 0;
   nlc_filtered_count_ = 0;
+  bloom_filtered_count_ = 0;
   min_wise_filtered_count_ = 0;
+  min_wise_bloom_filtered_count_ = 0;
   for (VertexID u = 0; u < pn; ++u) {
     VertexLabel u_label = plabels[u];
     VertexID u_deg = pattern_adj_[u].size();
     VertexID u_out_deg = pattern_.GetOutDegreeByLocalID(u);
     VertexID u_in_deg = pattern_.GetInDegreeByLocalID(u);
+    uint64_t u_bloom_mask = enable_bloom_filter_ ? p_bloom_signature_[u] : 0;
     for (VertexID v = 0; v < dn; ++v) {
       if (dlabels[v] != u_label) {
         ++label_filtered_count_;
@@ -171,6 +208,17 @@ void LFTJSubIso::BuildCandidateSets() {
           g_min_wise_cache_[v].all_neighbor_label_count <
               p_min_wise_cache_[u].all_neighbor_label_count) {
         ++nlc_filtered_count_;
+        continue;
+      }
+      if (enable_bloom_filter_ &&
+          (g_bloom_signature_[v] & u_bloom_mask) != u_bloom_mask) {
+        ++bloom_filtered_count_;
+        continue;
+      }
+      if (enable_min_wise_bloom_filter_ &&
+          !KMinBloomIPFilter(u, v, pattern_, data_graph_, p_min_wise_cache_,
+                             g_min_wise_cache_)) {
+        ++min_wise_bloom_filtered_count_;
         continue;
       }
       if (enable_min_wise_filter_ &&

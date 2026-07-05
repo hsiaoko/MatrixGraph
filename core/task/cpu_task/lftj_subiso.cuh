@@ -36,6 +36,8 @@ class LFTJSubIso : public CPUTaskBase {
              int filter_hop = 1, int filter_k = 3,
              bool disable_matching_order = false,
              bool enable_ldf_filter = true, bool enable_nlc_filter = true,
+             bool enable_bloom_filter = true,
+             bool enable_min_wise_bloom_filter = true,
              const std::string& reject_output_path = "")
       : pattern_path_(pattern_path),
         data_graph_path_(data_graph_path),
@@ -49,7 +51,9 @@ class LFTJSubIso : public CPUTaskBase {
         filter_k_(filter_k),
         disable_matching_order_(disable_matching_order),
         enable_ldf_filter_(enable_ldf_filter),
-        enable_nlc_filter_(enable_nlc_filter) {}
+        enable_nlc_filter_(enable_nlc_filter),
+        enable_bloom_filter_(enable_bloom_filter),
+        enable_min_wise_bloom_filter_(enable_min_wise_bloom_filter) {}
 
   void Run();
 
@@ -131,16 +135,24 @@ class LFTJSubIso : public CPUTaskBase {
   std::atomic<uint64_t> degree_filtered_count_{0};
   std::atomic<uint64_t> ldf_filtered_count_{0};
   std::atomic<uint64_t> nlc_filtered_count_{0};
+  std::atomic<uint64_t> bloom_filtered_count_{0};
   std::atomic<uint64_t> min_wise_filtered_count_{0};
+  std::atomic<uint64_t> min_wise_bloom_filtered_count_{0};
   std::atomic<uint64_t> intersection_pruned_count_{0};
 
   // Min-wise / NLC filter state.
   bool enable_min_wise_filter_ = true;
   bool enable_nlc_filter_ = true;
+  bool enable_bloom_filter_ = true;
+  bool enable_min_wise_bloom_filter_ = true;
   int filter_hop_ = 1;
   int filter_k_ = 3;
   std::vector<MinWiseFilterCache> p_min_wise_cache_;
   std::vector<MinWiseFilterCache> g_min_wise_cache_;
+
+  // Bloom filter state.
+  std::vector<uint64_t> p_bloom_signature_;
+  std::vector<uint64_t> g_bloom_signature_;
 
   // If true, use the natural vertex order (0,1,2,...) instead of the greedy
   // matching order. This is expected to degrade performance.

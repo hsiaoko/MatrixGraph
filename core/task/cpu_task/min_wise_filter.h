@@ -92,6 +92,10 @@ struct MinWiseFilterCache {
   uint32_t in_k_min_size = 0;
   uint32_t out_k_min_data[kDefaultHeapCapacity] = {0};
   uint32_t in_k_min_data[kDefaultHeapCapacity] = {0};
+  // 64-bit bitmap: bit i is set iff the i-th hash bucket is among the k-min
+  // selected labels for out/in neighbors.  Enables O(1) subset check.
+  uint64_t out_k_min_bitmap = 0;
+  uint64_t in_k_min_bitmap = 0;
 };
 
 namespace detail {
@@ -238,13 +242,16 @@ inline void BuildMinWiseFilterCache(const ImmutableCSR& csr,
           fc.out_min_hash = out_min;
 
           uint32_t filled = 0;
+          uint64_t out_k_min_bitmap_acc = 0;
           for (uint32_t h = 0; h < 16 && filled < static_cast<uint32_t>(k);
                ++h) {
             if (hash_freq[h] > 0) {
               fc.out_k_min_data[filled++] = h;
+              out_k_min_bitmap_acc |= (1ULL << h);
             }
           }
           fc.out_k_min_size = filled;
+          fc.out_k_min_bitmap = out_k_min_bitmap_acc;
 
           // In edges (ell-hop).
           MinWiseBitmap in_bitmap(32);
@@ -258,13 +265,16 @@ inline void BuildMinWiseFilterCache(const ImmutableCSR& csr,
           fc.in_min_hash = in_min;
 
           filled = 0;
+          uint64_t in_k_min_bitmap_acc = 0;
           for (uint32_t h = 0; h < 16 && filled < static_cast<uint32_t>(k);
                ++h) {
             if (hash_freq[h] > 0) {
               fc.in_k_min_data[filled++] = h;
+              in_k_min_bitmap_acc |= (1ULL << h);
             }
           }
           fc.in_k_min_size = filled;
+          fc.in_k_min_bitmap = in_k_min_bitmap_acc;
 
           // All neighbor label count (out | in).
           unsigned all_data = out_bitmap.GetData() | in_bitmap.GetData();
@@ -279,6 +289,38 @@ inline void BuildMinWiseFilterCache(const ImmutableCSR& csr,
           fc.all_neighbor_label_count = all_bitmap.Count();
         }
       });
+}
+
+inline bool KMinBloomIPFilter(VertexID u_idx, VertexID v_idx,
+                              const ImmutableCSR& p, const ImmutableCSR& g,
+                              const std::vector<MinWiseFilterCache>& p_cache,
+                              const std::vector<MinWiseFilterCache>& g_cache) {
+  const auto& u_cache = p_cache[u_idx];
+  const auto& v_cache = g_cache[v_idx];
+
+  // Out-edge k-min dominance: equivalent to KMinWiseIPFilter's out-edge loop.
+  uint64_t common = u_cache.out_k_min_bitmap & v_cache.out_k_min_bitmap;
+  uint64_t u_only = u_cache.out_k_min_bitmap ^ common;
+  uint64_t v_only = v_cache.out_k_min_bitmap ^ common;
+  if (u_only != 0) {
+    if (v_only == 0) return false;
+    if (__builtin_ctzll(u_only) < __builtin_ctzll(v_only)) return false;
+  }
+
+  // In-edge k-min dominance.
+  common = u_cache.in_k_min_bitmap & v_cache.in_k_min_bitmap;
+  u_only = u_cache.in_k_min_bitmap ^ common;
+  v_only = v_cache.in_k_min_bitmap ^ common;
+  if (u_only != 0) {
+    if (v_only == 0) return false;
+    if (__builtin_ctzll(u_only) < __builtin_ctzll(v_only)) return false;
+  }
+
+  // Same final count/degree checks as KMinWiseIPFilter.
+  return v_cache.in_neighbor_label_count >= u_cache.in_neighbor_label_count &&
+         v_cache.out_neighbor_label_count >= u_cache.out_neighbor_label_count &&
+         g.GetOutDegreeByLocalID(v_idx) >= p.GetOutDegreeByLocalID(u_idx) &&
+         g.GetInDegreeByLocalID(v_idx) >= p.GetInDegreeByLocalID(u_idx);
 }
 
 inline bool KMinWiseIPFilter(VertexID u_idx, VertexID v_idx,
