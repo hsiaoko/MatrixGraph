@@ -683,10 +683,7 @@ static bool KMinWiseIPFilter(VertexID u_idx, VertexID v_idx,
     }
   }
 
-  return v_cache.in_neighbor_label_count >= u_cache.in_neighbor_label_count &&
-         v_cache.out_neighbor_label_count >= u_cache.out_neighbor_label_count &&
-         g.GetOutDegreeByLocalID(v_idx) >= p.GetOutDegreeByLocalID(u_idx) &&
-         g.GetInDegreeByLocalID(v_idx) >= p.GetInDegreeByLocalID(u_idx);
+  return true;
 }
 
 static bool Filter(VertexID u_idx, VertexID v_idx, const ImmutableCSR& p,
@@ -695,30 +692,18 @@ static bool Filter(VertexID u_idx, VertexID v_idx, const ImmutableCSR& p,
   if (u_idx == kMaxVertexID) return false;
   if (v_idx == kMaxVertexID) return false;
 
-  auto c0 = Rdtsc();
-  bool label_ok = LabelFilter(u_idx, v_idx, p, g);
-  auto c1 = Rdtsc();
-  label_filter_cycles.fetch_add(c1 - c0);
-  __sync_fetch_and_add(&label_filter_calls, 1);
-  if (!label_ok) {
-    __sync_fetch_and_add(&label_filter_count, 1);
-    __sync_fetch_and_add(&filter_count, 1);
-    if (rejected_pairs) {
-      rejected_pairs->push_back(
-          (static_cast<uint64_t>(u_idx) << 32) |
-          static_cast<uint64_t>(g.GetGloablIDBasePointer()[v_idx]));
-    }
-    return false;
-  }
+  // Manually reordered filter pipeline for experimentation:
+  // min-wise-bloom -> nlc -> label -> label-degree -> runtime-nlc -> lpf -> bloom.
 
-  if (g_enable_label_degree_filter) {
-    auto c2 = Rdtsc();
-    bool ldf_ok = LabelDegreeFilter(u_idx, v_idx, p, g);
-    auto c3 = Rdtsc();
-    ldf_filter_cycles.fetch_add(c3 - c2);
-    __sync_fetch_and_add(&label_degree_filter_calls, 1);
-    if (!ldf_ok) {
-      __sync_fetch_and_add(&label_degree_filter_count, 1);
+  // 1. k-min-wise Bloom filter.
+  if (g_enable_min_wise_bloom_filter) {
+    auto c10 = Rdtsc();
+    bool min_wise_bloom_ok = KMinBloomFilter(u_idx, v_idx, p, g);
+    auto c11 = Rdtsc();
+    min_wise_bloom_filter_cycles.fetch_add(c11 - c10);
+    __sync_fetch_and_add(&min_wise_bloom_filter_calls, 1);
+    if (!min_wise_bloom_ok) {
+      __sync_fetch_and_add(&min_wise_bloom_filter_count, 1);
       __sync_fetch_and_add(&filter_count, 1);
       if (rejected_pairs) {
         rejected_pairs->push_back(
@@ -729,6 +714,7 @@ static bool Filter(VertexID u_idx, VertexID v_idx, const ImmutableCSR& p,
     }
   }
 
+  // 2. Neighbor-label-counter (NLC) filter.
   if (g_enable_nlc_filter) {
     auto c4 = Rdtsc();
     bool nlc_ok = NeighborLabelCounterFilter(u_idx, v_idx, p, g);
@@ -747,6 +733,43 @@ static bool Filter(VertexID u_idx, VertexID v_idx, const ImmutableCSR& p,
     }
   }
 
+  // 3. Label-only filter.
+  auto c0 = Rdtsc();
+  bool label_ok = LabelFilter(u_idx, v_idx, p, g);
+  auto c1 = Rdtsc();
+  label_filter_cycles.fetch_add(c1 - c0);
+  __sync_fetch_and_add(&label_filter_calls, 1);
+  if (!label_ok) {
+    __sync_fetch_and_add(&label_filter_count, 1);
+    __sync_fetch_and_add(&filter_count, 1);
+    if (rejected_pairs) {
+      rejected_pairs->push_back(
+          (static_cast<uint64_t>(u_idx) << 32) |
+          static_cast<uint64_t>(g.GetGloablIDBasePointer()[v_idx]));
+    }
+    return false;
+  }
+
+  // 4. Label-degree filter.
+  if (g_enable_label_degree_filter) {
+    auto c2 = Rdtsc();
+    bool ldf_ok = LabelDegreeFilter(u_idx, v_idx, p, g);
+    auto c3 = Rdtsc();
+    ldf_filter_cycles.fetch_add(c3 - c2);
+    __sync_fetch_and_add(&label_degree_filter_calls, 1);
+    if (!ldf_ok) {
+      __sync_fetch_and_add(&label_degree_filter_count, 1);
+      __sync_fetch_and_add(&filter_count, 1);
+      if (rejected_pairs) {
+        rejected_pairs->push_back(
+            (static_cast<uint64_t>(u_idx) << 32) |
+            static_cast<uint64_t>(g.GetGloablIDBasePointer()[v_idx]));
+      }
+      return false;
+    }
+  }
+
+  // 5. Runtime NLC filter.
   if (g_enable_runtime_nlc) {
     auto c_r0 = Rdtsc();
     bool runtime_nlc_ok = RuntimeNLCFilter(u_idx, v_idx, p, g);
@@ -765,6 +788,7 @@ static bool Filter(VertexID u_idx, VertexID v_idx, const ImmutableCSR& p,
     }
   }
 
+  // 6. Label-pair-frequency (LPF) filter.
   if (g_enable_lpf_filter) {
     auto c6 = Rdtsc();
     bool lpf_ok = LabelPairFilter(u_idx, v_idx, p, g);
@@ -783,6 +807,7 @@ static bool Filter(VertexID u_idx, VertexID v_idx, const ImmutableCSR& p,
     }
   }
 
+  // 7. Bloom neighbor-label-set filter.
   if (g_enable_bloom_filter) {
     auto c8 = Rdtsc();
     bool bloom_ok = BloomLabelSetFilter(u_idx, v_idx, p, g);
@@ -791,24 +816,6 @@ static bool Filter(VertexID u_idx, VertexID v_idx, const ImmutableCSR& p,
     __sync_fetch_and_add(&bloom_filter_calls, 1);
     if (!bloom_ok) {
       __sync_fetch_and_add(&bloom_filter_count, 1);
-      __sync_fetch_and_add(&filter_count, 1);
-      if (rejected_pairs) {
-        rejected_pairs->push_back(
-            (static_cast<uint64_t>(u_idx) << 32) |
-            static_cast<uint64_t>(g.GetGloablIDBasePointer()[v_idx]));
-      }
-      return false;
-    }
-  }
-
-  if (g_enable_min_wise_bloom_filter) {
-    auto c10 = Rdtsc();
-    bool min_wise_bloom_ok = KMinBloomFilter(u_idx, v_idx, p, g);
-    auto c11 = Rdtsc();
-    min_wise_bloom_filter_cycles.fetch_add(c11 - c10);
-    __sync_fetch_and_add(&min_wise_bloom_filter_calls, 1);
-    if (!min_wise_bloom_ok) {
-      __sync_fetch_and_add(&min_wise_bloom_filter_count, 1);
       __sync_fetch_and_add(&filter_count, 1);
       if (rejected_pairs) {
         rejected_pairs->push_back(
@@ -1959,6 +1966,7 @@ void SubIsoCPU::LoadData() {
   g_enable_lcf_filter = enable_lcf_filter_;
   g_enable_bloom_filter = enable_bloom_filter_;
   g_enable_min_wise_bloom_filter = enable_min_wise_bloom_filter_;
+  g_enable_runtime_nlc = enable_runtime_nlc_filter_;
 
   if (g_enable_lcf_filter && !LabelCountFilter(p_, g_)) {
     std::cout << "[SubIsoCPU] LCF rejected globally (label count mismatch)."

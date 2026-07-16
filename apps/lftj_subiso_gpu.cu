@@ -2,25 +2,17 @@
 
 #include <iostream>
 #include <string>
-#include <thread>
 
 #include "core/common/types.h"
 #include "core/components/scheduler/scheduler.h"
 #include "core/matrixgraph.cuh"
-#include "core/task/cpu_task/lftj_subiso.cuh"
+#include "core/task/gpu_task/lftj_subiso_gpu.cuh"
 
 DEFINE_string(p, "", "Path to the pattern graph directory (required)");
 DEFINE_string(g, "", "Path to the data graph directory (required)");
 DEFINE_string(o, "", "Path for optional output (default: none)");
-DEFINE_string(reject_output, "",
-              "Path to write filtered (u,v) pairs: data vertices with the "
-              "same label as pattern vertex u that did not enter candidates[u] "
-              "(default: none)");
 DEFINE_int32(t, 0,
-             "Number of CPU threads; 0 means use all hardware cores (default: "
-             "0 = all cores)");
-DEFINE_uint64(limit, std::numeric_limits<uint64_t>::max(),
-              "Maximum number of embeddings to count (default: unlimited)");
+             "Number of GPU threads; 0 means use default (default: 0)");
 DEFINE_bool(canonical, false,
             "Enforce increasing vertex IDs with matching depth to avoid "
             "automorphic duplicates (correct for cliques, default: false)");
@@ -78,43 +70,27 @@ static bool ValidateParameters() {
 
 int main(int argc, char** argv) {
   gflags::SetUsageMessage(
-      "LFTJ-style subgraph isomorphism counter (count-only, no materialization)"
-      "\nUsage: " +
+      "GPU LFTJ-style subgraph isomorphism counter (count-only).\n"
+      "Usage: " +
       std::string(argv[0]) +
-      " -p <pattern_dir> -g <graph_dir> [-o <output>] [-reject_output <path>] "
-      "[-t <threads>] [-limit <n>] [-canonical] [-disable_min_wise_filter] "
-      "[-filter_hop <hop>] [-filter_k <k>] [-disable_matching_order] "
-      "[-disable_ldf_filter] [-disable_nlc_filter] [-disable_lpf_filter] "
-      "[-disable_lcf_filter] [-disable_bloom_filter] "
-      "[-disable_min_wise_bloom_filter]");
+      " -p <pattern_dir> -g <graph_dir> [-t <threads>] [-o <output>] "
+      "[-canonical] [-disable_min_wise_filter] [-filter_hop <hop>] "
+      "[-filter_k <k>] [-disable_matching_order] [-disable_ldf_filter] "
+      "[-disable_nlc_filter] [-disable_lpf_filter] [-disable_lcf_filter] "
+      "[-disable_bloom_filter] [-disable_min_wise_bloom_filter]");
   gflags::ParseCommandLineFlags(&argc, &argv, true);
 
   if (!ValidateParameters()) {
-    gflags::ShowUsageWithFlagsRestrict(argv[0], "apps/lftj_subiso.cpp");
+    gflags::ShowUsageWithFlagsRestrict(argv[0], "apps/lftj_subiso_gpu.cu");
     return EXIT_FAILURE;
   }
 
-  int num_threads = FLAGS_t;
-  if (num_threads <= 0) {
-    num_threads = static_cast<int>(std::thread::hardware_concurrency());
-    if (num_threads <= 0) num_threads = 1;
-  }
-
-  std::cout << "=== LFTJ SubIso Configuration ===" << std::endl;
+  std::cout << "=== LFTJ SubIso GPU Configuration ===" << std::endl;
   std::cout << "Pattern Graph: " << FLAGS_p << std::endl;
   std::cout << "Data Graph: " << FLAGS_g << std::endl;
   std::cout << "Output Path: " << (FLAGS_o.empty() ? "(none)" : FLAGS_o)
             << std::endl;
-  std::cout << "Reject Output Path: "
-            << (FLAGS_reject_output.empty() ? "(none)" : FLAGS_reject_output)
-            << std::endl;
-  std::cout << "Thread Count: " << num_threads
-            << (FLAGS_t == 0 ? " (auto = all cores)" : " (user-specified)")
-            << std::endl;
-  std::cout << "Count Limit: "
-            << (FLAGS_limit == std::numeric_limits<uint64_t>::max()
-                    ? "unlimited"
-                    : std::to_string(FLAGS_limit))
+  std::cout << "GPU Threads: " << (FLAGS_t == 0 ? "default" : std::to_string(FLAGS_t))
             << std::endl;
   std::cout << "Canonical: " << (FLAGS_canonical ? "true" : "false")
             << std::endl;
@@ -140,20 +116,20 @@ int main(int argc, char** argv) {
   std::cout << "Min-Wise Bloom Filter: "
             << (FLAGS_disable_min_wise_bloom_filter ? "disabled" : "enabled")
             << std::endl;
-  std::cout << "=================================\n" << std::endl;
+  std::cout << "=====================================\n" << std::endl;
 
   try {
     auto scheduler_type = Scheduler2Enum("CHBL");
     sics::matrixgraph::core::MatrixGraph system(scheduler_type);
 
-    auto* task = new sics::matrixgraph::core::task::LFTJSubIso(
-        FLAGS_p, FLAGS_g, FLAGS_o, num_threads, FLAGS_limit, FLAGS_canonical,
+    auto* task = new sics::matrixgraph::core::task::LFTJSubIsoGpu(
+        FLAGS_p, FLAGS_g, FLAGS_o, FLAGS_t, FLAGS_canonical,
         !FLAGS_disable_min_wise_filter, FLAGS_filter_hop, FLAGS_filter_k,
         FLAGS_disable_matching_order, !FLAGS_disable_ldf_filter,
         !FLAGS_disable_nlc_filter, !FLAGS_disable_lpf_filter,
         !FLAGS_disable_lcf_filter, !FLAGS_disable_bloom_filter,
-        !FLAGS_disable_min_wise_bloom_filter, FLAGS_reject_output);
-    system.Run(sics::matrixgraph::core::common::kLFTJSubIso, task);
+        !FLAGS_disable_min_wise_bloom_filter);
+    system.Run(sics::matrixgraph::core::common::kLFTJSubIsoGpu, task);
     delete task;
   } catch (const std::exception& e) {
     std::cerr << "Error: " << e.what() << std::endl;

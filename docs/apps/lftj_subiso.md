@@ -1,40 +1,55 @@
-# LFTJ SubIso — CPU (`lftj_subiso_cpu_exec`, `lftj_subiso_exec`)
+# LFTJ SubIso
 
-CPU-only subgraph-isomorphism enumerator based on a Leapfrog-Trie-Join
-(LFTJ) style depth-first search. It supports exact counting, optional
-materialization, a greedy matching order, and several pre-filters
-(label-degree / LDF, neighborhood-label-count / NLC, and k-min-wise).
+MatrixGraph now provides two LFTJ-style subgraph-isomorphism counters:
+
+- `lftj_subiso_exec` — CPU LFTJ (count-only, optional materialization).
+- `lftj_subiso_gpu_exec` — single-GPU LFTJ (count-only MVP).
+
+Both reuse the same host-side preprocessing: undirected adjacency,
+greedy matching order, and the same set of pre-filters (label-degree /
+LDF, neighborhood-label-count / NLC, Bloom label-set, and k-min-wise /
+k-min-wise-Bloom).  The GPU version moves the enumeration (per-thread
+DFS over the matching order) to a CUDA kernel.
 
 ## Source files
 
 `core/task/cpu_task/lftj_subiso.cu`  
 `core/task/cpu_task/lftj_subiso.cuh`  
 `core/task/cpu_task/min_wise_filter.h`  
-`apps/lftj_subiso_cpu.cpp`  
-`apps/lftj_subiso.cpp`
+`core/task/gpu_task/lftj_subiso_gpu.cu`  
+`core/task/gpu_task/lftj_subiso_gpu.cuh`  
+`core/task/gpu_task/kernel/kernel_lftj_subiso.cu`  
+`core/task/gpu_task/kernel/kernel_lftj_subiso.cuh`  
+`apps/lftj_subiso.cpp`  
+`apps/lftj_subiso_gpu.cu`
 
 ## Binaries
 
 | Binary | Description |
 |--------|-------------|
-| `lftj_subiso_cpu_exec` | Stand-alone CPU executable |
-| `lftj_subiso_exec` | Runs through the MatrixGraph `MatrixGraph` scheduler |
+| `lftj_subiso_exec` | CPU LFTJ through the MatrixGraph scheduler |
+| `lftj_subiso_gpu_exec` | Single-GPU LFTJ counter through the MatrixGraph scheduler |
+
+The old stand-alone `lftj_subiso_cpu_exec` has been removed; its functionality
+(auto thread count, `-reject_output`, `-disable_min_wise_bloom_filter`) was
+merged into `lftj_subiso_exec`.
 
 ## Build
 
 ```bash
 cd build
-cmake --build . --target lftj_subiso_cpu_exec lftj_subiso_exec -j$(nproc)
+cmake --build . --target lftj_subiso_exec lftj_subiso_gpu_exec -j$(nproc)
 ```
 
-## Parameters
+## Parameters (CPU)
 
 | Flag | Default | Description |
 |------|---------|-------------|
 | `-p` | *required* | Pattern graph CSR directory |
 | `-g` | *required* | Data graph CSR directory |
 | `-o` | `""` | Output file path; if empty, only the match count is reported |
-| `-t` | hardware threads | Number of CPU threads (stand-alone binary) |
+| `-reject_output` | `""` | CSV path to write rejected `(u,v)` pairs |
+| `-t` | hardware threads | Number of CPU threads (`0` = auto) |
 | `-limit` | `max` | Stop enumeration after this many matches |
 | `-canonical` | false | Enforce strictly increasing data vertices (avoids automorphic duplicates) |
 | `-disable_min_wise_filter` | false | Disable the k-min-wise label-hash pre-filter |
@@ -43,13 +58,36 @@ cmake --build . --target lftj_subiso_cpu_exec lftj_subiso_exec -j$(nproc)
 | `-disable_matching_order` | false | Use natural order `0,1,2,...` instead of the greedy matching order |
 | `-disable_ldf_filter` | true | Disable label-degree filter (directed out/in degree check). **Default disabled** because LFTJ matches undirected edges; only enable (set to `false`) for symmetric/directed CSR data |
 | `-disable_nlc_filter` | false | Disable neighborhood-label-count filter |
+| `-disable_bloom_filter` | false | Disable Bloom neighbor-label-set filter |
+| `-disable_min_wise_bloom_filter` | false | Disable k-min-wise Bloom filter |
+
+## Parameters (GPU)
+
+The GPU binary accepts the same filter flags.  `-t` controls the total
+number of logical CUDA threads used to split root candidates (`0` = default).
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `-p` | *required* | Pattern graph CSR directory |
+| `-g` | *required* | Data graph CSR directory |
+| `-o` | `""` | Unused in the current count-only GPU implementation |
+| `-t` | 0 | Total CUDA threads (`0` = default 256) |
+| `-canonical` | false | Enforce strictly increasing data vertices |
+| `-disable_min_wise_filter` | false | Disable k-min-wise filter |
+| `-filter_hop` | 1 | Hop distance for min-wise neighbor signature |
+| `-filter_k` | 3 | Number of minimum hash values kept |
+| `-disable_matching_order` | false | Use natural matching order |
+| `-disable_ldf_filter` | true | Disable label-degree filter |
+| `-disable_nlc_filter` | false | Disable NLC filter |
+| `-disable_bloom_filter` | false | Disable Bloom filter |
+| `-disable_min_wise_bloom_filter` | false | Disable k-min-wise Bloom filter |
 
 ## Output
 
-- **Without `-o`**: count-only mode. Prints `Total matches: N` and filter
-  statistics, writes no files.
-- **With `-o`**: materializes all embeddings (up to `-limit`) to a binary
-  file with the following layout:
+- **CPU without `-o`**: count-only mode. Prints `Total matches: N` and filter
+  statistics.
+- **CPU with `-o`**: materializes all embeddings (up to `-limit`) to a binary
+  file:
 
 ```text
 [uint32_t pn]              // number of pattern vertices
@@ -57,78 +95,63 @@ cmake --build . --target lftj_subiso_cpu_exec lftj_subiso_exec -j$(nproc)
 [VertexID × pn × n_matches] // row-major embedding table
 ```
 
-## Filter statistics
-
-At the end of a run the following counters are printed:
-
-```text
-=== Filter Counts ===
-Label Filters:      N
-Degree Filters:     N
-LDF Filters:        N
-NLC Filters:        N
-Min-Wise Filters:   N
-Intersection Prune: N
-```
-
-- `Label Filters`: data vertices discarded because their label differs from
-  the pattern vertex.
-- `Degree Filters`: data vertices discarded because their undirected degree
-  is too low.
-- `LDF Filters`: data vertices discarded because their directed out-degree
-  or in-degree is too low (label-degree filter).
-- `NLC Filters`: data vertices discarded because they have fewer distinct
-  neighbor labels than the pattern vertex (neighborhood-label-count filter).
-- `Min-Wise Filters`: data vertices discarded by the k-min-wise
-  label-hash pre-filter.
-- `Intersection Prune`: candidate vertices removed by backward-neighbor
-  intersection during DFS.
+- **GPU**: count-only. Prints `Total matches: N` and timing breakdown.
 
 ## Examples
 
-**Count-only, default settings:**
-
-```bash
-./bin/lftj_subiso_cpu_exec \
-  -p <pattern_csr_dir>/ -g <data_csr_dir>/ -t 1
-```
-
-**Materialize matches to a binary file:**
-
-```bash
-./bin/lftj_subiso_cpu_exec \
-  -p <pattern_csr_dir>/ -g <data_csr_dir>/ -t 1 \
-  -o /tmp/lftj_matches.bin
-```
-
-**Disable all pre-filters and use canonical mode:**
-
-```bash
-./bin/lftj_subiso_cpu_exec \
-  -p <pattern_csr_dir>/ -g <data_csr_dir>/ -t 1 \
-  -disable_min_wise_filter -disable_ldf_filter -disable_nlc_filter -canonical
-```
-
-**Run through the MatrixGraph scheduler:**
+**CPU count-only, default settings:**
 
 ```bash
 ./bin/lftj_subiso_exec \
-  -p <pattern_csr_dir>/ -g <data_csr_dir>/ -t 1
+  -p <pattern_csr_dir>/ -g <data_csr_dir>/ -t 0
+```
+
+**CPU materialize matches to a binary file:**
+
+```bash
+./bin/lftj_subiso_exec \
+  -p <pattern_csr_dir>/ -g <data_csr_dir>/ -t 0 \
+  -o /tmp/lftj_matches.bin
+```
+
+**CPU disable all pre-filters and use canonical mode:**
+
+```bash
+./bin/lftj_subiso_exec \
+  -p <pattern_csr_dir>/ -g <data_csr_dir>/ -t 0 \
+  -disable_min_wise_filter -disable_ldf_filter -disable_nlc_filter -canonical
+```
+
+**GPU LFTJ with default filters:**
+
+```bash
+./bin/lftj_subiso_gpu_exec \
+  -p <pattern_csr_dir>/ -g <data_csr_dir>/ -t 512
+```
+
+**GPU LFTJ label-only baseline:**
+
+```bash
+./bin/lftj_subiso_gpu_exec \
+  -p <pattern_csr_dir>/ -g <data_csr_dir>/ -t 512 \
+  -disable_min_wise_filter -disable_nlc_filter \
+  -disable_bloom_filter -disable_min_wise_bloom_filter
 ```
 
 ## Notes
 
 - The greedy matching order (`-disable_matching_order=false`) usually gives
   the best performance.
-- The NLC and k-min-wise filters are enabled by default. LDF is **disabled by
-  default** because LFTJ matches undirected edges; it is only sound when the
-  CSR graph is symmetric (undirected stored as bidirectional directed edges).
-  Use `-disable_ldf_filter=false` to enable LDF for symmetric/directed data.
-- All filters add one-time preprocessing cost but can dramatically reduce the
-  DFS search space.
-- The scheduler version (`lftj_subiso_exec`) has slightly higher overhead
-  than the stand-alone binary (`lftj_subiso_cpu_exec`) because it goes
-  through the `MatrixGraph` task dispatch path.
+- The NLC, Bloom, k-min-wise, and k-min-wise-Bloom filters are enabled by
+  default. LDF is **disabled by default** because LFTJ matches undirected
+  edges; it is only sound when the CSR graph is symmetric (undirected stored
+  as bidirectional directed edges). Use `-disable_ldf_filter=false` to enable
+  LDF for symmetric/directed data.
+- The GPU version is a count-only MVP. It copies candidate sets and the
+  matching plan to the device and runs per-thread DFS enumeration.  It does
+  not materialize embeddings.
+- GPU match counts are identical to the CPU version when the same filter
+  flags are used.
 
 ## See Also
 

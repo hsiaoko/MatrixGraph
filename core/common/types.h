@@ -60,6 +60,7 @@ enum TaskType {
   kGraphAggregate,
   kComputeFeatures,
   kExecuteAggPrim,
+  kLFTJSubIsoGpu,
   // Other types.
 };
 

@@ -31,10 +31,20 @@ DEFINE_int32(filter_k, 3,
              "Number of minimum hash values (k) for k-min-wise filter (default: 3)");
 DEFINE_bool(disable_min_wise_filter, false,
             "Disable min-wise IP filter");
-DEFINE_bool(disable_label_degree_filter, false,
+DEFINE_bool(disable_ldf_filter, false,
             "Disable label-degree filter");
 DEFINE_bool(disable_nlc_filter, false,
             "Disable neighbor-label-counter filter");
+DEFINE_bool(disable_lpf_filter, false,
+            "Disable label-pair-frequency filter");
+DEFINE_bool(disable_lcf_filter, false,
+            "Disable global label-count filter");
+DEFINE_bool(disable_bloom_filter, false,
+            "Disable Bloom neighbor-label-set filter");
+DEFINE_bool(disable_min_wise_bloom_filter, false,
+            "Disable k-min-wise Bloom filter");
+DEFINE_bool(disable_runtime_nlc_filter, false,
+            "Disable runtime NLC filter (per-embedding neighbor-label-count check)");
 DEFINE_bool(disable_matching_order, false,
             "Disable cost-model-based matching order (use default local-id DFS)");
 
@@ -106,10 +116,23 @@ void PrintConfig() {
             << (FLAGS_disable_min_wise_filter ? "disabled" : "enabled")
             << std::endl;
   std::cout << "Label-Degree Filter: "
-            << (FLAGS_disable_label_degree_filter ? "disabled" : "enabled")
+            << (FLAGS_disable_ldf_filter ? "disabled" : "enabled")
             << std::endl;
   std::cout << "NLC Filter: "
             << (FLAGS_disable_nlc_filter ? "disabled" : "enabled") << std::endl;
+  std::cout << "LPF Filter: "
+            << (FLAGS_disable_lpf_filter ? "disabled" : "enabled") << std::endl;
+  std::cout << "LCF Filter: "
+            << (FLAGS_disable_lcf_filter ? "disabled" : "enabled") << std::endl;
+  std::cout << "Bloom Filter: "
+            << (FLAGS_disable_bloom_filter ? "disabled" : "enabled")
+            << std::endl;
+  std::cout << "Min-Wise Bloom Filter: "
+            << (FLAGS_disable_min_wise_bloom_filter ? "disabled" : "enabled")
+            << std::endl;
+  std::cout << "Runtime NLC Filter: "
+            << (FLAGS_disable_runtime_nlc_filter ? "disabled" : "enabled")
+            << std::endl;
   std::cout << "Matching Order: "
             << (FLAGS_disable_matching_order ? "default" : "cost-model")
             << std::endl;
@@ -123,7 +146,11 @@ int main(int argc, char* argv[]) {
       "Usage: " +
       std::string(argv[0]) +
       " -p <pattern_path> -g <graph_path> [-o <output_path>] "
-      "[-t <num_threads>] [options]");
+      "[-t <num_threads>] [-disable_min_wise_filter] "
+      "[-disable_ldf_filter] [-disable_nlc_filter] [-disable_lpf_filter] "
+      "[-disable_lcf_filter] [-disable_bloom_filter] "
+      "[-disable_min_wise_bloom_filter] [-disable_runtime_nlc_filter] "
+      "[-disable_matching_order] [options]");
 
   gflags::ParseCommandLineFlags(&argc, &argv, true);
 
@@ -141,8 +168,12 @@ int main(int argc, char* argv[]) {
     auto* task = new SubIsoCPU(
         FLAGS_p, FLAGS_g, FLAGS_o, FLAGS_t, FLAGS_m1, FLAGS_m2, "", "", "",
         "", FLAGS_reject_output, FLAGS_filter_hop, FLAGS_filter_k,
-        !FLAGS_disable_min_wise_filter, !FLAGS_disable_label_degree_filter,
-        !FLAGS_disable_nlc_filter, !FLAGS_disable_matching_order);
+        !FLAGS_disable_min_wise_filter, !FLAGS_disable_ldf_filter,
+        !FLAGS_disable_nlc_filter, !FLAGS_disable_matching_order,
+        !FLAGS_disable_lpf_filter, !FLAGS_disable_lcf_filter,
+        !FLAGS_disable_bloom_filter,
+        !FLAGS_disable_min_wise_bloom_filter,
+        !FLAGS_disable_runtime_nlc_filter);
     system.Run(sics::matrixgraph::core::common::kSubIsoCPU, task);
     delete task;
 

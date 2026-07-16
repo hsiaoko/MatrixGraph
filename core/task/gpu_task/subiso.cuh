@@ -42,11 +42,22 @@ class SubIso : public TaskBase {
  public:
   SubIso(const std::string& pattern_path, const std::string& data_graph_path,
          const std::string& data_graph_edgelist_path,
-         const std::string& output_path)
+         const std::string& output_path, bool enable_min_wise_filter = true,
+         bool enable_label_degree_filter = true, bool enable_nlc_filter = true,
+         bool enable_lpf_filter = true, bool enable_lcf_filter = true,
+         bool enable_bloom_filter = true,
+         bool enable_min_wise_bloom_filter = true)
       : pattern_path_(pattern_path),
         data_graph_path_(data_graph_path),
         data_graph_edgelist_path_(data_graph_edgelist_path),
-        output_path_(output_path) {}
+        output_path_(output_path),
+        enable_min_wise_filter_(enable_min_wise_filter),
+        enable_label_degree_filter_(enable_label_degree_filter),
+        enable_nlc_filter_(enable_nlc_filter),
+        enable_lpf_filter_(enable_lpf_filter),
+        enable_lcf_filter_(enable_lcf_filter),
+        enable_bloom_filter_(enable_bloom_filter),
+        enable_min_wise_bloom_filter_(enable_min_wise_bloom_filter) {}
 
   __host__ void Run();
 
@@ -81,7 +92,12 @@ class SubIso : public TaskBase {
 
   __host__ void Matching(const ImmutableCSR& p, const ImmutableCSR& g);
 
-  __host__ void WOJMatching(const ImmutableCSR& p, const ImmutableCSR& g);
+  __host__ void WOJMatching(const ImmutableCSR& p, const ImmutableCSR& g,
+                            bool enable_min_wise_filter,
+                            bool enable_label_degree_filter,
+                            bool enable_nlc_filter, bool enable_lpf_filter,
+                            bool enable_lcf_filter, bool enable_bloom_filter,
+                            bool enable_min_wise_bloom_filter);
 
   ImmutableCSR p_;
 
@@ -95,6 +111,14 @@ class SubIso : public TaskBase {
   const std::string data_graph_path_;
   const std::string data_graph_edgelist_path_;
   const std::string output_path_;
+
+  const bool enable_min_wise_filter_ = true;
+  const bool enable_label_degree_filter_ = true;
+  const bool enable_nlc_filter_ = true;
+  const bool enable_lpf_filter_ = true;
+  const bool enable_lcf_filter_ = true;
+  const bool enable_bloom_filter_ = true;
+  const bool enable_min_wise_bloom_filter_ = true;
 
   VertexLabel* label_p_ = nullptr;
 

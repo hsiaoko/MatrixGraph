@@ -194,8 +194,11 @@ __host__ void SubIso::Matching(const ImmutableCSR& p, const ImmutableCSR& g) {
   //matches.Print(3);
 }
 
-__host__ void SubIso::WOJMatching(const ImmutableCSR& p,
-                                  const ImmutableCSR& g) {
+__host__ void SubIso::WOJMatching(
+    const ImmutableCSR& p, const ImmutableCSR& g, bool enable_min_wise_filter,
+    bool enable_label_degree_filter, bool enable_nlc_filter,
+    bool enable_lpf_filter, bool enable_lcf_filter, bool enable_bloom_filter,
+    bool enable_min_wise_bloom_filter) {
   // Generate Execution Plan
   WOJExecutionPlan exec_plan;
   exec_plan.GenerateWOJExecutionPlan(p, g);
@@ -222,7 +225,10 @@ __host__ void SubIso::WOJMatching(const ImmutableCSR& p,
             << std::endl;
 
   auto start_time_0 = std::chrono::system_clock::now();
-  auto woj_matches = WOJSubIsoKernelWrapper::Filter(exec_plan, p, g);
+  auto woj_matches = WOJSubIsoKernelWrapper::Filter(
+      exec_plan, p, g, enable_min_wise_filter, enable_label_degree_filter,
+      enable_nlc_filter, enable_lpf_filter, enable_lcf_filter,
+      enable_bloom_filter, enable_min_wise_bloom_filter);
   auto start_time_1 = std::chrono::system_clock::now();
 
   auto output_woj_matches_vec =
@@ -254,7 +260,9 @@ __host__ void SubIso::Run() {
   LoadData();
   auto start_time_1 = std::chrono::system_clock::now();
 
-  WOJMatching(p_, g_);
+  WOJMatching(p_, g_, enable_min_wise_filter_, enable_label_degree_filter_,
+              enable_nlc_filter_, enable_lpf_filter_, enable_lcf_filter_,
+              enable_bloom_filter_, enable_min_wise_bloom_filter_);
   // Matching(p_, g_);
 
   auto start_time_2 = std::chrono::system_clock::now();
@@ -332,7 +340,8 @@ __host__ int SubIso::Run(
         sics::matrixgraph::core::util::MatrixGraphCudaDeviceList();
     exec_plan.SetCudaDeviceIds(cuda_devices);
 
-    results = WOJSubIsoKernelWrapper::Filter(exec_plan, *p, *g);
+    results = WOJSubIsoKernelWrapper::Filter(exec_plan, *p, *g, true, true, true,
+                                             true, true, false, false);
     results = WOJSubIsoKernelWrapper::Join(exec_plan, results);
   } catch (...) {
     delete[] p->GetVLabelBasePointer();

@@ -1,5 +1,6 @@
 #include "core/task/cpu_task/lftj_subiso.cuh"
 
+#include <array>
 #include <algorithm>
 #include <chrono>
 #include <cstring>
@@ -28,6 +29,35 @@ void LFTJSubIso::Run() {
 
   BuildUndirectedAdjacency();
   BuildMinWiseFilterCaches();
+
+  // LCF: global label-count pre-check.
+  if (enable_lcf_filter_) {
+    const int kLcfLabelCap = 32;
+    std::array<int, kLcfLabelCap> p_freq = {};
+    std::array<int, kLcfLabelCap> g_freq = {};
+    const VertexLabel* plabels = pattern_.GetVLabelBasePointer();
+    const VertexLabel* glabels = data_graph_.GetVLabelBasePointer();
+    for (VertexID u = 0; u < pattern_.get_num_vertices(); ++u) {
+      VertexLabel lbl = plabels[u];
+      if (lbl < kLcfLabelCap) ++p_freq[lbl];
+    }
+    for (VertexID v = 0; v < data_graph_.get_num_vertices(); ++v) {
+      VertexLabel lbl = glabels[v];
+      if (lbl < kLcfLabelCap) ++g_freq[lbl];
+    }
+    for (int lbl = 0; lbl < kLcfLabelCap; ++lbl) {
+      if (g_freq[lbl] < p_freq[lbl]) {
+        std::cout << "[LFTJSubIso] LCF rejected globally (label " << lbl
+                  << " count: pattern=" << p_freq[lbl] << " data="
+                  << g_freq[lbl] << ")." << std::endl;
+        std::cout << "=== Filter Counts ===" << std::endl;
+        std::cout << "LCF Filters:        1" << std::endl;
+        std::cout << "[LFTJSubIso] Total matches: 0" << std::endl;
+        return;
+      }
+    }
+  }
+
   BuildCandidateSets();
   if (!reject_output_path_.empty()) {
     WriteRejectedPairs();
@@ -60,6 +90,8 @@ void LFTJSubIso::Run() {
   std::cout << "Degree Filters:     " << degree_filtered_count_ << std::endl;
   std::cout << "LDF Filters:        " << ldf_filtered_count_ << std::endl;
   std::cout << "NLC Filters:        " << nlc_filtered_count_ << std::endl;
+  std::cout << "LPF Filters:        " << lpf_filtered_count_ << std::endl;
+  std::cout << "LCF Filters:        " << lcf_filtered_count_ << std::endl;
   std::cout << "Bloom Filters:      " << bloom_filtered_count_ << std::endl;
   std::cout << "Min-Wise Filters:   " << min_wise_filtered_count_ << std::endl;
   std::cout << "Min-Wise Bloom Filters: " << min_wise_bloom_filtered_count_ << std::endl;
@@ -179,6 +211,8 @@ void LFTJSubIso::BuildCandidateSets() {
   degree_filtered_count_ = 0;
   ldf_filtered_count_ = 0;
   nlc_filtered_count_ = 0;
+  lpf_filtered_count_ = 0;
+  lcf_filtered_count_ = 0;
   bloom_filtered_count_ = 0;
   min_wise_filtered_count_ = 0;
   min_wise_bloom_filtered_count_ = 0;
@@ -209,6 +243,34 @@ void LFTJSubIso::BuildCandidateSets() {
               p_min_wise_cache_[u].all_neighbor_label_count) {
         ++nlc_filtered_count_;
         continue;
+      }
+      if (enable_lpf_filter_) {
+        const int kLpfLabelCap = 32;
+        int u_freq[kLpfLabelCap] = {0};
+        int v_freq[kLpfLabelCap] = {0};
+        const VertexLabel* plabels = pattern_.GetVLabelBasePointer();
+        const VertexLabel* glabels = data_graph_.GetVLabelBasePointer();
+        for (VertexID nbr : pattern_adj_[u]) {
+          VertexLabel lbl = plabels[nbr];
+          if (lbl < kLpfLabelCap) ++u_freq[lbl];
+        }
+        VertexID v_deg = data_offsets_[v + 1] - data_offsets_[v];
+        const VertexID* v_nbrs = data_neighbors_.data() + data_offsets_[v];
+        for (VertexID i = 0; i < v_deg; ++i) {
+          VertexLabel lbl = glabels[v_nbrs[i]];
+          if (lbl < kLpfLabelCap) ++v_freq[lbl];
+        }
+        bool lpf_ok = true;
+        for (int lbl = 0; lbl < kLpfLabelCap; ++lbl) {
+          if (v_freq[lbl] < u_freq[lbl]) {
+            lpf_ok = false;
+            break;
+          }
+        }
+        if (!lpf_ok) {
+          ++lpf_filtered_count_;
+          continue;
+        }
       }
       if (enable_bloom_filter_ &&
           (g_bloom_signature_[v] & u_bloom_mask) != u_bloom_mask) {

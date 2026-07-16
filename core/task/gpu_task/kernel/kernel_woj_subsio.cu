@@ -1,5 +1,6 @@
 #include <cuda_runtime.h>
 
+#include <array>
 #include <algorithm>
 #include <chrono>
 #include <cstdlib>
@@ -79,14 +80,14 @@ using BufferVertexID =
 
 namespace {
 
-uint32_t WojLaunchGridDim() {
-  if (const char* s = std::getenv("MG_SUBISO_GRID")) {
+uint32_t WojLaunchTotalThreads() {
+  if (const char* s = std::getenv("MG_SUBISO_TOTAL_THREADS")) {
     int v = std::atoi(s);
     if (v > 0) {
       return static_cast<uint32_t>(v);
     }
   }
-  return kGridDim;
+  return kGridDim * kBlockDim;
 }
 
 uint32_t WojLaunchBlockDim() {
@@ -96,7 +97,21 @@ uint32_t WojLaunchBlockDim() {
       return static_cast<uint32_t>(v);
     }
   }
-  return kBlockDim;
+  // Default: fixed block size 128, grid derived from total threads.
+  return 128;
+}
+
+uint32_t WojLaunchGridDim() {
+  if (const char* s = std::getenv("MG_SUBISO_GRID")) {
+    int v = std::atoi(s);
+    if (v > 0) {
+      return static_cast<uint32_t>(v);
+    }
+  }
+  // Default: fixed block size 128, grid derived from total threads.
+  uint32_t total = WojLaunchTotalThreads();
+  uint32_t block = WojLaunchBlockDim();
+  return (total + block - 1) / block;
 }
 
 // Host-side stripe parallelism for WOJ Filter/Join (std::thread count). Default 4.
@@ -188,6 +203,12 @@ struct ParametersFilter {
   uint64_t* bloom_signature_p = nullptr;
   uint64_t* bloom_signature_g = nullptr;
   bool enable_bloom_filter = false;
+  bool enable_min_wise_filter = false;
+  bool enable_min_wise_bloom_filter = false;
+  bool enable_label_degree_filter = false;
+  bool enable_nlc_filter = false;
+  bool enable_lpf_filter = false;
+  int filter_order = 0;
   WOJMatches woj_matches;
   uint64_t* test;
 };
@@ -546,7 +567,6 @@ static __forceinline__ __device__ bool NeighborLabelCounterFilter(
   EdgeIndex* out_offset_p = (EdgeIndex*)(in_offset_p + params.n_vertices_p + 1);
   EdgeIndex* in_edges_p = (EdgeIndex*)(out_offset_p + params.n_vertices_p + 1);
   VertexID* out_edges_p = in_edges_p + params.n_edges_p;
-  VertexID* edges_globalid_by_localid_p = out_edges_p + params.n_edges_p;
 
   VertexID* globalid_g = (VertexID*)(params.data_g);
   VertexID* in_degree_g = globalid_g + params.n_vertices_g;
@@ -555,49 +575,36 @@ static __forceinline__ __device__ bool NeighborLabelCounterFilter(
   EdgeIndex* out_offset_g = (EdgeIndex*)(in_offset_g + params.n_vertices_g + 1);
   EdgeIndex* in_edges_g = (EdgeIndex*)(out_offset_g + params.n_vertices_g + 1);
   VertexID* out_edges_g = in_edges_g + params.n_edges_g;
-  VertexID* edges_globalid_by_localid_g = out_edges_g + params.n_edges_g;
 
-  VertexLabel v_label = params.v_label_g[globalid_g[v_idx]];
-  VertexLabel u_label = params.v_label_p[u_idx];
+  MiniKernelBitmap u_out_label_visited(32);
+  MiniKernelBitmap u_in_label_visited(32);
+  MiniKernelBitmap v_out_label_visited(32);
+  MiniKernelBitmap v_in_label_visited(32);
 
-  if (u_label != v_label) return false;
-
-  MiniKernelBitmap u_label_visited(32);
-  MiniKernelBitmap v_label_visited(32);
-  EdgeIndex u_offset_base;
-  EdgeIndex v_offset_base;
-
-  // u_offset_base = out_offset_p[u_idx];
-  // for (VertexID nbr_u_idx = 0; nbr_u_idx < out_degree_p[u_idx]; nbr_u_idx++)
-  // {
-  //   VertexID nbr_u = out_edges_p[u_offset_base + nbr_u_idx];
-  //   VertexLabel u_label = params.v_label_p[nbr_u];
-  //   u_label_visited.SetBit(u_label);
-  // }
-
-  // v_offset_base = out_offset_g[v_idx];
-  // for (VertexID nbr_v_idx = 0; nbr_v_idx < out_degree_g[v_idx]; nbr_v_idx++)
-  // {
-  //   VertexID nbr_v = out_edges_g[v_offset_base + nbr_v_idx];
-  //   VertexLabel v_label = params.v_label_g[nbr_v];
-  //   v_label_visited.SetBit(v_label);
-  // }
-
+  EdgeIndex u_offset_base = out_offset_p[u_idx];
+  for (VertexID i = 0; i < out_degree_p[u_idx]; ++i) {
+    VertexLabel lbl = params.v_label_p[out_edges_p[u_offset_base + i]];
+    u_out_label_visited.SetBit(lbl);
+  }
   u_offset_base = in_offset_p[u_idx];
-  for (VertexID nbr_u_idx = 0; nbr_u_idx < in_degree_p[u_idx]; nbr_u_idx++) {
-    VertexID nbr_u = in_edges_p[u_offset_base + nbr_u_idx];
-    VertexLabel u_label = params.v_label_p[nbr_u];
-    u_label_visited.SetBit(u_label);
+  for (VertexID i = 0; i < in_degree_p[u_idx]; ++i) {
+    VertexLabel lbl = params.v_label_p[in_edges_p[u_offset_base + i]];
+    u_in_label_visited.SetBit(lbl);
   }
 
+  EdgeIndex v_offset_base = out_offset_g[v_idx];
+  for (VertexID i = 0; i < out_degree_g[v_idx]; ++i) {
+    VertexLabel lbl = params.v_label_g[out_edges_g[v_offset_base + i]];
+    v_out_label_visited.SetBit(lbl);
+  }
   v_offset_base = in_offset_g[v_idx];
-  for (VertexID nbr_v_idx = 0; nbr_v_idx < in_degree_g[v_idx]; nbr_v_idx++) {
-    VertexID nbr_v = in_edges_g[v_offset_base + nbr_v_idx];
-    VertexLabel v_label = params.v_label_g[nbr_v];
-    v_label_visited.SetBit(v_label);
+  for (VertexID i = 0; i < in_degree_g[v_idx]; ++i) {
+    VertexLabel lbl = params.v_label_g[in_edges_g[v_offset_base + i]];
+    v_in_label_visited.SetBit(lbl);
   }
 
-  return v_label_visited.Count() >= u_label_visited.Count();
+  return v_out_label_visited.Count() >= u_out_label_visited.Count() &&
+         v_in_label_visited.Count() >= u_in_label_visited.Count();
 }
 
 static __forceinline__ __device__ bool SteadyFilter(
@@ -670,20 +677,222 @@ static __forceinline__ __device__ bool SteadyFilter(
   return true;
 }
 
+static __forceinline__ __device__ bool MinWiseBloomFilter(
+    const ParametersFilter& params, VertexID u_idx, VertexID v_idx) {
+  VertexID* globalid_p = (VertexID*)(params.data_p);
+  VertexID* in_degree_p = globalid_p + params.n_vertices_p;
+  VertexID* out_degree_p = in_degree_p + params.n_vertices_p;
+  EdgeIndex* in_offset_p = (EdgeIndex*)(out_degree_p + params.n_vertices_p);
+  EdgeIndex* out_offset_p = (EdgeIndex*)(in_offset_p + params.n_vertices_p + 1);
+  EdgeIndex* in_edges_p = (EdgeIndex*)(out_offset_p + params.n_vertices_p + 1);
+  VertexID* out_edges_p = in_edges_p + params.n_edges_p;
+
+  VertexID* globalid_g = (VertexID*)(params.data_g);
+  VertexID* in_degree_g = globalid_g + params.n_vertices_g;
+  VertexID* out_degree_g = in_degree_g + params.n_vertices_g;
+  EdgeIndex* in_offset_g = (EdgeIndex*)(out_degree_g + params.n_vertices_g);
+  EdgeIndex* out_offset_g = (EdgeIndex*)(in_offset_g + params.n_vertices_g + 1);
+  EdgeIndex* in_edges_g = (EdgeIndex*)(out_offset_g + params.n_vertices_g + 1);
+  VertexID* out_edges_g = in_edges_g + params.n_edges_g;
+
+  if (params.v_label_p[u_idx] != params.v_label_g[v_idx]) return false;
+
+  uint64_t u_out_bitmap = 0;
+  EdgeIndex u_out_base = out_offset_p[u_idx];
+  for (VertexID i = 0; i < out_degree_p[u_idx]; ++i) {
+    VertexLabel lbl = params.v_label_p[out_edges_p[u_out_base + i]];
+    VertexID h = HashTable(lbl);
+    if (h < 64) u_out_bitmap |= (1ULL << h);
+  }
+  uint64_t u_in_bitmap = 0;
+  EdgeIndex u_in_base = in_offset_p[u_idx];
+  for (VertexID i = 0; i < in_degree_p[u_idx]; ++i) {
+    VertexLabel lbl = params.v_label_p[in_edges_p[u_in_base + i]];
+    VertexID h = HashTable(lbl);
+    if (h < 64) u_in_bitmap |= (1ULL << h);
+  }
+
+  uint64_t v_out_bitmap = 0;
+  EdgeIndex v_out_base = out_offset_g[v_idx];
+  for (VertexID i = 0; i < out_degree_g[v_idx]; ++i) {
+    VertexLabel lbl = params.v_label_g[out_edges_g[v_out_base + i]];
+    VertexID h = HashTable(lbl);
+    if (h < 64) v_out_bitmap |= (1ULL << h);
+  }
+  uint64_t v_in_bitmap = 0;
+  EdgeIndex v_in_base = in_offset_g[v_idx];
+  for (VertexID i = 0; i < in_degree_g[v_idx]; ++i) {
+    VertexLabel lbl = params.v_label_g[in_edges_g[v_in_base + i]];
+    VertexID h = HashTable(lbl);
+    if (h < 64) v_in_bitmap |= (1ULL << h);
+  }
+
+  uint64_t common = u_out_bitmap & v_out_bitmap;
+  uint64_t u_only = u_out_bitmap ^ common;
+  uint64_t v_only = v_out_bitmap ^ common;
+  if (u_only != 0) {
+    if (v_only == 0) return false;
+    if ((__ffsll(static_cast<long long>(u_only)) - 1) < (__ffsll(static_cast<long long>(v_only)) - 1)) return false;
+  }
+
+  common = u_in_bitmap & v_in_bitmap;
+  u_only = u_in_bitmap ^ common;
+  v_only = v_in_bitmap ^ common;
+  if (u_only != 0) {
+    if (v_only == 0) return false;
+    if ((__ffsll(static_cast<long long>(u_only)) - 1) < (__ffsll(static_cast<long long>(v_only)) - 1)) return false;
+  }
+
+  return out_degree_g[v_idx] >= out_degree_p[u_idx] &&
+         in_degree_g[v_idx] >= in_degree_p[u_idx];
+}
+
+static __forceinline__ __device__ bool LabelPairFrequencyFilter(
+    const ParametersFilter& params, VertexID u_idx, VertexID v_idx) {
+  VertexID* globalid_p = (VertexID*)(params.data_p);
+  VertexID* in_degree_p = globalid_p + params.n_vertices_p;
+  VertexID* out_degree_p = in_degree_p + params.n_vertices_p;
+  EdgeIndex* in_offset_p = (EdgeIndex*)(out_degree_p + params.n_vertices_p);
+  EdgeIndex* out_offset_p = (EdgeIndex*)(in_offset_p + params.n_vertices_p + 1);
+  EdgeIndex* in_edges_p = (EdgeIndex*)(out_offset_p + params.n_vertices_p + 1);
+  VertexID* out_edges_p = in_edges_p + params.n_edges_p;
+
+  VertexID* globalid_g = (VertexID*)(params.data_g);
+  VertexID* in_degree_g = globalid_g + params.n_vertices_g;
+  VertexID* out_degree_g = in_degree_g + params.n_vertices_g;
+  EdgeIndex* in_offset_g = (EdgeIndex*)(out_degree_g + params.n_vertices_g);
+  EdgeIndex* out_offset_g = (EdgeIndex*)(in_offset_g + params.n_vertices_g + 1);
+  EdgeIndex* in_edges_g = (EdgeIndex*)(out_offset_g + params.n_vertices_g + 1);
+  VertexID* out_edges_g = in_edges_g + params.n_edges_g;
+
+  // Per-label neighbor frequency, labels capped at 32 to match subiso_cpu.
+  int u_freq[32] = {0};
+  EdgeIndex u_offset_base = out_offset_p[u_idx];
+  for (VertexID i = 0; i < out_degree_p[u_idx]; ++i) {
+    VertexLabel lbl = params.v_label_p[out_edges_p[u_offset_base + i]];
+    if (lbl < 32) ++u_freq[lbl];
+  }
+  u_offset_base = in_offset_p[u_idx];
+  for (VertexID i = 0; i < in_degree_p[u_idx]; ++i) {
+    VertexLabel lbl = params.v_label_p[in_edges_p[u_offset_base + i]];
+    if (lbl < 32) ++u_freq[lbl];
+  }
+
+  int v_freq[32] = {0};
+  EdgeIndex v_offset_base = out_offset_g[v_idx];
+  for (VertexID i = 0; i < out_degree_g[v_idx]; ++i) {
+    VertexLabel lbl = params.v_label_g[out_edges_g[v_offset_base + i]];
+    if (lbl < 32) ++v_freq[lbl];
+  }
+  v_offset_base = in_offset_g[v_idx];
+  for (VertexID i = 0; i < in_degree_g[v_idx]; ++i) {
+    VertexLabel lbl = params.v_label_g[in_edges_g[v_offset_base + i]];
+    if (lbl < 32) ++v_freq[lbl];
+  }
+
+  for (int lbl = 0; lbl < 32; ++lbl) {
+    if (v_freq[lbl] < u_freq[lbl]) return false;
+  }
+  return true;
+}
+
 static __forceinline__ __device__ bool Filter(const ParametersFilter& params,
                                               VertexID u_idx, VertexID v_idx) {
-  // return LabelFilter(params, u_idx, v_idx);
-  //    return MinWiseIPFilter(params, u_idx, v_idx);
-  //  return KMinWiseIPFilter(params, u_idx, v_idx);
-  //  return NeighborLabelCounterFilter(params, u_idx, v_idx);
-  if (!LabelDegreeFilter(params, u_idx, v_idx)) return false;
-  if (!BloomLabelSetFilter(params, u_idx, v_idx)) return false;
+  // Label filter is always the first cheap check.
+  if (!LabelFilter(params, u_idx, v_idx)) return false;
+
+  auto do_ldf = [&]() {
+    return !(params.enable_label_degree_filter &&
+             !LabelDegreeFilter(params, u_idx, v_idx));
+  };
+  auto do_nlc = [&]() {
+    return !(params.enable_nlc_filter &&
+             !NeighborLabelCounterFilter(params, u_idx, v_idx));
+  };
+  auto do_lpf = [&]() {
+    return !(params.enable_lpf_filter &&
+             !LabelPairFrequencyFilter(params, u_idx, v_idx));
+  };
+  auto do_bloom = [&]() {
+    return !(params.enable_bloom_filter &&
+             !BloomLabelSetFilter(params, u_idx, v_idx));
+  };
+  auto do_minwise = [&]() {
+    return !(params.enable_min_wise_filter &&
+             !KMinWiseIPFilter(params, u_idx, v_idx));
+  };
+  auto do_minwise_bloom = [&]() {
+    return !(params.enable_min_wise_bloom_filter &&
+             !MinWiseBloomFilter(params, u_idx, v_idx));
+  };
+
+  switch (params.filter_order) {
+    case 1: {  // minwise_first
+      if (!do_minwise()) return false;
+      if (!do_ldf()) return false;
+      if (!do_nlc()) return false;
+      if (!do_lpf()) return false;
+      if (!do_bloom()) return false;
+      if (!do_minwise_bloom()) return false;
+      break;
+    }
+    case 2: {  // bloom_first
+      if (!do_bloom()) return false;
+      if (!do_ldf()) return false;
+      if (!do_nlc()) return false;
+      if (!do_lpf()) return false;
+      if (!do_minwise()) return false;
+      if (!do_minwise_bloom()) return false;
+      break;
+    }
+    case 3: {  // lpf_first
+      if (!do_lpf()) return false;
+      if (!do_ldf()) return false;
+      if (!do_nlc()) return false;
+      if (!do_bloom()) return false;
+      if (!do_minwise()) return false;
+      if (!do_minwise_bloom()) return false;
+      break;
+    }
+    case 4: {  // nlc_first
+      if (!do_nlc()) return false;
+      if (!do_ldf()) return false;
+      if (!do_lpf()) return false;
+      if (!do_bloom()) return false;
+      if (!do_minwise()) return false;
+      if (!do_minwise_bloom()) return false;
+      break;
+    }
+    case 5: {  // lpf_nlc_bloom_minwisebloom_ldf
+      if (!do_lpf()) return false;
+      if (!do_nlc()) return false;
+      if (!do_bloom()) return false;
+      if (!do_minwise_bloom()) return false;
+      if (!do_ldf()) return false;
+      if (!do_minwise()) return false;
+      break;
+    }
+    case 6: {  // minwise_nlc_lpf
+      if (!do_minwise()) return false;
+      if (!do_nlc()) return false;
+      if (!do_lpf()) return false;
+      if (!do_ldf()) return false;
+      if (!do_bloom()) return false;
+      if (!do_minwise_bloom()) return false;
+      break;
+    }
+    case 0:
+    default: {  // default
+      if (!do_ldf()) return false;
+      if (!do_nlc()) return false;
+      if (!do_lpf()) return false;
+      if (!do_bloom()) return false;
+      if (!do_minwise()) return false;
+      if (!do_minwise_bloom()) return false;
+      break;
+    }
+  }
   return true;
-  //     return SteadyFilter(params, u_idx, v_idx);
-  // if (SteadyFilter(params, u_idx, v_idx)) {
-  //  return LabelDegreeFilter(params, u_idx, v_idx);
-  //}
-  // return false;
 }
 
 static __global__ void WOJFilterVCKernel(ParametersFilter params) {
@@ -967,7 +1176,10 @@ static __global__ void HashJoinWriteKernel(ParametersHashJoin params) {
 
 std::vector<WOJMatches*> WOJSubIsoKernelWrapper::Filter(
     const WOJExecutionPlan& exec_plan, const ImmutableCSR& p,
-    const ImmutableCSR& g) {
+    const ImmutableCSR& g, bool enable_min_wise_filter,
+    bool enable_label_degree_filter, bool enable_nlc_filter,
+    bool enable_lpf_filter, bool enable_lcf_filter, bool enable_bloom_filter,
+    bool enable_min_wise_bloom_filter) {
   dim3 dimBlock(WojLaunchBlockDim());
   dim3 dimGrid(WojLaunchGridDim());
 
@@ -1081,14 +1293,54 @@ std::vector<WOJMatches*> WOJSubIsoKernelWrapper::Filter(
   std::vector<UnifiedOwnedBufferVertexLabel> v_label_g_vec;
   v_label_g_vec.resize(exec_plan.get_n_devices());
 
+  // LCF: global label-count pre-check (host side).
+  if (enable_lcf_filter) {
+    const int kLcfLabelCap = 32;
+    std::array<int, kLcfLabelCap> p_freq = {};
+    std::array<int, kLcfLabelCap> g_freq = {};
+    const VertexLabel* plabels = p.GetVLabelBasePointer();
+    const VertexLabel* glabels = g.GetVLabelBasePointer();
+    for (VertexID u = 0; u < p.get_num_vertices(); ++u) {
+      VertexLabel lbl = plabels[u];
+      if (lbl < kLcfLabelCap) ++p_freq[lbl];
+    }
+    for (VertexID v = 0; v < g.get_num_vertices(); ++v) {
+      VertexLabel lbl = glabels[v];
+      if (lbl < kLcfLabelCap) ++g_freq[lbl];
+    }
+    for (int lbl = 0; lbl < kLcfLabelCap; ++lbl) {
+      if (g_freq[lbl] < p_freq[lbl]) {
+        std::cout << "[WOJ Filter] LCF rejected globally (label " << lbl
+                  << " count: pattern=" << p_freq[lbl] << " data="
+                  << g_freq[lbl] << ")." << std::endl;
+        // Return initialized but empty match tables.
+        for (VertexID _ = 0; _ < exec_plan.get_n_edges_p(); _++) {
+          woj_matches_vec[_] = new WOJMatches();
+          woj_matches_vec[_]->Init(exec_plan.get_n_edges_p(), kMaxMatchTableRows);
+          woj_matches_vec[_]->SetXOffset(2);
+          woj_matches_vec[_]->SetYOffset(0);
+          woj_matches_vec[_]->SetHeader(
+              0, exec_plan.get_exec_path_in_edges_ptr()[_ * 2]);
+          woj_matches_vec[_]->SetHeader(
+              1, exec_plan.get_exec_path_in_edges_ptr()[_ * 2 + 1]);
+        }
+        return woj_matches_vec;
+      }
+    }
+  }
+
   // Bloom label-set signatures for pattern and data graph.
   std::vector<uint64_t> bloom_signature_p_host(p.get_num_vertices(), 0);
   std::vector<uint64_t> bloom_signature_g_host(g.get_num_vertices(), 0);
-  bool enable_bloom_filter = true;  // default on for GPU WOJ
-  const char* bloom_env = std::getenv("MG_DISABLE_BLOOM_FILTER");
-  if (bloom_env && std::string(bloom_env) == "1") {
-    enable_bloom_filter = false;
-  }
+
+  std::cout << "[WOJ Filter] enable_min_wise_filter=" << enable_min_wise_filter
+            << " enable_label_degree_filter=" << enable_label_degree_filter
+            << " enable_nlc_filter=" << enable_nlc_filter
+            << " enable_lpf_filter=" << enable_lpf_filter
+            << " enable_lcf_filter=" << enable_lcf_filter
+            << " enable_bloom_filter=" << enable_bloom_filter
+            << " enable_min_wise_bloom_filter=" << enable_min_wise_bloom_filter
+            << std::endl;
   if (enable_bloom_filter) {
     const VertexLabel* plabels = p.GetVLabelBasePointer();
     auto pn = p.get_num_vertices();
@@ -1165,12 +1417,34 @@ std::vector<WOJMatches*> WOJSubIsoKernelWrapper::Filter(
         1, exec_plan.get_exec_path_in_edges_ptr()[_ * 2 + 1]);
   }
 
+  // Filter order override via environment variable.
+  int filter_order = 0;
+  const char* order_env = std::getenv("MG_FILTER_ORDER");
+  if (order_env) {
+    std::string order_str(order_env);
+    if (order_str == "minwise_first") {
+      filter_order = 1;
+    } else if (order_str == "bloom_first") {
+      filter_order = 2;
+    } else if (order_str == "lpf_first") {
+      filter_order = 3;
+    } else if (order_str == "nlc_first") {
+      filter_order = 4;
+    } else if (order_str == "lpf_nlc_bloom_minwisebloom_ldf") {
+      filter_order = 5;
+    } else if (order_str == "minwise_nlc_lpf") {
+      filter_order = 6;
+    }
+  }
+
   auto time1 = std::chrono::system_clock::now();
   RunHostStripeParallel(parallelism,
       [parallelism, &dimGrid, &dimBlock, &exec_plan, &p, &g,
        &exec_path_in_edges_vec, &data_p_vec, &v_label_p_vec, &data_g_vec,
        &v_label_g_vec, &bloom_signature_p_vec, &bloom_signature_g_vec,
-       enable_bloom_filter, &woj_matches_vec, &p_streams_vec](size_t w) {
+       enable_min_wise_filter, enable_label_degree_filter, enable_nlc_filter,
+       enable_lpf_filter, enable_bloom_filter, enable_min_wise_bloom_filter,
+       filter_order, &woj_matches_vec, &p_streams_vec](size_t w) {
         for (VertexID _ = static_cast<VertexID>(w);
              _ < exec_plan.get_n_edges_p();
              _ += static_cast<VertexID>(parallelism)) {
@@ -1199,6 +1473,12 @@ std::vector<WOJMatches*> WOJSubIsoKernelWrapper::Filter(
                                       ? bloom_signature_g_vec[logical_dev].GetPtr()
                                       : nullptr,
               .enable_bloom_filter = enable_bloom_filter,
+              .enable_min_wise_filter = enable_min_wise_filter,
+              .enable_min_wise_bloom_filter = enable_min_wise_bloom_filter,
+              .enable_label_degree_filter = enable_label_degree_filter,
+              .enable_nlc_filter = enable_nlc_filter,
+              .enable_lpf_filter = enable_lpf_filter,
+              .filter_order = filter_order,
               .woj_matches = *woj_matches_vec[_]};
 
           WOJFilterVCKernel<<<dimGrid, dimBlock, 0, stream>>>(params);

@@ -42,9 +42,13 @@ class WOJSubIsoKernelWrapper {
   // than once as an instance of Singleton class is already created.
   static WOJSubIsoKernelWrapper* GetInstance();
 
-  static std::vector<WOJMatches*> Filter(const WOJExecutionPlan& exec_plan,
-                                         const ImmutableCSR& p,
-                                         const ImmutableCSR& g);
+  static std::vector<WOJMatches*> Filter(
+      const WOJExecutionPlan& exec_plan, const ImmutableCSR& p,
+      const ImmutableCSR& g, bool enable_min_wise_filter = true,
+      bool enable_label_degree_filter = true, bool enable_nlc_filter = true,
+      bool enable_lpf_filter = true, bool enable_lcf_filter = true,
+      bool enable_bloom_filter = false,
+      bool enable_min_wise_bloom_filter = false);
 
   static std::vector<WOJMatches*> Join(
       const WOJExecutionPlan& exec_plan,

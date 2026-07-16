@@ -36,6 +36,7 @@ class LFTJSubIso : public CPUTaskBase {
              int filter_hop = 1, int filter_k = 3,
              bool disable_matching_order = false,
              bool enable_ldf_filter = true, bool enable_nlc_filter = true,
+             bool enable_lpf_filter = true, bool enable_lcf_filter = true,
              bool enable_bloom_filter = true,
              bool enable_min_wise_bloom_filter = true,
              const std::string& reject_output_path = "")
@@ -52,6 +53,8 @@ class LFTJSubIso : public CPUTaskBase {
         disable_matching_order_(disable_matching_order),
         enable_ldf_filter_(enable_ldf_filter),
         enable_nlc_filter_(enable_nlc_filter),
+        enable_lpf_filter_(enable_lpf_filter),
+        enable_lcf_filter_(enable_lcf_filter),
         enable_bloom_filter_(enable_bloom_filter),
         enable_min_wise_bloom_filter_(enable_min_wise_bloom_filter) {}
 
@@ -135,14 +138,18 @@ class LFTJSubIso : public CPUTaskBase {
   std::atomic<uint64_t> degree_filtered_count_{0};
   std::atomic<uint64_t> ldf_filtered_count_{0};
   std::atomic<uint64_t> nlc_filtered_count_{0};
+  std::atomic<uint64_t> lpf_filtered_count_{0};
+  std::atomic<uint64_t> lcf_filtered_count_{0};
   std::atomic<uint64_t> bloom_filtered_count_{0};
   std::atomic<uint64_t> min_wise_filtered_count_{0};
   std::atomic<uint64_t> min_wise_bloom_filtered_count_{0};
   std::atomic<uint64_t> intersection_pruned_count_{0};
 
-  // Min-wise / NLC filter state.
+  // Min-wise / NLC / Bloom / LPF / LCF filter state.
   bool enable_min_wise_filter_ = true;
   bool enable_nlc_filter_ = true;
+  bool enable_lpf_filter_ = true;
+  bool enable_lcf_filter_ = true;
   bool enable_bloom_filter_ = true;
   bool enable_min_wise_bloom_filter_ = true;
   int filter_hop_ = 1;

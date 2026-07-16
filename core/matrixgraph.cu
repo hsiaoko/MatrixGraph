@@ -10,6 +10,7 @@
 #include "core/task/gpu_task/ppr_query.cuh"
 #include "core/task/gpu_task/gar_match.cuh"
 #include "core/task/gpu_task/subiso.cuh"
+#include "core/task/gpu_task/lftj_subiso_gpu.cuh"
 #include "core/task/gpu_task/wcc.cuh"
 #include "core/task/gpu_task/graph_aggregate.cuh"
 #include "core/task/gpu_task/compute_features.cuh"
@@ -100,6 +101,12 @@ void MatrixGraph::Run(TaskType task_type, TaskBase* task_ptr) {
     case common::kComputeFeatures: {
       std::cout << "[ComputeFeatures]" << std::endl;
       auto task = reinterpret_cast<task::ComputeFeaturesTask*>(task_ptr);
+      task->Run();
+      break;
+    }
+    case common::kLFTJSubIsoGpu: {
+      std::cout << "[LFTJ SubIso GPU Query]" << std::endl;
+      auto task = reinterpret_cast<task::LFTJSubIsoGpu*>(task_ptr);
       task->Run();
       break;
     }
