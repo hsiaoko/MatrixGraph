@@ -23,6 +23,8 @@ using Attributes = sics::matrixgraph::core::data_structures::Attributes;
 using Attribute = sics::matrixgraph::core::data_structures::Attribute;
 using AttributeName = sics::matrixgraph::core::data_structures::AttributeName;
 using ValueType = sics::matrixgraph::core::data_structures::ValueType;
+using DeviceAttributes =
+    sics::matrixgraph::core::data_structures::DeviceAttributes;
 template <typename T>
 using DefaultHash = sics::matrixgraph::core::data_structures::DefaultHash<T>;
 
@@ -647,7 +649,7 @@ __host__ void GraphAggregate::LoadAttributes(
   std::vector<uint32_t> column_slots(n_columns);
 
   for (uint32_t v = 0; v < n_vertices; ++v) {
-    h_attrs[v].vertex_id = v;
+    h_attrs[v].entity_id = v;
     h_attrs[v].attr_map.size = n_columns;
     h_attrs[v].attr_map.capacity = capacity;
     h_attrs[v].attr_map.keys = h_keys.data() + v * capacity;
@@ -731,6 +733,102 @@ __host__ void GraphAggregate::SetVertexAttributes(
   }
 }
 
+__host__ void GraphAggregate::LoadEdgeAttributes(
+    bool is_outgoing,
+    uint32_t n_columns,
+    const GraphAggregateEdgeAttributeColumn* columns) {
+  if (!graph_) {
+    std::cerr << "[GraphAggregate::LoadEdgeAttributes] Graph not loaded"
+              << std::endl;
+    return;
+  }
+  if (n_columns == 0 || columns == nullptr) return;
+  if (per_gpu_states_.empty()) {
+    std::cerr << "[GraphAggregate::LoadEdgeAttributes] No GPUs available"
+              << std::endl;
+    return;
+  }
+
+  const uint32_t n_edges = is_outgoing
+                               ? graph_->get_num_outgoing_edges()
+                               : graph_->get_num_incoming_edges();
+
+  // Validate columns.
+  for (uint32_t c = 0; c < n_columns; ++c) {
+    if (columns[c].n_values != n_edges) {
+      std::cerr << "[GraphAggregate::LoadEdgeAttributes] Column '" << columns[c].key
+                << "' has " << columns[c].n_values << " values, expected "
+                << n_edges << std::endl;
+      return;
+    }
+    size_t elem_size = ValueTypeSize(columns[c].value_type);
+    if (elem_size == 0 || columns[c].values == nullptr) {
+      std::cerr << "[GraphAggregate::LoadEdgeAttributes] Unsupported or empty column"
+                << std::endl;
+      return;
+    }
+  }
+
+  // Build direction-agnostic attribute metadata / names once.
+  std::vector<AttributeName> names(n_columns);
+  std::vector<Attribute> attrs(n_columns);
+  for (uint32_t c = 0; c < n_columns; ++c) {
+    names[c] = AttributeName(columns[c].key);
+    std::memset(&attrs[c], 0, sizeof(Attribute));
+    std::strncpy(attrs[c].name, columns[c].key, sizeof(attrs[c].name) - 1);
+    attrs[c].type = static_cast<ValueType>(columns[c].value_type);
+    attrs[c].n_rows = n_edges;
+    attrs[c].n_elements = n_edges;
+    attrs[c].offsets = nullptr;
+  }
+
+  for (auto& gpu : per_gpu_states_) {
+    CudaDeviceGuard guard(gpu.device_id);
+
+    std::vector<uint8_t*> d_columns(n_columns);
+    std::vector<uint8_t*> d_valid(n_columns, nullptr);
+    std::vector<Attribute> local_attrs = attrs;
+
+    for (uint32_t c = 0; c < n_columns; ++c) {
+      size_t elem_size = ValueTypeSize(columns[c].value_type);
+      size_t bytes = elem_size * n_edges;
+      CUDA_CHECK(cudaMalloc(&d_columns[c], bytes));
+      CUDA_CHECK(cudaMemcpy(d_columns[c], columns[c].values, bytes,
+                            cudaMemcpyHostToDevice));
+      local_attrs[c].data = d_columns[c];
+
+      if (columns[c].valid != nullptr) {
+        CUDA_CHECK(cudaMalloc(&d_valid[c], n_edges));
+        CUDA_CHECK(cudaMemcpy(d_valid[c], columns[c].valid, n_edges,
+                              cudaMemcpyHostToDevice));
+        local_attrs[c].valid = d_valid[c];
+      } else {
+        local_attrs[c].valid = nullptr;
+      }
+    }
+
+    DeviceAttributes dev_attrs(0u, names.data(), local_attrs.data(), n_columns);
+    if (is_outgoing) {
+      gpu.edge_attrs_out_ = std::move(dev_attrs);
+      gpu.edge_attr_columns_out_ = std::move(d_columns);
+      for (uint8_t* p : d_valid) {
+        if (p) gpu.edge_attr_columns_out_.push_back(p);
+      }
+    } else {
+      gpu.edge_attrs_in_ = std::move(dev_attrs);
+      gpu.edge_attr_columns_in_ = std::move(d_columns);
+      for (uint8_t* p : d_valid) {
+        if (p) gpu.edge_attr_columns_in_.push_back(p);
+      }
+    }
+  }
+
+  std::cout << "[GraphAggregate] Loaded " << n_columns
+            << " edge attribute column(s) for "
+            << (is_outgoing ? "outgoing" : "incoming")
+            << " edges on " << per_gpu_states_.size() << " GPU(s)" << std::endl;
+}
+
 __host__ void GraphAggregate::Run() {
   std::cout << "[GraphAggregate] Run()" << std::endl;
   if (!graph_) {
@@ -747,6 +845,16 @@ __host__ void GraphAggregate::FreeDeviceBuffers() {
       gpu.d_graph_data_size = 0;
     }
     gpu.vertex_attrs.Free();
+    for (uint8_t* p : gpu.edge_attr_columns_out_) {
+      if (p) cudaFree(p);
+    }
+    gpu.edge_attr_columns_out_.clear();
+    for (uint8_t* p : gpu.edge_attr_columns_in_) {
+      if (p) cudaFree(p);
+    }
+    gpu.edge_attr_columns_in_.clear();
+    // edge_attrs_out_ / edge_attrs_in_ release their hash-map buckets in their
+    // destructors; we only need to free the column buffers above.
     for (auto& sb : gpu.stream_buffers) {
       CudaDeviceGuard sb_guard(gpu.device_id);
       sb.Free();
@@ -888,6 +996,8 @@ __host__ std::vector<kernel::FeatureValue> GraphAggregate::ComputeFeatures(
           graph_->get_num_incoming_edges(),
           graph_->get_num_outgoing_edges(),
           gpu_state.vertex_attrs.GetDevicePtr(),
+          gpu_state.edge_attrs_out_.GetDevicePtr(),
+          gpu_state.edge_attrs_in_.GetDevicePtr(),
           sb.d_pivot_vids,
           sub_chunk_n,
           d_requests_per_gpu[g],
@@ -929,7 +1039,8 @@ __host__ std::vector<kernel::FeatureValue> GraphAggregate::ComputeFeatures(
 __host__ std::vector<kernel::AllFeatures> GraphAggregate::ComputeAll(
     const std::vector<uint32_t>& pivot_vertex_ids,
     const kernel::AttributeName& attr_name,
-    bool use_outgoing) {
+    bool use_outgoing,
+    bool use_edge_attrs) {
   using kernel::AllFeatures;
   using kernel::ComputeAllFeaturesKernel;
 
@@ -1040,10 +1151,13 @@ __host__ std::vector<kernel::AllFeatures> GraphAggregate::ComputeAll(
           graph_->get_num_incoming_edges(),
           graph_->get_num_outgoing_edges(),
           gpu_state.vertex_attrs.GetDevicePtr(),
+          gpu_state.edge_attrs_out_.GetDevicePtr(),
+          gpu_state.edge_attrs_in_.GetDevicePtr(),
           sb.d_pivot_vids,
           sub_chunk_n,
           attr_name,
           use_outgoing,
+          use_edge_attrs,
           max_neighbors,
           sb.d_all_outputs);
 

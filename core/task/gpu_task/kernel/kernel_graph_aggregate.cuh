@@ -154,6 +154,7 @@ struct FeatureRequest {
   uint32_t neighbor_label;    // edge label filter (0 = any)
   bool use_outgoing;          // true = outgoing neighbors, false = incoming
   AggPrim prim;               // aggregation primitive
+  bool use_edge_attrs = false; // true = read attr from edge, false = from neighbor vertex
 };
 
 // ---------------------------------------------------------------------------
@@ -169,6 +170,8 @@ __global__ void ComputeFeaturesKernel(
     uint32_t n_in_edges,
     uint32_t n_out_edges,
     const Attributes* vertex_attrs,             // [n_vertices]
+    const Attributes* edge_attrs_out,           // shared table for outgoing edges
+    const Attributes* edge_attrs_in,            // shared table for incoming edges
     const uint32_t* pivot_vertex_ids,           // [n_pivots]
     uint32_t n_pivots,
     const FeatureRequest* requests,             // [n_requests]
@@ -183,10 +186,13 @@ __global__ void ComputeAllFeaturesKernel(
     uint32_t n_in_edges,
     uint32_t n_out_edges,
     const Attributes* vertex_attrs,             // [n_vertices]
+    const Attributes* edge_attrs_out,           // shared table for outgoing edges
+    const Attributes* edge_attrs_in,            // shared table for incoming edges
     const uint32_t* pivot_vertex_ids,           // [n_pivots]
     uint32_t n_pivots,
     AttributeName attr_name,                    // target attribute to aggregate
     bool use_outgoing,                          // true = outgoing neighbors
+    bool use_edge_attrs,                        // true = read attr from edge
     uint32_t max_neighbors,
     AllFeatures* d_outputs);                    // [n_pivots]
 

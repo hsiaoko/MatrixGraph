@@ -27,6 +27,17 @@ struct GraphAggregateAttributeColumn {
   const uint8_t* valid = nullptr; // host pointer; n_values bytes (1=valid) or null
 };
 
+// Columnar host attribute description used by LoadEdgeAttributes.
+// The caller provides one column per edge direction.  n_values must equal the
+// number of edges in that CSR direction.
+struct GraphAggregateEdgeAttributeColumn {
+  char key[64];                 // attribute name
+  int32_t value_type;           // ValueType enum value
+  uint32_t n_values;            // must equal n_out_edges or n_in_edges
+  const void* values = nullptr; // host pointer; n_values contiguous entries
+  const uint8_t* valid = nullptr; // host pointer; n_values bytes (1=valid) or null
+};
+
 // GraphAggregate task: per-vertex feature aggregation over a single graph.
 //
 // The task owns one ImmutableCSR graph and its per-vertex Attributes.  Callers
@@ -122,6 +133,15 @@ class GraphAggregate : public TaskBase {
   // multi-GPU configurations the attributes are cloned to each GPU.
   __host__ void SetVertexAttributes(DevicePerVertexAttributes attrs);
 
+  // Load columnar per-edge attributes from host memory.
+  // is_outgoing=true means the columns describe outgoing edges in CSR order
+  // (n_values must equal graph_->get_num_outgoing_edges()); otherwise they
+  // describe incoming edges.  Calls for the two directions are independent.
+  __host__ void LoadEdgeAttributes(
+      bool is_outgoing,
+      uint32_t n_columns,
+      const GraphAggregateEdgeAttributeColumn* columns);
+
   // Configure the number of CUDA streams used per GPU.
   // Must be called before loading data (default from MATRIXGRAPH_CUDA_STREAMS
   // env, or 2 if unset).
@@ -139,7 +159,8 @@ class GraphAggregate : public TaskBase {
   __host__ std::vector<kernel::AllFeatures> ComputeAll(
       const std::vector<uint32_t>& pivot_vertex_ids,
       const kernel::AttributeName& attr_name,
-      bool use_outgoing);
+      bool use_outgoing,
+      bool use_edge_attrs = false);
 
   // Accessors
   __host__ bool HasGraph() const { return graph_ != nullptr; }
@@ -153,6 +174,17 @@ class GraphAggregate : public TaskBase {
     return gpu_idx < per_gpu_states_.size()
                ? per_gpu_states_[gpu_idx].vertex_attrs.GetDevicePtr()
                : nullptr;
+  }
+  __host__ const Attributes* GetDeviceEdgeAttributes(
+      bool is_outgoing, size_t gpu_idx = 0) const {
+    if (gpu_idx >= per_gpu_states_.size()) return nullptr;
+    const auto* ptr = is_outgoing
+                          ? per_gpu_states_[gpu_idx].edge_attrs_out_.GetDevicePtr()
+                          : per_gpu_states_[gpu_idx].edge_attrs_in_.GetDevicePtr();
+    return ptr;
+  }
+  __host__ bool HasEdgeAttributes(bool is_outgoing, size_t gpu_idx = 0) const {
+    return GetDeviceEdgeAttributes(is_outgoing, gpu_idx) != nullptr;
   }
 
   // Test helper: create a synthetic ring graph with n_vertices and
@@ -199,6 +231,10 @@ class GraphAggregate : public TaskBase {
 
     // Device-side attributes on this GPU.
     DevicePerVertexAttributes vertex_attrs;
+    sics::matrixgraph::core::data_structures::DeviceAttributes edge_attrs_out_;
+    sics::matrixgraph::core::data_structures::DeviceAttributes edge_attrs_in_;
+    std::vector<uint8_t*> edge_attr_columns_out_;
+    std::vector<uint8_t*> edge_attr_columns_in_;
 
     // Streams and per-stream buffers on this GPU.
     std::vector<cudaStream_t> streams;

@@ -157,22 +157,23 @@ __device__ inline void BlockBitonicSort(FeatureValue* s, uint32_t n) {
 // Attribute access helpers
 // ---------------------------------------------------------------------------
 __device__ inline bool ReadAttributeValue(const Attribute* attr,
+                                          uint32_t row,
                                           FeatureValue* out) {
   if (!attr) return false;
   out->type = attr->type;
   switch (attr->type) {
     case ValueType::kInt:
     case ValueType::kTime:
-      out->i64 = GetInt(*attr, 0);
+      out->i64 = GetInt(*attr, row);
       break;
     case ValueType::kFloat64:
-      out->f64 = GetFloat64(*attr, 0);
+      out->f64 = GetFloat64(*attr, row);
       break;
     case ValueType::kFloat32:
-      out->f64 = static_cast<double>(*reinterpret_cast<const float*>(attr->data));
+      out->f64 = static_cast<double>(*(static_cast<const float*>(attr->data) + row));
       break;
     case ValueType::kBool:
-      out->b = GetBool(*attr, 0);
+      out->b = GetBool(*attr, row);
       break;
     default:
       out->type = ValueType::kInvalid;
@@ -190,9 +191,12 @@ __device__ inline uint32_t CollectNeighborValuesBlock(
     uint32_t n_in_edges,
     uint32_t n_out_edges,
     const Attributes* vertex_attrs,
+    const Attributes* edge_attrs_out,
+    const Attributes* edge_attrs_in,
     uint32_t pivot_vid,
     const AttributeName& attr_name,
     bool use_outgoing,
+    bool use_edge_attrs,
     FeatureValue* shared_buf,
     uint32_t max_neighbors,
     uint32_t* scratch) {
@@ -209,17 +213,29 @@ __device__ inline uint32_t CollectNeighborValuesBlock(
   const VertexID* edges = use_outgoing
       ? outgoing_edges + out_offset[pivot_vid]
       : incoming_edges + in_offset[pivot_vid];
+  const uint32_t edge_base = use_outgoing
+      ? out_offset[pivot_vid]
+      : in_offset[pivot_vid];
+  const Attributes* edge_attrs = use_outgoing ? edge_attrs_out : edge_attrs_in;
 
   // Single-pass cooperative collection with a shared atomic counter.
   if (threadIdx.x == 0) scratch[0] = 0;
   __syncthreads();
 
   for (uint32_t i = threadIdx.x; i < deg; i += blockDim.x) {
-    VertexID neighbor = edges[i];
-    const Attribute* attr = vertex_attrs[neighbor].attr_map.find(attr_name);
+    const Attribute* attr = nullptr;
+    uint32_t row = 0;
+    if (use_edge_attrs) {
+      attr = edge_attrs ? edge_attrs->attr_map.find(attr_name) : nullptr;
+      row = edge_base + i;
+    } else {
+      VertexID neighbor = edges[i];
+      attr = vertex_attrs ? vertex_attrs[neighbor].attr_map.find(attr_name) : nullptr;
+      row = 0;
+    }
     if (!attr) continue;
     FeatureValue v;
-    if (!ReadAttributeValue(attr, &v)) continue;
+    if (!ReadAttributeValue(attr, row, &v)) continue;
     uint32_t pos = atomicAdd(&scratch[0], 1);
     if (pos < max_neighbors) shared_buf[pos] = v;
   }
@@ -626,6 +642,8 @@ __global__ void ComputeFeaturesKernel(
     uint32_t n_in_edges,
     uint32_t n_out_edges,
     const Attributes* vertex_attrs,
+    const Attributes* edge_attrs_out,
+    const Attributes* edge_attrs_in,
     const uint32_t* pivot_vertex_ids,
     uint32_t n_pivots,
     const FeatureRequest* requests,
@@ -646,9 +664,10 @@ __global__ void ComputeFeaturesKernel(
   for (uint32_t req_idx = 0; req_idx < n_requests; ++req_idx) {
     uint32_t n_collected = CollectNeighborValuesBlock(
         graph_data, n_vertices, n_in_edges, n_out_edges,
-        vertex_attrs, vid,
+        vertex_attrs, edge_attrs_out, edge_attrs_in, vid,
         requests[req_idx].attr_name,
         requests[req_idx].use_outgoing,
+        requests[req_idx].use_edge_attrs,
         shared_buf, max_neighbors, scratch);
 
     __syncthreads();
@@ -669,10 +688,13 @@ __global__ void ComputeAllFeaturesKernel(
     uint32_t n_in_edges,
     uint32_t n_out_edges,
     const Attributes* vertex_attrs,
+    const Attributes* edge_attrs_out,
+    const Attributes* edge_attrs_in,
     const uint32_t* pivot_vertex_ids,
     uint32_t n_pivots,
     AttributeName attr_name,
     bool use_outgoing,
+    bool use_edge_attrs,
     uint32_t max_neighbors,
     AllFeatures* d_outputs) {
   extern __shared__ uint8_t shared_mem[];
@@ -690,11 +712,12 @@ __global__ void ComputeAllFeaturesKernel(
   req.attr_name = attr_name;
   req.neighbor_label = 0;
   req.use_outgoing = use_outgoing;
+  req.use_edge_attrs = use_edge_attrs;
 
   uint32_t n_collected = CollectNeighborValuesBlock(
       graph_data, n_vertices, n_in_edges, n_out_edges,
-      vertex_attrs, vid,
-      req.attr_name, req.use_outgoing,
+      vertex_attrs, edge_attrs_out, edge_attrs_in, vid,
+      req.attr_name, req.use_outgoing, req.use_edge_attrs,
       shared_buf, max_neighbors, scratch);
 
   __syncthreads();

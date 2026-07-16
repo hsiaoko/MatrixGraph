@@ -89,7 +89,7 @@ int main() {
   Attribute attrs[] = {age_attr, score_attr};
 
   // 4. Build DeviceAttributes (hash map lives in device memory).
-  DeviceAttributes dev_attrs(1 /* vertex_id / label_id */, names, attrs, 2);
+  DeviceAttributes dev_attrs(1 /* entity_id / label_id */, names, attrs, 2);
 
   // 5. Launch kernel: all threads share the same Attributes view.
   int64_t* d_out_age = nullptr;
@@ -129,7 +129,7 @@ int main() {
 
     HostHashMap<AttributeName, Attribute> host_map(h_names, h_attrs, 2);
     Attributes host_view;
-    host_view.vertex_id = 1;
+    host_view.entity_id = 1;
     host_view.attr_map = host_map.View();
 
     const Attribute* p = host_view.attr_map.find(AttributeName("age"));
@@ -148,7 +148,7 @@ int main() {
 
     HostHashMap<AttributeName, Attribute> host_map(h_names, h_attrs, 2);
     Attributes host_view;
-    host_view.vertex_id = 1;
+    host_view.entity_id = 1;
     host_view.attr_map = host_map.View();
 
     const Attribute* p = host_view.attr_map.find(AttributeName("nonexistent"));

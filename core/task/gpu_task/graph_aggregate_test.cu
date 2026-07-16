@@ -2,11 +2,13 @@
 
 #include <cmath>
 #include <cstdint>
+#include <cstring>
 #include <cuda_runtime.h>
 #include <iostream>
 #include <vector>
 
 using sics::matrixgraph::core::task::GraphAggregate;
+using sics::matrixgraph::core::task::GraphAggregateEdgeAttributeColumn;
 using sics::matrixgraph::core::task::kernel::AggPrim;
 using sics::matrixgraph::core::task::kernel::AllFeatures;
 using sics::matrixgraph::core::task::kernel::FeatureRequest;
@@ -186,7 +188,96 @@ int main() {
   if (all_pass) {
     std::cout << "[GraphAggregate ComputeAll Test] PASSED (" << n_vertices
               << " vertices)" << std::endl;
-    return 0;
+  } else {
+    return 1;
   }
-  return 1;
+
+  // -------------------------------------------------------------------------
+  // Edge attribute aggregation test (outgoing edges).
+  // -------------------------------------------------------------------------
+  {
+    const uint32_t n_edges = n_vertices * out_deg;
+    std::vector<double> edge_weights(n_edges);
+    for (uint32_t v = 0; v < n_vertices; ++v) {
+      for (uint32_t j = 0; j < out_deg; ++j) {
+        VertexID dst = (v + 1 + j) % n_vertices;
+        edge_weights[v * out_deg + j] = dst * 0.5;
+      }
+    }
+
+    GraphAggregateEdgeAttributeColumn weight_col;
+    std::memset(&weight_col, 0, sizeof(weight_col));
+    std::strncpy(weight_col.key, "weight", sizeof(weight_col.key) - 1);
+    weight_col.value_type = static_cast<int32_t>(
+        sics::matrixgraph::core::data_structures::ValueType::kFloat64);
+    weight_col.n_values = n_edges;
+    weight_col.values = edge_weights.data();
+
+    task.LoadEdgeAttributes(true, 1, &weight_col);
+
+    std::vector<FeatureRequest> edge_requests = {
+        {AttributeName("weight"), 0, true, AggPrim::kSum, true},
+        {AttributeName("weight"), 0, true, AggPrim::kMean, true},
+        {AttributeName("weight"), 0, true, AggPrim::kMin, true},
+        {AttributeName("weight"), 0, true, AggPrim::kMax, true},
+    };
+    const uint32_t n_edge_req = edge_requests.size();
+
+    std::vector<FeatureValue> edge_results =
+        task.ComputeFeatures(pivot_vids, edge_requests);
+
+    bool edge_pass = true;
+    for (uint32_t v = 0; v + out_deg < n_vertices; ++v) {
+      uint32_t base = v * n_edge_req;
+      double w1 = (v + 1) * 0.5;
+      double w2 = (v + 2) * 0.5;
+      double w3 = (v + 3) * 0.5;
+      double expected_sum = w1 + w2 + w3;
+      double expected_mean = expected_sum / 3.0;
+      double expected_min = w1;
+      double expected_max = w3;
+
+      if (!float_eq(expected_sum, edge_results[base + 0].ToDouble())) {
+        std::cerr << "FAIL edge sum at v=" << v
+                  << " expected=" << expected_sum
+                  << " got=" << edge_results[base + 0].ToDouble()
+                  << std::endl;
+        edge_pass = false;
+        break;
+      }
+      if (!float_eq(expected_mean, edge_results[base + 1].ToDouble())) {
+        std::cerr << "FAIL edge mean at v=" << v
+                  << " expected=" << expected_mean
+                  << " got=" << edge_results[base + 1].ToDouble()
+                  << std::endl;
+        edge_pass = false;
+        break;
+      }
+      if (!float_eq(expected_min, edge_results[base + 2].ToDouble())) {
+        std::cerr << "FAIL edge min at v=" << v
+                  << " expected=" << expected_min
+                  << " got=" << edge_results[base + 2].ToDouble()
+                  << std::endl;
+        edge_pass = false;
+        break;
+      }
+      if (!float_eq(expected_max, edge_results[base + 3].ToDouble())) {
+        std::cerr << "FAIL edge max at v=" << v
+                  << " expected=" << expected_max
+                  << " got=" << edge_results[base + 3].ToDouble()
+                  << std::endl;
+        edge_pass = false;
+        break;
+      }
+    }
+
+    if (edge_pass) {
+      std::cout << "[GraphAggregate Edge Attribute Test] PASSED (" << n_vertices
+                << " vertices)" << std::endl;
+    } else {
+      return 1;
+    }
+  }
+
+  return 0;
 }

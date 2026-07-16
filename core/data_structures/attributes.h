@@ -195,7 +195,7 @@ struct DefaultEqual<AttributeName> {
 // their vertex / thread id inside the Attribute columns.
 // ---------------------------------------------------------------------------
 struct Attributes {
-  uint32_t vertex_id = 0;  // label id, graph id, or any entity grouping id
+  uint32_t entity_id = 0;  // label id, graph id, vertex id, edge id, or any entity grouping id
   HashMap<AttributeName, Attribute> attr_map;
 };
 
@@ -212,13 +212,13 @@ class DeviceAttributes {
   DeviceAttributes() = default;
 
   // Build from host-side attribute name / Attribute descriptor pairs.
-  DeviceAttributes(uint32_t vertex_id,
+  DeviceAttributes(uint32_t entity_id,
                    const AttributeName* names,
                    const Attribute* attrs,
                    uint32_t n,
                    float load_factor = 0.7f) {
     if (n == 0) {
-      view_.vertex_id = vertex_id;
+      view_.entity_id = entity_id;
       return;
     }
 
@@ -260,18 +260,23 @@ class DeviceAttributes {
     delete[] h_values;
     delete[] h_occupied;
 
-    view_.vertex_id = vertex_id;
+    view_.entity_id = entity_id;
     view_.attr_map.keys = d_keys_;
     view_.attr_map.values = d_values_;
     view_.attr_map.occupied = d_occupied_;
     view_.attr_map.size = n;
     view_.attr_map.capacity = capacity_;
+
+    CUDA_CHECK(cudaMalloc(&d_view_, sizeof(Attributes)));
+    CUDA_CHECK(cudaMemcpy(d_view_, &view_, sizeof(Attributes),
+                          cudaMemcpyHostToDevice));
   }
 
   ~DeviceAttributes() {
     if (d_keys_) cudaFree(d_keys_);
     if (d_values_) cudaFree(d_values_);
     if (d_occupied_) cudaFree(d_occupied_);
+    if (d_view_) cudaFree(d_view_);
   }
 
   DeviceAttributes(const DeviceAttributes&) = delete;
@@ -281,11 +286,13 @@ class DeviceAttributes {
     d_keys_ = other.d_keys_;
     d_values_ = other.d_values_;
     d_occupied_ = other.d_occupied_;
+    d_view_ = other.d_view_;
     capacity_ = other.capacity_;
     view_ = other.view_;
     other.d_keys_ = nullptr;
     other.d_values_ = nullptr;
     other.d_occupied_ = nullptr;
+    other.d_view_ = nullptr;
     other.capacity_ = 0;
     other.view_ = Attributes{};
   }
@@ -295,14 +302,17 @@ class DeviceAttributes {
       if (d_keys_) cudaFree(d_keys_);
       if (d_values_) cudaFree(d_values_);
       if (d_occupied_) cudaFree(d_occupied_);
+      if (d_view_) cudaFree(d_view_);
       d_keys_ = other.d_keys_;
       d_values_ = other.d_values_;
       d_occupied_ = other.d_occupied_;
+      d_view_ = other.d_view_;
       capacity_ = other.capacity_;
       view_ = other.view_;
       other.d_keys_ = nullptr;
       other.d_values_ = nullptr;
       other.d_occupied_ = nullptr;
+      other.d_view_ = nullptr;
       other.capacity_ = 0;
       other.view_ = Attributes{};
     }
@@ -311,9 +321,12 @@ class DeviceAttributes {
 
   const Attributes& View() const { return view_; }
   Attributes& View() { return view_; }
+  const Attributes* GetDevicePtr() const { return d_view_; }
+  Attributes* GetDevicePtr() { return d_view_; }
 
  private:
   Attributes view_;
+  Attributes* d_view_ = nullptr;
   AttributeName* d_keys_ = nullptr;
   Attribute* d_values_ = nullptr;
   uint8_t* d_occupied_ = nullptr;
