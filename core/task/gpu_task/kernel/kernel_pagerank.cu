@@ -83,30 +83,10 @@ static __global__ void PageRankKernel(ParametersPageRank params) {
         (1.0f - params.damping_factor) / params.n_vertices_g +
         params.damping_factor * sum;
   }
-
-  for (int v_idx = params.n_vertices_g - tid;
-       v_idx > params.n_vertices_g - tid - 1; v_idx--) {
-    if (visited.GetBit(v_idx)) continue;
-    visited.SetBit(v_idx);
-
-    float sum = 0.0f;
-    EdgeIndex v_offset_base = in_offset_g[v_idx];
-
-    // Sum up contributions from incoming edges
-    for (VertexID nbr_idx = 0; nbr_idx < in_degree_g[v_idx]; nbr_idx++) {
-      VertexID nbr_v = in_edges_g[v_offset_base + nbr_idx];
-      float nbr_rank = params.curr_page_ranks[nbr_v];
-      float out_degree = static_cast<float>(out_degree_g[nbr_v]);
-      if (out_degree > 0) {
-        sum += nbr_rank / out_degree;
-      }
-    }
-
-    // Calculate new PageRank value
-    params.next_page_ranks[v_idx] =
-        (1.0f - params.damping_factor) / params.n_vertices_g +
-        params.damping_factor * sum;
-  }
+  // NOTE(GraphRAG): Removed the original second loop. It used an out-of-bounds
+  // starting index (n_vertices_g - tid) and, because the visited bitmap was
+  // already filled by the first loop, it was effectively dead code that caused
+  // illegal memory accesses on small graphs.
 }
 
 static __global__ void PageRankRangeKernel(ParametersPageRank params) {

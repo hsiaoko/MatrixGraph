@@ -87,7 +87,9 @@ static __global__ void BFSKernel(ParametersBFS params) {
 
   for (VertexID offset = tid; offset < *(params.in_active_vertices_offset);
        offset += step) {
-    if (!in_visited.GetBit(tid)) continue;
+    // NOTE(GraphRAG): in_visited was used with the wrong semantics (vertex-id
+    // bitmap vs active-array offset bitmap). active array bounds alone are
+    // sufficient for standard BFS, so the incorrect check is removed.
     VertexID v_idx = params.in_active_vertices[offset];
     EdgeIndex v_offset_base = out_offset_g[v_idx];
     VertexLabel v_level = params.v_level_g[v_idx];
@@ -173,19 +175,14 @@ void BFSKernelWrapper::BFS(
     BFSKernel<<<dimGrid, dimBlock, 0, stream>>>(params);
     cudaStreamSynchronize(stream);
 
-    std::swap(in_visited, out_visited);
     std::swap(in_active_vertices, out_active_vertices);
     std::swap(in_active_vertices_offset, out_active_vertices_offset);
     params.in_active_vertices = in_active_vertices;
     params.out_active_vertices = out_active_vertices;
     params.in_active_vertices_offset = in_active_vertices_offset;
     params.out_active_vertices_offset = out_active_vertices_offset;
-    params.in_visited_bitmap_data = in_visited.data();
-    params.out_visited_bitmap_data = out_visited.data();
 
     *(params.out_active_vertices_offset) = 0;
-    out_visited.Clear();
-    visited.Clear();
     params.current_level++;
   }
 

@@ -110,37 +110,66 @@ static __global__ void HashMinKernel(ParametersWCC params) {
     if (!in_visited.GetBit(v_idx)) continue;
     if (visited.GetBit(v_idx)) continue;
     visited.SetBit(v_idx);
-    EdgeIndex v_offset_base = out_offset_g[v_idx];
 
     VertexLabel v_label = params.v_label_g[v_idx];
+
+    // Forward: propagate to outgoing neighbors.
+    EdgeIndex out_offset_base = out_offset_g[v_idx];
     for (VertexID nbr_v_idx = 0; nbr_v_idx < out_degree_g[v_idx]; nbr_v_idx++) {
-      VertexID nbr_v = out_edges_g[v_offset_base + nbr_v_idx];
-
+      VertexID nbr_v = out_edges_g[out_offset_base + nbr_v_idx];
       VertexLabel label_nbr_v = *(params.v_label_g + nbr_v);
+      if (label_nbr_v > v_label) {
+        atomicMin(params.v_label_g + nbr_v, v_label);
+        out_visited.SetBit(nbr_v);
+      }
+    }
 
+    // NOTE(GraphRAG): To compute weakly connected components on a directed
+    // graph, also propagate along incoming edges (treat edges as undirected).
+    EdgeIndex in_offset_base = in_offset_g[v_idx];
+    for (VertexID nbr_v_idx = 0; nbr_v_idx < in_degree_g[v_idx]; nbr_v_idx++) {
+      VertexID nbr_v = in_edges_g[in_offset_base + nbr_v_idx];
+      VertexLabel label_nbr_v = *(params.v_label_g + nbr_v);
       if (label_nbr_v > v_label) {
         atomicMin(params.v_label_g + nbr_v, v_label);
         out_visited.SetBit(nbr_v);
       }
     }
   }
-  for (int v_idx = params.n_vertices_g - tid; v_idx > params.n_vertices_g / 3;
-       v_idx -= step) {
-    if (!in_visited.GetBit(v_idx)) continue;
-    if (visited.GetBit(v_idx)) continue;
+  // NOTE(GraphRAG): The original reverse sweep used an out-of-bounds index
+  // (n_vertices_g - tid) and integer underflow for tid >= n_vertices_g,
+  // causing crashes on small graphs and silent corruption on large ones.
+  // We replace it with a guarded reverse sweep over the same active vertices,
+  // also propagating along both out-edges and in-edges.
+  if (tid < params.n_vertices_g) {
+    for (int v_idx = static_cast<int>(params.n_vertices_g) - 1 - static_cast<int>(tid);
+         v_idx > static_cast<int>(params.n_vertices_g) / 3;
+         v_idx -= static_cast<int>(step)) {
+      VertexID vid = static_cast<VertexID>(v_idx);
+      if (!in_visited.GetBit(vid)) continue;
+      if (visited.GetBit(vid)) continue;
 
-    visited.SetBit(v_idx);
-    EdgeIndex v_offset_base = out_offset_g[v_idx];
+      visited.SetBit(vid);
+      VertexLabel v_label = params.v_label_g[vid];
 
-    VertexLabel v_label = params.v_label_g[v_idx];
-    for (VertexID nbr_v_idx = 0; nbr_v_idx < out_degree_g[v_idx]; nbr_v_idx++) {
-      VertexID nbr_v = out_edges_g[v_offset_base + nbr_v_idx];
+      EdgeIndex out_offset_base = out_offset_g[vid];
+      for (VertexID nbr_v_idx = 0; nbr_v_idx < out_degree_g[vid]; nbr_v_idx++) {
+        VertexID nbr_v = out_edges_g[out_offset_base + nbr_v_idx];
+        VertexLabel label_nbr_v = *(params.v_label_g + nbr_v);
+        if (label_nbr_v > v_label) {
+          atomicMin(params.v_label_g + nbr_v, v_label);
+          out_visited.SetBit(nbr_v);
+        }
+      }
 
-      VertexLabel label_nbr_v = *(params.v_label_g + nbr_v);
-
-      if (label_nbr_v > v_label) {
-        atomicMin(params.v_label_g + nbr_v, v_label);
-        out_visited.SetBit(nbr_v);
+      EdgeIndex in_offset_base = in_offset_g[vid];
+      for (VertexID nbr_v_idx = 0; nbr_v_idx < in_degree_g[vid]; nbr_v_idx++) {
+        VertexID nbr_v = in_edges_g[in_offset_base + nbr_v_idx];
+        VertexLabel label_nbr_v = *(params.v_label_g + nbr_v);
+        if (label_nbr_v > v_label) {
+          atomicMin(params.v_label_g + nbr_v, v_label);
+          out_visited.SetBit(nbr_v);
+        }
       }
     }
   }
