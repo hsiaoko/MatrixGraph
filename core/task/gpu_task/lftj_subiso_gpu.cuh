@@ -1,5 +1,5 @@
-#ifndef MATRIXGRAPH_CORE_TASK_GPU_LFTJ_SUBISO_GPU_CUH_
-#define MATRIXGRAPH_CORE_TASK_GPU_LFTJ_SUBISO_GPU_CUH_
+#ifndef MATRIXGRAPH_CORE_TASK_GPU_TASK_LFTJ_SUBISO_GPU_CUH_
+#define MATRIXGRAPH_CORE_TASK_GPU_TASK_LFTJ_SUBISO_GPU_CUH_
 
 #include <stdint.h>
 #include <string>
@@ -111,4 +111,4 @@ class LFTJSubIsoGpu : public TaskBase {
 }  // namespace matrixgraph
 }  // namespace sics
 
-#endif  // MATRIXGRAPH_CORE_TASK_GPU_LFTJ_SUBISO_GPU_CUH_
+#endif  // MATRIXGRAPH_CORE_TASK_GPU_TASK_LFTJ_SUBISO_GPU_CUH_

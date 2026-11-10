@@ -1,5 +1,5 @@
-#ifndef CORE_UTIL_ATOMIC_H_
-#define CORE_UTIL_ATOMIC_H_
+#ifndef MATRIXGRAPH_CORE_UTIL_ATOMIC_H_
+#define MATRIXGRAPH_CORE_UTIL_ATOMIC_H_
 
 #include <cassert>
 #include <cstdlib>
@@ -52,11 +52,11 @@ template <class ET> inline bool WriteMax(ET *a, ET b) {
 }
 
 template <class ET> inline void WriteAdd(ET *a, ET b) {
-  volatile ET newV, oldV;
+  volatile ET new_v, old_v;
   do {
-    oldV = *a;
-    newV = oldV + b;
-  } while (!CAS(a, oldV, newV));
+    old_v = *a;
+    new_v = old_v + b;
+  } while (!CAS(a, old_v, new_v));
 }
 
 } // namespace atomic
@@ -65,4 +65,4 @@ template <class ET> inline void WriteAdd(ET *a, ET b) {
 } // namespace matrixgraph
 } // namespace sics
 
-#endif // CORE_UTIL_ATOMIC_H_
+#endif // MATRIXGRAPH_CORE_UTIL_ATOMIC_H_

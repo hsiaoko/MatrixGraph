@@ -414,8 +414,8 @@ int GARMatchKernelWrapper::GARMatch(const GARGraphArrays& g,
     d_p_edge_src.Init(h_p_edge_src);
     d_p_edge_dst.Init(h_p_edge_dst);
 
-    dim3 dimBlock(kBlockDim);
-    dim3 dimGrid(kGridDim);
+    dim3 dim_block(kBlockDim);
+    dim3 dim_grid(kGridDim);
     for (int pe = 0; pe < p.n_edges; ++pe) {
       const int32_t pu = p.edge_src[pe];
       const int32_t pv = p.edge_dst[pe];
@@ -456,14 +456,14 @@ int GARMatchKernelWrapper::GARMatch(const GARGraphArrays& g,
           .cand_count = d_cand_count.GetPtr(),
           .cand_capacity = g.n_edges,
       };
-      GARBuildVertexValidMaskKernel<<<dimGrid, dimBlock>>>(
+      GARBuildVertexValidMaskKernel<<<dim_grid, dim_block>>>(
           params, pu, d_src_valid.GetPtr());
       CUDA_CHECK(cudaGetLastError());
-      GARBuildVertexValidMaskKernel<<<dimGrid, dimBlock>>>(
+      GARBuildVertexValidMaskKernel<<<dim_grid, dim_block>>>(
           params, pv, d_dst_valid.GetPtr());
       CUDA_CHECK(cudaGetLastError());
       CUDA_CHECK(cudaDeviceSynchronize());
-      GARFilterEdgeCandidatesKernel<<<dimGrid, dimBlock>>>(params);
+      GARFilterEdgeCandidatesKernel<<<dim_grid, dim_block>>>(params);
       CUDA_CHECK(cudaGetLastError());
       CUDA_CHECK(cudaDeviceSynchronize());
 
@@ -542,8 +542,8 @@ int GARMatchKernelWrapper::GARMatch(const GARGraphArrays& g,
   DeviceOwnedBufferInt32 d_frontier_b(emb_bytes);
   DeviceOwnedBufferInt d_curr_count(sizeof(int));
   DeviceOwnedBufferInt d_next_count(sizeof(int));
-  dim3 dimBlock(kBlockDim);
-  dim3 dimGrid(kGridDim);
+  dim3 dim_block(kBlockDim);
+  dim3 dim_grid(kGridDim);
 
   const int e0 = 0;
   const int32_t p0_u = p.edge_src[e0];
@@ -559,7 +559,7 @@ int GARMatchKernelWrapper::GARMatch(const GARGraphArrays& g,
   d_init_src.Init(h_init_src);
   d_init_dst.Init(h_init_dst);
   CUDA_CHECK(cudaMemset(d_curr_count.GetPtr(), 0, sizeof(int)));
-  GARInitEmbeddingsKernel<<<dimGrid, dimBlock>>>(
+  GARInitEmbeddingsKernel<<<dim_grid, dim_block>>>(
       d_init_src.GetPtr(), d_init_dst.GetPtr(),
       static_cast<int>(std::min(init_src.size(), init_dst.size())), p0_u, p0_v,
       p.n_nodes, d_frontier_a.GetPtr(), d_curr_count.GetPtr(), max_embeddings);
@@ -601,7 +601,7 @@ int GARMatchKernelWrapper::GARMatch(const GARGraphArrays& g,
         use_a_as_curr ? d_frontier_a.GetPtr() : d_frontier_b.GetPtr();
     int32_t* next_ptr =
         use_a_as_curr ? d_frontier_b.GetPtr() : d_frontier_a.GetPtr();
-    GARExpandEmbeddingsKernel<<<dimGrid, dimBlock>>>(
+    GARExpandEmbeddingsKernel<<<dim_grid, dim_block>>>(
         curr_ptr, h_curr_count, p.n_nodes, pu, pv, d_c_src.GetPtr(),
         d_c_dst.GetPtr(), n_cand, next_ptr, d_next_count.GetPtr(),
         max_embeddings);

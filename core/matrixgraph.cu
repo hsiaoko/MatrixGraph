@@ -158,22 +158,22 @@ void MatrixGraph::Run(TaskType task_type, CPUTaskBase* task_ptr) {
 
 void MatrixGraph::PrintDeviceInfo() const {
   int dev = 0;
-  cudaDeviceProp devProp;
+  cudaDeviceProp dev_prop;
   CUDA_CHECK(cudaGetDeviceCount(&dev));
   std::cout << "Device Info for " << dev << " devices." << std::endl;
   size_t size;
   cudaDeviceGetLimit(&size, cudaLimitMallocHeapSize);
   for (int i = 0; i < dev; i++) {
-    cudaGetDeviceProperties(&devProp, i);
-    std::cout << "Device " << i << ": " << devProp.name << std::endl;
-    std::cout << "multiProcessorCount: " << devProp.multiProcessorCount
+    cudaGetDeviceProperties(&dev_prop, i);
+    std::cout << "Device " << i << ": " << dev_prop.name << std::endl;
+    std::cout << "multiProcessorCount: " << dev_prop.multiProcessorCount
               << std::endl;
-    std::cout << "sharedMemPerBlock: " << devProp.sharedMemPerBlock / 1024.0
+    std::cout << "sharedMemPerBlock: " << dev_prop.sharedMemPerBlock / 1024.0
               << " KB" << std::endl;
-    std::cout << "maxThreadsPerBlock：" << devProp.maxThreadsPerBlock
+    std::cout << "maxThreadsPerBlock：" << dev_prop.maxThreadsPerBlock
               << std::endl;
     std::cout << "maxThreadsPerMultiProcessor："
-              << devProp.maxThreadsPerMultiProcessor << std::endl;
+              << dev_prop.maxThreadsPerMultiProcessor << std::endl;
     std::cout << "defaultCUDAHeapSize：" << size << std::endl;
     std::cout << std::endl;
   }

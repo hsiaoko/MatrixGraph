@@ -306,10 +306,8 @@ void WCCKernelWrapper::WCC(
     const cudaStream_t& stream, VertexID n_vertices_g, EdgeIndex n_edges_g,
     const data_structures::UnifiedOwnedBuffer<uint8_t>& data_g,
     const data_structures::UnifiedOwnedBuffer<VertexLabel>& v_label_g) {
-  dim3 dimBlock(util::MatrixGraphEnvLaunchBlockDim(kBlockDim));
-  dim3 dimGrid(util::MatrixGraphEnvLaunchGridDim(kGridDim));
-  // dim3 dimBlock(1);
-  // dim3 dimGrid(1);
+  dim3 dim_block(util::MatrixGraphEnvLaunchBlockDim(kBlockDim));
+  dim3 dim_grid(util::MatrixGraphEnvLaunchGridDim(kGridDim));
 
   // The default heap size is 8M.
   cudaDeviceSetLimit(cudaLimitMallocHeapSize, 8388608 * 128);
@@ -357,7 +355,7 @@ void WCCKernelWrapper::WCC(
                        .visited_bitmap_data = visited.data(),
                        .d_num_components = nullptr};
 
-  InitKernel<<<dimGrid, dimBlock, 0, stream>>>(params);
+  InitKernel<<<dim_grid, dim_block, 0, stream>>>(params);
 
   cudaStreamSynchronize(stream);
 
@@ -380,14 +378,10 @@ void WCCKernelWrapper::WCC(
         .visited_bitmap_data = visited.data(),
         .d_num_components = nullptr};
 
-    // std::cout << "Round " << round++
-    //           << " Active vertices: " << in_visited.Count() << std::endl;
     std::cout << "Round " << round++
               << " Active vertices: " << *(in_active_vertices_offset)
               << std::endl;
-    HashMinKernel<<<dimGrid, dimBlock, 0, stream>>>(params);
-    // HashMinRangeKernel<<<dimGrid, dimBlock, 0, stream>>>(params);
-    //    HashMinKernelActiveVertices<<<dimGrid, dimBlock, 0, stream>>>(params);
+    HashMinKernel<<<dim_grid, dim_block, 0, stream>>>(params);
     cudaStreamSynchronize(stream);
 
     std::swap(in_visited, out_visited);
@@ -416,7 +410,7 @@ void WCCKernelWrapper::WCC(
                              .out_visited_bitmap_data = nullptr,
                              .visited_bitmap_data = nullptr,
                              .d_num_components = d_num_components};
-  HashMinKernel<<<dimGrid, dimBlock, 0, stream>>>(count_params);
+  HashMinKernel<<<dim_grid, dim_block, 0, stream>>>(count_params);
   cudaStreamSynchronize(stream);
   unsigned int num_components = 0;
   CUDA_CHECK(cudaMemcpy(&num_components, d_num_components, sizeof(unsigned int),

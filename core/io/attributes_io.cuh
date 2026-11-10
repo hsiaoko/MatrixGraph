@@ -1,5 +1,5 @@
-#ifndef MATRIXGRAPH_CORE_IO_ATTRIBUTES_IO_H_
-#define MATRIXGRAPH_CORE_IO_ATTRIBUTES_IO_H_
+#ifndef MATRIXGRAPH_CORE_IO_ATTRIBUTES_IO_CUH_
+#define MATRIXGRAPH_CORE_IO_ATTRIBUTES_IO_CUH_
 
 #include <cstdint>
 #include <memory>
@@ -70,4 +70,4 @@ class AttributesIO {
 }  // namespace matrixgraph
 }  // namespace sics
 
-#endif  // MATRIXGRAPH_CORE_IO_ATTRIBUTES_IO_H_
+#endif  // MATRIXGRAPH_CORE_IO_ATTRIBUTES_IO_CUH_

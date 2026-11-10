@@ -1,5 +1,5 @@
-#ifndef CORE_GPU_KERNEL_DATA_STRUCTURES_KERNEL_BITMAP_CUH_
-#define CORE_GPU_KERNEL_DATA_STRUCTURES_KERNEL_BITMAP_CUH_
+#ifndef MATRIXGRAPH_CORE_UTIL_GPU_BITMAP_CUH_
+#define MATRIXGRAPH_CORE_UTIL_GPU_BITMAP_CUH_
 
 #include "core/util/bitmap.h"
 
@@ -35,4 +35,4 @@ __host__ class GPUBitmap : public Bitmap {
 }  // namespace matrixgraph
 }  // namespace sics
 
-#endif  // CORE_GPU_KERNEL_DATA_STRUCTURES_KERNEL_BITMAP_CUH_
+#endif  // MATRIXGRAPH_CORE_UTIL_GPU_BITMAP_CUH_

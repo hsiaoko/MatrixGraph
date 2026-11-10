@@ -626,8 +626,8 @@ void MatrixOperationsKernelWrapper::MatrixBitAnd(
     const data_structures::DeviceOwnedBuffer<uint64_t>& matrix_b_buf,
     data_structures::DeviceOwnedBuffer<uint64_t>* matrix_c_buf, uint32_t m,
     uint32_t k, uint32_t n) {
-  dim3 dimBlock(64);
-  dim3 dimGrid(64);
+  dim3 dim_block(64);
+  dim3 dim_grid(64);
 
   ParametersForMatrixBitAnd params{.matrix_a = matrix_a_buf.GetPtr(),
                                    .matrix_b = matrix_b_buf.GetPtr(),
@@ -636,7 +636,7 @@ void MatrixOperationsKernelWrapper::MatrixBitAnd(
                                    .k = k,
                                    .n = n};
 
-  matrix_and_kernel<<<dimBlock, dimGrid, 0, stream>>>(params);
+  matrix_and_kernel<<<dim_block, dim_grid, 0, stream>>>(params);
   cudaError_t err = cudaGetLastError();
   if (err != cudaSuccess) {
     CUDA_CHECK(err);
@@ -647,13 +647,13 @@ void MatrixOperationsKernelWrapper::MatrixBitCount(
     const cudaStream_t& stream,
     const data_structures::DeviceOwnedBuffer<uint64_t>& matrix_buf,
     data_structures::DeviceOwnedBuffer<uint64_t>* count_buf, uint64_t size) {
-  dim3 dimBlock(256);
-  dim3 dimGrid(256);
+  dim3 dim_block(256);
+  dim3 dim_grid(256);
   ParametersForMatrixBitCount params{
       .data = reinterpret_cast<unsigned long long*>(matrix_buf.GetPtr()),
       .count = reinterpret_cast<unsigned long long*>(count_buf->GetPtr()),
       .size = size};
-  matrix_count_kernel<<<dimBlock, dimGrid, 0, stream>>>(params);
+  matrix_count_kernel<<<dim_block, dim_grid, 0, stream>>>(params);
   cudaError_t err = cudaGetLastError();
   if (err != cudaSuccess) {
     CUDA_CHECK(err);
@@ -667,8 +667,8 @@ void MatrixOperationsKernelWrapper::InitBitTiledMatrixMetadataByLayoutMatrix(
     data_structures::DeviceOwnedBuffer<uint32_t>* tile_row_idx,
     data_structures::DeviceOwnedBuffer<uint32_t>* tile_col_idx,
     uint32_t tile_size) {
-  dim3 dimBlock(64);
-  dim3 dimGrid(64);
+  dim3 dim_block(64);
+  dim3 dim_grid(64);
   ParametersInitBitTiledMatrix params{
       .layout_matrix =
           reinterpret_cast<unsigned long long*>(layout_matrix.GetPtr()),
@@ -677,7 +677,7 @@ void MatrixOperationsKernelWrapper::InitBitTiledMatrixMetadataByLayoutMatrix(
       .tile_col_idx = reinterpret_cast<unsigned*>(tile_col_idx->GetPtr()),
       .tile_size = tile_size};
 
-  init_bit_tiled_matrix_metadata_kernel<<<dimBlock, dimGrid, 0, stream>>>(
+  init_bit_tiled_matrix_metadata_kernel<<<dim_block, dim_grid, 0, stream>>>(
       params);
   cudaError_t err = cudaGetLastError();
   if (err != cudaSuccess) {
@@ -701,8 +701,8 @@ void MatrixOperationsKernelWrapper::FillTiles(
     const data_structures::UnifiedOwnedBuffer<uint64_t>& data_a,
     const data_structures::UnifiedOwnedBuffer<uint64_t>& data_b,
     data_structures::UnifiedOwnedBuffer<uint64_t>* data_c) {
-  dim3 dimBlock(256);
-  dim3 dimGrid(128);
+  dim3 dim_block(256);
+  dim3 dim_grid(128);
 
   auto tile_unit = max(1u, (WORD_OFFSET(tile_size * tile_size)));
   auto tile_buffer_size =
@@ -730,7 +730,7 @@ void MatrixOperationsKernelWrapper::FillTiles(
       .data_b = (uint8_t*)data_b.GetPtr(),
       .data_c = (uint8_t*)(data_c->GetPtr())};
 
-  fill_tiles_kernel<<<dimBlock, dimGrid, 0, stream>>>(params);
+  fill_tiles_kernel<<<dim_block, dim_grid, 0, stream>>>(params);
   cudaError_t err = cudaGetLastError();
   if (err != cudaSuccess) {
     CUDA_CHECK(err);
@@ -762,8 +762,8 @@ void MatrixOperationsKernelWrapper::FillCSRTiles(
     const data_structures::UnifiedOwnedBuffer<uint8_t>& data_a,
     const data_structures::UnifiedOwnedBuffer<uint8_t>& data_b,
     data_structures::UnifiedOwnedBuffer<uint8_t>* data_c) {
-  dim3 dimBlock(128);
-  dim3 dimGrid(128);
+  dim3 dim_block(128);
+  dim3 dim_grid(128);
 
   auto tile_unit = max(1u, (WORD_OFFSET(tile_size * tile_size)));
   auto tile_buffer_size =
@@ -801,7 +801,7 @@ void MatrixOperationsKernelWrapper::FillCSRTiles(
       .csr_offset_c = csr_offset_c.GetPtr(),
   };
 
-  fill_csr_tiles_kernel<<<dimBlock, dimGrid, 0, stream>>>(params);
+  fill_csr_tiles_kernel<<<dim_block, dim_grid, 0, stream>>>(params);
   cudaError_t err = cudaGetLastError();
   if (err != cudaSuccess) {
     CUDA_CHECK(err);
@@ -827,8 +827,8 @@ void MatrixOperationsKernelWrapper::Walk(
     const data_structures::UnifiedOwnedBuffer<uint8_t>& data_b,
     data_structures::UnifiedOwnedBuffer<uint32_t>* edgelist_c,
     data_structures::UnifiedOwnedBuffer<EdgeIndex>* output_offset) {
-  dim3 dimBlock(32);
-  dim3 dimGrid(32);
+  dim3 dim_block(32);
+  dim3 dim_grid(32);
 
   auto tile_unit = max(1u, (WORD_OFFSET(tile_size * tile_size)));
   auto tile_buffer_size =
@@ -857,7 +857,7 @@ void MatrixOperationsKernelWrapper::Walk(
                         .edgelist_c = edgelist_c->GetPtr(),
                         .output_offset = output_offset->GetPtr()};
 
-  walk_kernel<<<dimBlock, dimGrid, 0>>>(params);
+  walk_kernel<<<dim_block, dim_grid, 0>>>(params);
   cudaError_t err = cudaGetLastError();
   if (err != cudaSuccess) {
     CUDA_CHECK(err);
@@ -868,15 +868,15 @@ void MatrixOperationsKernelWrapper::Count(
     const cudaStream_t& stream, size_t tile_size, size_t n_strips,
     size_t n_nz_tile, const data_structures::UnifiedOwnedBuffer<uint64_t>& data,
     data_structures::UnifiedOwnedBuffer<uint64_t>* count) {
-  dim3 dimBlock(256);
-  dim3 dimGrid(256);
+  dim3 dim_block(256);
+  dim3 dim_grid(256);
 
   unsigned n_uint64_t = data.GetSize() / sizeof(uint64_t);
   ParametersCount params{.n_uint64_t = n_uint64_t,
                          .data = (unsigned long long*)(data.GetPtr()),
                          .count = (unsigned long long*)(count->GetPtr())};
 
-  count_kernel<<<dimGrid, dimBlock, 0, stream>>>(params);
+  count_kernel<<<dim_grid, dim_block, 0, stream>>>(params);
   cudaError_t err = cudaGetLastError();
   if (err != cudaSuccess) {
     CUDA_CHECK(err);

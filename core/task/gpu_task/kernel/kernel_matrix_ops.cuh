@@ -1,5 +1,5 @@
-#ifndef MATRIXGRAPH_KERNEL_MatrixOps_CUH
-#define MATRIXGRAPH_KERNEL_MatrixOps_CUH
+#ifndef MATRIXGRAPH_CORE_TASK_GPU_TASK_KERNEL_KERNEL_MATRIX_OPS_CUH_
+#define MATRIXGRAPH_CORE_TASK_GPU_TASK_KERNEL_KERNEL_MATRIX_OPS_CUH_
 
 #include <cuda_runtime.h>
 
@@ -79,4 +79,4 @@ class MatrixOpsKernelWrapper {
 }  // namespace matrixgraph
 }  // namespace sics
 
-#endif  // MATRIXGRAPH_KERNEL_MatrixOps_CUH
+#endif  // MATRIXGRAPH_CORE_TASK_GPU_TASK_KERNEL_KERNEL_MATRIX_OPS_CUH_

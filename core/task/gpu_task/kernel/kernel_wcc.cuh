@@ -1,5 +1,5 @@
-#ifndef MATRIXGRAPH_KERNEL_WCC_CUH
-#define MATRIXGRAPH_KERNEL_WCC_CUH
+#ifndef MATRIXGRAPH_CORE_TASK_GPU_TASK_KERNEL_KERNEL_WCC_CUH_
+#define MATRIXGRAPH_CORE_TASK_GPU_TASK_KERNEL_KERNEL_WCC_CUH_
 
 #include <cuda_runtime.h>
 
@@ -84,4 +84,4 @@ class WCCKernelWrapper {
 }  // namespace matrixgraph
 }  // namespace sics
 
-#endif  // MATRIXGRAPH_KERNEL_WCC_CUH
+#endif  // MATRIXGRAPH_CORE_TASK_GPU_TASK_KERNEL_KERNEL_WCC_CUH_

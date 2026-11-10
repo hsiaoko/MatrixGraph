@@ -1180,15 +1180,15 @@ std::vector<WOJMatches*> WOJSubIsoKernelWrapper::Filter(
     bool enable_label_degree_filter, bool enable_nlc_filter,
     bool enable_lpf_filter, bool enable_lcf_filter, bool enable_bloom_filter,
     bool enable_min_wise_bloom_filter) {
-  dim3 dimBlock(WojLaunchBlockDim());
-  dim3 dimGrid(WojLaunchGridDim());
+  dim3 dim_block(WojLaunchBlockDim());
+  dim3 dim_grid(WojLaunchGridDim());
 
   const size_t parallelism = WojHostStripeThreads();
 
   std::cout << "[WOJ Filter] begin: |E_p|=" << exec_plan.get_n_edges_p()
-            << " cudaGrid=(" << dimGrid.x << "," << dimGrid.y << ","
-            << dimGrid.z << ") block=(" << dimBlock.x << "," << dimBlock.y
-            << "," << dimBlock.z << ") host_worker_stripes=" << parallelism
+            << " cudaGrid=(" << dim_grid.x << "," << dim_grid.y << ","
+            << dim_grid.z << ") block=(" << dim_block.x << "," << dim_block.y
+            << "," << dim_block.z << ") host_worker_stripes=" << parallelism
             << " GPUs=" << static_cast<int>(exec_plan.get_n_devices())
             << std::endl;
 
@@ -1439,7 +1439,7 @@ std::vector<WOJMatches*> WOJSubIsoKernelWrapper::Filter(
 
   auto time1 = std::chrono::system_clock::now();
   RunHostStripeParallel(parallelism,
-      [parallelism, &dimGrid, &dimBlock, &exec_plan, &p, &g,
+      [parallelism, &dim_grid, &dim_block, &exec_plan, &p, &g,
        &exec_path_in_edges_vec, &data_p_vec, &v_label_p_vec, &data_g_vec,
        &v_label_g_vec, &bloom_signature_p_vec, &bloom_signature_g_vec,
        enable_min_wise_filter, enable_label_degree_filter, enable_nlc_filter,
@@ -1481,7 +1481,7 @@ std::vector<WOJMatches*> WOJSubIsoKernelWrapper::Filter(
               .filter_order = filter_order,
               .woj_matches = *woj_matches_vec[_]};
 
-          WOJFilterVCKernel<<<dimGrid, dimBlock, 0, stream>>>(params);
+          WOJFilterVCKernel<<<dim_grid, dim_block, 0, stream>>>(params);
         }
       });
 
@@ -1655,8 +1655,8 @@ bool AdjacentPairsAllJoinable(const std::vector<WOJMatches*>& cur) {
 void RunHashJoinOnDevice(const WOJExecutionPlan& exec_plan,
                          WOJMatches* left_woj_matches,
                          WOJMatches* right_woj_matches,
-                         WOJMatches* output_woj_matches, dim3 dimGrid,
-                         dim3 dimBlock, int logical_gpu, cudaStream_t stream) {
+                         WOJMatches* output_woj_matches, dim3 dim_grid,
+                         dim3 dim_block, int logical_gpu, cudaStream_t stream) {
   cudaSetDevice(exec_plan.CudaDeviceId(logical_gpu));
 
   auto join_keys = left_woj_matches->GetJoinKey(*right_woj_matches);
@@ -1687,10 +1687,10 @@ void RunHashJoinOnDevice(const WOJExecutionPlan& exec_plan,
                         sizeof(VertexID) * (n_vertices_g + 1)));
 
   if (right_y > 0) {
-    BuildKeyStartKernel<<<dimGrid, dimBlock, 0, stream>>>(
+    BuildKeyStartKernel<<<dim_grid, dim_block, 0, stream>>>(
         right_woj_matches->get_data_ptr(), right_woj_matches->get_x(),
         join_keys.second, right_y, d_key_start);
-    BuildKeyCountKernel<<<dimGrid, dimBlock, 0, stream>>>(
+    BuildKeyCountKernel<<<dim_grid, dim_block, 0, stream>>>(
         right_woj_matches->get_data_ptr(), right_woj_matches->get_x(),
         join_keys.second, right_y, d_key_start, d_key_count);
   }
@@ -1703,7 +1703,7 @@ void RunHashJoinOnDevice(const WOJExecutionPlan& exec_plan,
     CUDA_CHECK(cudaMalloc(&d_match_count, sizeof(VertexID) * left_y));
     CUDA_CHECK(cudaMalloc(&d_match_offset, sizeof(VertexID) * left_y));
 
-    HashJoinCountKernel<<<dimGrid, dimBlock, 0, stream>>>(
+    HashJoinCountKernel<<<dim_grid, dim_block, 0, stream>>>(
         left_woj_matches->get_data_ptr(), left_woj_matches->get_x(),
         join_keys.first, left_y, d_key_count, d_match_count);
 
@@ -1742,7 +1742,7 @@ void RunHashJoinOnDevice(const WOJExecutionPlan& exec_plan,
           .key_start = d_key_start,
           .key_count = d_key_count,
           .match_offset = d_match_offset};
-      HashJoinWriteKernel<<<dimGrid, dimBlock, 0, stream>>>(params);
+      HashJoinWriteKernel<<<dim_grid, dim_block, 0, stream>>>(params);
     }
   } else {
     output_woj_matches->SetYOffset(0);
@@ -1759,19 +1759,19 @@ void RunHashJoinOnDevice(const WOJExecutionPlan& exec_plan,
 void RunBinaryJoinOnDevice(const WOJExecutionPlan& exec_plan,
                            WOJMatches* left_woj_matches,
                            WOJMatches* right_woj_matches,
-                           WOJMatches* output_woj_matches, dim3 dimGrid,
-                           dim3 dimBlock, int logical_gpu) {
+                           WOJMatches* output_woj_matches, dim3 dim_grid,
+                           dim3 dim_block, int logical_gpu) {
   cudaStream_t stream{};
   CUDA_CHECK(cudaStreamCreate(&stream));
   RunHashJoinOnDevice(exec_plan, left_woj_matches, right_woj_matches,
-                      output_woj_matches, dimGrid, dimBlock, logical_gpu,
+                      output_woj_matches, dim_grid, dim_block, logical_gpu,
                       stream);
   CUDA_CHECK(cudaStreamDestroy(stream));
 }
 
 std::vector<WOJMatches*> ExecuteBushyPairwiseRound(
     const WOJExecutionPlan& exec_plan, const std::vector<WOJMatches*>& cur,
-    dim3 dimGrid, dim3 dimBlock) {
+    dim3 dim_grid, dim3 dim_block) {
   const size_t n = cur.size();
   const size_t npairs = n / 2;
   const bool has_tail = (n % 2u) == 1u;
@@ -1788,7 +1788,7 @@ std::vector<WOJMatches*> ExecuteBushyPairwiseRound(
     for (size_t k = w; k < npairs; k += workers) {
       const int log_dev = static_cast<int>(static_cast<VertexID>(k) % nd);
       RunBinaryJoinOnDevice(exec_plan, cur[2 * k], cur[2 * k + 1], outs[k],
-                            dimGrid, dimBlock, log_dev);
+                            dim_grid, dim_block, log_dev);
     }
   });
 
@@ -1805,7 +1805,7 @@ std::vector<WOJMatches*> ExecuteBushyPairwiseRound(
 
 std::optional<std::vector<WOJMatches*>> TryBushyPairwiseJoin(
     const WOJExecutionPlan& exec_plan, std::vector<WOJMatches*> cur,
-    dim3 dimGrid, dim3 dimBlock) {
+    dim3 dim_grid, dim3 dim_block) {
   int level = 0;
   while (cur.size() > 1) {
     if (!AdjacentPairsAllJoinable(cur)) {
@@ -1816,7 +1816,7 @@ std::optional<std::vector<WOJMatches*>> TryBushyPairwiseJoin(
     }
     std::cout << "[WOJ Join] bushy level " << level << " pairwise joins, tables="
               << cur.size() << std::endl;
-    cur = ExecuteBushyPairwiseRound(exec_plan, cur, dimGrid, dimBlock);
+    cur = ExecuteBushyPairwiseRound(exec_plan, cur, dim_grid, dim_block);
     level++;
   }
   return std::vector<WOJMatches*>{cur[0]};
@@ -1831,8 +1831,8 @@ std::vector<WOJMatches*> WOJSubIsoKernelWrapper::Join(
   auto join_t0 = std::chrono::system_clock::now();
 
   // Join Tables.
-  dim3 dimBlock(WojLaunchBlockDim());
-  dim3 dimGrid(WojLaunchGridDim());
+  dim3 dim_block(WojLaunchBlockDim());
+  dim3 dim_grid(WojLaunchGridDim());
 
   SortWojJoinInputs(input_woj_matches_vec);
   auto join_t1 = std::chrono::system_clock::now();
@@ -1845,7 +1845,7 @@ std::vector<WOJMatches*> WOJSubIsoKernelWrapper::Join(
       bushy_tables.push_back(t);
     }
     auto bushy_out =
-        TryBushyPairwiseJoin(exec_plan, std::move(bushy_tables), dimGrid, dimBlock);
+        TryBushyPairwiseJoin(exec_plan, std::move(bushy_tables), dim_grid, dim_block);
     if (bushy_out.has_value()) {
       std::cout << "[WOJ Join] bushy pairwise reduction completed -> 1 result "
                    "table\n";
@@ -1862,9 +1862,9 @@ std::vector<WOJMatches*> WOJSubIsoKernelWrapper::Join(
       static_cast<size_t>(n_join_stripes));
 
   std::cout << "[WOJ Join] begin: input match tables="
-            << input_woj_matches_vec.size() << " cudaGrid=(" << dimGrid.x
-            << "," << dimGrid.y << "," << dimGrid.z << ") block=("
-            << dimBlock.x << "," << dimBlock.y << "," << dimBlock.z
+            << input_woj_matches_vec.size() << " cudaGrid=(" << dim_grid.x
+            << "," << dim_grid.y << "," << dim_grid.z << ") block=("
+            << dim_block.x << "," << dim_block.y << "," << dim_block.z
             << ") join_stripes=" << static_cast<int>(n_join_stripes) << " (GPUs="
             << static_cast<int>(n_devices) << " * JOIN_STRIPES_PER_GPU="
             << join_stripes_per_gpu << ") host_workers=" << join_workers
@@ -1901,7 +1901,7 @@ std::vector<WOJMatches*> WOJSubIsoKernelWrapper::Join(
   // join_workers host threads (see WojJoinHostWorkerCount).
   RunHostStripeParallel(
       join_workers,
-      [join_workers, n_join_stripes, &dimBlock, &dimGrid, &exec_plan,
+      [join_workers, n_join_stripes, &dim_block, &dim_grid, &exec_plan,
        &p_streams_vec, &src_matches_vec, &input_woj_matches_vec,
        &output_woj_matches_vec](size_t w) {
         for (VertexID s = static_cast<VertexID>(w); s < n_join_stripes;
@@ -1919,7 +1919,7 @@ std::vector<WOJMatches*> WOJSubIsoKernelWrapper::Join(
             auto right_woj_matches = input_woj_matches_vec[_];
 
             RunHashJoinOnDevice(exec_plan, left_woj_matches, right_woj_matches,
-                                output_woj_matches_vec[s], dimGrid, dimBlock,
+                                output_woj_matches_vec[s], dim_grid, dim_block,
                                 logical, stream);
 
             if (output_woj_matches_vec[s]->get_y_offset() == 0) {

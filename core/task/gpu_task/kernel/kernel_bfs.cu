@@ -159,10 +159,10 @@ void BFSKernelWrapper::BFS(
                        .visited_bitmap_data = visited.data(),
                        .current_level = 0};
 
-  dim3 dimBlock(util::MatrixGraphEnvLaunchBlockDim(kBlockDim));
-  dim3 dimGrid(util::MatrixGraphEnvLaunchGridDim(kGridDim));
+  dim3 dim_block(util::MatrixGraphEnvLaunchBlockDim(kBlockDim));
+  dim3 dim_grid(util::MatrixGraphEnvLaunchGridDim(kGridDim));
 
-  InitKernel<<<dimGrid, dimBlock, 0, stream>>>(params, source_vertex);
+  InitKernel<<<dim_grid, dim_block, 0, stream>>>(params, source_vertex);
   cudaStreamSynchronize(stream);
 
   auto time1 = std::chrono::system_clock::now();
@@ -172,7 +172,7 @@ void BFSKernelWrapper::BFS(
               << " Active vertices: " << *(params.in_active_vertices_offset)
               << std::endl;
 
-    BFSKernel<<<dimGrid, dimBlock, 0, stream>>>(params);
+    BFSKernel<<<dim_grid, dim_block, 0, stream>>>(params);
     cudaStreamSynchronize(stream);
 
     std::swap(in_active_vertices, out_active_vertices);

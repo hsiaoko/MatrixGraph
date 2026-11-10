@@ -1,5 +1,5 @@
-#ifndef CORE_UTIL_LOGGING_H_
-#define CORE_UTIL_LOGGING_H_
+#ifndef MATRIXGRAPH_CORE_UTIL_LOGGING_H_
+#define MATRIXGRAPH_CORE_UTIL_LOGGING_H_
 //#pragma once
 
 #include <folly/logging/FileHandlerFactory.h>

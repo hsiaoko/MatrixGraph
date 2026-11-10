@@ -1,5 +1,5 @@
-#ifndef CORE_UTIL_SET_H_
-#define CORE_UTIL_SET_H_
+#ifndef MATRIXGRAPH_CORE_UTIL_SET_OPERATIONS_H_
+#define MATRIXGRAPH_CORE_UTIL_SET_OPERATIONS_H_
 
 #include "core/util/execution_policy.h"
 #include <numeric>

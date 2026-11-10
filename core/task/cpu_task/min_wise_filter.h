@@ -1,5 +1,5 @@
-#ifndef MATRIXGRAPH_CORE_TASK_CPU_MIN_WISE_FILTER_H_
-#define MATRIXGRAPH_CORE_TASK_CPU_MIN_WISE_FILTER_H_
+#ifndef MATRIXGRAPH_CORE_TASK_CPU_TASK_MIN_WISE_FILTER_H_
+#define MATRIXGRAPH_CORE_TASK_CPU_TASK_MIN_WISE_FILTER_H_
 
 #include <algorithm>
 #include <atomic>
@@ -427,4 +427,4 @@ inline bool KMinWiseIPFilter(VertexID u_idx, VertexID v_idx,
 }  // namespace matrixgraph
 }  // namespace sics
 
-#endif  // MATRIXGRAPH_CORE_TASK_CPU_MIN_WISE_FILTER_H_
+#endif  // MATRIXGRAPH_CORE_TASK_CPU_TASK_MIN_WISE_FILTER_H_

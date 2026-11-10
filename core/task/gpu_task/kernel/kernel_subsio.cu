@@ -593,8 +593,8 @@ void SubIsoKernelWrapper::SubIso(
     const data_structures::UnifiedOwnedBuffer<VertexID>&
         v_candidate_offset_for_each_weft,
     const data_structures::UnifiedOwnedBuffer<VertexID>& matches_data) {
-  dim3 dimBlock(kBlockDim);
-  dim3 dimGrid(kGridDim);
+  dim3 dim_block(kBlockDim);
+  dim3 dim_grid(kGridDim);
 
   LocalMatches m0;
   ParametersSubIso params{
@@ -622,12 +622,12 @@ void SubIsoKernelWrapper::SubIso(
   cudaDeviceSetLimit(cudaLimitMallocHeapSize, 8388608 * 128);
   auto time1 = std::chrono::system_clock::now();
 
-  ExtendKernel<<<dimGrid, dimBlock, 0, stream>>>(params);
+  ExtendKernel<<<dim_grid, dim_block, 0, stream>>>(params);
 
   cudaStreamSynchronize(stream);
   auto time2 = std::chrono::system_clock::now();
 
-  // CheckKernel<<<dimGrid, dimBlock, 0, stream>>>(params);
+  // CheckKernel<<<dim_grid, dim_block, 0, stream>>>(params);
   cudaStreamSynchronize(stream);
   auto time3 = std::chrono::system_clock::now();
 

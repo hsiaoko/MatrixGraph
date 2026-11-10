@@ -64,8 +64,8 @@ void GPUBitmap::Init(size_t size, uint64_t* data) {
 }
 
 size_t GPUBitmap::GPUCount() const {
-  dim3 dimBlock(64);
-  dim3 dimGrid(64);
+  dim3 dim_block(64);
+  dim3 dim_grid(64);
 
   unsigned long long* count_ptr;
 
@@ -75,7 +75,7 @@ size_t GPUBitmap::GPUCount() const {
   cudaMallocManaged(&count_ptr, sizeof(unsigned long long));
   cudaMemset(count_ptr, 0, sizeof(unsigned long long));
 
-  matrix_count_kernel<<<dimGrid, dimBlock, 0, stream>>>(size_, data_,
+  matrix_count_kernel<<<dim_grid, dim_block, 0, stream>>>(size_, data_,
                                                         count_ptr);
   cudaStreamSynchronize(stream);
   cudaStreamDestroy(stream);
@@ -90,8 +90,8 @@ size_t GPUBitmap::GPUCount() const {
 }
 
 size_t GPUBitmap::GPUPreElementCount(size_t idx) const {
-  dim3 dimBlock(128);
-  dim3 dimGrid(128);
+  dim3 dim_block(128);
+  dim3 dim_grid(128);
 
   unsigned long long* count_ptr;
   cudaSetDevice(idx % 4);
@@ -101,7 +101,7 @@ size_t GPUBitmap::GPUPreElementCount(size_t idx) const {
   cudaMallocManaged(&count_ptr, sizeof(unsigned long long));
   cudaMemset(count_ptr, 0, sizeof(unsigned long long));
 
-  matrix_count_kernel<<<dimGrid, dimBlock, 0, stream>>>(idx, data_, count_ptr);
+  matrix_count_kernel<<<dim_grid, dim_block, 0, stream>>>(idx, data_, count_ptr);
   cudaStreamSynchronize(stream);
   cudaStreamDestroy(stream);
 

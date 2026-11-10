@@ -1,5 +1,5 @@
-#ifndef MATRIXGRAPH_CORE_TASK_GAR_DEDUCE_CUH_
-#define MATRIXGRAPH_CORE_TASK_GAR_DEDUCE_CUH_
+#ifndef MATRIXGRAPH_CORE_TASK_GPU_TASK_GAR_DEDUCE_CUH_
+#define MATRIXGRAPH_CORE_TASK_GPU_TASK_GAR_DEDUCE_CUH_
 
 #include <cstdint>
 #include <memory>
@@ -114,4 +114,4 @@ class GARDeduce : public TaskBase {
 }  // namespace matrixgraph
 }  // namespace sics
 
-#endif  // MATRIXGRAPH_CORE_TASK_GAR_DEDUCE_CUH_
+#endif  // MATRIXGRAPH_CORE_TASK_GPU_TASK_GAR_DEDUCE_CUH_

@@ -1,5 +1,5 @@
-#ifndef MATRIXGRAPH_CORE_TASK_SUBISO_CPU_CUH_
-#define MATRIXGRAPH_CORE_TASK_SUBISO_CPU_CUH_
+#ifndef MATRIXGRAPH_CORE_TASK_CPU_TASK_SUBISO_CPU_CUH_
+#define MATRIXGRAPH_CORE_TASK_CPU_TASK_SUBISO_CPU_CUH_
 
 #include <string>
 #include <thread>
@@ -131,4 +131,4 @@ class SubIsoCPU : public CPUTaskBase {
 }  // namespace matrixgraph
 }  // namespace sics
 
-#endif  // MATRIXGRAPH_CORE_TASK_SUBISO_CPU_CUH_
+#endif  // MATRIXGRAPH_CORE_TASK_CPU_TASK_SUBISO_CPU_CUH_

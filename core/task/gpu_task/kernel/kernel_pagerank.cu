@@ -170,8 +170,8 @@ void PageRankKernelWrapper::PageRank(
     const data_structures::UnifiedOwnedBuffer<uint8_t>& data_g,
     data_structures::UnifiedOwnedBuffer<float>& page_ranks,
     float damping_factor, float epsilon, int max_iterations) {
-  dim3 dimBlock(util::MatrixGraphEnvLaunchBlockDim(kBlockDim));
-  dim3 dimGrid(util::MatrixGraphEnvLaunchGridDim(kGridDim));
+  dim3 dim_block(util::MatrixGraphEnvLaunchBlockDim(kBlockDim));
+  dim3 dim_grid(util::MatrixGraphEnvLaunchGridDim(kGridDim));
 
   uint64_t* visited_bitmap_data;
   CUDA_CHECK(cudaMallocManaged(
@@ -191,7 +191,7 @@ void PageRankKernelWrapper::PageRank(
       d_next_page_ranks, damping_factor, epsilon,         visited_bitmap_data};
 
   // Initialize PageRank values
-  InitKernel<<<dimGrid, dimBlock, 0, stream>>>(params);
+  InitKernel<<<dim_grid, dim_block, 0, stream>>>(params);
   cudaStreamSynchronize(stream);
 
   // Main PageRank iteration loop
@@ -203,11 +203,11 @@ void PageRankKernelWrapper::PageRank(
     cudaMemset(d_max_diff, 0, sizeof(float));
 
     // Compute new PageRank values
-    PageRankKernel<<<dimGrid, dimBlock, 0, stream>>>(params);
-    // PageRankRangeKernel<<<dimGrid, dimBlock, 0, stream>>>(params);
+    PageRankKernel<<<dim_grid, dim_block, 0, stream>>>(params);
+    // PageRankRangeKernel<<<dim_grid, dim_block, 0, stream>>>(params);
 
     // Swap buffers and check for convergence
-    SwapAndCheckConvergenceKernel<<<dimGrid, dimBlock, 0, stream>>>(params,
+    SwapAndCheckConvergenceKernel<<<dim_grid, dim_block, 0, stream>>>(params,
                                                                     d_max_diff);
 
     // Copy max_diff back to host

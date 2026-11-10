@@ -1,3 +1,17 @@
+/**
+ * @file graph_aggregate.cu
+ * @brief GraphAggregate task implementation: per-vertex feature aggregation
+ *        over a single CSR graph, replicated across one or more GPUs.
+ *
+ * Host-side responsibilities:
+ *   - Replicate the CSR graph and per-vertex/per-edge attributes to each GPU.
+ *   - Launch the fused aggregation kernels (kernel_graph_aggregate.cuh) over
+ *     pivot vertices, using one or more CUDA streams per GPU.
+ *
+ * Device kernels live in core/task/gpu_task/kernel/kernel_graph_aggregate.cu;
+ * this TU owns only host orchestration and data movement.
+ */
+
 #include "core/task/gpu_task/graph_aggregate.cuh"
 
 #include <algorithm>

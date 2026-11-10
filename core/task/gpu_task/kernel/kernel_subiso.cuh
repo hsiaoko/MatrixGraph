@@ -4,8 +4,8 @@
 #include "core/data_structures/device_buffer.cuh"
 #include "core/data_structures/unified_buffer.cuh"
 
-#ifndef MATRIXGRAPH_CORE_TASK_KERNEL_KERNEL_SUBISO_CUH_
-#define MATRIXGRAPH_CORE_TASK_KERNEL_KERNEL_SUBISO_CUH_
+#ifndef MATRIXGRAPH_CORE_TASK_GPU_TASK_KERNEL_KERNEL_SUBISO_CUH_
+#define MATRIXGRAPH_CORE_TASK_GPU_TASK_KERNEL_KERNEL_SUBISO_CUH_
 
 namespace sics {
 namespace matrixgraph {

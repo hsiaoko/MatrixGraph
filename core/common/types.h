@@ -1,5 +1,5 @@
-#ifndef HYPERBLOCKER_CORE_COMMON_TYPES_H_
-#define HYPERBLOCKER_CORE_COMMON_TYPES_H_
+#ifndef MATRIXGRAPH_CORE_COMMON_TYPES_H_
+#define MATRIXGRAPH_CORE_COMMON_TYPES_H_
 
 #include <climits>
 #include <stdint.h>

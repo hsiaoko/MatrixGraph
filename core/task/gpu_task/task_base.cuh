@@ -1,35 +1,16 @@
-#ifndef MATRIXGRAPH_CORE_COMPONENTS_TASK_TASK_BASE_CUH_
-#define MATRIXGRAPH_CORE_COMPONENTS_TASK_TASK_BASE_CUH_
-
-// #include <cuda_runtime.h>
-
-#include <mutex>
-#include <unordered_map>
+#ifndef MATRIXGRAPH_CORE_TASK_GPU_TASK_TASK_BASE_CUH_
+#define MATRIXGRAPH_CORE_TASK_GPU_TASK_TASK_BASE_CUH_
 
 namespace sics {
 namespace matrixgraph {
 namespace core {
 namespace task {
 
+// Base class for GPU tasks. Kept minimal: derived tasks own their CUDA
+// streams and scratch buffers, so there is no shared state to manage here.
 class TaskBase {
  public:
   ~TaskBase() = default;
-
-  // Get CUDA stream for a task
-  // @param task_id: Identifier for the task
-  // cudaStream_t GetStream(size_t task_id);
-
-  // // Remove CUDA stream for a task
-  // // @param task_id: Identifier for the task
-  // void ReleaseStream(size_t task_id);
-
-  // // Check if a task is finished
-  // // @param task_id: Identifier for the task
-  // bool IsTaskFinished(size_t task_id);
-
-  // protected:
-  //  std::mutex streams_mtx_;
-  //  std::unordered_map<size_t, cudaStream_t*> streams_by_task_id_;
 };
 
 }  // namespace task
@@ -37,4 +18,4 @@ class TaskBase {
 }  // namespace matrixgraph
 }  // namespace sics
 
-#endif  // MATRIXGRAPH_CORE_COMPONENTS_TASK_TASK_BASE_CUH_
+#endif  // MATRIXGRAPH_CORE_TASK_GPU_TASK_TASK_BASE_CUH_

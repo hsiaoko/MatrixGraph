@@ -1,5 +1,5 @@
-#ifndef MATRIXGRAPH_KERNEL_BFS_CUH
-#define MATRIXGRAPH_KERNEL_BFS_CUH
+#ifndef MATRIXGRAPH_CORE_TASK_GPU_TASK_KERNEL_KERNEL_BFS_CUH_
+#define MATRIXGRAPH_CORE_TASK_GPU_TASK_KERNEL_KERNEL_BFS_CUH_
 
 #include <cuda_runtime.h>
 
@@ -50,4 +50,4 @@ class BFSKernelWrapper {
 }  // namespace matrixgraph
 }  // namespace sics
 
-#endif  // MATRIXGRAPH_KERNEL_BFS_CUH
+#endif  // MATRIXGRAPH_CORE_TASK_GPU_TASK_KERNEL_KERNEL_BFS_CUH_

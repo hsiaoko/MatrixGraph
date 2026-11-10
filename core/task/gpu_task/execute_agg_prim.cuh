@@ -144,46 +144,7 @@ struct AllFeatures {
 
 namespace kernel {
 
-// -----------------------------------------------------------------------------
-// Block-level aggregation primitives.
-// Each function assumes the caller has provided valid shared memory.
-// -----------------------------------------------------------------------------
-__device__ inline FeatureValue BlockAggCount(uint32_t n);
-__device__ inline FeatureValue BlockAggSum(const FeatureValue* values,
-                                           uint32_t n);
-__device__ inline FeatureValue BlockAggMean(const FeatureValue* values,
-                                            uint32_t n);
-__device__ inline FeatureValue BlockAggMedian(FeatureValue* values, uint32_t n);
-__device__ inline FeatureValue BlockAggMode(FeatureValue* values, uint32_t n);
-__device__ inline FeatureValue BlockAggMax(const FeatureValue* values,
-                                           uint32_t n);
-__device__ inline FeatureValue BlockAggMin(const FeatureValue* values,
-                                           uint32_t n);
-__device__ inline FeatureValue BlockAggVariance(const FeatureValue* values,
-                                                uint32_t n);
-__device__ inline FeatureValue BlockAggStd(const FeatureValue* values,
-                                           uint32_t n);
-__device__ inline FeatureValue BlockAggSkew(const FeatureValue* values,
-                                            uint32_t n);
-__device__ inline FeatureValue BlockAggEntropy(FeatureValue* values, uint32_t n);
-__device__ inline FeatureValue BlockAggNumUnique(FeatureValue* values,
-                                                 uint32_t n);
-__device__ inline FeatureValue BlockAggPercentTrue(const FeatureValue* values,
-                                                   uint32_t n);
-__device__ inline FeatureValue BlockAggQuarter(FeatureValue* values, uint32_t n);
-__device__ inline FeatureValue BlockAggQuartile3(FeatureValue* values,
-                                                 uint32_t n);
-__device__ inline FeatureValue BlockAggCountGreaterThanMean(
-    const FeatureValue* values, uint32_t n);
-__device__ inline FeatureValue BlockAggDFeat(const FeatureValue* values,
-                                             uint32_t n);
-
-__device__ inline FeatureValue BlockApplyAggPrim(AggPrim prim,
-                                                 FeatureValue* values,
-                                                 uint32_t n);
-
-__device__ inline AllFeatures BlockComputeAllFeaturesFromValues(
-    FeatureValue* values, uint32_t n);
+// Block-level aggregation primitives are defined in block_agg_prims.cuh.
 
 // -----------------------------------------------------------------------------
 // Global kernels

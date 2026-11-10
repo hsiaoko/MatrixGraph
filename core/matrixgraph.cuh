@@ -1,5 +1,5 @@
-#ifndef HYPERBLOCKER_CORE_HYPER_BLOCKER_CUH_
-#define HYPERBLOCKER_CORE_HYPER_BLOCKER_CUH_
+#ifndef MATRIXGRAPH_CORE_MATRIXGRAPH_CUH_
+#define MATRIXGRAPH_CORE_MATRIXGRAPH_CUH_
 
 #include "core/components/gpu_task_manager.cuh"
 #include "core/components/scheduler/CHBL_scheduler.h"
@@ -63,4 +63,4 @@ class MatrixGraph {
 }  // namespace matrixgraph
 }  // namespace sics
 
-#endif  // HYPERBLOCKER_CORE_HYPER_BLOCKER_CUH_
+#endif  // MATRIXGRAPH_CORE_MATRIXGRAPH_CUH_

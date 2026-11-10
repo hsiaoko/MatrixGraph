@@ -1,5 +1,5 @@
-#ifndef HYPERBLOCKER_CORE_COMPONENTS_SCHEDULER_EVEN_SPLIT_SCHEDULER_H_
-#define HYPERBLOCKER_CORE_COMPONENTS_SCHEDULER_EVEN_SPLIT_SCHEDULER_H_
+#ifndef MATRIXGRAPH_CORE_COMPONENTS_SCHEDULER_EVEN_SPLIT_SCHEDULER_H_
+#define MATRIXGRAPH_CORE_COMPONENTS_SCHEDULER_EVEN_SPLIT_SCHEDULER_H_
 
 #include "core/components/scheduler/scheduler.h"
 #include "core/util/bitmap_ownership.h"
@@ -37,4 +37,4 @@ class EvenSplitScheduler : public Scheduler {
 }  // namespace core
 }  // namespace matrixgraph
 }  // namespace sics
-#endif  // HYPERBLOCKER_CORE_COMPONENTS_SCHEDULER_EVEN_SPLIT_SCHEDULER_H_
+#endif  // MATRIXGRAPH_CORE_COMPONENTS_SCHEDULER_EVEN_SPLIT_SCHEDULER_H_

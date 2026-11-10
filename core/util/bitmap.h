@@ -1,5 +1,5 @@
-#ifndef CORE_UTIL_BITMAP_H_
-#define CORE_UTIL_BITMAP_H_
+#ifndef MATRIXGRAPH_CORE_UTIL_BITMAP_H_
+#define MATRIXGRAPH_CORE_UTIL_BITMAP_H_
 
 #include <cassert>
 #include <cstdint>
@@ -163,4 +163,4 @@ class Bitmap {
 }  // namespace matrixgraph
 }  // namespace sics
 
-#endif  // CORE_UTIL_BITMAP_H_
+#endif  // MATRIXGRAPH_CORE_UTIL_BITMAP_H_

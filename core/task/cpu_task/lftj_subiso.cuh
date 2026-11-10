@@ -1,5 +1,5 @@
-#ifndef MATRIXGRAPH_CORE_TASK_CPU_LFTJ_SUBISO_CUH_
-#define MATRIXGRAPH_CORE_TASK_CPU_LFTJ_SUBISO_CUH_
+#ifndef MATRIXGRAPH_CORE_TASK_CPU_TASK_LFTJ_SUBISO_CUH_
+#define MATRIXGRAPH_CORE_TASK_CPU_TASK_LFTJ_SUBISO_CUH_
 
 #include <atomic>
 #include <string>
@@ -186,4 +186,4 @@ class LFTJSubIso : public CPUTaskBase {
 }  // namespace matrixgraph
 }  // namespace sics
 
-#endif  // MATRIXGRAPH_CORE_TASK_CPU_LFTJ_SUBISO_CUH_
+#endif  // MATRIXGRAPH_CORE_TASK_CPU_TASK_LFTJ_SUBISO_CUH_

@@ -1,5 +1,5 @@
-#ifndef MATRIXGRAPH_CORE_TASK_GPU_TASK_KERNEL_GRAPH_AGGREGATE_CUH_
-#define MATRIXGRAPH_CORE_TASK_GPU_TASK_KERNEL_GRAPH_AGGREGATE_CUH_
+#ifndef MATRIXGRAPH_CORE_TASK_GPU_TASK_KERNEL_KERNEL_GRAPH_AGGREGATE_CUH_
+#define MATRIXGRAPH_CORE_TASK_GPU_TASK_KERNEL_KERNEL_GRAPH_AGGREGATE_CUH_
 
 #include <cuda_runtime.h>
 #include <cstdint>
@@ -7,6 +7,7 @@
 
 #include "core/data_structures/attributes.h"
 #include "core/data_structures/immutable_csr.cuh"
+#include "core/task/gpu_task/block_agg_prims.cuh"
 #include "core/task/gpu_task/execute_agg_prim.cuh"
 
 namespace sics {
@@ -22,22 +23,25 @@ using AttributeName = sics::matrixgraph::core::data_structures::AttributeName;
 using Attributes = sics::matrixgraph::core::data_structures::Attributes;
 
 // ---------------------------------------------------------------------------
-// FeatureValue + helpers are shared with execute_agg_prim.cuh (the canonical
-// task::FeatureValue). A local redefinition here created a second, distinct
-// FeatureValue type, so the BlockAggCount defined in this TU and the one in
-// execute_agg_prim.cu returned different types — nvlink's "prototype doesn't
-// match" at device-link time.
+// FeatureValue and its helpers are shared with execute_agg_prim.cuh (the
+// canonical task::FeatureValue).  A local redefinition here created a second,
+// distinct FeatureValue type, so the BlockAggCount defined in this TU and the
+// one in execute_agg_prim.cu returned different types — nvlink's "prototype
+// doesn't match" at device-link time.
+//
+// AggPrim and AllFeatures below are intentionally LOCAL to GraphAggregate:
+// their value ordering differs from task::AggPrim / task::AllFeatures and the
+// Go C API depends on this ordering, so they must not be aliased to the task
+// versions.
 // ---------------------------------------------------------------------------
 using sics::matrixgraph::core::task::FeatureValue;
 using sics::matrixgraph::core::task::MakeIntValue;
 using sics::matrixgraph::core::task::MakeBoolValue;
 using sics::matrixgraph::core::task::MakeInvalidValue;
-__device__ __host__ inline FeatureValue MakeFloatValue(double v) {
-  return sics::matrixgraph::core::task::MakeFloat64Value(v);
-}
+using sics::matrixgraph::core::task::MakeFloat64Value;
 
 // ---------------------------------------------------------------------------
-// Aggregation primitives
+// Aggregation primitives (GraphAggregate ordering — do not reorder).
 // ---------------------------------------------------------------------------
 enum class AggPrim : uint8_t {
   kCount = 0,
@@ -59,30 +63,17 @@ enum class AggPrim : uint8_t {
 };
 
 // ---------------------------------------------------------------------------
-// Aggregation operators (device)
+// Aggregation operators (device). BlockAgg* primitives live in
+// block_agg_prims.cuh; the dispatcher is defined here because it switches over
+// this TU's AggPrim ordering.
 // ---------------------------------------------------------------------------
-__device__ inline FeatureValue AggCount(const FeatureValue* values, uint32_t n);
-__device__ inline FeatureValue AggSum(const FeatureValue* values, uint32_t n);
-__device__ inline FeatureValue AggMean(const FeatureValue* values, uint32_t n);
-__device__ inline FeatureValue AggMin(FeatureValue* values, uint32_t n);
-__device__ inline FeatureValue AggMax(FeatureValue* values, uint32_t n);
-__device__ inline FeatureValue AggVariance(FeatureValue* values, uint32_t n);
-__device__ inline FeatureValue AggStd(FeatureValue* values, uint32_t n);
-__device__ inline FeatureValue AggMedian(FeatureValue* values, uint32_t n);
-__device__ inline FeatureValue AggMode(FeatureValue* values, uint32_t n);
-__device__ inline FeatureValue AggNumUnique(FeatureValue* values, uint32_t n);
-__device__ inline FeatureValue AggEntropy(FeatureValue* values, uint32_t n);
-__device__ inline FeatureValue AggQuarter(FeatureValue* values, uint32_t n);
-__device__ inline FeatureValue AggQuartile3(FeatureValue* values, uint32_t n);
-__device__ inline FeatureValue AggPercentTrue(const FeatureValue* values, uint32_t n);
-__device__ inline FeatureValue AggSkew(FeatureValue* values, uint32_t n);
-__device__ inline FeatureValue AggCountGreaterThanMean(FeatureValue* values, uint32_t n);
-
-__device__ inline void DeviceSortValues(FeatureValue* arr, uint32_t n);
-__device__ inline FeatureValue ApplyAggPrim(AggPrim prim, FeatureValue* values, uint32_t n);
+__device__ inline FeatureValue BlockApplyAggPrim(AggPrim prim,
+                                                 FeatureValue* values,
+                                                 uint32_t n,
+                                                 const BlockWorkspace& ws);
 
 // ---------------------------------------------------------------------------
-// AllFeatures: fused output container for compute_all
+// AllFeatures: fused output container for compute_all.
 // ---------------------------------------------------------------------------
 struct AllFeatures {
   FeatureValue count;
@@ -103,18 +94,15 @@ struct AllFeatures {
   FeatureValue skew;
 };
 
-// Returns the dynamic shared memory bytes required for one block given the
-// per-pivot neighbor cap.  The layout stores a small shared header, CUB
-// temporary storage, and sorted indices; actual neighbor FeatureValues live
-// in the global workspace.
-__host__ size_t ComputeGraphAggregateSharedMemSize(uint32_t max_neighbors);
-
-// ---------------------------------------------------------------------------
-// Fused aggregation: compute all primitives in one pass over the value list.
+// Fused compute-all: compute all primitives in one pass over the value list.
 // The caller owns the input buffer; values may be reordered (sorted in-place).
-// ---------------------------------------------------------------------------
-__device__ inline AllFeatures ComputeAllFeaturesFromValues(FeatureValue* values,
-                                                           uint32_t n);
+__device__ inline AllFeatures BlockComputeAllFeaturesFromValues(
+    FeatureValue* values, uint32_t n, const BlockWorkspace& ws);
+
+// Returns the dynamic shared memory bytes required for one block given the
+// per-pivot neighbor cap.  Layout: [values buf][sum buf][minmax buf][scan buf]
+// (see GetBlockWorkspace in block_agg_prims.cuh).
+__host__ size_t ComputeGraphAggregateSharedMemSize(uint32_t max_neighbors);
 
 // ---------------------------------------------------------------------------
 // FeatureRequest
@@ -172,4 +160,4 @@ __global__ void ComputeAllFeaturesKernel(
 }  // namespace matrixgraph
 }  // namespace sics
 
-#endif  // MATRIXGRAPH_CORE_TASK_GPU_TASK_KERNEL_GRAPH_AGGREGATE_CUH_
+#endif  // MATRIXGRAPH_CORE_TASK_GPU_TASK_KERNEL_KERNEL_GRAPH_AGGREGATE_CUH_

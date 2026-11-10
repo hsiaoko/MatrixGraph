@@ -1,5 +1,5 @@
-#ifndef SICS_GRAPH_SYSTEMS_TOOLS_COMMON_YAML_CONFIG_H_
-#define SICS_GRAPH_SYSTEMS_TOOLS_COMMON_YAML_CONFIG_H_
+#ifndef MATRIXGRAPH_CORE_COMMON_YAML_CONFIG_H_
+#define MATRIXGRAPH_CORE_COMMON_YAML_CONFIG_H_
 
 #include <iostream>
 #include <yaml-cpp/yaml.h>
@@ -110,4 +110,4 @@ struct convert<sics::matrixgraph::core::data_structures::GraphMetadata> {
 };
 
 } // namespace YAML
-#endif // SICS_GRAPH_SYSTEMS_TOOLS_COMMON_YAML_CONFIG_H_
+#endif // MATRIXGRAPH_CORE_COMMON_YAML_CONFIG_H_

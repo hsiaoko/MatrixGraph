@@ -1,5 +1,5 @@
-#ifndef MATRIXGRAPH_CORE_TASK_PAGERANK_CUH_
-#define MATRIXGRAPH_CORE_TASK_PAGERANK_CUH_
+#ifndef MATRIXGRAPH_CORE_TASK_GPU_TASK_PAGERANK_CUH_
+#define MATRIXGRAPH_CORE_TASK_GPU_TASK_PAGERANK_CUH_
 
 #include <string>
 
@@ -48,4 +48,4 @@ class PageRank : public TaskBase {
 }  // namespace matrixgraph
 }  // namespace sics
 
-#endif  // MATRIXGRAPH_CORE_TASK_PAGERANK_CUH_
+#endif  // MATRIXGRAPH_CORE_TASK_GPU_TASK_PAGERANK_CUH_

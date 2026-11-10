@@ -1,5 +1,5 @@
-#ifndef MATRIXGRAPH_CORE_TASK_GAR_MATCH_CUH_
-#define MATRIXGRAPH_CORE_TASK_GAR_MATCH_CUH_
+#ifndef MATRIXGRAPH_CORE_TASK_GPU_TASK_GAR_MATCH_CUH_
+#define MATRIXGRAPH_CORE_TASK_GPU_TASK_GAR_MATCH_CUH_
 
 #include <cstdint>
 #include <memory>
@@ -131,4 +131,4 @@ class GARMatch : public TaskBase {
 }  // namespace matrixgraph
 }  // namespace sics
 
-#endif  // MATRIXGRAPH_CORE_TASK_GAR_MATCH_CUH_
+#endif  // MATRIXGRAPH_CORE_TASK_GPU_TASK_GAR_MATCH_CUH_

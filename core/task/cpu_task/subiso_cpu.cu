@@ -1178,7 +1178,7 @@ static bool IsFeasible(
     const std::vector<Matrix>& m_vec,
     const std::vector<UnifiedOwnedBufferFloat*>& m_unified_buffer_vec,
     VertexID u_src, VertexID u_dst, VertexID v_src, VertexID v_dst,
-    LocalMatches* localMatches, std::vector<uint64_t>* rejected_pairs = nullptr) {
+    LocalMatches* local_matches, std::vector<uint64_t>* rejected_pairs = nullptr) {
   if (u_src == kMaxVertexID && v_src == kMaxVertexID) {
     return true;
   }
@@ -2093,10 +2093,10 @@ void SubIsoCPU::Run() {
     if (calls == 0) return;
     int64_t survivors = calls - rejects;
     double p = static_cast<double>(rejects) / calls;
-    double dH = -std::log2(1.0 - p);
+    double delta_h = -std::log2(1.0 - p);
     std::cout << name << ": calls=" << calls << ", rejects=" << rejects
               << ", survivors=" << survivors << ", p=" << p
-              << ", ΔH=" << dH << " bits" << std::endl;
+              << ", ΔH=" << delta_h << " bits" << std::endl;
   };
   print_survivor_dh("Label", label_filter_calls, label_filter_count);
   print_survivor_dh("LDF", label_degree_filter_calls,

@@ -1,5 +1,5 @@
-#ifndef MATRIXGRAPH_GO_API_H_
-#define MATRIXGRAPH_GO_API_H_
+#ifndef MATRIXGRAPH_CORE_GO_API_MATRIXGRAPH_GO_API_H_
+#define MATRIXGRAPH_CORE_GO_API_MATRIXGRAPH_GO_API_H_
 
 #ifdef __cplusplus
 extern "C" {
@@ -367,4 +367,4 @@ int matrixgraph_subiso(
 }
 #endif
 
-#endif /* MATRIXGRAPH_GO_API_H_ */
+#endif /* MATRIXGRAPH_CORE_GO_API_MATRIXGRAPH_GO_API_H_ */

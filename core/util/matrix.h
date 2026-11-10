@@ -1,6 +1,6 @@
 
-#ifndef GRAPH_COMPUTING_MATRIXGRAPH_CORE_UTIL_MATRIX_H_
-#define GRAPH_COMPUTING_MATRIXGRAPH_CORE_UTIL_MATRIX_H_
+#ifndef MATRIXGRAPH_CORE_UTIL_MATRIX_H_
+#define MATRIXGRAPH_CORE_UTIL_MATRIX_H_
 
 #include <cstdlib>
 #include <cublas_v2.h>
@@ -138,8 +138,8 @@ template <typename T, typename S> void FreeDeviceMemory(T *A, T *B, S *C) {
 }
 
 template <typename T, typename S>
-int cuBLASGemmExWrapper(cublasHandle_t handle, cublasOperation_t transA,
-                        cublasOperation_t transB, int m, int n, int k, T *A,
+int cuBLASGemmExWrapper(cublasHandle_t handle, cublasOperation_t trans_a,
+                        cublasOperation_t trans_b, int m, int n, int k, T *A,
                         T *B, S *C, int lda, int ldb, int ldc, S *alpha,
                         S *beta, int algo) {
   cudaDataType_t AType, BType, CType, ComputeType;
@@ -155,7 +155,7 @@ int cuBLASGemmExWrapper(cublasHandle_t handle, cublasOperation_t transA,
     return -1;
   }
   cublasStatus_t status;
-  status = cublasGemmEx(handle, transA, transB, m, n, k, alpha, A, AType, lda,
+  status = cublasGemmEx(handle, trans_a, trans_b, m, n, k, alpha, A, AType, lda,
                         B, BType, ldb, beta, C, CType, ldc, ComputeType,
                         static_cast<cublasGemmAlgo_t>(algo));
 
@@ -196,4 +196,4 @@ void TestcuBLASGemm(cublasHandle_t handle, int m, int n, int k, T *A, T *B, S *C
 } // namespace core
 } // namespace matrixgraph
 } // namespace sics
-#endif // GRAPH_COMPUTING_MATRIXGRAPH_CORE_UTIL_MATRIX_H_
+#endif // MATRIXGRAPH_CORE_UTIL_MATRIX_H_

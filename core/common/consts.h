@@ -1,6 +1,6 @@
 
-#ifndef MATRIX_CORE_COMMON_CONSTS_H_
-#define MATRIX_CORE_COMMON_CONSTS_H_
+#ifndef MATRIXGRAPH_CORE_COMMON_CONSTS_H_
+#define MATRIXGRAPH_CORE_COMMON_CONSTS_H_
 
 #include <cstdint>
 #include <limits>

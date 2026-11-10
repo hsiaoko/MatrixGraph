@@ -1,5 +1,5 @@
-#ifndef MATRIXGRAPH_CORE_TASK_KERNEL_ALGORITHMS_SORT_CUH_
-#define MATRIXGRAPH_CORE_TASK_KERNEL_ALGORITHMS_SORT_CUH_
+#ifndef MATRIXGRAPH_CORE_TASK_GPU_TASK_KERNEL_ALGORITHMS_SORT_CUH_
+#define MATRIXGRAPH_CORE_TASK_GPU_TASK_KERNEL_ALGORITHMS_SORT_CUH_
 
 #include <cstddef>
 #include <cuda_runtime.h>
@@ -94,10 +94,10 @@ static void MergeSort(const cudaStream_t& stream, VertexID* data, VertexID key,
 
   int step = 2;
   while (step / 2 < static_cast<int>(y)) {
-    const int threadsPerBlock = static_cast<int>(kBlockDim);
+    const int threads_per_block = static_cast<int>(kBlockDim);
     int blocks = (static_cast<int>(y) + step - 1) / step;
 
-    MergeSortKernel<<<blocks, threadsPerBlock, 0, stream>>>(in_buf, out_buf,
+    MergeSortKernel<<<blocks, threads_per_block, 0, stream>>>(in_buf, out_buf,
                                                               key, x, y, step);
     CUDA_CHECK(cudaStreamSynchronize(stream));
     cudaError_t err = cudaGetLastError();
@@ -171,4 +171,4 @@ static __host__ __device__ void QuickSort(int arr[], int low, int high) {
 } // namespace matrixgraph
 } // namespace sics
 
-#endif // MATRIXGRAPH_CORE_TASK_KERNEL_ALGORITHMS_SORT_CUH_
+#endif // MATRIXGRAPH_CORE_TASK_GPU_TASK_KERNEL_ALGORITHMS_SORT_CUH_

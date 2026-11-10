@@ -1,5 +1,5 @@
-#ifndef MATRIXGRAPH_MATRIX_CUH
-#define MATRIXGRAPH_MATRIX_CUH
+#ifndef MATRIXGRAPH_CORE_DATA_STRUCTURES_MATRIX_CUH_
+#define MATRIXGRAPH_CORE_DATA_STRUCTURES_MATRIX_CUH_
 
 #include <string>
 #include <stdint.h>
@@ -41,4 +41,4 @@ class Matrix {
 }  // namespace matrixgraph
 }  // namespace sics
 
-#endif  // MATRIXGRAPH_MATRIX_CUH
+#endif  // MATRIXGRAPH_CORE_DATA_STRUCTURES_MATRIX_CUH_

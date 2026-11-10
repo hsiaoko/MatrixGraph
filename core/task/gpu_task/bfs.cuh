@@ -1,5 +1,5 @@
-#ifndef MATRIXGRAPH_BFS_CUH
-#define MATRIXGRAPH_BFS_CUH
+#ifndef MATRIXGRAPH_CORE_TASK_GPU_TASK_BFS_CUH_
+#define MATRIXGRAPH_CORE_TASK_GPU_TASK_BFS_CUH_
 
 #include <string>
 
@@ -56,4 +56,4 @@ class BFS : public TaskBase {
 }  // namespace matrixgraph
 }  // namespace sics
 
-#endif  // MATRIXGRAPH_BFS_CUH
+#endif  // MATRIXGRAPH_CORE_TASK_GPU_TASK_BFS_CUH_
