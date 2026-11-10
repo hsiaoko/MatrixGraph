@@ -7,6 +7,7 @@
 
 #include "core/data_structures/attributes.h"
 #include "core/data_structures/immutable_csr.cuh"
+#include "core/task/gpu_task/execute_agg_prim.cuh"
 
 namespace sics {
 namespace matrixgraph {
@@ -21,49 +22,18 @@ using AttributeName = sics::matrixgraph::core::data_structures::AttributeName;
 using Attributes = sics::matrixgraph::core::data_structures::Attributes;
 
 // ---------------------------------------------------------------------------
-// FeatureValue: unified value container for feature computation
+// FeatureValue + helpers are shared with execute_agg_prim.cuh (the canonical
+// task::FeatureValue). A local redefinition here created a second, distinct
+// FeatureValue type, so the BlockAggCount defined in this TU and the one in
+// execute_agg_prim.cu returned different types — nvlink's "prototype doesn't
+// match" at device-link time.
 // ---------------------------------------------------------------------------
-struct FeatureValue {
-  ValueType type = ValueType::kInvalid;
-  union {
-    int64_t i64;
-    double f64;
-    bool b;
-  };
-
-  __device__ __host__ bool IsValid() const { return type != ValueType::kInvalid; }
-
-  __host__ __device__ double ToDouble() const {
-    switch (type) {
-      case ValueType::kInt:
-      case ValueType::kTime:    return static_cast<double>(i64);
-      case ValueType::kFloat64: return f64;
-      case ValueType::kFloat32: return static_cast<double>(f64); // stored in f64 field for simplicity
-      case ValueType::kBool:    return b ? 1.0 : 0.0;
-      default:                  return 0.0;
-    }
-  }
-
-  __device__ int Compare(const FeatureValue& other) const {
-    double a = ToDouble();
-    double d = other.ToDouble();
-    if (a < d) return -1;
-    if (a > d) return 1;
-    return 0;
-  }
-};
-
-__device__ __host__ inline FeatureValue MakeIntValue(int64_t v) {
-  FeatureValue r; r.type = ValueType::kInt; r.i64 = v; return r;
-}
+using sics::matrixgraph::core::task::FeatureValue;
+using sics::matrixgraph::core::task::MakeIntValue;
+using sics::matrixgraph::core::task::MakeBoolValue;
+using sics::matrixgraph::core::task::MakeInvalidValue;
 __device__ __host__ inline FeatureValue MakeFloatValue(double v) {
-  FeatureValue r; r.type = ValueType::kFloat64; r.f64 = v; return r;
-}
-__device__ __host__ inline FeatureValue MakeBoolValue(bool v) {
-  FeatureValue r; r.type = ValueType::kBool; r.b = v; return r;
-}
-__device__ __host__ inline FeatureValue MakeInvalidValue() {
-  FeatureValue r; r.type = ValueType::kInvalid; return r;
+  return sics::matrixgraph::core::task::MakeFloat64Value(v);
 }
 
 // ---------------------------------------------------------------------------
