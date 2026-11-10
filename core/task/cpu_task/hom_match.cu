@@ -24,7 +24,8 @@ std::uint32_t FlipSlot(std::uint32_t slot, int num_relations) {
 
 // nullptr when pattern vertex v is unpinned.
 const std::uint32_t* PinOf(
-    const std::unordered_map<int, std::uint32_t>& pins, int v) {
+    const std::unordered_map<std::uint32_t, std::uint32_t>& pins,
+    std::uint32_t v) {
   const auto it = pins.find(v);
   return it == pins.end() ? nullptr : &it->second;
 }
@@ -55,7 +56,7 @@ HomMatchIndex::HomMatchIndex(const GARGraphArrays& g, int num_relations)
 std::uint64_t HomMatcher::Enumerate(
     const HomMatchIndex& idx, const GARPatternArrays& p,
     std::uint64_t match_cap, std::vector<std::uint32_t>* out, bool* capped,
-    const std::unordered_map<int, std::uint32_t>& pins) const {
+    const std::unordered_map<std::uint32_t, std::uint32_t>& pins) const {
   *capped = false;
   const int n = p.n_nodes;
   const int m = p.n_edges;
@@ -168,8 +169,8 @@ std::uint64_t HomMatcher::Enumerate(
       seed_adj.is_out ? FlipSlot(seed_adj.slot, R) : seed_adj.slot;
   const auto& seed_pairs = idx.RelationPairs(static_cast<int>(seed_slot));
 
-  const std::uint32_t* pin0 = PinOf(pins, static_cast<int>(order[0]));
-  const std::uint32_t* pin1 = PinOf(pins, static_cast<int>(order[1]));
+  const std::uint32_t* pin0 = PinOf(pins, order[0]);
+  const std::uint32_t* pin1 = PinOf(pins, order[1]);
   const std::vector<std::uint64_t>* scan = &seed_pairs;
   bool swapped = false;
   if (pin0 == nullptr && pin1 != nullptr) {
@@ -225,7 +226,7 @@ std::uint64_t HomMatcher::Enumerate(
         continue;
       }
       if (cand_pos[pos] == 0) {
-        if (const std::uint32_t* pp = PinOf(pins, static_cast<int>(order[pos]))) {
+        if (const std::uint32_t* pp = PinOf(pins, order[pos])) {
           const Adj& driver = back_edges[pos][0];
           const std::uint32_t src = driver.is_out ? *pp : emb[driver.other];
           const std::uint32_t dst = driver.is_out ? emb[driver.other] : *pp;

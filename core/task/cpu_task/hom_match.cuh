@@ -69,7 +69,7 @@ class HomMatcher {
   std::uint64_t Enumerate(
       const HomMatchIndex& idx, const GARPatternArrays& p,
       std::uint64_t match_cap, std::vector<std::uint32_t>* out, bool* capped,
-      const std::unordered_map<int, std::uint32_t>& pins) const;
+      const std::unordered_map<std::uint32_t, std::uint32_t>& pins) const;
 
   std::uint64_t Enumerate(const HomMatchIndex& idx, const GARPatternArrays& p,
                           std::uint64_t match_cap,
