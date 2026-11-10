@@ -279,13 +279,8 @@ class ExecuteAggPrim : public TaskBase {
   __host__ void Run();
 
  private:
-  __host__ void EnsureStreams();
-  __host__ void DestroyStreams();
   // Release all persistent device/pinned scratch buffers.
   __host__ void FreeBuffers();
-
-  uint32_t n_streams_ = 1;
-  std::vector<cudaStream_t> streams_;
 
   // Persistent scratch reused across ComputeByPrim calls (capacities in
   // elements; grown on demand, never shrunk). Removes per-call cudaMalloc/Free.

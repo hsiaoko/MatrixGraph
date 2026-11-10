@@ -360,6 +360,7 @@ inline void CopyAllFeaturesToC(const AllFeatures& src,
   CopyFeatureValueToC(src.entropy, &dst->entropy);
   CopyFeatureValueToC(src.percent_true, &dst->percent_true);
   CopyFeatureValueToC(src.skew, &dst->skew);
+  CopyFeatureValueToC(src.dfeat, &dst->dfeat);
 }
 
 }  // namespace

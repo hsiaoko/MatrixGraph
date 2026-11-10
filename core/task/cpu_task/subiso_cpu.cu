@@ -25,6 +25,7 @@
 #include "core/data_structures/woj_exec_plan.cuh"
 #include "core/data_structures/woj_matches.cuh"
 #include "core/task/cpu_task/subiso_cpu.cuh"
+#include "core/task/cpu_task/min_wise_filter.h"
 #include "core/task/gpu_task/kernel/algorithms/hash.cuh"
 #include "core/task/gpu_task/kernel/algorithms/sort.cuh"
 #include "core/task/gpu_task/matrix_ops.cuh"
@@ -247,114 +248,6 @@ static inline bool BloomLabelSetFilter(VertexID u_idx, VertexID v_idx,
 static thread_local std::vector<uint32_t> tl_filter_visited;
 static thread_local uint32_t tl_filter_stamp = 0;
 
-static inline void EnsureVisitedBuffer(VertexID n) {
-  if (tl_filter_visited.size() < n) {
-    tl_filter_visited.assign(n, 0);
-  }
-  // Stamp overflow is practically impossible (2^32 BFS per thread), but
-  // guard against it anyway.
-  if (__builtin_expect(++tl_filter_stamp == 0, 0)) {
-    std::fill(tl_filter_visited.begin(), tl_filter_visited.end(), 0);
-    tl_filter_stamp = 1;
-  }
-}
-
-// Collect labels of vertices reachable within `hop` steps following outgoing
-// edges of `src`.  Updates `bitmap`, `hash_freq` and `min_hash`.
-static void CollectEllHopOutLabels(const ImmutableCSR& csr, VertexID src,
-                                   int hop, MiniKernelBitmap& bitmap,
-                                   uint32_t hash_freq[16],
-                                   VertexID& min_hash) {
-  auto n = csr.get_num_vertices();
-  EnsureVisitedBuffer(n);
-  const uint32_t stamp = tl_filter_stamp;
-  std::vector<std::pair<VertexID, int>> queue;
-  queue.reserve(64);
-
-  auto init_degree = csr.GetOutDegreeByLocalID(src);
-  auto init_edges = csr.GetOutgoingEdgesByLocalID(src);
-  for (VertexID i = 0; i < init_degree; ++i) {
-    VertexID nbr = init_edges[i];
-    if (tl_filter_visited[nbr] != stamp) {
-      tl_filter_visited[nbr] = stamp;
-      queue.emplace_back(nbr, 1);
-    }
-  }
-
-  for (size_t head = 0; head < queue.size(); ++head) {
-    VertexID cur = queue[head].first;
-    int dist = queue[head].second;
-
-    VertexLabel lbl = csr.GetVLabelBasePointer()[cur];
-    bitmap.SetBit(lbl);
-    VertexID h = HashTable(lbl);
-    if (h < 16) {
-      hash_freq[h]++;
-      min_hash = min_hash < h ? min_hash : h;
-    }
-
-    if (dist < hop) {
-      auto cur_degree = csr.GetOutDegreeByLocalID(cur);
-      auto cur_edges = csr.GetOutgoingEdgesByLocalID(cur);
-      for (VertexID i = 0; i < cur_degree; ++i) {
-        VertexID nxt = cur_edges[i];
-        if (tl_filter_visited[nxt] != stamp) {
-          tl_filter_visited[nxt] = stamp;
-          queue.emplace_back(nxt, dist + 1);
-        }
-      }
-    }
-  }
-}
-
-// Collect labels of vertices reachable within `hop` steps following incoming
-// edges of `src`.
-static void CollectEllHopInLabels(const ImmutableCSR& csr, VertexID src,
-                                  int hop, MiniKernelBitmap& bitmap,
-                                  uint32_t hash_freq[16],
-                                  VertexID& min_hash) {
-  auto n = csr.get_num_vertices();
-  EnsureVisitedBuffer(n);
-  const uint32_t stamp = tl_filter_stamp;
-  std::vector<std::pair<VertexID, int>> queue;
-  queue.reserve(64);
-
-  auto init_degree = csr.GetInDegreeByLocalID(src);
-  auto init_edges = csr.GetIncomingEdgesByLocalID(src);
-  for (VertexID i = 0; i < init_degree; ++i) {
-    VertexID nbr = init_edges[i];
-    if (tl_filter_visited[nbr] != stamp) {
-      tl_filter_visited[nbr] = stamp;
-      queue.emplace_back(nbr, 1);
-    }
-  }
-
-  for (size_t head = 0; head < queue.size(); ++head) {
-    VertexID cur = queue[head].first;
-    int dist = queue[head].second;
-
-    VertexLabel lbl = csr.GetVLabelBasePointer()[cur];
-    bitmap.SetBit(lbl);
-    VertexID h = HashTable(lbl);
-    if (h < 16) {
-      hash_freq[h]++;
-      min_hash = min_hash < h ? min_hash : h;
-    }
-
-    if (dist < hop) {
-      auto cur_degree = csr.GetInDegreeByLocalID(cur);
-      auto cur_edges = csr.GetIncomingEdgesByLocalID(cur);
-      for (VertexID i = 0; i < cur_degree; ++i) {
-        VertexID nxt = cur_edges[i];
-        if (tl_filter_visited[nxt] != stamp) {
-          tl_filter_visited[nxt] = stamp;
-          queue.emplace_back(nxt, dist + 1);
-        }
-      }
-    }
-  }
-}
-
 static void BuildFilterCache(const ImmutableCSR& csr,
                              std::vector<VertexFilterCache>& cache,
                              int hop, int k) {
@@ -377,7 +270,7 @@ static void BuildFilterCache(const ImmutableCSR& csr,
           uint32_t hash_freq[16] = {0};
           VertexID out_min = kMaxVertexID;
 
-          CollectEllHopOutLabels(csr, v, hop, out_bitmap, hash_freq, out_min);
+          detail::CollectEllHopOutLabels(csr, v, hop, out_bitmap, hash_freq, out_min, tl_filter_visited, tl_filter_stamp);
           fc.out_neighbor_label_count = out_bitmap.Count();
           fc.out_min_hash = out_min;
 
@@ -399,7 +292,7 @@ static void BuildFilterCache(const ImmutableCSR& csr,
           memset(hash_freq, 0, sizeof(hash_freq));
           VertexID in_min = kMaxVertexID;
 
-          CollectEllHopInLabels(csr, v, hop, in_bitmap, hash_freq, in_min);
+          detail::CollectEllHopInLabels(csr, v, hop, in_bitmap, hash_freq, in_min, tl_filter_visited, tl_filter_stamp);
           fc.in_neighbor_label_count = in_bitmap.Count();
           fc.in_min_hash = in_min;
 

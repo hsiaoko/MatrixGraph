@@ -196,21 +196,22 @@ typedef struct {
 | Value | Name | Output type |
 |-------|------|-------------|
 | `0` | `kCount` | `int64` |
-| `1` | `kCountGreaterThanMean` | `int64` |
-| `2` | `kNumUnique` | `int64` |
-| `3` | `kSum` | `float64` |
-| `4` | `kMean` | `float64` |
-| `5` | `kVariance` | `float64` |
-| `6` | `kStd` | `float64` |
-| `7` | `kMode` | `float64` |
-| `8` | `kMin` | `float64` |
-| `9` | `kMax` | `float64` |
-| `10`| `kMedian` | `float64` |
-| `11`| `kQuarter` | `float64` |
-| `12`| `kQuartile3` | `float64` |
-| `13`| `kEntropy` | `float64` |
-| `14`| `kPercentTrue` | `float64` |
-| `15`| `kSkew` | `float64` |
+| `1` | `kSum` | `float64` |
+| `2` | `kMean` | `float64` |
+| `3` | `kMedian` | `float64` |
+| `4` | `kMode` | `float64` |
+| `5` | `kMax` | `float64` |
+| `6` | `kMin` | `float64` |
+| `7` | `kVariance` | `float64` |
+| `8` | `kStd` | `float64` |
+| `9` | `kSkew` | `float64` |
+| `10`| `kEntropy` | `float64` |
+| `11`| `kNumUnique` | `int64` |
+| `12`| `kPercentTrue` | `float64` |
+| `13`| `kQuarter` | `float64` |
+| `14`| `kQuartile3` | `float64` |
+| `15`| `kCountGreaterThanMean` | `int64` |
+| `16`| `kDFeat` | passthrough |
 
 ### Go example — synthetic graph + feature computation
 
@@ -232,21 +233,22 @@ type AggPrim int32
 
 const (
     AggCount                AggPrim = 0
-    AggCountGreaterThanMean AggPrim = 1
-    AggNumUnique            AggPrim = 2
-    AggSum                  AggPrim = 3
-    AggMean                 AggPrim = 4
-    AggVariance             AggPrim = 5
-    AggStd                  AggPrim = 6
-    AggMode                 AggPrim = 7
-    AggMin                  AggPrim = 8
-    AggMax                  AggPrim = 9
-    AggMedian               AggPrim = 10
-    AggQuarter              AggPrim = 11
-    AggQuartile3            AggPrim = 12
-    AggEntropy              AggPrim = 13
-    AggPercentTrue          AggPrim = 14
-    AggSkew                 AggPrim = 15
+    AggSum                  AggPrim = 1
+    AggMean                 AggPrim = 2
+    AggMedian               AggPrim = 3
+    AggMode                 AggPrim = 4
+    AggMax                  AggPrim = 5
+    AggMin                  AggPrim = 6
+    AggVariance             AggPrim = 7
+    AggStd                  AggPrim = 8
+    AggSkew                 AggPrim = 9
+    AggEntropy              AggPrim = 10
+    AggNumUnique            AggPrim = 11
+    AggPercentTrue          AggPrim = 12
+    AggQuarter              AggPrim = 13
+    AggQuartile3            AggPrim = 14
+    AggCountGreaterThanMean AggPrim = 15
+    AggDFeat                AggPrim = 16
 )
 
 func GraphAggregateCreate() unsafe.Pointer {

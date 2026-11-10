@@ -142,7 +142,6 @@ class GraphFilterAggregate : public TaskBase {
   using FeatureValue = sics::matrixgraph::core::task::FeatureValue;
 
   __host__ void EnsureStreams();
-  __host__ void DestroyStreams();
   __host__ void FreeBuffers();
 
   __host__ void BuildAttributesFromColumns(
@@ -152,9 +151,6 @@ class GraphFilterAggregate : public TaskBase {
   // Reusable device buffers, grown on demand.
   __host__ void EnsureRequestBuffers(uint32_t stream_idx, uint32_t n_requests);
   __host__ void EnsureScratch(uint32_t stream_idx, size_t hash_total);
-
-  uint32_t n_streams_ = 2;
-  std::vector<cudaStream_t> streams_;
 
   // Graph topology (host master + device copy).
   using VertexID = sics::matrixgraph::core::common::VertexID;

@@ -113,8 +113,9 @@ inline void EnsureVisitedBuffer(VertexID n,
   }
 }
 
+template <class Bitmap>
 inline void CollectEllHopOutLabels(const ImmutableCSR& csr, VertexID src,
-                                   int hop, MinWiseBitmap& bitmap,
+                                   int hop, Bitmap& bitmap,
                                    uint32_t hash_freq[16],
                                    VertexID& min_hash,
                                    std::vector<uint32_t>& visited,
@@ -161,8 +162,9 @@ inline void CollectEllHopOutLabels(const ImmutableCSR& csr, VertexID src,
   }
 }
 
+template <class Bitmap>
 inline void CollectEllHopInLabels(const ImmutableCSR& csr, VertexID src,
-                                  int hop, MinWiseBitmap& bitmap,
+                                  int hop, Bitmap& bitmap,
                                   uint32_t hash_freq[16],
                                   VertexID& min_hash,
                                   std::vector<uint32_t>& visited,

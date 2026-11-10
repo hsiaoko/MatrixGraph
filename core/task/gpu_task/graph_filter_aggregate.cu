@@ -11,6 +11,7 @@
 #include "core/common/consts.h"
 #include "core/common/types.h"
 #include "core/data_structures/immutable_csr.cuh"
+#include "core/task/gpu_task/block_agg_prims.cuh"
 #include "core/task/gpu_task/execute_agg_prim.cuh"
 #include "core/util/cuda_check.cuh"
 
@@ -29,6 +30,8 @@ using AttributeName = sics::matrixgraph::core::data_structures::AttributeName;
 
 using VertexID = sics::matrixgraph::core::common::VertexID;
 using EdgeIndex = sics::matrixgraph::core::common::EdgeIndex;
+
+using sics::matrixgraph::core::task::kernel::BlockSumAll;
 
 __device__ __forceinline__ double AttrToDouble(const Attribute* attr, uint32_t row) {
   if (!attr) return 0.0;
@@ -387,29 +390,7 @@ __device__ __forceinline__ FeatureValue AttrToFeatureValue(const Attribute* attr
   return v;
 }
 
-// Warp reduce helpers.
-__device__ __forceinline__ double WarpSum(double val) {
-  for (int o = 16; o > 0; o >>= 1) val += __shfl_down_sync(0xffffffffu, val, o);
-  return val;
-}
 
-__device__ __forceinline__ double BlockSum(double val, double* sdata) {
-  int lane = threadIdx.x & 31;
-  int wid = threadIdx.x >> 5;
-  val = WarpSum(val);
-  if (lane == 0) sdata[wid] = val;
-  __syncthreads();
-  if (threadIdx.x == 0) {
-    int nwarps = (blockDim.x + 31) >> 5;
-    double r = 0.0;
-    for (int i = 0; i < nwarps; ++i) r += sdata[i];
-    sdata[0] = r;
-  }
-  __syncthreads();
-  double r = sdata[0];
-  __syncthreads();
-  return r;
-}
 
 // NumUnique via per-block hash table in global memory.
 static const unsigned long long kHashEmpty = 0xFFFFFFFFFFFFFFFFull;
@@ -547,9 +528,9 @@ __global__ void FilterAggKernel(const EdgeIndex* csr_offsets,
   }
 
   // Block reductions.
-  double total_sum = BlockSum(sum, sd);
-  uint32_t total_count = static_cast<uint32_t>(BlockSum(static_cast<double>(count), sd) + 0.5);
-  uint32_t total_true = static_cast<uint32_t>(BlockSum(static_cast<double>(true_count), sd) + 0.5);
+  double total_sum = BlockSumAll(sum, sd);
+  uint32_t total_count = static_cast<uint32_t>(BlockSumAll(static_cast<double>(count), sd) + 0.5);
+  uint32_t total_true = static_cast<uint32_t>(BlockSumAll(static_cast<double>(true_count), sd) + 0.5);
 
   // Min / max: argmin/argmax across the whole block (every neighbor), not just
   // one warp. First reduce within each warp, then reduce the per-warp winners
@@ -618,9 +599,9 @@ __global__ void FilterAggKernel(const EdgeIndex* csr_offsets,
     sum_sq += d * d;
     sum_cube += d * d * d;
   }
-  uint32_t total_gtm = static_cast<uint32_t>(BlockSum(static_cast<double>(gtm), sd) + 0.5);
-  double total_sq = BlockSum(sum_sq, sd);
-  double total_cube = BlockSum(sum_cube, sd);
+  uint32_t total_gtm = static_cast<uint32_t>(BlockSumAll(static_cast<double>(gtm), sd) + 0.5);
+  double total_sq = BlockSumAll(sum_sq, sd);
+  double total_cube = BlockSumAll(sum_cube, sd);
 
   if (threadIdx.x == 0) {
     FeatureValue r = MakeInvalidValue();
@@ -700,7 +681,7 @@ __global__ void FilterAggKernel(const EdgeIndex* csr_offsets,
 // -----------------------------------------------------------------------------
 // Host implementation
 // -----------------------------------------------------------------------------
-GraphFilterAggregate::GraphFilterAggregate() = default;
+GraphFilterAggregate::GraphFilterAggregate() { n_streams_ = 2; }
 
 GraphFilterAggregate::~GraphFilterAggregate() {
   DestroyStreams();
@@ -771,8 +752,7 @@ __host__ void GraphFilterAggregate::SetNumStreams(uint32_t n_streams) {
 
 __host__ void GraphFilterAggregate::EnsureStreams() {
   if (streams_.size() == n_streams_ && d_requests_.size() == n_streams_) return;
-  DestroyStreams();
-  streams_.resize(n_streams_);
+  TaskBase::EnsureStreams();
   d_requests_.resize(n_streams_, nullptr);
   d_outputs_.resize(n_streams_, nullptr);
   d_hash_offsets_.resize(n_streams_, nullptr);
@@ -781,16 +761,6 @@ __host__ void GraphFilterAggregate::EnsureStreams() {
   outputs_cap_.resize(n_streams_, 0);
   hash_offsets_cap_.resize(n_streams_, 0);
   hash_scratch_cap_.resize(n_streams_, 0);
-  for (uint32_t i = 0; i < n_streams_; ++i) {
-    CUDA_CHECK(cudaStreamCreate(&streams_[i]));
-  }
-}
-
-__host__ void GraphFilterAggregate::DestroyStreams() {
-  for (cudaStream_t s : streams_) {
-    if (s) cudaStreamDestroy(s);
-  }
-  streams_.clear();
 }
 
 __host__ void GraphFilterAggregate::FreeBuffers() {

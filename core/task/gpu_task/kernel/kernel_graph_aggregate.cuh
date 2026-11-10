@@ -23,81 +23,18 @@ using AttributeName = sics::matrixgraph::core::data_structures::AttributeName;
 using Attributes = sics::matrixgraph::core::data_structures::Attributes;
 
 // ---------------------------------------------------------------------------
-// FeatureValue and its helpers are shared with execute_agg_prim.cuh (the
-// canonical task::FeatureValue).  A local redefinition here created a second,
-// distinct FeatureValue type, so the BlockAggCount defined in this TU and the
-// one in execute_agg_prim.cu returned different types — nvlink's "prototype
-// doesn't match" at device-link time.
-//
-// AggPrim and AllFeatures below are intentionally LOCAL to GraphAggregate:
-// their value ordering differs from task::AggPrim / task::AllFeatures and the
-// Go C API depends on this ordering, so they must not be aliased to the task
-// versions.
+// FeatureValue, its helpers, AggPrim, AllFeatures and the BlockAgg* primitives
+// are all shared with execute_agg_prim (the canonical task:: definitions).
+// GraphAggregate and ExecuteAggPrim therefore expose one and the same primitive
+// ordering (aligned with featurelib/primitive/prim_mapping.go).
 // ---------------------------------------------------------------------------
 using sics::matrixgraph::core::task::FeatureValue;
 using sics::matrixgraph::core::task::MakeIntValue;
 using sics::matrixgraph::core::task::MakeBoolValue;
 using sics::matrixgraph::core::task::MakeInvalidValue;
 using sics::matrixgraph::core::task::MakeFloat64Value;
-
-// ---------------------------------------------------------------------------
-// Aggregation primitives (GraphAggregate ordering — do not reorder).
-// ---------------------------------------------------------------------------
-enum class AggPrim : uint8_t {
-  kCount = 0,
-  kCountGreaterThanMean,
-  kNumUnique,
-  kSum,
-  kMean,
-  kVariance,
-  kStd,
-  kMode,
-  kMin,
-  kMax,
-  kMedian,
-  kQuarter,
-  kQuartile3,
-  kEntropy,
-  kPercentTrue,
-  kSkew
-};
-
-// ---------------------------------------------------------------------------
-// Aggregation operators (device). BlockAgg* primitives live in
-// block_agg_prims.cuh; the dispatcher is defined here because it switches over
-// this TU's AggPrim ordering.
-// ---------------------------------------------------------------------------
-__device__ inline FeatureValue BlockApplyAggPrim(AggPrim prim,
-                                                 FeatureValue* values,
-                                                 uint32_t n,
-                                                 const BlockWorkspace& ws);
-
-// ---------------------------------------------------------------------------
-// AllFeatures: fused output container for compute_all.
-// ---------------------------------------------------------------------------
-struct AllFeatures {
-  FeatureValue count;
-  FeatureValue count_greater_than_mean;
-  FeatureValue num_unique;
-  FeatureValue sum;
-  FeatureValue mean;
-  FeatureValue variance;
-  FeatureValue std;
-  FeatureValue mode;
-  FeatureValue min;
-  FeatureValue max;
-  FeatureValue median;
-  FeatureValue quarter;
-  FeatureValue quartile3;
-  FeatureValue entropy;
-  FeatureValue percent_true;
-  FeatureValue skew;
-};
-
-// Fused compute-all: compute all primitives in one pass over the value list.
-// The caller owns the input buffer; values may be reordered (sorted in-place).
-__device__ inline AllFeatures BlockComputeAllFeaturesFromValues(
-    FeatureValue* values, uint32_t n, const BlockWorkspace& ws);
+using sics::matrixgraph::core::task::AggPrim;
+using sics::matrixgraph::core::task::AllFeatures;
 
 // Returns the dynamic shared memory bytes required for one block given the
 // per-pivot neighbor cap.  Layout: [values buf][sum buf][minmax buf][scan buf]

@@ -52,7 +52,7 @@ int matrixgraph_graph_aggregate_compute_features(
     MatrixGraphFeatureValue* out_values);
 
 /** Output container for the fused compute-all kernel.
- *  Mirrors kernel::AllFeatures field-for-field.
+ *  Mirrors task::AllFeatures field-for-field.
  */
 typedef struct {
   MatrixGraphFeatureValue count;
@@ -71,6 +71,7 @@ typedef struct {
   MatrixGraphFeatureValue entropy;
   MatrixGraphFeatureValue percent_true;
   MatrixGraphFeatureValue skew;
+  MatrixGraphFeatureValue dfeat;
 } MatrixGraphAllFeatures;
 
 /** Fused compute-all: produce every aggregation primitive for each pivot
