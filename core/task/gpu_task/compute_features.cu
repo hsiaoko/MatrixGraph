@@ -95,10 +95,7 @@ __host__ void ComputeFeaturesTask::TransferGraphDataToDevice() {
   if (graph_ == nullptr) return;
 
   const uint8_t* h_buf = graph_->GetGraphBuffer();
-  const uint8_t* h_end =
-      reinterpret_cast<const uint8_t*>(graph_->GetLocalIDBasePointer()) +
-      sizeof(VertexID) * (graph_->get_max_vid() + 1);
-  d_graph_data_size_ = h_end - h_buf;
+  d_graph_data_size_ = graph_->GetGraphBufferSize();
 
   CUDA_CHECK(cudaMalloc(&d_graph_data_, d_graph_data_size_));
   CUDA_CHECK(

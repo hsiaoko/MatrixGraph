@@ -10,14 +10,7 @@ ImmutableCSRGPU::ImmutableCSRGPU(const ImmutableCSR& csr) { Init(csr); }
 void ImmutableCSRGPU::Init(const ImmutableCSR& csr) {
   metadata_ = csr.GetMetadata();
 
-  size_t data_size = sizeof(VertexID) * get_num_vertices() +
-                     sizeof(VertexID) * get_num_vertices() +
-                     sizeof(VertexID) * get_num_vertices() +
-                     sizeof(EdgeIndex) * (get_num_vertices() + 1) +
-                     sizeof(EdgeIndex) * (get_num_vertices() + 1) +
-                     sizeof(VertexID) * get_num_incoming_edges() +
-                     sizeof(VertexID) * get_num_outgoing_edges() +
-                     sizeof(VertexID) * (get_max_vid() + 1);
+  size_t data_size = csr.GetGraphBufferSize();
 
   CUDA_CHECK(cudaMallocManaged(&graph_base_pointer_, data_size));
   CUDA_CHECK(cudaMemcpy(graph_base_pointer_, csr.GetGraphBuffer(), data_size,

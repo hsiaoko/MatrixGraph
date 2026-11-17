@@ -155,6 +155,19 @@ class ImmutableCSR {
 
   inline uint8_t* GetGraphBuffer() const { return graph_base_pointer_.get(); }
 
+  // Size of the contiguous host graph buffer: globalid, in/out degree,
+  // in/out offsets, in/out edge lists, and the edges_globalid and localid
+  // tables. Derived from the parsed pointers so it cannot drift from
+  // ParseBasePtr; device uploads should size with this, never with a
+  // hand-copied formula (the old copies each missed the localid table).
+  inline size_t GetGraphBufferSize() const {
+    const uint8_t* begin = reinterpret_cast<const uint8_t*>(GetGraphBuffer());
+    const uint8_t* end =
+        reinterpret_cast<const uint8_t*>(GetLocalIDBasePointer()) +
+        sizeof(VertexID) * (metadata_.max_vid + 1);
+    return static_cast<size_t>(end - begin);
+  }
+
   inline VertexID* GetGloablIDBasePointer() const {
     return globalid_by_localid_base_pointer_;
   }

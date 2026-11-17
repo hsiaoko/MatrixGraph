@@ -1239,14 +1239,7 @@ std::vector<WOJMatches*> WOJSubIsoKernelWrapper::Filter(
   BufferVertexID buffer_exec_path_in_edges;
 
   data_p.data = p.GetGraphBuffer();
-  data_p.size = sizeof(VertexID) * p.get_num_vertices() +
-                sizeof(VertexID) * p.get_num_vertices() +
-                sizeof(VertexID) * p.get_num_vertices() +
-                sizeof(EdgeIndex) * (p.get_num_vertices() + 1) +
-                sizeof(EdgeIndex) * (p.get_num_vertices() + 1) +
-                sizeof(VertexID) * p.get_num_incoming_edges() +
-                sizeof(VertexID) * p.get_num_outgoing_edges() +
-                sizeof(VertexID) * (p.get_max_vid() + 1);
+  data_p.size = p.GetGraphBufferSize();
 
   buffer_exec_path_in_edges.data = exec_plan.get_exec_path_in_edges_ptr();
   buffer_exec_path_in_edges.size =
@@ -1261,14 +1254,7 @@ std::vector<WOJMatches*> WOJSubIsoKernelWrapper::Filter(
   BufferVertexID data_edgelist_g;
 
   data_g.data = g.GetGraphBuffer();
-  data_g.size = sizeof(VertexID) * g.get_num_vertices() +
-                sizeof(VertexID) * g.get_num_vertices() +
-                sizeof(VertexID) * g.get_num_vertices() +
-                sizeof(EdgeIndex) * (g.get_num_vertices() + 1) +
-                sizeof(EdgeIndex) * (g.get_num_vertices() + 1) +
-                sizeof(VertexID) * g.get_num_incoming_edges() +
-                sizeof(VertexID) * g.get_num_outgoing_edges() +
-                sizeof(VertexID) * (g.get_max_vid() + 1);
+  data_g.size = g.GetGraphBufferSize();
 
   v_label_g.data = g.GetVLabelBasePointer();
   v_label_g.size = sizeof(VertexLabel) * g.get_num_vertices();

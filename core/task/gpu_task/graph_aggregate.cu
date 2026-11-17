@@ -554,10 +554,7 @@ __host__ void GraphAggregate::TransferGraphToAllGpus() {
 
   const ImmutableCSR& g = *graph_;
   const uint8_t* h_buf = g.GetGraphBuffer();
-  const uint8_t* h_end =
-      reinterpret_cast<const uint8_t*>(g.GetLocalIDBasePointer()) +
-      sizeof(VertexID) * (g.get_max_vid() + 1);
-  size_t buf_size = h_end - h_buf;
+  const size_t buf_size = g.GetGraphBufferSize();
 
   for (auto& gpu : per_gpu_states_) {
     CudaDeviceGuard guard(gpu.device_id);

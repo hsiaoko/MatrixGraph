@@ -76,13 +76,7 @@ __host__ void BFS::ExecuteBFS(const ImmutableCSR& g, VertexID src) {
   // Set up data buffer
   BufferUint8 data_g;
   data_g.data = g.GetGraphBuffer();
-  data_g.size =
-      sizeof(VertexID) * g.get_num_vertices() *
-          3 +  // globalid, in_degree, out_degree
-      sizeof(EdgeIndex) * (g.get_num_vertices() + 1) *
-          2 +  // in_offset, out_offset
-      sizeof(VertexID) * (g.get_num_incoming_edges() +
-                          g.get_num_outgoing_edges() + g.get_max_vid() + 1);
+  data_g.size = g.GetGraphBufferSize();
   unified_data_g.Init(data_g);
 
   // Set up vertex label buffer

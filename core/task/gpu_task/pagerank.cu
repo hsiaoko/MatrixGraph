@@ -85,14 +85,7 @@ __host__ void PageRank::ComputePageRank(const ImmutableCSR& g) {
   UnifiedOwnedBufferVertexID unified_edgelist_g;
 
   data_g.data = g.GetGraphBuffer();
-  data_g.size = sizeof(VertexID) * g.get_num_vertices() +
-                sizeof(VertexID) * g.get_num_vertices() +
-                sizeof(VertexID) * g.get_num_vertices() +
-                sizeof(EdgeIndex) * (g.get_num_vertices() + 1) +
-                sizeof(EdgeIndex) * (g.get_num_vertices() + 1) +
-                sizeof(VertexID) * g.get_num_incoming_edges() +
-                sizeof(VertexID) * g.get_num_outgoing_edges() +
-                sizeof(VertexID) * (g.get_max_vid() + 1);
+  data_g.size = g.GetGraphBufferSize();
 
   unified_data_g.Init(data_g);
 

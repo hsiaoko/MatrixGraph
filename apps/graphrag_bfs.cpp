@@ -80,11 +80,7 @@ int main(int argc, char* argv[]) {
     // Replicate BFS::ExecuteBFS buffer setup.
     sics::matrixgraph::core::data_structures::Buffer<uint8_t> data_g;
     data_g.data = g.GetGraphBuffer();
-    data_g.size = sizeof(VertexID) * g.get_num_vertices() * 3 +
-                  sizeof(EdgeIndex) * (g.get_num_vertices() + 1) * 2 +
-                  sizeof(VertexID) *
-                      (g.get_num_incoming_edges() + g.get_num_outgoing_edges() +
-                       g.get_max_vid() + 1);
+    data_g.size = g.GetGraphBufferSize();
 
     UnifiedOwnedBuffer<uint8_t> unified_data_g;
     unified_data_g.Init(data_g);

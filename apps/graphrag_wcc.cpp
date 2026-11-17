@@ -78,14 +78,7 @@ int main(int argc, char* argv[]) {
     // Replicate the data buffer setup from WCC::HashMin.
     sics::matrixgraph::core::data_structures::Buffer<uint8_t> data_g;
     data_g.data = g.GetGraphBuffer();
-    data_g.size = sizeof(VertexID) * g.get_num_vertices() +
-                  sizeof(VertexID) * g.get_num_vertices() +
-                  sizeof(VertexID) * g.get_num_vertices() +
-                  sizeof(EdgeIndex) * (g.get_num_vertices() + 1) +
-                  sizeof(EdgeIndex) * (g.get_num_vertices() + 1) +
-                  sizeof(VertexID) * g.get_num_incoming_edges() +
-                  sizeof(VertexID) * g.get_num_outgoing_edges() +
-                  sizeof(VertexID) * (g.get_max_vid() + 1);
+    data_g.size = g.GetGraphBufferSize();
 
     UnifiedOwnedBuffer<uint8_t> unified_data_g;
     unified_data_g.Init(data_g);
