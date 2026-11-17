@@ -24,6 +24,11 @@ class BitmapOwnership : public Bitmap {
 
   BitmapOwnership(size_t size) { Init(size); }
 
+  // Bitmap declares Init(size_t) and Init(size_t, uint64_t*); the ownership
+  // variant overrides the first. Keep the base overloads visible so a caller
+  // passing a preallocated buffer does not bind to a hidden overload set.
+  using Bitmap::Init;
+
   // copy constructor
   BitmapOwnership(const BitmapOwnership& other) {
     size_ = other.size();

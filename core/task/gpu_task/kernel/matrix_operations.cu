@@ -23,8 +23,12 @@ using sics::matrixgraph::core::common::kMaxVertexID;
 using sics::matrixgraph::core::common::VertexID;
 using sics::matrixgraph::core::task::kernel::KernelBitmap;
 
+#ifndef WORD_OFFSET
 #define WORD_OFFSET(i) ((i) >> 6)
+#endif
+#ifndef BIT_OFFSET
 #define BIT_OFFSET(i) ((i) & 0x3f)
+#endif
 #define min(a, b) ((a) < (b) ? (a) : (b))
 #define max(a, b) ((a) > (b) ? (a) : (b))
 

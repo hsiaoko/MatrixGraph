@@ -10,8 +10,12 @@ namespace core {
 namespace task {
 namespace kernel {
 
+#ifndef KERNEL_WORD_OFFSET
 #define KERNEL_WORD_OFFSET(i) ((i) >> 6)
+#endif
+#ifndef BIT_OFFSET
 #define BIT_OFFSET(i) ((i) & 0x3f)
+#endif
 
 class KernelBitmap {
 public:

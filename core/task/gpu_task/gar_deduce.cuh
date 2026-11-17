@@ -53,6 +53,10 @@ class GARDeduce : public TaskBase {
   GARDeduce() = default;
   ~GARDeduce() = default;
 
+  // TaskBase::Run is the engine entry point; the typed Run below is the
+  // programmable API, so keep both overload sets visible.
+  using TaskBase::Run;
+
   // Uploads the graph. e_src/e_dst must be sorted by (src, dst) — the edge
   // predicate evaluation binary-searches them. Call once per chase round.
   __host__ void SetGraph(const GARGraphArrays& g);

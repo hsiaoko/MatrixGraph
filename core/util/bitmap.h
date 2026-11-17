@@ -11,8 +11,12 @@ namespace matrixgraph {
 namespace core {
 namespace util {
 
-#define WORD_OFFSET(i) (i >> 6)
-#define BIT_OFFSET(i) (i & 0x3f)
+#ifndef WORD_OFFSET
+#define WORD_OFFSET(i) ((i) >> 6)
+#endif
+#ifndef BIT_OFFSET
+#define BIT_OFFSET(i) ((i) & 0x3f)
+#endif
 
 // @DESCRIPTION
 //
