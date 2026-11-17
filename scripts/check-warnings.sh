@@ -12,12 +12,12 @@
 # run against a fresh build directory for a full measurement.
 #
 # Usage: scripts/check-warnings.sh <build-dir> [max-unique-warnings]
-# Default cap: 173 (Debug+Release union measured at HEAD 4cec1d5, see
+# Default cap: 158 (clean Release build measured at M5.1 3caec81, see
 # .audit/warnings-baseline*.txt).
 set -uo pipefail
 
 BUILD_DIR=${1:?usage: check-warnings.sh <build-dir> [max-unique-warnings]}
-CAP=${2:-173}
+CAP=${2:-158}
 
 LOG=$(mktemp /tmp/mg-warnings-XXXXXX.log)
 trap 'rm -f "$LOG" "$LOG.uniq"' EXIT
