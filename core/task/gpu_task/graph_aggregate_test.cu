@@ -206,7 +206,7 @@ int main() {
     }
 
     GraphAggregateEdgeAttributeColumn weight_col;
-    std::memset(&weight_col, 0, sizeof(weight_col));
+    weight_col = GraphAggregateEdgeAttributeColumn{};
     std::strncpy(weight_col.key, "weight", sizeof(weight_col.key) - 1);
     weight_col.value_type = static_cast<int32_t>(
         sics::matrixgraph::core::data_structures::ValueType::kFloat64);

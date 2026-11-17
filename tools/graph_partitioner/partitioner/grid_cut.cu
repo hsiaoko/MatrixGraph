@@ -173,7 +173,9 @@ void GridCutPartitioner::RunPartitioner() {
   std::cout << "[GridCutPartitioner] Constructing Edgelist of blocks...\n"
             << std::endl;
   for (auto _ = 0; _ < n_partitions_ * n_partitions_; _++) {
-    EdgelistMetadata meta{.num_vertices = vertices_bm_for_each_block[_].Count(),
+    EdgelistMetadata meta{.num_vertices =
+                              static_cast<uint32_t>(
+                                  vertices_bm_for_each_block[_].Count()),
                           .num_edges = n_edges_for_each_block[_],
                           .max_vid = max_vid_for_each_block[_],
                           .min_vid = min_vid_for_each_block[_]};

@@ -947,7 +947,7 @@ static inline void Join(VertexID n_vertices_g,
             VertexID left_walker = right_data_offset - 1;
             VertexID right_walker = right_data_offset;
 
-            while (left_walker >= 0 && left_walker < right_y_offset &&
+            while (left_walker < right_y_offset &&
                    right_data[left_walker * right_x_offset + right_hash_idx] ==
                        target) {
               // Write direct on the global memory.
@@ -972,7 +972,7 @@ static inline void Join(VertexID n_vertices_g,
               left_walker--;
             }
 
-            while (right_walker >= 0 && right_walker < right_y_offset &&
+            while (right_walker < right_y_offset &&
                    right_data[right_walker * right_x_offset + right_hash_idx] ==
                        target) {
               // Write direct on the global memory.

@@ -676,7 +676,7 @@ __host__ void GraphAggregate::LoadAttributes(
         if (!h_occupied[v * capacity + slot]) {
           h_keys[v * capacity + slot] = name;
           Attribute& attr = h_values[v * capacity + slot];
-          std::memset(&attr, 0, sizeof(Attribute));
+          attr = Attribute{};
           std::strncpy(attr.name, columns[c].key, sizeof(attr.name) - 1);
           attr.type = static_cast<ValueType>(columns[c].value_type);
           attr.n_rows = 1;
@@ -785,7 +785,7 @@ __host__ void GraphAggregate::LoadEdgeAttributes(
   std::vector<Attribute> attrs(n_columns);
   for (uint32_t c = 0; c < n_columns; ++c) {
     names[c] = AttributeName(columns[c].key);
-    std::memset(&attrs[c], 0, sizeof(Attribute));
+    attrs[c] = Attribute{};
     std::strncpy(attrs[c].name, columns[c].key, sizeof(attrs[c].name) - 1);
     attrs[c].type = static_cast<ValueType>(columns[c].value_type);
     attrs[c].n_rows = n_edges;

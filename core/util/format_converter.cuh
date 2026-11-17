@@ -325,9 +325,9 @@ static BitTiledMatrix* Edgelist2BitTiledMatrix(const Edges& edges,
   size_t n_nz_tile = tile_visited->GPUCount();
 
   TiledMatrixMetadata metadata = {
-      .n_strips = n_strips,
-      .n_nz_tile = n_nz_tile,
-      .tile_size = tile_size,
+      .n_strips = static_cast<uint32_t>(n_strips),
+      .n_nz_tile = static_cast<uint32_t>(n_nz_tile),
+      .tile_size = static_cast<uint32_t>(tile_size),
   };
 
   bit_tiled_matrix->Init(metadata, tile_visited);
@@ -442,7 +442,8 @@ static CSRTiledMatrix* Edgelist2CSRTiledMatrix(
 
   if (edges.get_metadata().num_edges == 0) {
     TiledMatrixMetadata tile_meta_data = {
-        .n_strips = n_strips, .n_nz_tile = 0, .tile_size = tile_size};
+        .n_strips = static_cast<uint32_t>(n_strips), .n_nz_tile = 0,
+        .tile_size = static_cast<uint32_t>(tile_size)};
     csr_tiled_matrix->Init(tile_meta_data);
     return csr_tiled_matrix;
   }
@@ -545,7 +546,9 @@ static CSRTiledMatrix* Edgelist2CSRTiledMatrix(
 
   size_t n_nz_tile = graph_visited.Count();
   TiledMatrixMetadata tile_meta_data = {
-      .n_strips = n_strips, .n_nz_tile = n_nz_tile, .tile_size = tile_size};
+      .n_strips = static_cast<uint32_t>(n_strips),
+      .n_nz_tile = static_cast<uint32_t>(n_nz_tile),
+      .tile_size = static_cast<uint32_t>(tile_size)};
   csr_tiled_matrix->Init(tile_meta_data, new GPUBitmap(n_csr * n_csr));
 
   VertexID gid = 0;
@@ -560,11 +563,11 @@ static CSRTiledMatrix* Edgelist2CSRTiledMatrix(
 
                     gid_map[tile_id] = gid;
                     SubGraphMetadata metadata = {
-                        .gid = tile_id,
+                        .gid = static_cast<GraphID>(tile_id),
                         .num_vertices = n_vertices,
                         .num_incoming_edges = 0,
                         .num_outgoing_edges = count_out_edges_vec[tile_id],
-                        .max_vid = tile_size,
+                        .max_vid = static_cast<VertexID>(tile_size),
                         .min_vid = 0};
 
                     csr_tiled_matrix->SetCSRMetadata(metadata, gid);

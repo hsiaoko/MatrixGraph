@@ -1,6 +1,7 @@
 #include "core/task/gpu_task/compute_features.cuh"
 
 #include <cuda_runtime.h>
+#include <cstdio>
 #include <cstring>
 #include <iostream>
 #include <vector>
@@ -169,9 +170,10 @@ __host__ void ComputeFeaturesTask::LoadAttributes(
     for (size_t c = 0; c < total_n_columns; ++c) {
       MatrixGraphValueType mg_type = d_columns_[c].type;
       size_t elem_size = ValueTypeSize(mg_type);
-      std::memset(&attrs[c], 0, sizeof(Attribute));
-      std::strncpy(attrs[c].name, d_columns_[c].key,
-                   sizeof(attrs[c].name) - 1);
+      attrs[c] = Attribute{};
+      std::snprintf(attrs[c].name, sizeof(attrs[c].name), "%.*s",
+                    static_cast<int>(sizeof(attrs[c].name) - 1),
+                    d_columns_[c].key);
       attrs[c].type = MGToInternalValueType(mg_type);
       attrs[c].n_rows = 1;
       attrs[c].n_elements = 1;
