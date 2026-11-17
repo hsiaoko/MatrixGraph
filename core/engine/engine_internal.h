@@ -1,9 +1,9 @@
 #ifndef MATRIXGRAPH_CORE_ENGINE_ENGINE_INTERNAL_H_
 #define MATRIXGRAPH_CORE_ENGINE_ENGINE_INTERNAL_H_
 
-#include <memory>
-
 #include "core/engine/engine.h"
+
+#include <memory>
 
 namespace sics {
 namespace matrixgraph {

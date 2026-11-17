@@ -1,13 +1,3 @@
-#include <cuda_runtime.h>
-
-#include <algorithm>
-#include <ctime>
-#include <iostream>
-#include <mutex>
-#include <thread>
-#include <unordered_map>
-#include <vector>
-
 #include "core/common/consts.h"
 #include "core/common/host_algorithms.cuh"
 #include "core/common/types.h"
@@ -25,6 +15,15 @@
 #include "core/util/cuda_device.cuh"
 #include "core/util/cuda_prefetch.cuh"
 #include "core/util/format_converter.cuh"
+
+#include <algorithm>
+#include <ctime>
+#include <cuda_runtime.h>
+#include <iostream>
+#include <mutex>
+#include <thread>
+#include <unordered_map>
+#include <vector>
 
 namespace sics {
 namespace matrixgraph {
@@ -64,8 +63,7 @@ __host__ void BFS::ExecuteBFS(const ImmutableCSR& g, VertexID src) {
 
   const std::vector<int> cuda_devices =
       sics::matrixgraph::core::util::MatrixGraphCudaDeviceList();
-  const int primary_gpu =
-      cuda_devices.empty() ? 0 : cuda_devices[0];
+  const int primary_gpu = cuda_devices.empty() ? 0 : cuda_devices[0];
   CUDA_CHECK(cudaSetDevice(primary_gpu));
 
   // Initialize buffers

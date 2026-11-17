@@ -98,10 +98,9 @@ void Skew::ComputeSkew(const ImmutableCSRGraph& g) {
                 [&](VertexID s) {
                   const uint32_t ecc = BfsMaxDistanceUndirected(g, s);
                   uint32_t cur = d_hat_atomic.load(std::memory_order_relaxed);
-                  while (ecc > cur &&
-                         !d_hat_atomic.compare_exchange_weak(
-                             cur, ecc, std::memory_order_relaxed,
-                             std::memory_order_relaxed)) {
+                  while (ecc > cur && !d_hat_atomic.compare_exchange_weak(
+                                          cur, ecc, std::memory_order_relaxed,
+                                          std::memory_order_relaxed)) {
                   }
                 });
 
@@ -113,10 +112,10 @@ void Skew::ComputeSkew(const ImmutableCSRGraph& g) {
               << std::endl;
   } else {
     std::cout << "[Skew] d_hat(G) (approximate, " << k
-              << " random BFS sources, seed=" << random_seed_
-              << "): " << d_hat << std::endl;
+              << " random BFS sources, seed=" << random_seed_ << "): " << d_hat
+              << std::endl;
     std::cout << "[Skew] note: d_hat ≤ true undirected diameter (same as "
-                  "Diameter app)."
+                 "Diameter app)."
               << std::endl;
   }
 

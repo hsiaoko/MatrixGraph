@@ -1,17 +1,16 @@
 #ifndef MATRIXGRAPH_CORE_DATA_STRUCTURES_EDGELIST_H_
 #define MATRIXGRAPH_CORE_DATA_STRUCTURES_EDGELIST_H_
 
-#include <yaml-cpp/yaml.h>
-
-#include <cstring>
-#include <queue>
-#include <iostream>
-
 #include "core/common/consts.h"
 #include "core/common/types.h"
 #include "core/util/atomic.h"
 #include "core/util/bitmap.h"
 #include "core/util/bitmap_ownership.h"
+
+#include <cstring>
+#include <iostream>
+#include <queue>
+#include <yaml-cpp/yaml.h>
 
 namespace sics {
 namespace matrixgraph {
@@ -220,7 +219,8 @@ class Edges {
   // that appears as an endpoint in this edgelist (supports non-compact IDs).
   // Uses edges sorted by src for adjacency and util::BitmapOwnership for BFS
   // visited marks ([0 .. max_vid]; size = max_vid + 1). Return is moved.
-  // Implemented in edgelist_khop.cpp (parallel std::for_each / std::sort + execution).
+  // Implemented in edgelist_khop.cpp (parallel std::for_each / std::sort +
+  // execution).
   std::vector<Edges> BuildKHopOutSubgraphs(VertexID k) const;
 
  private:

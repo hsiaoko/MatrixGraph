@@ -1,11 +1,10 @@
 // This file belongs to the SICS graph-systems project, a C++ library for
 // exploiting parallelism graph computing.
-#include <iostream>
-
-#include <gflags/gflags.h>
-
 #include "core/common/types.h"
 #include "tools/graph_partitioner/partitioner/grid_cut.cuh"
+
+#include <gflags/gflags.h>
+#include <iostream>
 
 using GridCutPartitioner =
     sics::matrixgraph::tools::partitioner::GridCutPartitioner;
@@ -26,7 +25,7 @@ DEFINE_string(store_strategy, "unconstrained",
 DEFINE_bool(biggraph, false, "for big graphs.");
 
 enum Partitioner {
-  kHashEdgeCut, // default
+  kHashEdgeCut,  // default
   kHashVertexCut,
   kHybridCut,
   kPlanarVertexCut,
@@ -34,7 +33,7 @@ enum Partitioner {
   kUndefinedPartitioner
 };
 
-static Partitioner Partitioner2Enum(const std::string &s) {
+static Partitioner Partitioner2Enum(const std::string& s) {
   if (s == "gridcut")
     return kGridCut;
   else
@@ -42,7 +41,7 @@ static Partitioner Partitioner2Enum(const std::string &s) {
   return kUndefinedPartitioner;
 };
 
-static StoreStrategy StoreStrategy2Enum(const std::string &s) {
+static StoreStrategy StoreStrategy2Enum(const std::string& s) {
   if (s == "incoming_only")
     return StoreStrategy::kIncomingOnly;
   else if (s == "outgoing_only")
@@ -52,7 +51,7 @@ static StoreStrategy StoreStrategy2Enum(const std::string &s) {
   return StoreStrategy::kUndefinedStrategy;
 };
 
-int main(int argc, char **argv) {
+int main(int argc, char** argv) {
   gflags::SetUsageMessage(
       "\n USAGE: graph-partitioner -partitioner [options] -i [input "
       "path] "
@@ -66,25 +65,23 @@ int main(int argc, char **argv) {
       "\n");
 
   gflags::ParseCommandLineFlags(&argc, &argv, true);
-  if (FLAGS_i == "" || FLAGS_o == "")
-    exit(EXIT_FAILURE);
+  if (FLAGS_i == "" || FLAGS_o == "") exit(EXIT_FAILURE);
 
   switch (Partitioner2Enum(FLAGS_partitioner)) {
-  case kGridCut: {
-
-    GridCutPartitioner partitioner(FLAGS_i, FLAGS_o,
-                                   StoreStrategy2Enum(FLAGS_store_strategy),
-                                   FLAGS_n_partitions);
-    partitioner.RunPartitioner();
-    break;
-  }
-  case kUndefinedPartitioner: {
-    break;
-  }
-  default: {
-    std::cout << "Unknown partitioner type: " << FLAGS_partitioner;
-    exit(EXIT_FAILURE);
-  }
+    case kGridCut: {
+      GridCutPartitioner partitioner(FLAGS_i, FLAGS_o,
+                                     StoreStrategy2Enum(FLAGS_store_strategy),
+                                     FLAGS_n_partitions);
+      partitioner.RunPartitioner();
+      break;
+    }
+    case kUndefinedPartitioner: {
+      break;
+    }
+    default: {
+      std::cout << "Unknown partitioner type: " << FLAGS_partitioner;
+      exit(EXIT_FAILURE);
+    }
   }
 
   gflags::ShutDownCommandLineFlags();

@@ -1,8 +1,8 @@
 #ifndef MATRIXGRAPH_CORE_TASK_GPU_TASK_TASK_BASE_CUH_
 #define MATRIXGRAPH_CORE_TASK_GPU_TASK_TASK_BASE_CUH_
 
-#include <cuda_runtime.h>
 #include <cstdint>
+#include <cuda_runtime.h>
 #include <vector>
 
 namespace sics {

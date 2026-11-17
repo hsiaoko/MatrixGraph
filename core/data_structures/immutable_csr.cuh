@@ -1,15 +1,15 @@
 #ifndef MATRIXGRAPH_CORE_DATA_STRUCTURES_IMMUTABLE_CSR_CUH_
 #define MATRIXGRAPH_CORE_DATA_STRUCTURES_IMMUTABLE_CSR_CUH_
 
+#include "core/common/yaml_config.h"
+#include "core/data_structures/metadata.h"
+
 #include <cassert>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
 #include <memory>
 #include <string>
-
-#include "core/common/yaml_config.h"
-#include "core/data_structures/metadata.h"
 
 namespace sics {
 namespace matrixgraph {

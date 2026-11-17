@@ -1,4 +1,9 @@
+#include "core/common/consts.h"
+#include "core/data_structures/device_buffer.cuh"
+#include "core/data_structures/unified_buffer.cuh"
 #include "core/task/gpu_task/kernel/kernel_lftj_subiso.cuh"
+#include "core/util/cuda_check.cuh"
+#include "core/util/cuda_device.cuh"
 
 #include <algorithm>
 #include <chrono>
@@ -6,12 +11,6 @@
 #include <iostream>
 #include <limits>
 #include <vector>
-
-#include "core/common/consts.h"
-#include "core/data_structures/device_buffer.cuh"
-#include "core/data_structures/unified_buffer.cuh"
-#include "core/util/cuda_check.cuh"
-#include "core/util/cuda_device.cuh"
 
 namespace sics {
 namespace matrixgraph {
@@ -65,27 +64,29 @@ struct ParametersLFTJ {
 
   // Matching order and backward neighbors.
   VertexID* order;
-  VertexID* bn_offsets;     // size pn+1
-  VertexID* bn_data;        // flattened bn_list
+  VertexID* bn_offsets;  // size pn+1
+  VertexID* bn_data;     // flattened bn_list
   VertexID pn;
 
   bool canonical;
   uint64_t* match_count;
 
-  // Per-thread workspace: each thread gets kMaxPatternVertices * kMaxLocalCandidates.
+  // Per-thread workspace: each thread gets kMaxPatternVertices *
+  // kMaxLocalCandidates.
   VertexID* local_cand_workspace;
   uint32_t* visited_workspace;  // each thread gets n_vertices_g bits
 };
 
 __device__ __forceinline__ VertexID* LocalCandBuf(VertexID* workspace,
-                                                   uint32_t tid, uint32_t depth) {
+                                                  uint32_t tid,
+                                                  uint32_t depth) {
   return workspace + tid * kMaxPatternVertices * kMaxLocalCandidates +
          depth * kMaxLocalCandidates;
 }
 
 // Binary search for value v in sorted array [arr, arr+n).
 __device__ __forceinline__ bool DeviceBinarySearch(const VertexID* arr,
-                                                    uint32_t n, VertexID v) {
+                                                   uint32_t n, VertexID v) {
   int lo = 0, hi = static_cast<int>(n) - 1;
   while (lo <= hi) {
     int mid = (lo + hi) >> 1;
@@ -117,7 +118,7 @@ __device__ __forceinline__ void DeviceIntersectSorted(
 }
 
 __device__ __forceinline__ bool VisitedGet(const uint32_t* visited,
-                                            VertexID v) {
+                                           VertexID v) {
   return visited[v >> 5] & (1u << (v & 31u));
 }
 
@@ -206,8 +207,8 @@ static __global__ void LFTJEnumerateKernel(ParametersLFTJ params) {
     VertexID bn[kMaxBackwardNeighbors];
     const VertexID* bn_nbrs[kMaxBackwardNeighbors];
     uint32_t bn_deg[kMaxBackwardNeighbors];
-    uint32_t bn_count = params.bn_offsets[next_depth + 1] -
-                        params.bn_offsets[next_depth];
+    uint32_t bn_count =
+        params.bn_offsets[next_depth + 1] - params.bn_offsets[next_depth];
     if (bn_count > kMaxBackwardNeighbors) bn_count = kMaxBackwardNeighbors;
 
     for (uint32_t i = 0; i < bn_count; ++i) {
@@ -218,12 +219,13 @@ static __global__ void LFTJEnumerateKernel(ParametersLFTJ params) {
           params.data_offsets[mapped_v + 1] - params.data_offsets[mapped_v];
     }
 
-    VertexID* out_buf = LocalCandBuf(params.local_cand_workspace, tid, next_depth);
+    VertexID* out_buf =
+        LocalCandBuf(params.local_cand_workspace, tid, next_depth);
     uint32_t out_size = 0;
 
     if (bn_count == 0) {
-      out_size = base_size < kMaxLocalCandidates ? base_size
-                                                 : kMaxLocalCandidates;
+      out_size =
+          base_size < kMaxLocalCandidates ? base_size : kMaxLocalCandidates;
       for (uint32_t i = 0; i < out_size; ++i) out_buf[i] = base[i];
     } else {
       // Find smallest list to iterate over.
@@ -316,8 +318,8 @@ uint64_t LFTJSubIsoKernelWrapper::Enumerate(
     const std::vector<std::vector<VertexID>>& /*pattern_adj*/,
     const std::vector<std::vector<VertexID>>& candidates,
     const std::vector<VertexID>& order,
-    const std::vector<std::vector<VertexID>>& bn_list,
-    bool canonical, int num_threads) {
+    const std::vector<std::vector<VertexID>>& bn_list, bool canonical,
+    int num_threads) {
   using UnifiedOwnedBufferUint8 =
       sics::matrixgraph::core::data_structures::UnifiedOwnedBuffer<uint8_t>;
   using UnifiedOwnedBufferUint32 =
@@ -335,14 +337,13 @@ uint64_t LFTJSubIsoKernelWrapper::Enumerate(
   VertexID dn = data_graph.get_num_vertices();
 
   // Pattern CSR buffers.
-  auto pattern_buf_size =
-      sizeof(VertexID) * pn +           // globalid
-      sizeof(VertexID) * pn +           // in_degree
-      sizeof(VertexID) * pn +           // out_degree
-      sizeof(EdgeIndex) * (pn + 1) +    // in_offset
-      sizeof(EdgeIndex) * (pn + 1) +    // out_offset
-      sizeof(VertexID) * pattern.get_num_incoming_edges() +
-      sizeof(VertexID) * pattern.get_num_outgoing_edges();
+  auto pattern_buf_size = sizeof(VertexID) * pn +         // globalid
+                          sizeof(VertexID) * pn +         // in_degree
+                          sizeof(VertexID) * pn +         // out_degree
+                          sizeof(EdgeIndex) * (pn + 1) +  // in_offset
+                          sizeof(EdgeIndex) * (pn + 1) +  // out_offset
+                          sizeof(VertexID) * pattern.get_num_incoming_edges() +
+                          sizeof(VertexID) * pattern.get_num_outgoing_edges();
   UnifiedOwnedBufferUint8 d_pattern_csr;
   d_pattern_csr.Init(pattern_buf_size);
   std::memcpy(d_pattern_csr.GetPtr(), pattern.GetGraphBuffer(),
@@ -362,18 +363,16 @@ uint64_t LFTJSubIsoKernelWrapper::Enumerate(
               sizeof(VertexLabel) * pn);
 
   // Data CSR buffers.
-  auto data_buf_size =
-      sizeof(VertexID) * dn +           // globalid
-      sizeof(VertexID) * dn +           // in_degree
-      sizeof(VertexID) * dn +           // out_degree
-      sizeof(EdgeIndex) * (dn + 1) +    // in_offset
-      sizeof(EdgeIndex) * (dn + 1) +    // out_offset
-      sizeof(VertexID) * data_graph.get_num_incoming_edges() +
-      sizeof(VertexID) * data_graph.get_num_outgoing_edges();
+  auto data_buf_size = sizeof(VertexID) * dn +         // globalid
+                       sizeof(VertexID) * dn +         // in_degree
+                       sizeof(VertexID) * dn +         // out_degree
+                       sizeof(EdgeIndex) * (dn + 1) +  // in_offset
+                       sizeof(EdgeIndex) * (dn + 1) +  // out_offset
+                       sizeof(VertexID) * data_graph.get_num_incoming_edges() +
+                       sizeof(VertexID) * data_graph.get_num_outgoing_edges();
   UnifiedOwnedBufferUint8 d_data_csr;
   d_data_csr.Init(data_buf_size);
-  std::memcpy(d_data_csr.GetPtr(), data_graph.GetGraphBuffer(),
-              data_buf_size);
+  std::memcpy(d_data_csr.GetPtr(), data_graph.GetGraphBuffer(), data_buf_size);
 
   VertexID* d_globalid_g = reinterpret_cast<VertexID*>(d_data_csr.GetPtr());
   VertexID* d_in_degree_g = d_globalid_g + dn;
@@ -381,8 +380,7 @@ uint64_t LFTJSubIsoKernelWrapper::Enumerate(
   EdgeIndex* d_in_offset_g = reinterpret_cast<EdgeIndex*>(d_out_degree_g + dn);
   EdgeIndex* d_out_offset_g = d_in_offset_g + dn + 1;
   VertexID* d_in_edges_g = reinterpret_cast<VertexID*>(d_out_offset_g + dn + 1);
-  VertexID* d_out_edges_g =
-      d_in_edges_g + data_graph.get_num_incoming_edges();
+  VertexID* d_out_edges_g = d_in_edges_g + data_graph.get_num_incoming_edges();
 
   UnifiedOwnedBufferVertexLabel d_v_label_g;
   d_v_label_g.Init(sizeof(VertexLabel) * dn);
@@ -404,8 +402,7 @@ uint64_t LFTJSubIsoKernelWrapper::Enumerate(
   EdgeIndex total_cand = 0;
   std::vector<EdgeIndex> cand_offsets_host(pn + 1, 0);
   for (VertexID u = 0; u < pn; ++u) {
-    cand_offsets_host[u + 1] =
-        cand_offsets_host[u] + candidates[u].size();
+    cand_offsets_host[u + 1] = cand_offsets_host[u] + candidates[u].size();
   }
   total_cand = cand_offsets_host[pn];
 

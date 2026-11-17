@@ -1,11 +1,10 @@
 #ifndef MATRIXGRAPH_CORE_DATA_STRUCTURES_HEAP_CUH_
 #define MATRIXGRAPH_CORE_DATA_STRUCTURES_HEAP_CUH_
 
-#include <cuda_runtime.h>
+#include "core/common/consts.h"
 
 #include <cstdint>
-
-#include "core/common/consts.h"
+#include <cuda_runtime.h>
 
 namespace sics {
 namespace matrixgraph {

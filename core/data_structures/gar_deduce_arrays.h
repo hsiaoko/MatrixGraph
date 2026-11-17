@@ -21,11 +21,11 @@ namespace data_structures {
 struct GARPredicate {
   int32_t kind = 0;
   int32_t node = -1;
-  int32_t col = -1;      // index into GARAttrColumnSet (-1 for edge)
+  int32_t col = -1;  // index into GARAttrColumnSet (-1 for edge)
   int32_t op = 0;
-  double cval = 0.0;     // const right-hand side (kind 0)
+  double cval = 0.0;  // const right-hand side (kind 0)
   int32_t rhs_node = -1;
-  int32_t rhs_col = -1;  // var right-hand column (kind 1)
+  int32_t rhs_col = -1;     // var right-hand column (kind 1)
   int32_t edge_label = -1;  // base relation id (kind 2)
 };
 
@@ -67,11 +67,9 @@ struct GARDeduceArrays {
   void Print() const {
     std::cout << "[GARDeduceArrays] embeddings="
               << (num_embeddings ? *num_embeddings : 0)
-              << " x_satisfied="
-              << (num_x_satisfied ? *num_x_satisfied : 0)
+              << " x_satisfied=" << (num_x_satisfied ? *num_x_satisfied : 0)
               << " heads=" << (head_size ? *head_size : 0)
-              << " capped=" << (match_capped ? *match_capped : 0)
-              << std::endl;
+              << " capped=" << (match_capped ? *match_capped : 0) << std::endl;
   }
 };
 

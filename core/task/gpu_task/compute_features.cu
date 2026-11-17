@@ -1,12 +1,11 @@
 #include "core/task/gpu_task/compute_features.cuh"
+#include "core/util/cuda_check.cuh"
 
-#include <cuda_runtime.h>
 #include <cstdio>
 #include <cstring>
+#include <cuda_runtime.h>
 #include <iostream>
 #include <vector>
-
-#include "core/util/cuda_check.cuh"
 
 /**
  * @file compute_features.cu
@@ -34,13 +33,20 @@ using DeviceAttributes =
 // ---------------------------------------------------------------------------
 __host__ ValueType MGToInternalValueType(MatrixGraphValueType type) {
   switch (type) {
-    case MG_VALUE_INT:     return ValueType::kInt;
-    case MG_VALUE_FLOAT64: return ValueType::kFloat64;
-    case MG_VALUE_BOOL:    return ValueType::kBool;
-    case MG_VALUE_TIME:    return ValueType::kTime;
-    case MG_VALUE_FLOAT32: return ValueType::kFloat32;
-    case MG_VALUE_STRING:  return ValueType::kString;
-    default:               return ValueType::kInvalid;
+    case MG_VALUE_INT:
+      return ValueType::kInt;
+    case MG_VALUE_FLOAT64:
+      return ValueType::kFloat64;
+    case MG_VALUE_BOOL:
+      return ValueType::kBool;
+    case MG_VALUE_TIME:
+      return ValueType::kTime;
+    case MG_VALUE_FLOAT32:
+      return ValueType::kFloat32;
+    case MG_VALUE_STRING:
+      return ValueType::kString;
+    default:
+      return ValueType::kInvalid;
   }
 }
 
@@ -61,7 +67,8 @@ __host__ size_t ComputeFeaturesTask::ValueTypeSize(MatrixGraphValueType type) {
   }
 }
 
-__host__ MatrixGraphValueType ComputeFeaturesTask::ValueTypeFromMG(int32_t type) {
+__host__ MatrixGraphValueType
+ComputeFeaturesTask::ValueTypeFromMG(int32_t type) {
   return static_cast<MatrixGraphValueType>(type);
 }
 
@@ -99,8 +106,8 @@ __host__ void ComputeFeaturesTask::TransferGraphDataToDevice() {
   d_graph_data_size_ = graph_->GetGraphBufferSize();
 
   CUDA_CHECK(cudaMalloc(&d_graph_data_, d_graph_data_size_));
-  CUDA_CHECK(
-      cudaMemcpy(d_graph_data_, h_buf, d_graph_data_size_, cudaMemcpyHostToDevice));
+  CUDA_CHECK(cudaMemcpy(d_graph_data_, h_buf, d_graph_data_size_,
+                        cudaMemcpyHostToDevice));
 }
 
 // ---------------------------------------------------------------------------
@@ -177,8 +184,8 @@ __host__ void ComputeFeaturesTask::LoadAttributes(
       attrs[c].type = MGToInternalValueType(mg_type);
       attrs[c].n_rows = 1;
       attrs[c].n_elements = 1;
-      attrs[c].data = static_cast<const uint8_t*>(d_columns_[c].d_values) +
-                      v * elem_size;
+      attrs[c].data =
+          static_cast<const uint8_t*>(d_columns_[c].d_values) + v * elem_size;
       attrs[c].offsets = nullptr;
     }
     per_vertex_attrs_.emplace_back(v, names.data(), attrs.data(),
@@ -220,17 +227,15 @@ __host__ void ComputeFeaturesTask::LoadLabels(const uint32_t* labels,
   }
   if (n != graph_->get_num_vertices()) {
     std::cerr << "[ComputeFeaturesTask::LoadLabels] Label count " << n
-              << " != vertex count " << graph_->get_num_vertices()
-              << std::endl;
+              << " != vertex count " << graph_->get_num_vertices() << std::endl;
     return;
   }
   if (d_labels_) cudaFree(d_labels_);
   CUDA_CHECK(cudaMalloc(&d_labels_, sizeof(uint32_t) * n));
-  CUDA_CHECK(
-      cudaMemcpy(d_labels_, labels, sizeof(uint32_t) * n, cudaMemcpyHostToDevice));
+  CUDA_CHECK(cudaMemcpy(d_labels_, labels, sizeof(uint32_t) * n,
+                        cudaMemcpyHostToDevice));
   n_labels_ = n;
-  std::cout << "[ComputeFeaturesTask] Loaded " << n << " label(s)"
-            << std::endl;
+  std::cout << "[ComputeFeaturesTask] Loaded " << n << " label(s)" << std::endl;
 }
 
 // ---------------------------------------------------------------------------
@@ -242,8 +247,8 @@ __host__ void ComputeFeaturesTask::LoadLabels(const uint32_t* labels,
  *
  * Used to reserve enough workspace for nested AggExpr / TransExpr evaluations.
  */
-static uint32_t ComputeExprMaxDepth(const std::vector<MatrixGraphPlanNode>& plan,
-                                    int32_t expr_idx) {
+static uint32_t ComputeExprMaxDepth(
+    const std::vector<MatrixGraphPlanNode>& plan, int32_t expr_idx) {
   if (expr_idx < 0 || static_cast<size_t>(expr_idx) >= plan.size()) return 0;
   const MatrixGraphPlanNode& node = plan[expr_idx];
   const MatrixGraphExprType type = static_cast<MatrixGraphExprType>(node.type);
@@ -284,8 +289,7 @@ static uint32_t ComputePlanMaxExprDepth(
  * determines the per-pivot workspace size.
  */
 static void CollectNavIndices(const std::vector<MatrixGraphPlanNode>& plan,
-                              int32_t expr_idx,
-                              std::vector<int32_t>& out) {
+                              int32_t expr_idx, std::vector<int32_t>& out) {
   if (expr_idx < 0 || static_cast<size_t>(expr_idx) >= plan.size()) return;
   const MatrixGraphPlanNode& node = plan[expr_idx];
   const MatrixGraphExprType type = static_cast<MatrixGraphExprType>(node.type);
@@ -304,9 +308,8 @@ static void CollectNavIndices(const std::vector<MatrixGraphPlanNode>& plan,
  *
  * A FilterNav adds one level on top of its inner navigator.
  */
-static uint32_t ComputeNavDepth(
-    const std::vector<MatrixGraphPlanNode>& navs,
-    int32_t nav_idx) {
+static uint32_t ComputeNavDepth(const std::vector<MatrixGraphPlanNode>& navs,
+                                int32_t nav_idx) {
   if (nav_idx < 0 || static_cast<size_t>(nav_idx) >= navs.size()) return 0;
   const MatrixGraphPlanNode& nav = navs[nav_idx];
   const MatrixGraphNavType type = static_cast<MatrixGraphNavType>(nav.type);
@@ -365,8 +368,7 @@ __host__ std::vector<MatrixGraphFeatureValue> ComputeFeaturesTask::Compute(
     const std::vector<int32_t>& output_expr_indices) {
   std::vector<MatrixGraphFeatureValue> result;
   if (graph_ == nullptr || d_graph_data_ == nullptr) {
-    std::cerr << "[ComputeFeaturesTask::Compute] Graph not loaded"
-              << std::endl;
+    std::cerr << "[ComputeFeaturesTask::Compute] Graph not loaded" << std::endl;
     return result;
   }
   if (per_vertex_attrs_.empty()) {
@@ -374,8 +376,7 @@ __host__ std::vector<MatrixGraphFeatureValue> ComputeFeaturesTask::Compute(
               << std::endl;
     return result;
   }
-  if (pivot_vertex_ids.empty() || output_expr_indices.empty() ||
-      plan.empty()) {
+  if (pivot_vertex_ids.empty() || output_expr_indices.empty() || plan.empty()) {
     return result;
   }
 
@@ -400,7 +401,8 @@ __host__ std::vector<MatrixGraphFeatureValue> ComputeFeaturesTask::Compute(
                         cudaMemcpyHostToDevice));
 
   if (!conds.empty()) {
-    CUDA_CHECK(cudaMalloc(&d_conds, sizeof(MatrixGraphCondNode) * conds.size()));
+    CUDA_CHECK(
+        cudaMalloc(&d_conds, sizeof(MatrixGraphCondNode) * conds.size()));
     CUDA_CHECK(cudaMemcpy(d_conds, conds.data(),
                           sizeof(MatrixGraphCondNode) * conds.size(),
                           cudaMemcpyHostToDevice));
@@ -414,8 +416,7 @@ __host__ std::vector<MatrixGraphFeatureValue> ComputeFeaturesTask::Compute(
 
   CUDA_CHECK(cudaMalloc(&d_pivot_vertex_ids, sizeof(uint32_t) * n_pivots));
   CUDA_CHECK(cudaMemcpy(d_pivot_vertex_ids, pivot_vertex_ids.data(),
-                        sizeof(uint32_t) * n_pivots,
-                        cudaMemcpyHostToDevice));
+                        sizeof(uint32_t) * n_pivots, cudaMemcpyHostToDevice));
 
   // Workspace and outputs.
   constexpr uint32_t kWorkspaceCapacity =
@@ -425,11 +426,10 @@ __host__ std::vector<MatrixGraphFeatureValue> ComputeFeaturesTask::Compute(
       ComputePlanMaxWorkspaceDepth(plan, navs, output_expr_indices);
   MatrixGraphFeatureValue* d_workspace = nullptr;
   MatrixGraphFeatureValue* d_outputs = nullptr;
-  CUDA_CHECK(cudaMalloc(&d_workspace,
-                        sizeof(MatrixGraphFeatureValue) * n_pivots *
-                            per_pivot_workspace));
-  CUDA_CHECK(cudaMalloc(&d_outputs,
-                        sizeof(MatrixGraphFeatureValue) * n_pivots * n_outputs));
+  CUDA_CHECK(cudaMalloc(&d_workspace, sizeof(MatrixGraphFeatureValue) *
+                                          n_pivots * per_pivot_workspace));
+  CUDA_CHECK(cudaMalloc(
+      &d_outputs, sizeof(MatrixGraphFeatureValue) * n_pivots * n_outputs));
 
 #ifndef NDEBUG
   // -G device-debug instrumentation inflates the plan interpreter's stack
@@ -446,26 +446,13 @@ __host__ std::vector<MatrixGraphFeatureValue> ComputeFeaturesTask::Compute(
 
   // Launch one block per pivot.
   kernel::ComputeFeaturesKernel<<<n_pivots, kWorkspaceCapacity>>>(
-      d_graph_data_,
-      graph_->get_num_vertices(),
-      graph_->get_num_incoming_edges(),
-      graph_->get_num_outgoing_edges(),
-      d_labels_,
-      d_per_vertex_attrs_,
-      d_pivot_vertex_ids,
-      n_pivots,
-      d_plan,
-      static_cast<uint32_t>(plan.size()),
-      d_navs,
-      static_cast<uint32_t>(navs.size()),
-      d_conds,
-      static_cast<uint32_t>(conds.size()),
-      d_output_expr_indices,
-      n_outputs,
-      d_workspace,
-      kWorkspaceCapacity,
-      per_pivot_workspace,
-      d_outputs);
+      d_graph_data_, graph_->get_num_vertices(),
+      graph_->get_num_incoming_edges(), graph_->get_num_outgoing_edges(),
+      d_labels_, d_per_vertex_attrs_, d_pivot_vertex_ids, n_pivots, d_plan,
+      static_cast<uint32_t>(plan.size()), d_navs,
+      static_cast<uint32_t>(navs.size()), d_conds,
+      static_cast<uint32_t>(conds.size()), d_output_expr_indices, n_outputs,
+      d_workspace, kWorkspaceCapacity, per_pivot_workspace, d_outputs);
   CUDA_CHECK(cudaDeviceSynchronize());
 
   result.resize(n_pivots * n_outputs);

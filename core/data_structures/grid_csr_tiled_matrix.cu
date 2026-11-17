@@ -11,12 +11,12 @@ namespace data_structures {
 using GraphID = sics::matrixgraph::core::common::GraphID;
 using VertexID = sics::matrixgraph::core::common::VertexID;
 
-GridCSRTiledMatrix::GridCSRTiledMatrix(const GridGraphMetadata &metadata) {
+GridCSRTiledMatrix::GridCSRTiledMatrix(const GridGraphMetadata& metadata) {
   metadata_ = metadata;
   tiled_matrix_vec_.resize(pow(metadata_.n_chunks, 2));
 
-  std::generate(tiled_matrix_vec_.begin(),
-                tiled_matrix_vec_.end(), []() { return new CSRTiledMatrix(); });
+  std::generate(tiled_matrix_vec_.begin(), tiled_matrix_vec_.end(),
+                []() { return new CSRTiledMatrix(); });
 }
 
 void GridCSRTiledMatrix::Print(VertexID max_n_blocks) const {
@@ -29,15 +29,14 @@ void GridCSRTiledMatrix::Print(VertexID max_n_blocks) const {
               .n_nz_tile == 0) {
         continue;
       }
-      if (x > max_n_blocks || y > max_n_blocks)
-        return;
+      if (x > max_n_blocks || y > max_n_blocks) return;
       std::cout << "Block (" << x << "," << y << ")" << std::endl;
       tiled_matrix_vec_[x * metadata_.n_chunks + y]->Print(max_n_blocks);
     }
   }
 }
 
-} // namespace data_structures
-} // namespace core
-} // namespace matrixgraph
-} // namespace sics
+}  // namespace data_structures
+}  // namespace core
+}  // namespace matrixgraph
+}  // namespace sics

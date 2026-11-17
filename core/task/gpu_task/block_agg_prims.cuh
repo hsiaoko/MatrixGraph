@@ -1,13 +1,13 @@
 #ifndef MATRIXGRAPH_CORE_TASK_GPU_TASK_BLOCK_AGG_PRIMS_CUH_
 #define MATRIXGRAPH_CORE_TASK_GPU_TASK_BLOCK_AGG_PRIMS_CUH_
 
-#include <cuda_runtime.h>
+#include "core/common/consts.h"
+#include "core/task/gpu_task/execute_agg_prim.cuh"
+
 #include <cfloat>
 #include <cmath>
 #include <cstdint>
-
-#include "core/common/consts.h"
-#include "core/task/gpu_task/execute_agg_prim.cuh"
+#include <cuda_runtime.h>
 
 namespace sics {
 namespace matrixgraph {
@@ -36,8 +36,8 @@ struct BlockWorkspace {
 
 __device__ inline BlockWorkspace GetBlockWorkspace(uint8_t* base,
                                                    uint32_t values_capacity) {
-  double* sum_buf = reinterpret_cast<double*>(
-      base + values_capacity * sizeof(FeatureValue));
+  double* sum_buf =
+      reinterpret_cast<double*>(base + values_capacity * sizeof(FeatureValue));
   FeatureValue* minmax_buf = reinterpret_cast<FeatureValue*>(
       base + values_capacity * sizeof(FeatureValue) +
       common::kBlockDim * sizeof(double));
@@ -79,7 +79,8 @@ __device__ __forceinline__ double BlockSumAll(double v, double* s) {
   return r;
 }
 
-__device__ __forceinline__ FeatureValue BlockMin(FeatureValue val, FeatureValue* sdata) {
+__device__ __forceinline__ FeatureValue BlockMin(FeatureValue val,
+                                                 FeatureValue* sdata) {
   sdata[threadIdx.x] = val;
   __syncthreads();
   for (int s = blockDim.x / 2; s > 0; s >>= 1) {
@@ -92,7 +93,8 @@ __device__ __forceinline__ FeatureValue BlockMin(FeatureValue val, FeatureValue*
   return sdata[0];
 }
 
-__device__ __forceinline__ FeatureValue BlockMax(FeatureValue val, FeatureValue* sdata) {
+__device__ __forceinline__ FeatureValue BlockMax(FeatureValue val,
+                                                 FeatureValue* sdata) {
   sdata[threadIdx.x] = val;
   __syncthreads();
   for (int s = blockDim.x / 2; s > 0; s >>= 1) {
@@ -106,8 +108,8 @@ __device__ __forceinline__ FeatureValue BlockMax(FeatureValue val, FeatureValue*
 }
 
 __device__ __forceinline__ uint32_t BlockExclusiveScan(uint32_t val,
-                                              uint32_t* sdata,
-                                              uint32_t* total) {
+                                                       uint32_t* sdata,
+                                                       uint32_t* total) {
   sdata[threadIdx.x] = val;
   __syncthreads();
   for (int offset = 1; offset < blockDim.x; offset <<= 1) {
@@ -180,8 +182,8 @@ __device__ inline FeatureValue BlockAggCount(uint32_t n) {
 }
 
 __device__ __forceinline__ FeatureValue BlockAggSum(const FeatureValue* values,
-                                           uint32_t n,
-                                           const BlockWorkspace& ws) {
+                                                    uint32_t n,
+                                                    const BlockWorkspace& ws) {
   if (n == 0) return MakeInvalidValue();
   double local = 0.0;
   for (uint32_t i = threadIdx.x; i < n; i += blockDim.x) {
@@ -191,16 +193,16 @@ __device__ __forceinline__ FeatureValue BlockAggSum(const FeatureValue* values,
 }
 
 __device__ __forceinline__ FeatureValue BlockAggMean(const FeatureValue* values,
-                                            uint32_t n,
-                                            const BlockWorkspace& ws) {
+                                                     uint32_t n,
+                                                     const BlockWorkspace& ws) {
   if (n == 0) return MakeInvalidValue();
   FeatureValue sum = BlockAggSum(values, n, ws);
   return MakeFloat64Value(sum.ToDouble() / static_cast<double>(n));
 }
 
 __device__ __forceinline__ FeatureValue BlockAggMin(const FeatureValue* values,
-                                           uint32_t n,
-                                           const BlockWorkspace& ws) {
+                                                    uint32_t n,
+                                                    const BlockWorkspace& ws) {
   if (n == 0) return MakeInvalidValue();
   FeatureValue local = values[0];
   for (uint32_t i = threadIdx.x; i < n; i += blockDim.x) {
@@ -210,8 +212,8 @@ __device__ __forceinline__ FeatureValue BlockAggMin(const FeatureValue* values,
 }
 
 __device__ __forceinline__ FeatureValue BlockAggMax(const FeatureValue* values,
-                                           uint32_t n,
-                                           const BlockWorkspace& ws) {
+                                                    uint32_t n,
+                                                    const BlockWorkspace& ws) {
   if (n == 0) return MakeInvalidValue();
   FeatureValue local = values[0];
   for (uint32_t i = threadIdx.x; i < n; i += blockDim.x) {
@@ -220,9 +222,8 @@ __device__ __forceinline__ FeatureValue BlockAggMax(const FeatureValue* values,
   return BlockMax(local, ws.minmax_buf);
 }
 
-__device__ __forceinline__ FeatureValue BlockAggVariance(const FeatureValue* values,
-                                                uint32_t n,
-                                                const BlockWorkspace& ws) {
+__device__ __forceinline__ FeatureValue BlockAggVariance(
+    const FeatureValue* values, uint32_t n, const BlockWorkspace& ws) {
   if (n == 0) return MakeInvalidValue();
   double mean = BlockAggMean(values, n, ws).ToDouble();
   double local = 0.0;
@@ -234,14 +235,15 @@ __device__ __forceinline__ FeatureValue BlockAggVariance(const FeatureValue* val
 }
 
 __device__ __forceinline__ FeatureValue BlockAggStd(const FeatureValue* values,
-                                           uint32_t n,
-                                           const BlockWorkspace& ws) {
+                                                    uint32_t n,
+                                                    const BlockWorkspace& ws) {
   FeatureValue var = BlockAggVariance(values, n, ws);
   if (!var.IsValid()) return var;
   return MakeFloat64Value(sqrt(var.ToDouble()));
 }
 
-__device__ inline FeatureValue BlockAggMedian(FeatureValue* values, uint32_t n) {
+__device__ inline FeatureValue BlockAggMedian(FeatureValue* values,
+                                              uint32_t n) {
   if (n == 0) return MakeInvalidValue();
   BlockBitonicSort(values, n);
   return values[n / 2];
@@ -319,8 +321,8 @@ __device__ inline FeatureValue BlockAggQuarter(FeatureValue* values,
     uint32_t lower = static_cast<uint32_t>(floor(pos));
     uint32_t upper = static_cast<uint32_t>(ceil(pos));
     double w = pos - static_cast<double>(lower);
-    double v = values[lower].ToDouble() * (1.0 - w) +
-               values[upper].ToDouble() * w;
+    double v =
+        values[lower].ToDouble() * (1.0 - w) + values[upper].ToDouble() * w;
     values[0] = MakeFloat64Value(v);
   }
   __syncthreads();
@@ -337,17 +339,16 @@ __device__ inline FeatureValue BlockAggQuartile3(FeatureValue* values,
     uint32_t lower = static_cast<uint32_t>(floor(pos));
     uint32_t upper = static_cast<uint32_t>(ceil(pos));
     double w = pos - static_cast<double>(lower);
-    double v = values[lower].ToDouble() * (1.0 - w) +
-               values[upper].ToDouble() * w;
+    double v =
+        values[lower].ToDouble() * (1.0 - w) + values[upper].ToDouble() * w;
     values[0] = MakeFloat64Value(v);
   }
   __syncthreads();
   return values[0];
 }
 
-__device__ __forceinline__ FeatureValue BlockAggPercentTrue(const FeatureValue* values,
-                                                   uint32_t n,
-                                                   const BlockWorkspace& ws) {
+__device__ __forceinline__ FeatureValue BlockAggPercentTrue(
+    const FeatureValue* values, uint32_t n, const BlockWorkspace& ws) {
   if (n == 0) return MakeInvalidValue();
   uint32_t local = 0;
   for (uint32_t i = threadIdx.x; i < n; i += blockDim.x) {
@@ -359,8 +360,8 @@ __device__ __forceinline__ FeatureValue BlockAggPercentTrue(const FeatureValue* 
 }
 
 __device__ __forceinline__ FeatureValue BlockAggSkew(const FeatureValue* values,
-                                            uint32_t n,
-                                            const BlockWorkspace& ws) {
+                                                     uint32_t n,
+                                                     const BlockWorkspace& ws) {
   if (n == 0) return MakeInvalidValue();
   double mean = BlockAggMean(values, n, ws).ToDouble();
   double stdv = BlockAggStd(values, n, ws).ToDouble();
@@ -392,11 +393,8 @@ __device__ inline FeatureValue BlockAggDFeat(const FeatureValue* values,
   return values[0];
 }
 
-
-__device__ __forceinline__ FeatureValue BlockApplyAggPrim(AggPrim prim,
-                                                 FeatureValue* values,
-                                                 uint32_t n,
-                                                 const BlockWorkspace& ws) {
+__device__ __forceinline__ FeatureValue BlockApplyAggPrim(
+    AggPrim prim, FeatureValue* values, uint32_t n, const BlockWorkspace& ws) {
   switch (prim) {
     case AggPrim::kCount:
       return BlockAggCount(n);
@@ -548,16 +546,16 @@ __device__ __forceinline__ AllFeatures BlockComputeAllFeaturesFromValues(
       uint32_t l1 = static_cast<uint32_t>(floor(pos1));
       uint32_t u1 = static_cast<uint32_t>(ceil(pos1));
       double w1 = pos1 - static_cast<double>(l1);
-      double v1 = values[l1].ToDouble() * (1.0 - w1) +
-                  values[u1].ToDouble() * w1;
+      double v1 =
+          values[l1].ToDouble() * (1.0 - w1) + values[u1].ToDouble() * w1;
       q1 = MakeFloat64Value(v1);
 
       double pos3 = 0.75 * static_cast<double>(n - 1);
       uint32_t l3 = static_cast<uint32_t>(floor(pos3));
       uint32_t u3 = static_cast<uint32_t>(ceil(pos3));
       double w3 = pos3 - static_cast<double>(l3);
-      double v3 = values[l3].ToDouble() * (1.0 - w3) +
-                  values[u3].ToDouble() * w3;
+      double v3 =
+          values[l3].ToDouble() * (1.0 - w3) + values[u3].ToDouble() * w3;
       q3 = MakeFloat64Value(v3);
     }
 

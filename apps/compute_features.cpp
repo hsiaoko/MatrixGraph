@@ -12,20 +12,20 @@
  * It exits with 0 when all checks pass and non-zero otherwise.
  */
 
+#include "core/task/gpu_task/compute_features.cuh"
+
+#include "core/data_structures/immutable_csr.cuh"
+
 #include <cmath>
 #include <cstring>
 #include <iostream>
 #include <memory>
 #include <vector>
 
-#include "core/data_structures/immutable_csr.cuh"
-#include "core/task/gpu_task/compute_features.cuh"
-
 using sics::matrixgraph::core::common::EdgeIndex;
 using sics::matrixgraph::core::common::VertexID;
 using sics::matrixgraph::core::data_structures::ImmutableCSR;
 using sics::matrixgraph::core::task::ComputeFeaturesTask;
-
 
 namespace {
 
@@ -43,16 +43,15 @@ std::unique_ptr<ImmutableCSR> BuildRingCSR(uint32_t n_vertices) {
   uint32_t n_edges = n_vertices * kOutDegree;
   uint32_t max_vid = n_vertices - 1;
 
-  size_t buf_size =
-      sizeof(VertexID) * n_vertices +         // globalid
-      sizeof(VertexID) * n_vertices +         // indegree
-      sizeof(VertexID) * n_vertices +         // outdegree
-      sizeof(EdgeIndex) * (n_vertices + 1) +  // in_offset
-      sizeof(EdgeIndex) * (n_vertices + 1) +  // out_offset
-      sizeof(VertexID) * n_edges +            // incoming_edges
-      sizeof(VertexID) * n_edges +            // outgoing_edges
-      sizeof(VertexID) * (max_vid + 1) +      // edges_globalid
-      sizeof(VertexID) * (max_vid + 1);       // localid_by_globalid
+  size_t buf_size = sizeof(VertexID) * n_vertices +         // globalid
+                    sizeof(VertexID) * n_vertices +         // indegree
+                    sizeof(VertexID) * n_vertices +         // outdegree
+                    sizeof(EdgeIndex) * (n_vertices + 1) +  // in_offset
+                    sizeof(EdgeIndex) * (n_vertices + 1) +  // out_offset
+                    sizeof(VertexID) * n_edges +            // incoming_edges
+                    sizeof(VertexID) * n_edges +            // outgoing_edges
+                    sizeof(VertexID) * (max_vid + 1) +      // edges_globalid
+                    sizeof(VertexID) * (max_vid + 1);  // localid_by_globalid
 
   uint8_t* buf = new uint8_t[buf_size]();
   csr->SetNumVertices(n_vertices);
@@ -227,14 +226,14 @@ int main() {
   task.LoadAttributes(1, &score_col);
 
   std::vector<MatrixGraphPlanNode> plan;
-  plan.push_back(AttrNode("score"));           // 0
-  plan.push_back(ConstFloatNode(3.14));        // 1
-  plan.push_back(ConstFloatNode(10.0));        // 2
-  plan.push_back(AggNode(MG_AGG_SUM, 0, 0));   // 3
-  plan.push_back(AggNode(MG_AGG_MEAN, 0, 0));  // 4
+  plan.push_back(AttrNode("score"));              // 0
+  plan.push_back(ConstFloatNode(3.14));           // 1
+  plan.push_back(ConstFloatNode(10.0));           // 2
+  plan.push_back(AggNode(MG_AGG_SUM, 0, 0));      // 3
+  plan.push_back(AggNode(MG_AGG_MEAN, 0, 0));     // 4
   plan.push_back(TransNode(MG_TRANS_ADD, 0, 2));  // 5: score + 10
-  plan.push_back(AggNode(MG_AGG_SUM, 0, 0));   // 6: inner sum over neighbors
-  plan.push_back(AggNode(MG_AGG_MEAN, 6, 0));  // 7: mean of neighbor sums
+  plan.push_back(AggNode(MG_AGG_SUM, 0, 0));      // 6: inner sum over neighbors
+  plan.push_back(AggNode(MG_AGG_MEAN, 6, 0));     // 7: mean of neighbor sums
 
   std::vector<MatrixGraphPlanNode> navs;
   navs.push_back(OutNeighborNav());
@@ -295,14 +294,15 @@ int main() {
   task.LoadAttributes(1, &flag_col);
 
   std::vector<MatrixGraphPlanNode> plan2;
-  plan2.push_back(AttrNode("score"));     // 0
-  plan2.push_back(AttrNode("flag"));      // 1
-  plan2.push_back(ConstIntNode(1));       // 2
-  plan2.push_back(AggNode(MG_AGG_SUM, 0, 1));  // 3: sum score of filtered neighbors
+  plan2.push_back(AttrNode("score"));  // 0
+  plan2.push_back(AttrNode("flag"));   // 1
+  plan2.push_back(ConstIntNode(1));    // 2
+  plan2.push_back(
+      AggNode(MG_AGG_SUM, 0, 1));  // 3: sum score of filtered neighbors
 
   std::vector<MatrixGraphPlanNode> navs2;
-  navs2.push_back(OutNeighborNav());       // 0: out neighbor
-  navs2.push_back(FilterNavNode(0, 0));    // 1: filter where flag == 1
+  navs2.push_back(OutNeighborNav());     // 0: out neighbor
+  navs2.push_back(FilterNavNode(0, 0));  // 1: filter where flag == 1
 
   std::vector<MatrixGraphCondNode> conds2;
   conds2.push_back(CondNode(MG_COND_EQ, 1, 2));

@@ -1,10 +1,10 @@
 #ifndef MATRIXGRAPH_APPS_BACKEND_FLAG_H_
 #define MATRIXGRAPH_APPS_BACKEND_FLAG_H_
 
-#include <string>
-
 #include "core/engine/engine.h"
 #include "core/util/error.h"
+
+#include <string>
 
 namespace mg_app {
 
@@ -18,8 +18,7 @@ inline sics::matrixgraph::core::engine::Backend ParseBackend(
   if (name == "cpu_serial" || name == "serial") return Backend::kCpuSerial;
   throw sics::matrixgraph::core::util::Error(
       sics::matrixgraph::core::util::ErrorCode::kInvalidArgument,
-      "unknown -backend value '" + name +
-          "' (options: gpu, cpu, cpu_serial)");
+      "unknown -backend value '" + name + "' (options: gpu, cpu, cpu_serial)");
 }
 
 }  // namespace mg_app

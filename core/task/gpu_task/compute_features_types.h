@@ -34,11 +34,11 @@ extern "C" {
  * plans stable.
  */
 enum MatrixGraphExprType {
-  MG_EXPR_ATTR = 0,          /**< Read a per-vertex attribute by key. */
-  MG_EXPR_CONST = 1,         /**< Literal constant (int/float/bool/time). */
-  MG_EXPR_AGG = 2,           /**< Aggregation over a navigator. */
-  MG_EXPR_TRANS = 3,         /**< Arithmetic/logical transformation. */
-  MG_EXPR_PATTERN_ATTR = 4,  /**< Pattern-matched attribute (not implemented). */
+  MG_EXPR_ATTR = 0,         /**< Read a per-vertex attribute by key. */
+  MG_EXPR_CONST = 1,        /**< Literal constant (int/float/bool/time). */
+  MG_EXPR_AGG = 2,          /**< Aggregation over a navigator. */
+  MG_EXPR_TRANS = 3,        /**< Arithmetic/logical transformation. */
+  MG_EXPR_PATTERN_ATTR = 4, /**< Pattern-matched attribute (not implemented). */
 };
 
 /**
@@ -49,10 +49,10 @@ enum MatrixGraphExprType {
  * only bindings that satisfy a condition.
  */
 enum MatrixGraphNavType {
-  MG_NAV_SELF = 0,      /**< Single binding: the pivot vertex itself. */
-  MG_NAV_NEIGHBOR = 1,  /**< Outgoing/incoming neighbors (see direction). */
-  MG_NAV_FILTER = 2,    /**< Filtered wrapper around another navigator. */
-  MG_NAV_PATTERN = 3,   /**< Pattern-based bindings (not implemented). */
+  MG_NAV_SELF = 0,     /**< Single binding: the pivot vertex itself. */
+  MG_NAV_NEIGHBOR = 1, /**< Outgoing/incoming neighbors (see direction). */
+  MG_NAV_FILTER = 2,   /**< Filtered wrapper around another navigator. */
+  MG_NAV_PATTERN = 3,  /**< Pattern-based bindings (not implemented). */
 };
 
 /**
@@ -62,12 +62,12 @@ enum MatrixGraphNavType {
  * with ToDouble().
  */
 enum MatrixGraphCondType {
-  MG_COND_EQ = 0,  /**< Equal. */
-  MG_COND_NE = 1,  /**< Not equal. */
-  MG_COND_LT = 2,  /**< Less than. */
-  MG_COND_LE = 3,  /**< Less than or equal. */
-  MG_COND_GT = 4,  /**< Greater than. */
-  MG_COND_GE = 5,  /**< Greater than or equal. */
+  MG_COND_EQ = 0, /**< Equal. */
+  MG_COND_NE = 1, /**< Not equal. */
+  MG_COND_LT = 2, /**< Less than. */
+  MG_COND_LE = 3, /**< Less than or equal. */
+  MG_COND_GT = 4, /**< Greater than. */
+  MG_COND_GE = 5, /**< Greater than or equal. */
 };
 
 /**
@@ -137,9 +137,9 @@ enum MatrixGraphTransOp {
  * expressions are evaluated with the binding vertex as pivot_vid.
  */
 struct MatrixGraphCondNode {
-  int32_t op;          /**< MatrixGraphCondType. */
-  int32_t left_expr;   /**< Index of the left-hand expression in the plan. */
-  int32_t right_expr;  /**< Index of the right-hand expression in the plan. */
+  int32_t op;         /**< MatrixGraphCondType. */
+  int32_t left_expr;  /**< Index of the left-hand expression in the plan. */
+  int32_t right_expr; /**< Index of the right-hand expression in the plan. */
 };
 
 /**
@@ -164,14 +164,14 @@ struct MatrixGraphCondNode {
  *   - PATTERN:  type=MG_NAV_PATTERN, pattern_ref
  */
 struct MatrixGraphPlanNode {
-  int32_t type;  /**< MatrixGraphExprType for expressions; negative nav tag. */
+  int32_t type; /**< MatrixGraphExprType for expressions; negative nav tag. */
 
   /* Expression-specific fields. */
-  int32_t op;       /**< Aggregation primitive id (for AggExpr). */
-  int32_t src_idx;  /**< Child expression index (for AggExpr). */
-  int32_t nav_idx;  /**< Navigator plan index (for AggExpr). */
-  int32_t child_a;  /**< First child (for TransExpr / binary ops). */
-  int32_t child_b;  /**< Second child. */
+  int32_t op;      /**< Aggregation primitive id (for AggExpr). */
+  int32_t src_idx; /**< Child expression index (for AggExpr). */
+  int32_t nav_idx; /**< Navigator plan index (for AggExpr). */
+  int32_t child_a; /**< First child (for TransExpr / binary ops). */
+  int32_t child_b; /**< Second child. */
 
   /* For AttrExpr / PatternAttrExpr. */
   char key[64];
@@ -183,11 +183,11 @@ struct MatrixGraphPlanNode {
   int32_t const_b;
 
   /* For Navigators. */
-  int32_t direction;       /**< 0=out, 1=in, 2=both (NeighborNav; 2 unsupported). */
-  char target_label[64];   /**< Empty = no label filter (NeighborNav). */
-  int32_t cond_idx;        /**< Filter condition index (FilterNav). */
-  int32_t inner_nav_idx;   /**< Wrapped navigator index (FilterNav/PatternNav). */
-  int32_t pattern_ref;     /**< Pattern reference (PatternNav). */
+  int32_t direction; /**< 0=out, 1=in, 2=both (NeighborNav; 2 unsupported). */
+  char target_label[64]; /**< Empty = no label filter (NeighborNav). */
+  int32_t cond_idx;      /**< Filter condition index (FilterNav). */
+  int32_t inner_nav_idx; /**< Wrapped navigator index (FilterNav/PatternNav). */
+  int32_t pattern_ref;   /**< Pattern reference (PatternNav). */
 };
 
 /**
@@ -198,11 +198,11 @@ struct MatrixGraphPlanNode {
  * all three fields sequentially; doing so overwrites earlier values.
  */
 struct MatrixGraphFeatureValue {
-  int32_t type;  /**< MatrixGraphValueType. */
+  int32_t type; /**< MatrixGraphValueType. */
   union {
-    int64_t i64;  /**< Valid when type == MG_VALUE_INT or MG_VALUE_TIME. */
-    double f64;   /**< Valid when type == MG_VALUE_FLOAT64 or MG_VALUE_FLOAT32. */
-    int32_t b;    /**< Valid when type == MG_VALUE_BOOL. */
+    int64_t i64; /**< Valid when type == MG_VALUE_INT or MG_VALUE_TIME. */
+    double f64; /**< Valid when type == MG_VALUE_FLOAT64 or MG_VALUE_FLOAT32. */
+    int32_t b;  /**< Valid when type == MG_VALUE_BOOL. */
   };
 };
 

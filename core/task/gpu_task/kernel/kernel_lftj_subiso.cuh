@@ -1,11 +1,11 @@
 #ifndef MATRIXGRAPH_CORE_TASK_GPU_TASK_KERNEL_KERNEL_LFTJ_SUBISO_CUH_
 #define MATRIXGRAPH_CORE_TASK_GPU_TASK_KERNEL_KERNEL_LFTJ_SUBISO_CUH_
 
-#include <stdint.h>
-#include <vector>
-
 #include "core/common/types.h"
 #include "core/data_structures/immutable_csr.cuh"
+
+#include <stdint.h>
+#include <vector>
 
 namespace sics {
 namespace matrixgraph {
@@ -28,8 +28,8 @@ class LFTJSubIsoKernelWrapper {
       const std::vector<std::vector<VertexID>>& pattern_adj,
       const std::vector<std::vector<VertexID>>& candidates,
       const std::vector<VertexID>& order,
-      const std::vector<std::vector<VertexID>>& bn_list,
-      bool canonical, int num_threads);
+      const std::vector<std::vector<VertexID>>& bn_list, bool canonical,
+      int num_threads);
 };
 
 }  // namespace kernel

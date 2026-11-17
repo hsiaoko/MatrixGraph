@@ -1,12 +1,11 @@
 #ifndef MATRIXGRAPH_CORE_TASK_GPU_TASK_KERNEL_ALGORITHMS_HASH_CUH_
 #define MATRIXGRAPH_CORE_TASK_GPU_TASK_KERNEL_ALGORITHMS_HASH_CUH_
 
-#include <cuda_runtime.h>
-
-#include <iostream>
-
 #include "core/common/types.h"
 #include "core/util/cuda_check.cuh"
+
+#include <cuda_runtime.h>
+#include <iostream>
 
 namespace sics {
 namespace matrixgraph {

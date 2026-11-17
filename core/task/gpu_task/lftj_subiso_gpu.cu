@@ -1,17 +1,16 @@
+#include "core/task/gpu_task/kernel/kernel_lftj_subiso.cuh"
 #include "core/task/gpu_task/lftj_subiso_gpu.cuh"
+#include "core/util/cuda_check.cuh"
+#include "core/util/cuda_device.cuh"
 
-#include <array>
 #include <algorithm>
+#include <array>
 #include <chrono>
 #include <cstring>
 #include <iostream>
 #include <limits>
 #include <numeric>
 #include <unordered_set>
-
-#include "core/task/gpu_task/kernel/kernel_lftj_subiso.cuh"
-#include "core/util/cuda_check.cuh"
-#include "core/util/cuda_device.cuh"
 
 namespace sics {
 namespace matrixgraph {
@@ -174,8 +173,8 @@ void LFTJSubIsoGpu::BuildCandidateSets() {
     };
     auto do_minwise_bloom = [&](VertexID v) {
       return !(enable_min_wise_bloom_filter_ &&
-               !KMinBloomIPFilter(u, v, pattern_, data_graph_, p_min_wise_cache_,
-                                  g_min_wise_cache_));
+               !KMinBloomIPFilter(u, v, pattern_, data_graph_,
+                                  p_min_wise_cache_, g_min_wise_cache_));
     };
     auto do_minwise = [&](VertexID v) {
       return !(enable_min_wise_filter_ &&
@@ -433,8 +432,8 @@ void LFTJSubIsoGpu::Run() {
     for (int lbl = 0; lbl < kLcfLabelCap; ++lbl) {
       if (g_freq[lbl] < p_freq[lbl]) {
         std::cout << "[LFTJSubIsoGpu] LCF rejected globally (label " << lbl
-                  << " count: pattern=" << p_freq[lbl] << " data="
-                  << g_freq[lbl] << ")." << std::endl;
+                  << " count: pattern=" << p_freq[lbl]
+                  << " data=" << g_freq[lbl] << ")." << std::endl;
         std::cout << "[LFTJSubIsoGpu] Total matches: 0" << std::endl;
         return;
       }
@@ -446,8 +445,8 @@ void LFTJSubIsoGpu::Run() {
 
   auto t2 = std::chrono::high_resolution_clock::now();
 
-  CUDA_CHECK(cudaSetDevice(
-      sics::matrixgraph::core::util::MatrixGraphCudaDevice()));
+  CUDA_CHECK(
+      cudaSetDevice(sics::matrixgraph::core::util::MatrixGraphCudaDevice()));
 
   uint64_t match_count = LFTJSubIsoKernelWrapper::Enumerate(
       pattern_, data_graph_, data_offsets_, data_neighbors_, pattern_adj_,

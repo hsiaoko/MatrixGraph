@@ -4,7 +4,6 @@
 #include <climits>
 #include <cstddef>
 #include <memory>
-
 #include <oneapi/tbb/global_control.h>
 
 namespace sics {
@@ -12,8 +11,9 @@ namespace matrixgraph {
 namespace core {
 namespace util {
 
-// RAII: caps worker parallelism for std::execution::par when libstdc++ routes via oneTBB.
-// max_threads == 0: no control (default hardware/TBB pool behavior).
+// RAII: caps worker parallelism for std::execution::par when libstdc++ routes
+// via oneTBB. max_threads == 0: no control (default hardware/TBB pool
+// behavior).
 class CpuParallelScope {
  public:
   explicit CpuParallelScope(std::size_t max_threads) {

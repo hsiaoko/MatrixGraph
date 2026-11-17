@@ -1,12 +1,11 @@
-#include <cuda_runtime.h>
-
-#include <iostream>
-
 #include "core/common/consts.h"
 #include "core/common/types.h"
 #include "core/data_structures/kernel_bitmap.cuh"
 #include "core/task/gpu_task/kernel/matrix_operations.cuh"
 #include "core/util/cuda_check.cuh"
+
+#include <cuda_runtime.h>
+#include <iostream>
 
 namespace sics {
 namespace matrixgraph {
@@ -870,7 +869,8 @@ void MatrixOperationsKernelWrapper::Walk(
 
 void MatrixOperationsKernelWrapper::Count(
     const cudaStream_t& stream, size_t /*tile_size*/, size_t /*n_strips*/,
-    size_t /*n_nz_tile*/, const data_structures::UnifiedOwnedBuffer<uint64_t>& data,
+    size_t /*n_nz_tile*/,
+    const data_structures::UnifiedOwnedBuffer<uint64_t>& data,
     data_structures::UnifiedOwnedBuffer<uint64_t>* count) {
   dim3 dim_block(256);
   dim3 dim_grid(256);

@@ -1,13 +1,13 @@
 #ifndef MATRIXGRAPH_CORE_TASK_GPU_TASK_KERNEL_ALGORITHMS_SORT_CUH_
 #define MATRIXGRAPH_CORE_TASK_GPU_TASK_KERNEL_ALGORITHMS_SORT_CUH_
 
-#include <cstddef>
-#include <cuda_runtime.h>
-#include <iostream>
-
 #include "core/common/consts.h"
 #include "core/common/types.h"
 #include "core/util/cuda_check.cuh"
+
+#include <cstddef>
+#include <cuda_runtime.h>
+#include <iostream>
 
 namespace sics {
 namespace matrixgraph {
@@ -18,14 +18,15 @@ namespace kernel {
 using VertexID = sics::matrixgraph::core::common::VertexID;
 using sics::matrixgraph::core::common::kBlockDim;
 
-template <class T> static __host__ __device__ void swap(T *a, T *b) {
+template <class T>
+static __host__ __device__ void swap(T* a, T* b) {
   T temp = *a;
   *a = *b;
   *b = temp;
 }
 
 // Merge two sorted subarrays into a single sorted array
-static __device__ void Merge(VertexID *input, VertexID *output, VertexID key,
+static __device__ void Merge(VertexID* input, VertexID* output, VertexID key,
                              VertexID x, int left, int mid, int right) {
   int i = left, j = mid + 1, k = left;
 
@@ -57,7 +58,7 @@ static __device__ void Merge(VertexID *input, VertexID *output, VertexID key,
 }
 
 // Kernel for parallel merge sort
-static __global__ void MergeSortKernel(VertexID *input, VertexID *output,
+static __global__ void MergeSortKernel(VertexID* input, VertexID* output,
                                        VertexID key, VertexID x, VertexID y,
                                        int step) {
   int idx = blockIdx.x * blockDim.x + threadIdx.x;
@@ -125,14 +126,12 @@ static void MergeSort(const cudaStream_t& stream, VertexID* data, VertexID key,
 }
 
 static __host__ __device__ int Partition(int arr[], int low, int high) {
-
   // Initialize pivot to be the first element
   int p = arr[low];
   int i = low;
   int j = high;
 
   while (i < j) {
-
     // Find the first element greater than
     // the pivot (from starting)
     while (arr[i] <= p && i <= high - 1) {
@@ -154,7 +153,6 @@ static __host__ __device__ int Partition(int arr[], int low, int high) {
 
 static __host__ __device__ void QuickSort(int arr[], int low, int high) {
   if (low < high) {
-
     // call partition function to find Partition Index
     int pi = Partition(arr, low, high);
 
@@ -165,10 +163,10 @@ static __host__ __device__ void QuickSort(int arr[], int low, int high) {
   }
 }
 
-} // namespace kernel
-} // namespace task
-} // namespace core
-} // namespace matrixgraph
-} // namespace sics
+}  // namespace kernel
+}  // namespace task
+}  // namespace core
+}  // namespace matrixgraph
+}  // namespace sics
 
-#endif // MATRIXGRAPH_CORE_TASK_GPU_TASK_KERNEL_ALGORITHMS_SORT_CUH_
+#endif  // MATRIXGRAPH_CORE_TASK_GPU_TASK_KERNEL_ALGORITHMS_SORT_CUH_

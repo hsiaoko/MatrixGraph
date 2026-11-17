@@ -1,12 +1,12 @@
 #ifndef MATRIXGRAPH_CORE_TASK_CPU_TASK_SKEW_H_
 #define MATRIXGRAPH_CORE_TASK_CPU_TASK_SKEW_H_
 
-#include <cstdint>
-#include <string>
-
 #include "core/common/types.h"
 #include "core/data_structures/immutable_csr.cuh"
 #include "core/task/gpu_task/task_base.cuh"
+
+#include <cstdint>
+#include <string>
 
 namespace sics {
 namespace matrixgraph {

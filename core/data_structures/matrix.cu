@@ -1,8 +1,8 @@
-#include <fstream>
-#include <iostream>
-
 #include "core/data_structures/matrix.cuh"
 #include "yaml-cpp/yaml.h"
+
+#include <fstream>
+#include <iostream>
 
 namespace sics {
 namespace matrixgraph {

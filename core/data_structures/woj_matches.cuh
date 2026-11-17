@@ -46,7 +46,7 @@ class WOJMatches {
                           const std::pair<VertexID, VertexID>& hash_keys);
 
   __host__ std::vector<WOJMatches*> SplitAndCopy(VertexID n_partitions,
-                                                  VertexID x = 0);
+                                                 VertexID x = 0);
 
   __host__ void CopyData(const WOJMatches& other);
 

@@ -1,15 +1,6 @@
 // GraphRAG wrapper: run MatrixGraph BFS and write per-vertex levels to disk.
-#include <gflags/gflags.h>
-
-#include <cuda_runtime.h>
-#include <filesystem>
-#include <fstream>
-#include <iostream>
-#include <limits>
-#include <string>
-
-#include "core/common/types.h"
 #include "apps/backend_flag.h"
+#include "core/common/types.h"
 #include "core/data_structures/host_buffer.cuh"
 #include "core/data_structures/immutable_csr.cuh"
 #include "core/data_structures/unified_buffer.cuh"
@@ -19,6 +10,14 @@
 #include "core/util/cuda_check.cuh"
 #include "core/util/cuda_device.cuh"
 #include "core/util/cuda_prefetch.cuh"
+
+#include <cuda_runtime.h>
+#include <filesystem>
+#include <fstream>
+#include <gflags/gflags.h>
+#include <iostream>
+#include <limits>
+#include <string>
 
 DEFINE_string(g, "", "Path to the input CSR graph directory (required)");
 DEFINE_string(o, "", "Path to the output directory (required)");
@@ -87,7 +86,8 @@ int main(int argc, char* argv[]) {
         {reinterpret_cast<void*>(unified_v_label_g.GetPtr()),
          unified_v_label_g.GetSize()}};
     sics::matrixgraph::core::util::MatrixGraphPrefetchManagedToDevice(
-        primary_gpu, sics::matrixgraph::core::util::MatrixGraphCudaStreamsPerGpu(),
+        primary_gpu,
+        sics::matrixgraph::core::util::MatrixGraphCudaStreamsPerGpu(),
         prefetch);
 
     cudaStream_t stream;
@@ -101,16 +101,14 @@ int main(int argc, char* argv[]) {
     CUDA_CHECK(cudaDeviceSynchronize());
 
     // Copy results from managed memory back to the host label buffer.
-    CUDA_CHECK(cudaMemcpy(g.GetVLabelBasePointer(),
-                          unified_v_label_g.GetPtr(),
+    CUDA_CHECK(cudaMemcpy(g.GetVLabelBasePointer(), unified_v_label_g.GetPtr(),
                           sizeof(VertexLabel) * g.get_num_vertices(),
                           cudaMemcpyDefault));
 
     std::filesystem::create_directories(FLAGS_o);
     std::ofstream level_file(FLAGS_o + "/bfs_levels.bin", std::ios::binary);
-    level_file.write(
-        reinterpret_cast<const char*>(g.GetVLabelBasePointer()),
-        sizeof(VertexLabel) * g.get_num_vertices());
+    level_file.write(reinterpret_cast<const char*>(g.GetVLabelBasePointer()),
+                     sizeof(VertexLabel) * g.get_num_vertices());
     level_file.close();
 
     VertexLabel max_level = 0;

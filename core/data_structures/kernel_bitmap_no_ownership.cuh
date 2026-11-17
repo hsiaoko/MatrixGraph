@@ -18,34 +18,31 @@ namespace kernel {
 #endif
 
 class KernelBitmapNoOwnership {
-public:
+ public:
   __device__ KernelBitmapNoOwnership() = default;
 
-  __device__ KernelBitmapNoOwnership(uint64_t size, uint64_t *data) {
+  __device__ KernelBitmapNoOwnership(uint64_t size, uint64_t* data) {
     size_ = size;
     data_ = data;
   }
 
-  __device__ void Init(uint64_t size, uint64_t *data) {
-    if (data_ != nullptr)
-      free(data_);
+  __device__ void Init(uint64_t size, uint64_t* data) {
+    if (data_ != nullptr) free(data_);
     data_ = data;
     size_ = size;
   }
 
   __device__ void Init(uint64_t size) {
-    if (data_ != nullptr)
-      free(data_);
+    if (data_ != nullptr) free(data_);
 
     size_ = size;
     data_ =
-        (uint64_t *)malloc(sizeof(uint64_t) * (KERNEL_WORD_OFFSET(size) + 1));
+        (uint64_t*)malloc(sizeof(uint64_t) * (KERNEL_WORD_OFFSET(size) + 1));
   }
 
   __device__ void Clear() {
     uint64_t bm_size = KERNEL_WORD_OFFSET(size_);
-    for (uint64_t i = 0; i <= bm_size; i++)
-      data_[i] = 0;
+    for (uint64_t i = 0; i <= bm_size; i++) data_[i] = 0;
   }
 
   __device__ void Fill() {
@@ -60,22 +57,19 @@ public:
   }
 
   __device__ bool GetBit(uint64_t i) const {
-    if (i > size_)
-      return 0;
+    if (i > size_) return 0;
     return data_[KERNEL_WORD_OFFSET(i)] & (1ul << BIT_OFFSET(i));
   }
 
   __device__ void SetBit(uint64_t i) {
-    if (i > size_)
-      return;
-    atomicOr((unsigned long long int *)(data_ + KERNEL_WORD_OFFSET(i)),
+    if (i > size_) return;
+    atomicOr((unsigned long long int*)(data_ + KERNEL_WORD_OFFSET(i)),
              (unsigned long long int)(1ul << BIT_OFFSET(i)));
   }
 
   __device__ void ClearBit(const uint64_t i) {
-    if (i > size_)
-      return;
-    atomicAnd((unsigned long long int *)(data_ + KERNEL_WORD_OFFSET(i)),
+    if (i > size_) return;
+    atomicAnd((unsigned long long int*)(data_ + KERNEL_WORD_OFFSET(i)),
               ~(unsigned long long int)(1ul << BIT_OFFSET(i)));
   }
 
@@ -96,17 +90,17 @@ public:
 
   __device__ uint64_t GetSize() const { return size_; }
 
-  __device__ uint64_t *GetPtr() const { return data_; }
+  __device__ uint64_t* GetPtr() const { return data_; }
 
-private:
+ private:
   uint64_t size_ = 0;
-  uint64_t *data_ = nullptr;
+  uint64_t* data_ = nullptr;
 };
 
-} // namespace kernel
-} // namespace task
-} // namespace core
-} // namespace matrixgraph
-} // namespace sics
+}  // namespace kernel
+}  // namespace task
+}  // namespace core
+}  // namespace matrixgraph
+}  // namespace sics
 
-#endif // INC_51_11_GRAPH_COMPUTING_MATRIXGRAPH_CORE_TASK_KERNEL_KERNEL_BITMAP_CUH_
+#endif  // INC_51_11_GRAPH_COMPUTING_MATRIXGRAPH_CORE_TASK_KERNEL_KERNEL_BITMAP_CUH_

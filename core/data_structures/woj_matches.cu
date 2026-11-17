@@ -1,11 +1,11 @@
-#include <algorithm>
-#include <cassert>
-
 #include "core/common/consts.h"
 #include "core/common/types.h"
 #include "core/data_structures/woj_matches.cuh"
 #include "core/util/bitmap_ownership.h"
 #include "core/util/cuda_check.cuh"
+
+#include <algorithm>
+#include <cassert>
 
 namespace sics {
 namespace matrixgraph {
@@ -62,7 +62,7 @@ void WOJMatches::SetHeader(const VertexID* left_header, VertexID left_offset_x,
 }
 
 std::vector<WOJMatches*> WOJMatches::SplitAndCopy(VertexID n_partitions,
-                                                    VertexID x) {
+                                                  VertexID x) {
   std::vector<WOJMatches*> splitted_data;
   splitted_data.resize(n_partitions);
 
@@ -80,10 +80,9 @@ std::vector<WOJMatches*> WOJMatches::SplitAndCopy(VertexID n_partitions,
     splitted_data[_]->SetXOffset(get_x_offset());
 
     if (alloc_x == x_) {
-      CUDA_CHECK(cudaMemcpy(splitted_data[_]->get_data_ptr(),
-                            get_data_ptr() + count * get_x(),
-                            sizeof(VertexID) * partition_size * get_x(),
-                            cudaMemcpyDefault));
+      CUDA_CHECK(cudaMemcpy(
+          splitted_data[_]->get_data_ptr(), get_data_ptr() + count * get_x(),
+          sizeof(VertexID) * partition_size * get_x(), cudaMemcpyDefault));
     } else {
       // Reorganize rows from old stride x_ to new stride alloc_x.
       for (VertexID row = 0; row < partition_size; row++) {

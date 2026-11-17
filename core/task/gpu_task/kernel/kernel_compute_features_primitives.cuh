@@ -1,12 +1,12 @@
 #ifndef MATRIXGRAPH_CORE_TASK_GPU_TASK_KERNEL_KERNEL_COMPUTE_FEATURES_PRIMITIVES_CUH_
 #define MATRIXGRAPH_CORE_TASK_GPU_TASK_KERNEL_KERNEL_COMPUTE_FEATURES_PRIMITIVES_CUH_
 
-#include <cuda_runtime.h>
+#include "core/task/gpu_task/compute_features_types.h"
+
 #include <cfloat>
 #include <cmath>
 #include <cstdint>
-
-#include "core/task/gpu_task/compute_features_types.h"
+#include <cuda_runtime.h>
 
 namespace sics {
 namespace matrixgraph {
@@ -293,8 +293,7 @@ __device__ inline MGFeatureValue AggPercentTrue(const MGFeatureValue* values,
   if (n == 0) return MakeInvalidValue();
   double local = 0.0;
   if (threadIdx.x < n) {
-    local = (values[threadIdx.x].type == MG_VALUE_BOOL &&
-             values[threadIdx.x].b)
+    local = (values[threadIdx.x].type == MG_VALUE_BOOL && values[threadIdx.x].b)
                 ? 1.0
                 : 0.0;
   }
@@ -488,23 +487,40 @@ __device__ inline MGFeatureValue ApplyAggPrim(int32_t prim,
   }
 
   switch (prim) {
-    case kAggCount:                 return AggCount(values, n);
-    case kAggSum:                   return AggSum(values, n);
-    case kAggMean:                  return AggMean(values, n);
-    case kAggMin:                   return AggMin(values, n);
-    case kAggMax:                   return AggMax(values, n);
-    case kAggVariance:              return AggVariance(values, n);
-    case kAggStd:                   return AggStd(values, n);
-    case kAggMedian:                return AggMedian(values, n);
-    case kAggMode:                  return AggMode(values, n);
-    case kAggNumUnique:             return AggNumUnique(values, n);
-    case kAggEntropy:               return AggEntropy(values, n);
-    case kAggQuarter:               return AggQuarter(values, n);
-    case kAggQuartile3:             return AggQuartile3(values, n);
-    case kAggPercentTrue:           return AggPercentTrue(values, n);
-    case kAggSkew:                  return AggSkew(values, n);
-    case kAggCountGreaterThanMean:  return AggCountGreaterThanMean(values, n);
-    default:                        return MakeInvalidValue();
+    case kAggCount:
+      return AggCount(values, n);
+    case kAggSum:
+      return AggSum(values, n);
+    case kAggMean:
+      return AggMean(values, n);
+    case kAggMin:
+      return AggMin(values, n);
+    case kAggMax:
+      return AggMax(values, n);
+    case kAggVariance:
+      return AggVariance(values, n);
+    case kAggStd:
+      return AggStd(values, n);
+    case kAggMedian:
+      return AggMedian(values, n);
+    case kAggMode:
+      return AggMode(values, n);
+    case kAggNumUnique:
+      return AggNumUnique(values, n);
+    case kAggEntropy:
+      return AggEntropy(values, n);
+    case kAggQuarter:
+      return AggQuarter(values, n);
+    case kAggQuartile3:
+      return AggQuartile3(values, n);
+    case kAggPercentTrue:
+      return AggPercentTrue(values, n);
+    case kAggSkew:
+      return AggSkew(values, n);
+    case kAggCountGreaterThanMean:
+      return AggCountGreaterThanMean(values, n);
+    default:
+      return MakeInvalidValue();
   }
 }
 

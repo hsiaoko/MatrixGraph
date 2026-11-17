@@ -48,8 +48,8 @@ static bool test_single_primitives() {
   auto stdv = task.Compute(AggPrim::kStd, nums.data(), nums.size());
   auto q1 = task.Compute(AggPrim::kQuarter, nums.data(), nums.size());
   auto q3 = task.Compute(AggPrim::kQuartile3, nums.data(), nums.size());
-  auto cgm = task.Compute(AggPrim::kCountGreaterThanMean, nums.data(),
-                          nums.size());
+  auto cgm =
+      task.Compute(AggPrim::kCountGreaterThanMean, nums.data(), nums.size());
   auto nu = task.Compute(AggPrim::kNumUnique, nums.data(), nums.size());
 
   // Expected values for [1,2,3,4,5]:
@@ -72,27 +72,26 @@ static bool test_single_primitives() {
   if (nu.i64 != 5) pass = false;
 
   // Mode test: [1, 2, 2, 3, 3] -> mode = 2 (first record-breaking)
-  std::vector<FeatureValue> mode_nums = {
-      MakeIntValue(1), MakeIntValue(2), MakeIntValue(2),
-      MakeIntValue(3), MakeIntValue(3)};
-  auto mode_result = task.Compute(AggPrim::kMode, mode_nums.data(),
-                                  mode_nums.size());
+  std::vector<FeatureValue> mode_nums = {MakeIntValue(1), MakeIntValue(2),
+                                         MakeIntValue(2), MakeIntValue(3),
+                                         MakeIntValue(3)};
+  auto mode_result =
+      task.Compute(AggPrim::kMode, mode_nums.data(), mode_nums.size());
   if (mode_result.i64 != 2) {
     std::cerr << "FAIL mode expected=2 got=" << mode_result.i64 << std::endl;
     pass = false;
   }
 
   // Entropy test: [1,1,2,2] -> p=0.5 each -> entropy=1.0
-  std::vector<FeatureValue> entropy_nums = {
-      MakeIntValue(1), MakeIntValue(1), MakeIntValue(2), MakeIntValue(2)};
-  auto entropy = task.Compute(AggPrim::kEntropy, entropy_nums.data(),
-                              entropy_nums.size());
+  std::vector<FeatureValue> entropy_nums = {MakeIntValue(1), MakeIntValue(1),
+                                            MakeIntValue(2), MakeIntValue(2)};
+  auto entropy =
+      task.Compute(AggPrim::kEntropy, entropy_nums.data(), entropy_nums.size());
   pass &= check("entropy", 1.0, entropy.ToDouble());
 
   // PercentTrue test: [true, false, true, true] -> 0.75
-  std::vector<FeatureValue> bools = {
-      MakeBoolValue(true), MakeBoolValue(false),
-      MakeBoolValue(true), MakeBoolValue(true)};
+  std::vector<FeatureValue> bools = {MakeBoolValue(true), MakeBoolValue(false),
+                                     MakeBoolValue(true), MakeBoolValue(true)};
   auto pct = task.Compute(AggPrim::kPercentTrue, bools.data(), bools.size());
   pass &= check("percent_true", 0.75, pct.ToDouble());
 
@@ -177,8 +176,8 @@ static bool test_batch_multi_prim() {
   std::vector<std::vector<FeatureValue>> inputs = {
       {MakeIntValue(1), MakeIntValue(2), MakeIntValue(3)},
       {MakeIntValue(4), MakeIntValue(5), MakeIntValue(6), MakeIntValue(7)}};
-  std::vector<AggPrim> prims = {
-      AggPrim::kSum, AggPrim::kMean, AggPrim::kCount, AggPrim::kMin};
+  std::vector<AggPrim> prims = {AggPrim::kSum, AggPrim::kMean, AggPrim::kCount,
+                                AggPrim::kMin};
 
   auto results = task.ComputeBatchMultiPrim(inputs, prims);
   bool pass = true;

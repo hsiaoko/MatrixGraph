@@ -1,15 +1,6 @@
 #ifndef MATRIXGRAPH_CORE_UTIL_FORMAT_CONVERTER_CUH_
 #define MATRIXGRAPH_CORE_UTIL_FORMAT_CONVERTER_CUH_
 
-#include <chrono>
-#include <cinttypes>
-#include <cmath>
-#include "core/util/parallel.h"
-#include <iomanip>
-#include <list>
-#include <numeric>
-#include <vector>
-
 #include "core/common/types.h"
 #include "core/data_structures/bit_tiled_matrix.cuh"
 #include "core/data_structures/csr_tiled_matrix.cuh"
@@ -19,7 +10,16 @@
 #include "core/util/bitmap_ownership.h"
 #include "core/util/cuda_check.cuh"
 #include "core/util/gpu_bitmap.cuh"
+#include "core/util/parallel.h"
+
+#include <chrono>
+#include <cinttypes>
+#include <cmath>
+#include <iomanip>
+#include <list>
+#include <numeric>
 #include <thread>
+#include <vector>
 
 namespace sics {
 
@@ -70,8 +70,8 @@ inline Edges* ImmutableCSR2Edgelist(const ImmutableCSR& immutable_csr) {
 
   std::cout << "[ImmutableCSR2Edgelist] Converting immutable csr to edge buffer"
             << std::endl;
-  ParallelFor(worker.begin(), worker.end(),
-      [step, &immutable_csr, &edge_ptr](auto w) {
+  ParallelFor(
+      worker.begin(), worker.end(), [step, &immutable_csr, &edge_ptr](auto w) {
         for (VertexID vid = w; vid < immutable_csr.get_num_vertices();
              vid += step) {
           auto offset = immutable_csr.GetOutOffsetByLocalID(vid);
@@ -115,7 +115,8 @@ inline ImmutableCSR* Edgelist2ImmutableCSR(const Edges& edgelist) {
 
   // Compute min_vid and obtain the num of incoming/outgoing edges for each
   // vertex.
-  ParallelFor(worker.begin(), worker.end(),
+  ParallelFor(
+      worker.begin(), worker.end(),
       [step, &min_vid, &num_out_edges_by_vid, &num_in_edges_by_vid, &visited,
        &edgelist, &buffer_edges_globalid_by_localid](auto& w) {
         for (EdgeIndex i = w; i < edgelist.get_metadata().num_edges;
@@ -140,26 +141,26 @@ inline ImmutableCSR* Edgelist2ImmutableCSR(const Edges& edgelist) {
 
   // Malloc space for each vertex.
   ParallelFor(worker.begin(), worker.end(),
-                [&visited, &buffer_csr_vertices, &count_in_edges,
-                 &count_out_edges, &num_in_edges_by_vid, &num_out_edges_by_vid,
-                 aligned_max_vid, max_vid, step](auto w) {
-                  for (auto j = w; j < max_vid + 1; j += step) {
-                    if (!visited.GetBit(j)) {
-                      continue;
-                    }
-                    buffer_csr_vertices[j].vid = j;
-                    buffer_csr_vertices[j].indegree = num_in_edges_by_vid[j];
-                    buffer_csr_vertices[j].outdegree = num_out_edges_by_vid[j];
-                    buffer_csr_vertices[j].incoming_edges =
-                        new VertexID[num_in_edges_by_vid[j]]();
-                    buffer_csr_vertices[j].outgoing_edges =
-                        new VertexID[num_out_edges_by_vid[j]]();
-                    WriteAdd(&count_in_edges,
-                             (EdgeIndex)buffer_csr_vertices[j].indegree);
-                    WriteAdd(&count_out_edges,
-                             (EdgeIndex)buffer_csr_vertices[j].outdegree);
+              [&visited, &buffer_csr_vertices, &count_in_edges,
+               &count_out_edges, &num_in_edges_by_vid, &num_out_edges_by_vid,
+               aligned_max_vid, max_vid, step](auto w) {
+                for (auto j = w; j < max_vid + 1; j += step) {
+                  if (!visited.GetBit(j)) {
+                    continue;
                   }
-                });
+                  buffer_csr_vertices[j].vid = j;
+                  buffer_csr_vertices[j].indegree = num_in_edges_by_vid[j];
+                  buffer_csr_vertices[j].outdegree = num_out_edges_by_vid[j];
+                  buffer_csr_vertices[j].incoming_edges =
+                      new VertexID[num_in_edges_by_vid[j]]();
+                  buffer_csr_vertices[j].outgoing_edges =
+                      new VertexID[num_out_edges_by_vid[j]]();
+                  WriteAdd(&count_in_edges,
+                           (EdgeIndex)buffer_csr_vertices[j].indegree);
+                  WriteAdd(&count_out_edges,
+                           (EdgeIndex)buffer_csr_vertices[j].outdegree);
+                }
+              });
   delete[] num_in_edges_by_vid;
   delete[] num_out_edges_by_vid;
 
@@ -168,24 +169,25 @@ inline ImmutableCSR* Edgelist2ImmutableCSR(const Edges& edgelist) {
 
   // Fill edges in each vertex.
   ParallelFor(worker.begin(), worker.end(),
-      [step, &min_vid, &num_out_edges_by_vid, &num_in_edges_by_vid, &visited,
-       &edgelist, &buffer_csr_vertices, &offset_in_edges,
-       &offset_out_edges](auto& w) {
-        for (EdgeIndex i = w; i < edgelist.get_metadata().num_edges;
-             i += step) {
-          auto edgelist_localid_2_globalid =
-              edgelist.get_localid_to_globalid_ptr();
-          auto e = edgelist.get_edge_by_index(i);
-          e.src = edgelist_localid_2_globalid[e.src];
-          e.dst = edgelist_localid_2_globalid[e.dst];
+              [step, &min_vid, &num_out_edges_by_vid, &num_in_edges_by_vid,
+               &visited, &edgelist, &buffer_csr_vertices, &offset_in_edges,
+               &offset_out_edges](auto& w) {
+                for (EdgeIndex i = w; i < edgelist.get_metadata().num_edges;
+                     i += step) {
+                  auto edgelist_localid_2_globalid =
+                      edgelist.get_localid_to_globalid_ptr();
+                  auto e = edgelist.get_edge_by_index(i);
+                  e.src = edgelist_localid_2_globalid[e.src];
+                  e.dst = edgelist_localid_2_globalid[e.dst];
 
-          EdgeIndex offset_out = 0, offset_in = 0;
-          offset_out = __sync_fetch_and_add(offset_out_edges + e.src, 1);
-          offset_in = __sync_fetch_and_add(offset_in_edges + e.dst, 1);
-          buffer_csr_vertices[e.src].outgoing_edges[offset_out] = e.dst;
-          buffer_csr_vertices[e.dst].incoming_edges[offset_in] = e.src;
-        }
-      });
+                  EdgeIndex offset_out = 0, offset_in = 0;
+                  offset_out =
+                      __sync_fetch_and_add(offset_out_edges + e.src, 1);
+                  offset_in = __sync_fetch_and_add(offset_in_edges + e.dst, 1);
+                  buffer_csr_vertices[e.src].outgoing_edges[offset_out] = e.dst;
+                  buffer_csr_vertices[e.dst].incoming_edges[offset_in] = e.src;
+                }
+              });
 
   delete[] offset_in_edges;
   delete[] offset_out_edges;
@@ -229,8 +231,8 @@ inline ImmutableCSR* Edgelist2ImmutableCSR(const Edges& edgelist) {
 
   // Fill edges.
   vid = 0;
-  ParallelFor(parallel_scope_vertices.begin(),
-      parallel_scope_vertices.end(),
+  ParallelFor(
+      parallel_scope_vertices.begin(), parallel_scope_vertices.end(),
       [&visited, &buffer_csr_vertices, &buffer_in_edges, &buffer_out_edges,
        &buffer_in_offset, &buffer_out_offset, &vid_map](auto j) {
         if (!visited.GetBit(j)) return;
@@ -257,13 +259,13 @@ inline ImmutableCSR* Edgelist2ImmutableCSR(const Edges& edgelist) {
   VertexID* buffer_localid_by_globalid = new VertexID[max_vid + 1]();
 
   ParallelFor(worker.begin(), worker.end(),
-      [&buffer_edges_globalid_by_localid, &buffer_localid_by_globalid, step,
-       max_vid](auto w) {
-        for (auto j = w; j < max_vid + 1; j += step) {
-          buffer_edges_globalid_by_localid[j] = j;
-          buffer_localid_by_globalid[j] = j;
-        }
-      });
+              [&buffer_edges_globalid_by_localid, &buffer_localid_by_globalid,
+               step, max_vid](auto w) {
+                for (auto j = w; j < max_vid + 1; j += step) {
+                  buffer_edges_globalid_by_localid[j] = j;
+                  buffer_localid_by_globalid[j] = j;
+                }
+              });
 
   immutable_csr->SetVertexLabelBuffer(
       new VertexLabel[edgelist.get_metadata().num_vertices]());
@@ -304,7 +306,8 @@ inline BitTiledMatrix* Edgelist2BitTiledMatrix(const Edges& edges,
   auto tile_visited = new GPUBitmap(n_strips * n_strips);
 
   VertexID n_nz_tile_per_row[n_strips] = {0};
-  ParallelFor(worker.begin(), worker.end(),
+  ParallelFor(
+      worker.begin(), worker.end(),
       [step, &edges, block_scope, tile_size, &tile_visited, &n_nz_tile_per_row,
        n_strips](auto w) {
         for (auto eid = w; eid < edges.get_metadata().num_edges; eid += step) {
@@ -339,7 +342,8 @@ inline BitTiledMatrix* Edgelist2BitTiledMatrix(const Edges& edges,
 
   std::cout << "[Edgelist2BitTiledMatrix] Creating None Zero Tile: "
             << n_nz_tile << " in total" << std::endl;
-  ParallelFor(worker.begin(), worker.end(),
+  ParallelFor(
+      worker.begin(), worker.end(),
       [step, &edges, block_scope, tile_size, &tile_visited, &bit_tiled_matrix,
        &n_nz_tile_per_row, n_strips](auto w) {
         for (auto eid = w; eid < edges.get_metadata().num_edges; eid += step) {
@@ -441,7 +445,8 @@ inline CSRTiledMatrix* Edgelist2CSRTiledMatrix(
 
   if (edges.get_metadata().num_edges == 0) {
     TiledMatrixMetadata tile_meta_data = {
-        .n_strips = static_cast<uint32_t>(n_strips), .n_nz_tile = 0,
+        .n_strips = static_cast<uint32_t>(n_strips),
+        .n_nz_tile = 0,
         .tile_size = static_cast<uint32_t>(tile_size)};
     csr_tiled_matrix->Init(tile_meta_data);
     return csr_tiled_matrix;
@@ -470,7 +475,8 @@ inline CSRTiledMatrix* Edgelist2CSRTiledMatrix(
   std::vector<VertexID> gid_map(n_csr);
 
   // Step 1. compute tile_id for each edge.
-  ParallelFor(worker.begin(), worker.end(),
+  ParallelFor(
+      worker.begin(), worker.end(),
       [&edges, step, block_scope, tile_size, n_strips, &buffer_csr_vertices_vec,
        &num_out_edges_by_vid_vec, &visited_vec, &graph_visited](auto& w) {
         for (EdgeIndex eid = w; eid < edges.get_metadata().num_edges;
@@ -496,7 +502,8 @@ inline CSRTiledMatrix* Edgelist2CSRTiledMatrix(
         }
       });
 
-  ParallelFor(worker.begin(), worker.end(),
+  ParallelFor(
+      worker.begin(), worker.end(),
       [step, n_strips, tile_size, n_csr, &buffer_csr_vertices_vec,
        &graph_visited, &num_out_edges_by_vid_vec, &count_out_edges_vec, &edges,
        &visited_vec](auto& w) {
@@ -521,7 +528,8 @@ inline CSRTiledMatrix* Edgelist2CSRTiledMatrix(
       });
 
   // Step 2. compute global id for src.
-  ParallelFor(worker.begin(), worker.end(),
+  ParallelFor(
+      worker.begin(), worker.end(),
       [&edges, step, block_scope, tile_size, n_strips, &buffer_csr_vertices_vec,
        &num_out_edges_by_vid_vec, &visited_vec, &graph_visited](auto& w) {
         for (EdgeIndex eid = w; eid < edges.get_metadata().num_edges;
@@ -551,27 +559,27 @@ inline CSRTiledMatrix* Edgelist2CSRTiledMatrix(
 
   VertexID gid = 0;
   ParallelFor(worker.begin(), worker.end(),
-                [step, n_strips, &gid, tile_size, &visited_vec, n_csr,
-                 &buffer_csr_vertices_vec, &num_out_edges_by_vid_vec,
-                 &count_out_edges_vec, &csr_tiled_matrix, &graph_visited,
-                 &gid_map](auto& w) {
-                  for (auto tile_id = w; tile_id < n_csr; tile_id += step) {
-                    if (!graph_visited.GetBit(tile_id)) continue;
-                    VertexID n_vertices = visited_vec[tile_id].Count();
+              [step, n_strips, &gid, tile_size, &visited_vec, n_csr,
+               &buffer_csr_vertices_vec, &num_out_edges_by_vid_vec,
+               &count_out_edges_vec, &csr_tiled_matrix, &graph_visited,
+               &gid_map](auto& w) {
+                for (auto tile_id = w; tile_id < n_csr; tile_id += step) {
+                  if (!graph_visited.GetBit(tile_id)) continue;
+                  VertexID n_vertices = visited_vec[tile_id].Count();
 
-                    gid_map[tile_id] = gid;
-                    SubGraphMetadata metadata = {
-                        .gid = static_cast<GraphID>(tile_id),
-                        .num_vertices = n_vertices,
-                        .num_incoming_edges = 0,
-                        .num_outgoing_edges = count_out_edges_vec[tile_id],
-                        .max_vid = static_cast<VertexID>(tile_size),
-                        .min_vid = 0};
+                  gid_map[tile_id] = gid;
+                  SubGraphMetadata metadata = {
+                      .gid = static_cast<GraphID>(tile_id),
+                      .num_vertices = n_vertices,
+                      .num_incoming_edges = 0,
+                      .num_outgoing_edges = count_out_edges_vec[tile_id],
+                      .max_vid = static_cast<VertexID>(tile_size),
+                      .min_vid = 0};
 
-                    csr_tiled_matrix->SetCSRMetadata(metadata, gid);
-                    gid++;
-                  }
-                });
+                  csr_tiled_matrix->SetCSRMetadata(metadata, gid);
+                  gid++;
+                }
+              });
 
   size_t total_mem = 0;
   size_t n_mem_size[n_nz_tile] = {0};
@@ -614,24 +622,25 @@ inline CSRTiledMatrix* Edgelist2CSRTiledMatrix(
   std::vector<VertexID*> y_vid_map_vec(n_nz_tile);
 
   ParallelFor(worker.begin(), worker.end(),
-      [step, n_csr, n_nz_tile, &csr_tiled_matrix, &buffer_globalid_vec,
-       &buffer_outdegree_vec, &buffer_out_offset_vec, &buffer_out_edges_vec,
-       &y_vid_map_vec](auto& w) {
-        for (auto i = w; i < n_nz_tile; i += step) {
-          auto* csr_base_ptr = csr_tiled_matrix->GetCSRBasePtrByIdx(i);
+              [step, n_csr, n_nz_tile, &csr_tiled_matrix, &buffer_globalid_vec,
+               &buffer_outdegree_vec, &buffer_out_offset_vec,
+               &buffer_out_edges_vec, &y_vid_map_vec](auto& w) {
+                for (auto i = w; i < n_nz_tile; i += step) {
+                  auto* csr_base_ptr = csr_tiled_matrix->GetCSRBasePtrByIdx(i);
 
-          ImmutableCSR csr(csr_tiled_matrix->GetCSRMetadataByIdx(i));
-          csr.ParseBasePtr(csr_base_ptr);
-          buffer_globalid_vec[i] = csr.GetGloablIDBasePointer();
-          buffer_out_offset_vec[i] = csr.GetOutOffsetBasePointer();
-          buffer_outdegree_vec[i] = csr.GetOutDegreeBasePointer();
-          buffer_out_edges_vec[i] = csr.GetOutgoingEdgesBasePointer();
-          y_vid_map_vec[i] = csr.GetEdgesGloablIDBasePointer();
-        }
-      });
+                  ImmutableCSR csr(csr_tiled_matrix->GetCSRMetadataByIdx(i));
+                  csr.ParseBasePtr(csr_base_ptr);
+                  buffer_globalid_vec[i] = csr.GetGloablIDBasePointer();
+                  buffer_out_offset_vec[i] = csr.GetOutOffsetBasePointer();
+                  buffer_outdegree_vec[i] = csr.GetOutDegreeBasePointer();
+                  buffer_out_edges_vec[i] = csr.GetOutgoingEdgesBasePointer();
+                  y_vid_map_vec[i] = csr.GetEdgesGloablIDBasePointer();
+                }
+              });
 
   // Fill edges in each vertex.
-  ParallelFor(worker.begin(), worker.end(),
+  ParallelFor(
+      worker.begin(), worker.end(),
       [tile_size, &edges, step, block_scope, n_strips, &buffer_csr_vertices_vec,
        &y_vid_map_vec, &offset_out_edges_vec, &csr_tiled_matrix,
        &gid_map](auto& w) {
@@ -665,38 +674,39 @@ inline CSRTiledMatrix* Edgelist2CSRTiledMatrix(
   offset_out_edges_vec.clear();
 
   ParallelFor(worker.begin(), worker.end(),
-                [tile_size, &edges, step, block_scope, n_strips, n_csr,
-                 &offset_out_edges_vec, &buffer_csr_vertices_vec, &visited_vec,
-                 &gid_map, &graph_visited, &buffer_outdegree_vec](auto& w) {
-                  for (auto i = w; i < n_csr; i += step) {
-                    if (!graph_visited.GetBit(i)) continue;
-                    VertexID vid = 0;
-                    for (VertexID j = 0; j < tile_size; j++) {
-                      if (!visited_vec[i].GetBit(j)) continue;
-                      buffer_outdegree_vec[gid_map[i]][vid++] =
-                          buffer_csr_vertices_vec[i][j].outdegree;
-                    }
+              [tile_size, &edges, step, block_scope, n_strips, n_csr,
+               &offset_out_edges_vec, &buffer_csr_vertices_vec, &visited_vec,
+               &gid_map, &graph_visited, &buffer_outdegree_vec](auto& w) {
+                for (auto i = w; i < n_csr; i += step) {
+                  if (!graph_visited.GetBit(i)) continue;
+                  VertexID vid = 0;
+                  for (VertexID j = 0; j < tile_size; j++) {
+                    if (!visited_vec[i].GetBit(j)) continue;
+                    buffer_outdegree_vec[gid_map[i]][vid++] =
+                        buffer_csr_vertices_vec[i][j].outdegree;
                   }
-                });
+                }
+              });
 
   // Construct offset.
   ParallelFor(worker.begin(), worker.end(),
-                [tile_size, &edges, step, block_scope, n_strips, n_csr,
-                 n_nz_tile, &offset_out_edges_vec, &buffer_csr_vertices_vec,
-                 &visited_vec, &buffer_outdegree_vec, &buffer_out_offset_vec,
-                 &csr_tiled_matrix](auto& w) {
-                  for (auto i = w; i < n_nz_tile; i += step) {
-                    auto metadata = csr_tiled_matrix->GetCSRMetadataByIdx(i);
-                    for (VertexID j = 1; j < metadata.num_vertices + 1; j++) {
-                      buffer_out_offset_vec[i][j] =
-                          buffer_out_offset_vec[i][j - 1] +
-                          buffer_outdegree_vec[i][j - 1];
-                    }
+              [tile_size, &edges, step, block_scope, n_strips, n_csr, n_nz_tile,
+               &offset_out_edges_vec, &buffer_csr_vertices_vec, &visited_vec,
+               &buffer_outdegree_vec, &buffer_out_offset_vec,
+               &csr_tiled_matrix](auto& w) {
+                for (auto i = w; i < n_nz_tile; i += step) {
+                  auto metadata = csr_tiled_matrix->GetCSRMetadataByIdx(i);
+                  for (VertexID j = 1; j < metadata.num_vertices + 1; j++) {
+                    buffer_out_offset_vec[i][j] =
+                        buffer_out_offset_vec[i][j - 1] +
+                        buffer_outdegree_vec[i][j - 1];
                   }
-                });
+                }
+              });
 
   // Fill edges.
-  ParallelFor(worker.begin(), worker.end(),
+  ParallelFor(
+      worker.begin(), worker.end(),
       [&visited_vec, step, n_csr, tile_size, &buffer_out_edges_vec,
        &buffer_csr_vertices_vec, &buffer_outdegree_vec, &gid_map,
        &graph_visited, &buffer_out_offset_vec](auto& w) {
@@ -716,7 +726,8 @@ inline CSRTiledMatrix* Edgelist2CSRTiledMatrix(
       });
 
   // Generate global id
-  ParallelFor(worker.begin(), worker.end(),
+  ParallelFor(
+      worker.begin(), worker.end(),
       [&visited_vec, step, n_csr, n_nz_tile, tile_size, &buffer_out_edges_vec,
        &buffer_csr_vertices_vec, &buffer_globalid_vec, &graph_visited, &gid_map,
        &buffer_out_offset_vec](auto& w) {
@@ -732,7 +743,8 @@ inline CSRTiledMatrix* Edgelist2CSRTiledMatrix(
         }
       });
 
-  ParallelFor(worker.begin(), worker.end(),
+  ParallelFor(
+      worker.begin(), worker.end(),
       [n_strips, &visited_vec, step, n_csr, n_nz_tile, tile_size,
        &n_nz_tile_per_row, &buffer_out_edges_vec, &buffer_csr_vertices_vec,
        &buffer_globalid_vec, &buffer_outdegree_vec, &buffer_out_offset_vec,

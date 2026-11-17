@@ -1,11 +1,11 @@
 #ifndef MATRIXGRAPH_CORE_UTIL_BITMAP_OWNERSHIP_H_
 #define MATRIXGRAPH_CORE_UTIL_BITMAP_OWNERSHIP_H_
 
+#include "core/util/bitmap.h"
+
 #include <cassert>
 #include <cstdint>
 #include <cstring>
-
-#include "core/util/bitmap.h"
 
 namespace sics {
 namespace matrixgraph {

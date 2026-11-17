@@ -1,17 +1,16 @@
 #ifndef MATRIXGRAPH_CORE_TASK_GPU_TASK_GRAPH_AGGREGATE_CUH_
 #define MATRIXGRAPH_CORE_TASK_GPU_TASK_GRAPH_AGGREGATE_CUH_
 
-#include <cuda_runtime.h>
-
-#include <memory>
-#include <string>
-#include <vector>
-
 #include "core/common/types.h"
 #include "core/data_structures/attributes.h"
 #include "core/data_structures/immutable_csr.cuh"
 #include "core/task/gpu_task/kernel/kernel_graph_aggregate.cuh"
 #include "core/task/gpu_task/task_base.cuh"
+
+#include <cuda_runtime.h>
+#include <memory>
+#include <string>
+#include <vector>
 
 namespace sics {
 namespace matrixgraph {
@@ -20,22 +19,24 @@ namespace task {
 
 // Columnar host attribute description used by LoadAttributes.
 struct GraphAggregateAttributeColumn {
-  char key[64];                 // attribute name
-  int32_t value_type;           // ValueType enum value
-  uint32_t n_values;            // must equal number of vertices
-  const void* values = nullptr; // host pointer; n_values contiguous entries
-  const uint8_t* valid = nullptr; // host pointer; n_values bytes (1=valid) or null
+  char key[64];                  // attribute name
+  int32_t value_type;            // ValueType enum value
+  uint32_t n_values;             // must equal number of vertices
+  const void* values = nullptr;  // host pointer; n_values contiguous entries
+  const uint8_t* valid =
+      nullptr;  // host pointer; n_values bytes (1=valid) or null
 };
 
 // Columnar host attribute description used by LoadEdgeAttributes.
 // The caller provides one column per edge direction.  n_values must equal the
 // number of edges in that CSR direction.
 struct GraphAggregateEdgeAttributeColumn {
-  char key[64];                 // attribute name
-  int32_t value_type;           // ValueType enum value
-  uint32_t n_values;            // must equal n_out_edges or n_in_edges
-  const void* values = nullptr; // host pointer; n_values contiguous entries
-  const uint8_t* valid = nullptr; // host pointer; n_values bytes (1=valid) or null
+  char key[64];                  // attribute name
+  int32_t value_type;            // ValueType enum value
+  uint32_t n_values;             // must equal n_out_edges or n_in_edges
+  const void* values = nullptr;  // host pointer; n_values contiguous entries
+  const uint8_t* valid =
+      nullptr;  // host pointer; n_values bytes (1=valid) or null
 };
 
 // GraphAggregate task: per-vertex feature aggregation over a single graph.
@@ -62,10 +63,12 @@ class GraphAggregate : public TaskBase {
     ~DevicePerVertexAttributes() { Free(); }
 
     DevicePerVertexAttributes(const DevicePerVertexAttributes&) = delete;
-    DevicePerVertexAttributes& operator=(const DevicePerVertexAttributes&) = delete;
+    DevicePerVertexAttributes& operator=(const DevicePerVertexAttributes&) =
+        delete;
 
     DevicePerVertexAttributes(DevicePerVertexAttributes&& other) noexcept;
-    DevicePerVertexAttributes& operator=(DevicePerVertexAttributes&& other) noexcept;
+    DevicePerVertexAttributes& operator=(
+        DevicePerVertexAttributes&& other) noexcept;
 
     // Build device-side per-vertex Attributes from a host-side array.
     // h_attrs[i].attr_map must already be built on host (pointing to host temp
@@ -124,9 +127,8 @@ class GraphAggregate : public TaskBase {
   // Load columnar per-vertex attributes from host memory.  The columns are
   // replicated to every selected GPU and a per-vertex attribute map is built
   // on each GPU.
-  __host__ void LoadAttributes(
-      uint32_t n_columns,
-      const GraphAggregateAttributeColumn* columns);
+  __host__ void LoadAttributes(uint32_t n_columns,
+                               const GraphAggregateAttributeColumn* columns);
 
   // Set the per-vertex Attributes for the loaded graph.  Ownership of the
   // device memory is transferred into the task for the primary GPU; for
@@ -138,8 +140,7 @@ class GraphAggregate : public TaskBase {
   // (n_values must equal graph_->get_num_outgoing_edges()); otherwise they
   // describe incoming edges.  Calls for the two directions are independent.
   __host__ void LoadEdgeAttributes(
-      bool is_outgoing,
-      uint32_t n_columns,
+      bool is_outgoing, uint32_t n_columns,
       const GraphAggregateEdgeAttributeColumn* columns);
 
   // Configure the number of CUDA streams used per GPU.
@@ -158,29 +159,30 @@ class GraphAggregate : public TaskBase {
   // request per primitive because shared work (sum, mean, sort) is done once.
   __host__ std::vector<kernel::AllFeatures> ComputeAll(
       const std::vector<uint32_t>& pivot_vertex_ids,
-      const kernel::AttributeName& attr_name,
-      bool use_outgoing,
+      const kernel::AttributeName& attr_name, bool use_outgoing,
       bool use_edge_attrs = false);
 
   // Accessors
   __host__ bool HasGraph() const { return graph_ != nullptr; }
   __host__ const ImmutableCSR& GetGraph() const { return *graph_; }
   __host__ uint32_t GetNumVertices() const {
-    return per_gpu_states_.empty() ? 0
-                                   : per_gpu_states_[0].vertex_attrs.GetNumVertices();
+    return per_gpu_states_.empty()
+               ? 0
+               : per_gpu_states_[0].vertex_attrs.GetNumVertices();
   }
   __host__ uint32_t GetNumStreams() const { return n_streams_; }
-  __host__ const Attributes* GetDeviceVertexAttributes(size_t gpu_idx = 0) const {
+  __host__ const Attributes* GetDeviceVertexAttributes(
+      size_t gpu_idx = 0) const {
     return gpu_idx < per_gpu_states_.size()
                ? per_gpu_states_[gpu_idx].vertex_attrs.GetDevicePtr()
                : nullptr;
   }
-  __host__ const Attributes* GetDeviceEdgeAttributes(
-      bool is_outgoing, size_t gpu_idx = 0) const {
+  __host__ const Attributes* GetDeviceEdgeAttributes(bool is_outgoing,
+                                                     size_t gpu_idx = 0) const {
     if (gpu_idx >= per_gpu_states_.size()) return nullptr;
-    const auto* ptr = is_outgoing
-                          ? per_gpu_states_[gpu_idx].edge_attrs_out_.GetDevicePtr()
-                          : per_gpu_states_[gpu_idx].edge_attrs_in_.GetDevicePtr();
+    const auto* ptr =
+        is_outgoing ? per_gpu_states_[gpu_idx].edge_attrs_out_.GetDevicePtr()
+                    : per_gpu_states_[gpu_idx].edge_attrs_in_.GetDevicePtr();
     return ptr;
   }
   __host__ bool HasEdgeAttributes(bool is_outgoing, size_t gpu_idx = 0) const {
@@ -215,10 +217,8 @@ class GraphAggregate : public TaskBase {
     uint32_t all_output_pivot_capacity = 0;
 
     __host__ void Free();
-    __host__ void EnsureCapacity(
-        uint32_t n_pivots,
-        uint32_t n_requests,
-        uint32_t max_neighbors);
+    __host__ void EnsureCapacity(uint32_t n_pivots, uint32_t n_requests,
+                                 uint32_t max_neighbors);
   };
 
   // Per-GPU state.

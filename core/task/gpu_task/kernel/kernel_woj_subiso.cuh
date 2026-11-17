@@ -1,8 +1,6 @@
 #ifndef MATRIXGRAPH_CORE_TASK_GPU_TASK_KERNEL_KERNEL_WOJ_SUBISO_CUH_
 #define MATRIXGRAPH_CORE_TASK_GPU_TASK_KERNEL_KERNEL_WOJ_SUBISO_CUH_
 
-#include <vector>
-
 #include "core/common/types.h"
 #include "core/data_structures/device_buffer.cuh"
 #include "core/data_structures/edgelist.h"
@@ -11,6 +9,8 @@
 #include "core/data_structures/unified_buffer.cuh"
 #include "core/data_structures/woj_exec_plan.cuh"
 #include "core/data_structures/woj_matches.cuh"
+
+#include <vector>
 
 namespace sics {
 namespace matrixgraph {
@@ -34,7 +34,6 @@ class WOJSubIsoKernelWrapper {
  public:
   // deleting copy constructor
 
-
   // @Description: GetInstance() is a method that returns an instance
   // when it is invoked. It returns the same instance if it is invoked more
   // than once as an instance of Singleton class is already created.
@@ -49,7 +48,6 @@ class WOJSubIsoKernelWrapper {
   static std::vector<WOJMatches*> Join(
       const WOJExecutionPlan& exec_plan,
       const std::vector<WOJMatches*>& input_woj_matches);
-
 };
 
 }  // namespace kernel

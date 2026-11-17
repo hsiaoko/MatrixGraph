@@ -1,10 +1,10 @@
 #ifndef MATRIXGRAPH_CORE_TASK_GPU_TASK_KERNEL_KERNEL_GAR_DEDUCE_CUH_
 #define MATRIXGRAPH_CORE_TASK_GPU_TASK_KERNEL_KERNEL_GAR_DEDUCE_CUH_
 
+#include "core/data_structures/gar_deduce_arrays.h"
+
 #include <cstdint>
 #include <cuda_runtime.h>
-
-#include "core/data_structures/gar_deduce_arrays.h"
 
 // Kernels for the GPU deduce (chase) task: pattern matching under
 // HOMOMORPHISM semantics (distinct pattern vertices may map to the same data
@@ -49,10 +49,10 @@ struct GARDeduceFilterParams {
   const int32_t* g_v_label;  // nullptr = every vertex matches any label
   int g_n_edges;
   GARDeducePatternDev p;
-  int* cand_counts;              // [p.n_edges]         (pass 1 out)
-  const int* cand_offsets;       // [p.n_edges + 1]     (pass 2 in, read-only)
-  uint32_t* cand_src;            // [cand_offsets[n]]   (pass 2 out)
-  uint32_t* cand_dst;            // [cand_offsets[n]]   (pass 2 out)
+  int* cand_counts;         // [p.n_edges]         (pass 1 out)
+  const int* cand_offsets;  // [p.n_edges + 1]     (pass 2 in, read-only)
+  uint32_t* cand_src;       // [cand_offsets[n]]   (pass 2 out)
+  uint32_t* cand_dst;       // [cand_offsets[n]]   (pass 2 out)
 };
 
 // Fill cursors: per-pattern-edge write positions, initialized by the caller
@@ -102,8 +102,7 @@ void LaunchGARDeducePackCandidates(const uint32_t* cand_src,
 // vertices to one data vertex).
 void LaunchGARDeduceInitEmbeddings(const uint64_t* fwd_keys, int n_cand,
                                    int p_u, int p_v, int n_nodes,
-                                   int32_t* out_emb, int* out_count,
-                                   int cap);
+                                   int32_t* out_emb, int* out_count, int cap);
 // Expand the frontier by one pattern edge, adjacency-driven: per frontier
 // row a binary search locates the candidate segment of the bound endpoint
 // (fwd keys for a bound src, bwd keys for a bound dst) and only that
@@ -112,8 +111,7 @@ void LaunchGARDeduceExpandEmbeddings(const int32_t* curr, int n_curr,
                                      int n_nodes, int p_u, int p_v,
                                      const uint64_t* fwd_keys,
                                      const uint64_t* bwd_keys, int n_cand,
-                                     int32_t* next, int* next_count,
-                                     int cap);
+                                     int32_t* next, int* next_count, int cap);
 void LaunchGARDeduceEvalEmit(const GARDeduceEvalParams& params);
 
 }  // namespace kernel

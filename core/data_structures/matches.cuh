@@ -1,14 +1,14 @@
 #ifndef MATRIXGRAPH_CORE_DATA_STRUCTURES_MATCHES_CUH_
 #define MATRIXGRAPH_CORE_DATA_STRUCTURES_MATCHES_CUH_
 
-#include <algorithm>
-
 #include "core/common/consts.h"
 #include "core/common/types.h"
 #include "core/data_structures/device_buffer.cuh"
 #include "core/data_structures/host_buffer.cuh"
 #include "core/data_structures/unified_buffer.cuh"
 #include "core/util/bitmap_ownership.h"
+
+#include <algorithm>
 
 namespace sics {
 namespace matrixgraph {

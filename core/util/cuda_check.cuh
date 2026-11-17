@@ -1,12 +1,11 @@
 #ifndef MATRIXGRAPH_CORE_UTIL_CUDA_CHECK_CUH_
 #define MATRIXGRAPH_CORE_UTIL_CUDA_CHECK_CUH_
 
-#include <cuda_runtime.h>
+#include "core/util/error.h"
 
+#include <cuda_runtime.h>
 #include <iostream>
 #include <string>
-
-#include "core/util/error.h"
 
 // Library code reports failures by throwing; only entry points translate
 // them into exit codes (a library that closes the host process cannot be

@@ -1,17 +1,17 @@
 #ifndef MATRIXGRAPH_CORE_TASK_CPU_TASK_PATTERN_VERTEX_ORDER_CUH_
 #define MATRIXGRAPH_CORE_TASK_CPU_TASK_PATTERN_VERTEX_ORDER_CUH_
 
-#include <algorithm>
-#include <array>
-#include <cstring>
-#include <numeric>
-#include <vector>
-
 #include "core/common/consts.h"
 #include "core/common/types.h"
 #include "core/data_structures/immutable_csr.cuh"
 #include "core/data_structures/matrix.cuh"
 #include "core/task/gpu_task/kernel/algorithms/hash.cuh"
+
+#include <algorithm>
+#include <array>
+#include <cstring>
+#include <numeric>
+#include <vector>
 
 namespace sics {
 namespace matrixgraph {
@@ -171,8 +171,8 @@ class PatternVertexOrder {
                 sizeof(VertexID) * num_in);
     std::memcpy(pattern->GetOutgoingEdgesBasePointer(), new_out_edges.data(),
                 sizeof(VertexID) * num_out);
-    std::memcpy(pattern->GetEdgesGloablIDBasePointer(), new_edges_globalid.data(),
-                sizeof(VertexID) * (max_vid + 1));
+    std::memcpy(pattern->GetEdgesGloablIDBasePointer(),
+                new_edges_globalid.data(), sizeof(VertexID) * (max_vid + 1));
     std::memcpy(pattern->GetLocalIDBasePointer(), new_localid.data(),
                 sizeof(VertexID) * (max_vid + 1));
     std::memcpy(pattern->GetVLabelBasePointer(), new_label.data(),
@@ -202,8 +202,7 @@ class PatternVertexOrder {
                   old_data + static_cast<size_t>(old_row) * y,
                   sizeof(float) * y);
     }
-    std::memcpy(matrix->GetPtr(), new_data.data(),
-                sizeof(float) * x * y);
+    std::memcpy(matrix->GetPtr(), new_data.data(), sizeof(float) * x * y);
   }
 
  private:
@@ -224,8 +223,8 @@ class PatternVertexOrder {
     auto in_degree = g.GetInDegreeByLocalID(vid);
     auto in_edges = g.GetIncomingEdgesByLocalID(vid);
     for (VertexID i = 0; i < in_degree; ++i) {
-      VertexID h = sics::matrixgraph::core::task::kernel::HashTable(
-          labels[in_edges[i]]);
+      VertexID h =
+          sics::matrixgraph::core::task::kernel::HashTable(labels[in_edges[i]]);
       if (h < min_hash) min_hash = h;
     }
     return min_hash;

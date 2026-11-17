@@ -1,16 +1,15 @@
 #ifndef MATRIXGRAPH_CORE_TASK_GPU_TASK_KERNEL_KERNEL_WCC_CUH_
 #define MATRIXGRAPH_CORE_TASK_GPU_TASK_KERNEL_KERNEL_WCC_CUH_
 
-#include <cuda_runtime.h>
-
-#include <vector>
-
 #include "core/common/types.h"
 #include "core/data_structures/device_buffer.cuh"
 #include "core/data_structures/edgelist.h"
 #include "core/data_structures/exec_plan.cuh"
 #include "core/data_structures/immutable_csr.cuh"
 #include "core/data_structures/unified_buffer.cuh"
+
+#include <cuda_runtime.h>
+#include <vector>
 
 namespace sics {
 namespace matrixgraph {

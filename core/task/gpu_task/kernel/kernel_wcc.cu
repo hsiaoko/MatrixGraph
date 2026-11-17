@@ -6,6 +6,7 @@
 #include "core/task/gpu_task/kernel/kernel_wcc.cuh"
 #include "core/util/bitmap_no_ownership.h"
 #include "core/util/cuda_launch_dims.cuh"
+
 #include <chrono>
 #include <cuda_runtime.h>
 #include <iostream>
@@ -135,7 +136,8 @@ static __global__ void HashMinKernel(ParametersWCC params) {
   // We replace it with a guarded reverse sweep over the same active vertices,
   // also propagating along both out-edges and in-edges.
   if (tid < params.n_vertices_g) {
-    for (int v_idx = static_cast<int>(params.n_vertices_g) - 1 - static_cast<int>(tid);
+    for (int v_idx =
+             static_cast<int>(params.n_vertices_g) - 1 - static_cast<int>(tid);
          v_idx > static_cast<int>(params.n_vertices_g) / 3;
          v_idx -= static_cast<int>(step)) {
       VertexID vid = static_cast<VertexID>(v_idx);

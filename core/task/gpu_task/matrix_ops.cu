@@ -1,11 +1,3 @@
-#include <cuda_runtime.h>
-
-#include <ctime>
-#include <iostream>
-#include <mutex>
-#include <thread>
-#include <unordered_map>
-
 #include "core/common/consts.h"
 #include "core/common/host_algorithms.cuh"
 #include "core/common/types.h"
@@ -18,6 +10,13 @@
 #include "core/util/atomic.h"
 #include "core/util/bitmap_no_ownership.h"
 #include "core/util/bitmap_ownership.h"
+
+#include <ctime>
+#include <cuda_runtime.h>
+#include <iostream>
+#include <mutex>
+#include <thread>
+#include <unordered_map>
 
 namespace sics {
 namespace matrixgraph {

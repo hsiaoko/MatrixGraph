@@ -4,7 +4,6 @@
 #include <filesystem>
 #include <fstream>
 #include <stdexcept>
-
 #include <yaml-cpp/yaml.h>
 
 namespace sics {
@@ -24,11 +23,16 @@ bool IsList(ValueType t) {
 
 ValueType ListElementType(ValueType t) {
   switch (t) {
-    case ValueType::kFloatList: return ValueType::kFloat64;
-    case ValueType::kIntList: return ValueType::kInt;
-    case ValueType::kTimeList: return ValueType::kTime;
-    case ValueType::kStringList: return ValueType::kString;
-    default: return t;
+    case ValueType::kFloatList:
+      return ValueType::kFloat64;
+    case ValueType::kIntList:
+      return ValueType::kInt;
+    case ValueType::kTimeList:
+      return ValueType::kTime;
+    case ValueType::kStringList:
+      return ValueType::kString;
+    default:
+      return t;
   }
 }
 
@@ -41,8 +45,7 @@ void WriteBuffer(const std::string& path, const void* data, uint64_t bytes) {
   }
 }
 
-std::unique_ptr<uint8_t[]> ReadBuffer(const std::string& path,
-                                      uint64_t bytes) {
+std::unique_ptr<uint8_t[]> ReadBuffer(const std::string& path, uint64_t bytes) {
   auto buf = std::make_unique<uint8_t[]>(bytes > 0 ? bytes : 1);
   std::ifstream in(path, std::ios::binary);
   if (!in) throw std::runtime_error("AttributesIO: cannot open " + path);
@@ -60,12 +63,18 @@ std::unique_ptr<uint8_t[]> ReadBuffer(const std::string& path,
 
 uint32_t AttributesIO::ElementSize(ValueType type) {
   switch (type) {
-    case ValueType::kFloat64: return 8;
-    case ValueType::kFloat32: return 4;
-    case ValueType::kInt: return 8;
-    case ValueType::kTime: return 8;
-    case ValueType::kBool: return 1;
-    case ValueType::kString: return 0;  // variable, blob + offsets
+    case ValueType::kFloat64:
+      return 8;
+    case ValueType::kFloat32:
+      return 4;
+    case ValueType::kInt:
+      return 8;
+    case ValueType::kTime:
+      return 8;
+    case ValueType::kBool:
+      return 1;
+    case ValueType::kString:
+      return 0;  // variable, blob + offsets
     default:
       throw std::runtime_error("AttributesIO: ElementSize on non-scalar type");
   }
@@ -181,8 +190,8 @@ void AttributesIO::Read(const std::string& dir, Storage* storage) {
       a.valid = storage->blobs.back().get();
     }
     if (cm.has_offsets) {
-      storage->blobs.push_back(ReadBuffer(
-          base + ".offsets.bin", sizeof(uint32_t) * (cm.n_rows + 1)));
+      storage->blobs.push_back(ReadBuffer(base + ".offsets.bin",
+                                          sizeof(uint32_t) * (cm.n_rows + 1)));
       a.offsets =
           reinterpret_cast<const uint32_t*>(storage->blobs.back().get());
     }
@@ -191,17 +200,16 @@ void AttributesIO::Read(const std::string& dir, Storage* storage) {
     const bool is_strlist = cm.type == ValueType::kStringList;
     if (is_string || is_strlist) {
       storage->blobs.push_back(ReadBuffer(
-          base + ".elem_offsets.bin",
-          sizeof(uint32_t) * (cm.n_elements + 1)));
-      const auto* elem_off = reinterpret_cast<const uint32_t*>(
-          storage->blobs.back().get());
+          base + ".elem_offsets.bin", sizeof(uint32_t) * (cm.n_elements + 1)));
+      const auto* elem_off =
+          reinterpret_cast<const uint32_t*>(storage->blobs.back().get());
       storage->blobs.push_back(
           ReadBuffer(base + ".bin", elem_off[cm.n_elements]));
       const char* blob =
           reinterpret_cast<const char*>(storage->blobs.back().get());
       // Rebuild the StringView array.
-      auto views = std::make_unique<StringView[]>(
-          cm.n_elements > 0 ? cm.n_elements : 1);
+      auto views =
+          std::make_unique<StringView[]>(cm.n_elements > 0 ? cm.n_elements : 1);
       for (uint32_t i = 0; i < cm.n_elements; ++i) {
         views[i].data = blob + elem_off[i];
         views[i].len = elem_off[i + 1] - elem_off[i];
@@ -209,15 +217,12 @@ void AttributesIO::Read(const std::string& dir, Storage* storage) {
       // StringView is POD; storing the array as a byte blob keeps ownership
       // in one place (the deleter is compatible with trivially-destructible
       // element types).
-      storage->blobs.emplace_back(
-          reinterpret_cast<uint8_t*>(views.release()));
-      a.data = reinterpret_cast<const StringView*>(
-          storage->blobs.back().get());
+      storage->blobs.emplace_back(reinterpret_cast<uint8_t*>(views.release()));
+      a.data = reinterpret_cast<const StringView*>(storage->blobs.back().get());
     } else {
-      const uint64_t bytes = static_cast<uint64_t>(cm.n_elements) *
-                             ElementSize(IsList(cm.type)
-                                             ? ListElementType(cm.type)
-                                             : cm.type);
+      const uint64_t bytes =
+          static_cast<uint64_t>(cm.n_elements) *
+          ElementSize(IsList(cm.type) ? ListElementType(cm.type) : cm.type);
       storage->blobs.push_back(ReadBuffer(base + ".bin", bytes));
       a.data = storage->blobs.back().get();
     }

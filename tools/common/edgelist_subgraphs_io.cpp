@@ -1,9 +1,10 @@
+#include "tools/common/edgelist_subgraphs_io.cuh"
+
+#include "core/data_structures/metadata.h"
+
 #include <filesystem>
 #include <fstream>
 #include <vector>
-
-#include "core/data_structures/metadata.h"
-#include "tools/common/edgelist_subgraphs_io.cuh"
 
 namespace sics {
 namespace matrixgraph {
@@ -26,10 +27,9 @@ using Edges = sics::matrixgraph::core::data_structures::Edges;
 using sics::matrixgraph::core::util::atomic::WriteAdd;
 using sics::matrixgraph::core::util::atomic::WriteMax;
 
-void EdgelistSubGraphsIO::Write(const std::string &output_root_path,
-                                const std::vector<Edges> &edge_buckets,
-                                const GraphMetadata &graph_metadata) {
-
+void EdgelistSubGraphsIO::Write(const std::string& output_root_path,
+                                const std::vector<Edges>& edge_buckets,
+                                const GraphMetadata& graph_metadata) {
   std::cout << "Writing subgraphs" << std::endl;
   if (!std::filesystem::exists(output_root_path))
     std::filesystem::create_directory(output_root_path);
@@ -41,7 +41,6 @@ void EdgelistSubGraphsIO::Write(const std::string &output_root_path,
 
   std::vector<SubGraphMetadata> subgraph_metadata_vec;
   for (GraphID gid = 0; gid < graph_metadata.num_subgraphs; gid++) {
-
     std::ofstream out_data_file(output_root_path + "graphs/" +
                                 std::to_string(gid) + ".bin");
     std::ofstream out_local_id_to_global_id(output_root_path +
@@ -49,11 +48,11 @@ void EdgelistSubGraphsIO::Write(const std::string &output_root_path,
                                             std::to_string(gid) + ".bin");
 
     out_data_file.write(
-        reinterpret_cast<char *>(edge_buckets[gid].get_base_ptr()),
+        reinterpret_cast<char*>(edge_buckets[gid].get_base_ptr()),
         sizeof(Edge) * edge_buckets[gid].get_metadata().num_edges);
 
     out_local_id_to_global_id.write(
-        reinterpret_cast<char *>(
+        reinterpret_cast<char*>(
             edge_buckets[gid].get_localid_to_globalid_ptr()),
         sizeof(VertexID) * edge_buckets[gid].get_metadata().num_vertices);
 
@@ -82,10 +81,9 @@ void EdgelistSubGraphsIO::Write(const std::string &output_root_path,
   out_meta_file.close();
 }
 
-void EdgelistSubGraphsIO::Read(const std::string &input_root_path,
-                               std::vector<Edges> *edges_blocks,
-                               GraphMetadata *graph_metadata) {
-
+void EdgelistSubGraphsIO::Read(const std::string& input_root_path,
+                               std::vector<Edges>* edges_blocks,
+                               GraphMetadata* graph_metadata) {
   auto node = YAML::LoadFile(input_root_path + "meta.yaml");
 
   *graph_metadata = node.as<GraphMetadata>();
@@ -93,7 +91,6 @@ void EdgelistSubGraphsIO::Read(const std::string &input_root_path,
   edges_blocks->reserve(graph_metadata->num_subgraphs);
 
   for (GraphID _ = 0; _ < graph_metadata->num_subgraphs; _++) {
-
     EdgelistMetadata edgelist_metadata = {
         .num_vertices = graph_metadata->subgraphs[_].num_vertices,
         .num_edges = graph_metadata->subgraphs[_].num_outgoing_edges,
@@ -107,14 +104,14 @@ void EdgelistSubGraphsIO::Read(const std::string &input_root_path,
 
     auto buffer_edges = new Edge[edgelist_metadata.num_edges]();
 
-    in_file.read(reinterpret_cast<char *>(buffer_edges),
+    in_file.read(reinterpret_cast<char*>(buffer_edges),
                  sizeof(Edge) * edgelist_metadata.num_edges);
 
     edges_blocks->emplace_back(Edges(edgelist_metadata, buffer_edges));
 
-    auto *localid_to_globalid = new VertexID[edgelist_metadata.num_vertices]();
+    auto* localid_to_globalid = new VertexID[edgelist_metadata.num_vertices]();
 
-    id_map_file.read(reinterpret_cast<char *>(localid_to_globalid),
+    id_map_file.read(reinterpret_cast<char*>(localid_to_globalid),
                      sizeof(VertexID) * edgelist_metadata.num_vertices);
     edges_blocks->back().SetLocalIDToGlobalID(localid_to_globalid);
 
@@ -122,7 +119,7 @@ void EdgelistSubGraphsIO::Read(const std::string &input_root_path,
   }
 }
 
-} // namespace common
-} // namespace tools
-} // namespace matrixgraph
-} // namespace sics
+}  // namespace common
+}  // namespace tools
+}  // namespace matrixgraph
+}  // namespace sics

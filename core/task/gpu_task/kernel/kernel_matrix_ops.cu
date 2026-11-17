@@ -1,6 +1,5 @@
-#include <cuda_runtime.h>
-
 #include <chrono>
+#include <cuda_runtime.h>
 #include <iostream>
 
 #if defined(USE_AVX2) && !defined(__CUDACC__)

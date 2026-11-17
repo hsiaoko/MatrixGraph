@@ -2,6 +2,7 @@
 #define MATRIXGRAPH_CORE_UTIL_CUDA_PREFETCH_CUH_
 
 #include "core/util/cuda_check.cuh"
+
 #include <algorithm>
 #include <cuda_runtime.h>
 #include <utility>
@@ -31,8 +32,7 @@ inline void MatrixGraphPrefetchManagedToDevice(
     size_t bytes = ptr_size[i].second;
     if (p != nullptr && bytes > 0) {
       CUDA_CHECK(cudaMemPrefetchAsync(
-          p, bytes, device,
-          streams[i % static_cast<size_t>(n_streams)]));
+          p, bytes, device, streams[i % static_cast<size_t>(n_streams)]));
     }
   }
   for (int i = 0; i < n_streams; ++i) {

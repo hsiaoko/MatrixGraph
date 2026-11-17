@@ -1,6 +1,8 @@
 #ifndef MATRIXGRAPH_TOOLS_GRAPH_CONVERTER_CONVERTER_TO_ARANGODB_JSON_CUH_
 #define MATRIXGRAPH_TOOLS_GRAPH_CONVERTER_CONVERTER_TO_ARANGODB_JSON_CUH_
 
+#include "core/data_structures/edgelist.h"
+
 #include <algorithm>
 #include <cstdint>
 #include <filesystem>
@@ -10,8 +12,6 @@
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
-
-#include "core/data_structures/edgelist.h"
 
 namespace sics {
 namespace matrixgraph {
@@ -28,10 +28,12 @@ struct ArangoExportOptions {
   std::string default_vertex_label = "vertex";
   std::string default_edge_label = "relationship";
   std::string import_time = "1970-01-01T00:00:00Z";  // _time: import time
-  std::string pivot_time = "1970-01-01T00:00:00Z";   // _pivot_time: business time
+  std::string pivot_time =
+      "1970-01-01T00:00:00Z";  // _pivot_time: business time
   bool random_vertex_labels = false;
   unsigned label_range = 1;
-  VertexID k_hop = 0;  // k-hop distance for k_hop pivot mode (0 means unlimited/all)
+  VertexID k_hop =
+      0;  // k-hop distance for k_hop pivot mode (0 means unlimited/all)
 };
 
 static std::string EscapeJSON(const std::string& in) {
@@ -62,10 +64,10 @@ static std::string EscapeJSON(const std::string& in) {
   return out;
 }
 
-static bool BuildCSVArraysFromEdgelistCSV(const std::string& input_path,
-                                          const std::string& sep,
-                                          bool keep_original_vid,
-                                          sics::matrixgraph::core::data_structures::Edges* out_edgelist) {
+static bool BuildCSVArraysFromEdgelistCSV(
+    const std::string& input_path, const std::string& sep,
+    bool keep_original_vid,
+    sics::matrixgraph::core::data_structures::Edges* out_edgelist) {
   if (out_edgelist == nullptr) return false;
   out_edgelist->ReadFromCSV(input_path, sep, keep_original_vid);
   out_edgelist->ShowGraph();
@@ -87,9 +89,10 @@ static std::string PickVertexLabel(std::mt19937* rng,
   return opt.default_vertex_label + "_" + std::to_string(dist(*rng));
 }
 
-static bool WriteArangoDBJSON(const std::string& out_dir,
-                              const sics::matrixgraph::core::data_structures::Edges& edgelist,
-                              const ArangoExportOptions& opt) {
+static bool WriteArangoDBJSON(
+    const std::string& out_dir,
+    const sics::matrixgraph::core::data_structures::Edges& edgelist,
+    const ArangoExportOptions& opt) {
   const std::string graph_structure_path = out_dir + "/graph_structure.json";
   const std::string pivot_ids_path = out_dir + "/pivot_graph_ids.jsonl";
   const std::string pivot_graphs_path = out_dir + "/pivot_graphs.jsonl";
@@ -135,21 +138,21 @@ static bool WriteArangoDBJSON(const std::string& out_dir,
     // Build k-hop subgraphs for each pivot vertex using BuildKHopOutSubgraphs
     VertexID k = opt.k_hop > 0 ? opt.k_hop : metadata.max_vid + 1;
     auto subgraphs = edgelist.BuildKHopOutSubgraphs(k);
-    
+
     // Get all unique vertices as centers (same order as BuildKHopOutSubgraphs)
     std::vector<VertexID> centers;
     centers.reserve(subgraphs.size());
     for (size_t i = 0; i < subgraphs.size(); ++i) {
       centers.push_back(to_global(static_cast<VertexID>(i)));
     }
-    
+
     for (size_t i = 0; i < subgraphs.size(); ++i) {
       const auto& subgraph = subgraphs[i];
       const auto& sub_meta = subgraph.get_metadata();
-      
+
       PivotGraphDoc doc;
       doc.pivot_id = "pg_" + std::to_string(centers[i]);
-      
+
       // Collect vertices from subgraph
       std::unordered_set<VertexID> vertex_set;
       for (size_t j = 0; j < sub_meta.num_edges; ++j) {
@@ -160,15 +163,15 @@ static bool WriteArangoDBJSON(const std::string& out_dir,
         vertex_set.insert(global_dst);
         doc.edges.emplace_back(global_src, global_dst);
       }
-      
+
       doc.vertices.assign(vertex_set.begin(), vertex_set.end());
       std::sort(doc.vertices.begin(), doc.vertices.end());
-      
+
       if (!doc.edges.empty()) {
         pivots.push_back(std::move(doc));
       }
     }
-    
+
     std::sort(pivots.begin(), pivots.end(),
               [](const PivotGraphDoc& a, const PivotGraphDoc& b) {
                 return a.pivot_id < b.pivot_id;
@@ -248,9 +251,8 @@ static bool WriteArangoDBJSON(const std::string& out_dir,
     if (!fout.is_open()) return false;
     for (const auto& pg : pivots) {
       fout << "{\"graph_id\":" << opt.graph_id
-           << ",\"business_id\":" << opt.business_id
-           << ",\"pivot_graph_id\":\"" << EscapeJSON(pg.pivot_id)
-           << "\"}\n";
+           << ",\"business_id\":" << opt.business_id << ",\"pivot_graph_id\":\""
+           << EscapeJSON(pg.pivot_id) << "\"}\n";
     }
   }
 
@@ -269,9 +271,8 @@ static bool WriteArangoDBJSON(const std::string& out_dir,
       for (size_t i = 0; i < pg.vertices.size(); ++i) {
         const auto& v = pg.vertices[i];
         if (i) fout << ",";
-        fout << "{\"id\":\"" << std::to_string(v)
-             << "\",\"time\":\"" << EscapeJSON(opt.import_time)
-             << "\",\"label\":\""
+        fout << "{\"id\":\"" << std::to_string(v) << "\",\"time\":\""
+             << EscapeJSON(opt.import_time) << "\",\"label\":\""
              << EscapeJSON(vlabel[v])
              << "\",\"attrs\":[{\"key\":\"placeholder\",\"value\":\"0\"}]}";
       }
@@ -279,13 +280,13 @@ static bool WriteArangoDBJSON(const std::string& out_dir,
       for (size_t i = 0; i < pg.edges.size(); ++i) {
         const auto& e = pg.edges[i];
         if (i) fout << ",";
-        fout << "{\"id\":\"e_" << edge_auto++
-             << "\",\"label\":\"" << EscapeJSON(opt.default_edge_label)
-             << "\",\"srcId\":\"" << std::to_string(e.src)
-             << "\",\"dstId\":\"" << std::to_string(e.dst)
-             << "\",\"time\":\"" << EscapeJSON(opt.import_time)
-             << "\",\"dstLabel\":\"" << EscapeJSON(vlabel[e.dst])
-             << "\",\"srcLabel\":\"" << EscapeJSON(vlabel[e.src])
+        fout << "{\"id\":\"e_" << edge_auto++ << "\",\"label\":\""
+             << EscapeJSON(opt.default_edge_label) << "\",\"srcId\":\""
+             << std::to_string(e.src) << "\",\"dstId\":\""
+             << std::to_string(e.dst) << "\",\"time\":\""
+             << EscapeJSON(opt.import_time) << "\",\"dstLabel\":\""
+             << EscapeJSON(vlabel[e.dst]) << "\",\"srcLabel\":\""
+             << EscapeJSON(vlabel[e.src])
              << "\",\"attrs\":[{\"key\":\"placeholder\",\"value\":\"0\"}]}";
       }
       fout << "]}}}\n";
@@ -299,11 +300,15 @@ static bool WriteArangoDBJSON(const std::string& out_dir,
     fout << "1) graph_structure.json\n";
     fout << "2) pivot_graph_ids.jsonl\n";
     fout << "3) pivot_graphs.jsonl\n\n";
-    fout << "pivot_graphs.jsonl shape: {graph_id,business_id,pivot_graph_id,_time,_pivot_time,graph:{main:{vertices,edges}}}\n";
-    fout << "Each edge fields: label,id,srcId,dstId,time,dstLabel,srcLabel,attrs.\n";
-    fout << "The export contains placeholder labels/attrs where source data is missing.\n";
+    fout << "pivot_graphs.jsonl shape: "
+            "{graph_id,business_id,pivot_graph_id,_time,_pivot_time,graph:{"
+            "main:{vertices,edges}}}\n";
+    fout << "Each edge fields: "
+            "label,id,srcId,dstId,time,dstLabel,srcLabel,attrs.\n";
+    fout << "The export contains placeholder labels/attrs where source data is "
+            "missing.\n";
   }
-  
+
   return true;
 }
 
@@ -316,7 +321,8 @@ static bool ConvertEdgelistCSV2ArangoDBJSON(const std::string& input_path,
     std::filesystem::create_directory(output_path);
 
   sics::matrixgraph::core::data_structures::Edges edgelist;
-  if (!BuildCSVArraysFromEdgelistCSV(input_path, sep, keep_original_vid, &edgelist)) {
+  if (!BuildCSVArraysFromEdgelistCSV(input_path, sep, keep_original_vid,
+                                     &edgelist)) {
     return false;
   }
   return WriteArangoDBJSON(output_path, edgelist, opt);

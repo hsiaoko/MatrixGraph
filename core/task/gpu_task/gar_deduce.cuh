@@ -1,16 +1,16 @@
 #ifndef MATRIXGRAPH_CORE_TASK_GPU_TASK_GAR_DEDUCE_CUH_
 #define MATRIXGRAPH_CORE_TASK_GPU_TASK_GAR_DEDUCE_CUH_
 
-#include <cstdint>
-#include <memory>
-#include <unordered_map>
-
 #include "core/common/types.h"
 #include "core/data_structures/device_buffer.cuh"
 #include "core/data_structures/gar_deduce_arrays.h"
 #include "core/data_structures/gar_graph_arrays.h"
 #include "core/data_structures/gar_pattern_arrays.h"
 #include "core/task/gpu_task/task_base.cuh"
+
+#include <cstdint>
+#include <memory>
+#include <unordered_map>
 
 namespace sics {
 namespace matrixgraph {

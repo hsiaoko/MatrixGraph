@@ -6,6 +6,7 @@
 #include "core/task/gpu_task/kernel/algorithms/hash.cuh"
 #include "core/task/gpu_task/kernel/kernel_gar_match.cuh"
 #include "core/util/cuda_check.cuh"
+
 #include <algorithm>
 #include <cstdint>
 #include <cuda_runtime.h>

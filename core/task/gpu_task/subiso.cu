@@ -1,13 +1,3 @@
-#include <cuda_runtime.h>
-
-#include <algorithm>
-#include <ctime>
-#include <iostream>
-#include <mutex>
-#include <thread>
-#include <vector>
-#include <unordered_map>
-
 #include "core/common/host_algorithms.cuh"
 #include "core/common/types.h"
 #include "core/data_structures/device_buffer.cuh"
@@ -25,6 +15,15 @@
 #include "core/util/cuda_check.cuh"
 #include "core/util/cuda_device.cuh"
 #include "core/util/format_converter.cuh"
+
+#include <algorithm>
+#include <ctime>
+#include <cuda_runtime.h>
+#include <iostream>
+#include <mutex>
+#include <thread>
+#include <unordered_map>
+#include <vector>
 
 namespace sics {
 namespace matrixgraph {
@@ -95,8 +94,8 @@ __host__ void SubIso::LoadData() {
 
   g_.Read(data_graph_path_);
 
-  //p_.PrintGraph(10);
-  //g_.PrintGraph(1);
+  // p_.PrintGraph(10);
+  // g_.PrintGraph(1);
 }
 
 __host__ void SubIso::WOJMatching(
@@ -112,10 +111,10 @@ __host__ void SubIso::WOJMatching(
   exec_plan.SetCudaDeviceIds(cuda_devices);
 
   std::cout << "[SubIso] WOJMatching: execution plan |V_p|="
-            << exec_plan.get_n_vertices_p() << " |E_p|="
-            << exec_plan.get_n_edges_p() << " |V_g|="
-            << exec_plan.get_n_vertices_g() << " |E_g|="
-            << exec_plan.get_n_edges_g() << std::endl;
+            << exec_plan.get_n_vertices_p()
+            << " |E_p|=" << exec_plan.get_n_edges_p()
+            << " |V_g|=" << exec_plan.get_n_vertices_g()
+            << " |E_g|=" << exec_plan.get_n_edges_g() << std::endl;
   std::cout << "[SubIso] WOJMatching: plan uses " << exec_plan.get_n_devices()
             << " logical GPU(s), device id(s): ";
   for (size_t i = 0; i < cuda_devices.size(); ++i) {
@@ -192,12 +191,11 @@ __host__ void SubIso::Run() {
 __host__ int SubIso::Run(
     uint32_t p_num_vertices, uint32_t p_num_in_edges, uint32_t p_num_out_edges,
     uint32_t p_max_vid, uint32_t p_min_vid, const uint8_t* p_csr_data,
-    uint64_t p_csr_data_size, const uint32_t* p_labels,
-    uint32_t g_num_vertices, uint32_t g_num_in_edges, uint32_t g_num_out_edges,
-    uint32_t g_max_vid, uint32_t g_min_vid, const uint8_t* g_csr_data,
-    uint64_t g_csr_data_size, const uint32_t* g_labels,
-    int max_result_tables, int max_result_rows, int max_result_cols,
-    uint32_t* out_table_cols, uint32_t* out_table_rows,
+    uint64_t p_csr_data_size, const uint32_t* p_labels, uint32_t g_num_vertices,
+    uint32_t g_num_in_edges, uint32_t g_num_out_edges, uint32_t g_max_vid,
+    uint32_t g_min_vid, const uint8_t* g_csr_data, uint64_t g_csr_data_size,
+    const uint32_t* g_labels, int max_result_tables, int max_result_rows,
+    int max_result_cols, uint32_t* out_table_cols, uint32_t* out_table_rows,
     uint32_t* out_headers_flat, uint32_t* out_data_flat, int* out_num_tables) {
   if (!p_csr_data || !p_labels || !g_csr_data || !g_labels || !out_num_tables) {
     return 1;
@@ -227,12 +225,12 @@ __host__ int SubIso::Run(
     return csr;
   };
 
-  ImmutableCSR* p = build_csr(p_num_vertices, p_num_in_edges, p_num_out_edges,
-                              p_max_vid, p_min_vid, p_csr_data,
-                              p_csr_data_size, p_labels);
-  ImmutableCSR* g = build_csr(g_num_vertices, g_num_in_edges, g_num_out_edges,
-                              g_max_vid, g_min_vid, g_csr_data,
-                              g_csr_data_size, g_labels);
+  ImmutableCSR* p =
+      build_csr(p_num_vertices, p_num_in_edges, p_num_out_edges, p_max_vid,
+                p_min_vid, p_csr_data, p_csr_data_size, p_labels);
+  ImmutableCSR* g =
+      build_csr(g_num_vertices, g_num_in_edges, g_num_out_edges, g_max_vid,
+                g_min_vid, g_csr_data, g_csr_data_size, g_labels);
 
   // Run WOJ matching.
   std::vector<WOJMatches*> results;
@@ -243,8 +241,8 @@ __host__ int SubIso::Run(
         sics::matrixgraph::core::util::MatrixGraphCudaDeviceList();
     exec_plan.SetCudaDeviceIds(cuda_devices);
 
-    results = WOJSubIsoKernelWrapper::Filter(exec_plan, *p, *g, true, true, true,
-                                             true, true, false, false);
+    results = WOJSubIsoKernelWrapper::Filter(exec_plan, *p, *g, true, true,
+                                             true, true, true, false, false);
     results = WOJSubIsoKernelWrapper::Join(exec_plan, results);
   } catch (...) {
     delete[] p->GetVLabelBasePointer();
@@ -270,8 +268,7 @@ __host__ int SubIso::Run(
                                ? static_cast<uint32_t>(max_result_cols)
                                : cols;
     if (header_copy > 0 && out_headers_flat) {
-      uint32_t* dst_header =
-          out_headers_flat + t * max_result_cols;
+      uint32_t* dst_header = out_headers_flat + t * max_result_cols;
       std::memcpy(dst_header, m->get_header_ptr(),
                   sizeof(uint32_t) * header_copy);
     }
@@ -281,14 +278,14 @@ __host__ int SubIso::Run(
                             ? static_cast<uint32_t>(max_result_rows)
                             : rows;
     if (row_copy > 0 && cols > 0 && out_data_flat) {
-      uint32_t* dst_data = out_data_flat + t * max_result_rows * max_result_cols;
+      uint32_t* dst_data =
+          out_data_flat + t * max_result_rows * max_result_cols;
       const uint32_t* src_data = m->get_data_ptr();
       for (uint32_t r = 0; r < row_copy; ++r) {
         uint32_t col_copy = cols > static_cast<uint32_t>(max_result_cols)
                                 ? static_cast<uint32_t>(max_result_cols)
                                 : cols;
-        std::memcpy(dst_data + r * max_result_cols,
-                    src_data + r * m->get_x(),
+        std::memcpy(dst_data + r * max_result_cols, src_data + r * m->get_x(),
                     sizeof(uint32_t) * col_copy);
       }
     }

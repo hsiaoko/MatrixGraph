@@ -1,10 +1,10 @@
 #ifndef MATRIXGRAPH_CORE_COMMON_YAML_CONFIG_H_
 #define MATRIXGRAPH_CORE_COMMON_YAML_CONFIG_H_
 
+#include "core/data_structures/metadata.h"
+
 #include <iostream>
 #include <yaml-cpp/yaml.h>
-
-#include "core/data_structures/metadata.h"
 
 namespace YAML {
 
@@ -15,8 +15,9 @@ using VertexID = sics::matrixgraph::core::common::VertexID;
 using GraphID = sics::matrixgraph::core::common::GraphID;
 using EdgeIndex = sics::matrixgraph::core::common::EdgeIndex;
 
-template <> struct convert<TiledMatrixMetadata> {
-  static Node encode(TiledMatrixMetadata &metadata) {
+template <>
+struct convert<TiledMatrixMetadata> {
+  static Node encode(TiledMatrixMetadata& metadata) {
     Node node;
     node["n_cols"] = metadata.n_cols;
     node["n_rows"] = metadata.n_rows;
@@ -25,7 +26,7 @@ template <> struct convert<TiledMatrixMetadata> {
     return node;
   }
 
-  static bool decode(const Node &node, TiledMatrixMetadata &metadata) {
+  static bool decode(const Node& node, TiledMatrixMetadata& metadata) {
     if (node["TiledMatrix"].size() != 3) {
       return false;
     }
@@ -41,9 +42,9 @@ template <> struct convert<TiledMatrixMetadata> {
 // template is needed for this function
 template <>
 struct convert<sics::matrixgraph::core::data_structures::SubGraphMetadata> {
-  static Node
-  encode(const sics::matrixgraph::core::data_structures::SubGraphMetadata
-             &subgraph_metadata) {
+  static Node encode(
+      const sics::matrixgraph::core::data_structures::SubGraphMetadata&
+          subgraph_metadata) {
     Node node;
     node["gid"] = subgraph_metadata.gid;
     node["num_vertices"] = subgraph_metadata.num_vertices;
@@ -53,11 +54,10 @@ struct convert<sics::matrixgraph::core::data_structures::SubGraphMetadata> {
     node["min_vid"] = subgraph_metadata.min_vid;
     return node;
   }
-  static bool decode(const Node &node,
-                     sics::matrixgraph::core::data_structures::SubGraphMetadata
-                         &subgraph_metadata) {
-    if (node.size() != 6)
-      return false;
+  static bool decode(const Node& node,
+                     sics::matrixgraph::core::data_structures::SubGraphMetadata&
+                         subgraph_metadata) {
+    if (node.size() != 6) return false;
 
     subgraph_metadata.gid = node["gid"].as<GraphID>();
     subgraph_metadata.num_vertices = node["num_vertices"].as<EdgeIndex>();
@@ -75,7 +75,7 @@ struct convert<sics::matrixgraph::core::data_structures::SubGraphMetadata> {
 template <>
 struct convert<sics::matrixgraph::core::data_structures::GraphMetadata> {
   static Node encode(
-      const sics::matrixgraph::core::data_structures::GraphMetadata &metadata) {
+      const sics::matrixgraph::core::data_structures::GraphMetadata& metadata) {
     Node node;
     node["num_vertices"] = metadata.num_vertices;
     node["num_edges"] = metadata.num_edges;
@@ -92,10 +92,9 @@ struct convert<sics::matrixgraph::core::data_structures::GraphMetadata> {
     return node;
   }
 
-  static bool
-  decode(const Node &node,
-         sics::matrixgraph::core::data_structures::GraphMetadata &metadata) {
-
+  static bool decode(
+      const Node& node,
+      sics::matrixgraph::core::data_structures::GraphMetadata& metadata) {
     metadata.num_vertices =
         node["GraphMetadata"]["num_vertices"].as<VertexID>();
     metadata.num_edges = node["GraphMetadata"]["num_edges"].as<EdgeIndex>();
@@ -109,5 +108,5 @@ struct convert<sics::matrixgraph::core::data_structures::GraphMetadata> {
   }
 };
 
-} // namespace YAML
-#endif // MATRIXGRAPH_CORE_COMMON_YAML_CONFIG_H_
+}  // namespace YAML
+#endif  // MATRIXGRAPH_CORE_COMMON_YAML_CONFIG_H_

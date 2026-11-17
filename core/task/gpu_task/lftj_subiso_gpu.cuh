@@ -1,14 +1,14 @@
 #ifndef MATRIXGRAPH_CORE_TASK_GPU_TASK_LFTJ_SUBISO_GPU_CUH_
 #define MATRIXGRAPH_CORE_TASK_GPU_TASK_LFTJ_SUBISO_GPU_CUH_
 
-#include <stdint.h>
-#include <string>
-#include <vector>
-
 #include "core/common/types.h"
 #include "core/data_structures/immutable_csr.cuh"
 #include "core/task/cpu_task/min_wise_filter.h"
 #include "core/task/gpu_task/task_base.cuh"
+
+#include <stdint.h>
+#include <string>
+#include <vector>
 
 namespace sics {
 namespace matrixgraph {

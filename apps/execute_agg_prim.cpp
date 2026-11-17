@@ -1,13 +1,12 @@
-#include <gflags/gflags.h>
+#include "core/task/gpu_task/execute_agg_prim.cuh"
 
 #include <chrono>
 #include <cstdint>
+#include <gflags/gflags.h>
 #include <iostream>
 #include <sstream>
 #include <string>
 #include <vector>
-
-#include "core/task/gpu_task/execute_agg_prim.cuh"
 
 // Input values as a comma-separated list.
 DEFINE_string(values, "1,2,3,4,5",
@@ -45,9 +44,10 @@ DEFINE_string(prims_batch, "",
 
 // One-by-one submission: process each list independently with single-list
 // Compute/ComputeAll calls instead of fused batch kernels.
-DEFINE_bool(one_by_one, false,
-            "If true, process batch lists one by one using single-list "
-            "Compute/ComputeAll calls (no batch kernel fusion). Used with -lists.");
+DEFINE_bool(
+    one_by_one, false,
+    "If true, process batch lists one by one using single-list "
+    "Compute/ComputeAll calls (no batch kernel fusion). Used with -lists.");
 
 using sics::matrixgraph::core::task::AggPrim;
 using sics::matrixgraph::core::task::AllFeatures;
@@ -90,7 +90,8 @@ static std::vector<std::string> SplitByComma(const std::string& s) {
     while (ws_front < part.size() && std::isspace(part[ws_front])) ++ws_front;
     size_t ws_back = part.size();
     while (ws_back > ws_front && std::isspace(part[ws_back - 1])) --ws_back;
-    if (ws_front < ws_back) parts.emplace_back(part.substr(ws_front, ws_back - ws_front));
+    if (ws_front < ws_back)
+      parts.emplace_back(part.substr(ws_front, ws_back - ws_front));
     start = end + 1;
   }
   return parts;
@@ -107,7 +108,8 @@ static std::vector<std::string> SplitBySemicolon(const std::string& s) {
     while (ws_front < part.size() && std::isspace(part[ws_front])) ++ws_front;
     size_t ws_back = part.size();
     while (ws_back > ws_front && std::isspace(part[ws_back - 1])) --ws_back;
-    if (ws_front < ws_back) parts.emplace_back(part.substr(ws_front, ws_back - ws_front));
+    if (ws_front < ws_back)
+      parts.emplace_back(part.substr(ws_front, ws_back - ws_front));
     start = end + 1;
   }
   return parts;
@@ -203,8 +205,7 @@ int main(int argc, char* argv[]) {
       }
       std::cout << "Batch input: " << lists.size() << " list(s), "
                 << FLAGS_n_streams << " stream(s)"
-                << (FLAGS_one_by_one ? ", one-by-one" : "")
-                << std::endl;
+                << (FLAGS_one_by_one ? ", one-by-one" : "") << std::endl;
 
       Clock::time_point t0 = Clock::now();
       if (FLAGS_one_by_one) {
@@ -237,8 +238,8 @@ int main(int argc, char* argv[]) {
               lists.size(), std::vector<FeatureValue>(prims.size()));
           for (size_t i = 0; i < lists.size(); ++i) {
             for (size_t j = 0; j < prims.size(); ++j) {
-              results[i][j] = task.Compute(prims[j], lists[i].data(),
-                                           lists[i].size());
+              results[i][j] =
+                  task.Compute(prims[j], lists[i].data(), lists[i].size());
             }
           }
           std::cout << "[Timing] Compute (one-by-one): " << SecondsSince(t0)
@@ -341,25 +342,57 @@ int main(int argc, char* argv[]) {
                 << std::endl;
 
       std::cout << "All primitives:" << std::endl;
-      std::cout << "  count="; PrintValue(all.count); std::cout << std::endl;
-      std::cout << "  sum="; PrintValue(all.sum); std::cout << std::endl;
-      std::cout << "  mean="; PrintValue(all.mean); std::cout << std::endl;
-      std::cout << "  median="; PrintValue(all.median); std::cout << std::endl;
-      std::cout << "  mode="; PrintValue(all.mode); std::cout << std::endl;
-      std::cout << "  min="; PrintValue(all.min); std::cout << std::endl;
-      std::cout << "  max="; PrintValue(all.max); std::cout << std::endl;
-      std::cout << "  variance="; PrintValue(all.variance); std::cout << std::endl;
-      std::cout << "  std="; PrintValue(all.std); std::cout << std::endl;
-      std::cout << "  skew="; PrintValue(all.skew); std::cout << std::endl;
-      std::cout << "  entropy="; PrintValue(all.entropy); std::cout << std::endl;
-      std::cout << "  num_unique="; PrintValue(all.num_unique); std::cout << std::endl;
-      std::cout << "  percent_true="; PrintValue(all.percent_true); std::cout << std::endl;
-      std::cout << "  quarter="; PrintValue(all.quarter); std::cout << std::endl;
-      std::cout << "  quartile3="; PrintValue(all.quartile3); std::cout << std::endl;
+      std::cout << "  count=";
+      PrintValue(all.count);
+      std::cout << std::endl;
+      std::cout << "  sum=";
+      PrintValue(all.sum);
+      std::cout << std::endl;
+      std::cout << "  mean=";
+      PrintValue(all.mean);
+      std::cout << std::endl;
+      std::cout << "  median=";
+      PrintValue(all.median);
+      std::cout << std::endl;
+      std::cout << "  mode=";
+      PrintValue(all.mode);
+      std::cout << std::endl;
+      std::cout << "  min=";
+      PrintValue(all.min);
+      std::cout << std::endl;
+      std::cout << "  max=";
+      PrintValue(all.max);
+      std::cout << std::endl;
+      std::cout << "  variance=";
+      PrintValue(all.variance);
+      std::cout << std::endl;
+      std::cout << "  std=";
+      PrintValue(all.std);
+      std::cout << std::endl;
+      std::cout << "  skew=";
+      PrintValue(all.skew);
+      std::cout << std::endl;
+      std::cout << "  entropy=";
+      PrintValue(all.entropy);
+      std::cout << std::endl;
+      std::cout << "  num_unique=";
+      PrintValue(all.num_unique);
+      std::cout << std::endl;
+      std::cout << "  percent_true=";
+      PrintValue(all.percent_true);
+      std::cout << std::endl;
+      std::cout << "  quarter=";
+      PrintValue(all.quarter);
+      std::cout << std::endl;
+      std::cout << "  quartile3=";
+      PrintValue(all.quartile3);
+      std::cout << std::endl;
       std::cout << "  count_greater_than_mean=";
       PrintValue(all.count_greater_than_mean);
       std::cout << std::endl;
-      std::cout << "  dfeat="; PrintValue(all.dfeat); std::cout << std::endl;
+      std::cout << "  dfeat=";
+      PrintValue(all.dfeat);
+      std::cout << std::endl;
     } else {
       auto prim_names = SplitByComma(FLAGS_prims);
       std::cout << "Primitives: " << FLAGS_prims << std::endl;

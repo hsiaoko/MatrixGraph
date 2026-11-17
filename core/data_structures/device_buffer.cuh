@@ -1,10 +1,10 @@
 #ifndef MATRIXGRAPH_CORE_DATA_STRUCTURES_DEVICE_BUFFER_CUH_
 #define MATRIXGRAPH_CORE_DATA_STRUCTURES_DEVICE_BUFFER_CUH_
 
-#include <cuda_runtime.h>
-
 #include "core/data_structures/host_buffer.cuh"
 #include "core/util/cuda_check.cuh"
+
+#include <cuda_runtime.h>
 
 namespace sics {
 namespace matrixgraph {
@@ -12,19 +12,20 @@ namespace core {
 namespace data_structures {
 
 // Class to manage buffers allocated on the device
-template <typename T> class DeviceOwnedBuffer {
-public:
+template <typename T>
+class DeviceOwnedBuffer {
+ public:
   // Default constructor
   DeviceOwnedBuffer() = default;
 
   // @Brif: Deleted copy constructor and copy assignment operator to prevent
   // copying
-  DeviceOwnedBuffer(const DeviceOwnedBuffer<T> &) = delete;
+  DeviceOwnedBuffer(const DeviceOwnedBuffer<T>&) = delete;
 
-  DeviceOwnedBuffer &operator=(const DeviceOwnedBuffer<T> &) = delete;
+  DeviceOwnedBuffer& operator=(const DeviceOwnedBuffer<T>&) = delete;
 
   // @Brif: Move constructor and move assignment operator
-  DeviceOwnedBuffer(DeviceOwnedBuffer<T> &&r) noexcept {
+  DeviceOwnedBuffer(DeviceOwnedBuffer<T>&& r) noexcept {
     if (this != &r) {
       cudaFree(ptr_);
       ptr_ = r.GetPtr();
@@ -34,7 +35,7 @@ public:
     }
   }
 
-  DeviceOwnedBuffer &operator=(DeviceOwnedBuffer<T> &&r) noexcept {
+  DeviceOwnedBuffer& operator=(DeviceOwnedBuffer<T>&& r) noexcept {
     if (this != &r) {
       cudaFree(ptr_);
       ptr_ = r.GetPtr();
@@ -47,10 +48,10 @@ public:
 
   // @Brif:  Deleted copy constructor and copy assignment operator to prevent
   // DeviceOwnedBuffer<T> object get the ownership of the host buffer.
-  DeviceOwnedBuffer(Buffer<T> &&h_buff) = delete;
+  DeviceOwnedBuffer(Buffer<T>&& h_buff) = delete;
 
   // @Brif: Constructor with buffer and optional stream
-  DeviceOwnedBuffer(const Buffer<T> &h_buf, const cudaStream_t &stream) {
+  DeviceOwnedBuffer(const Buffer<T>& h_buf, const cudaStream_t& stream) {
     Init(h_buf, stream);
   }
 
@@ -67,20 +68,18 @@ public:
   // Parameters:
   //   h_buf: Reference to the host buffer
   //   stream: CUDA stream for asynchronous memory operations.
-  void Init(const Buffer<T> &h_buf, const cudaStream_t &stream) {
-    if (ptr_ != nullptr)
-      cudaFree(ptr_);
+  void Init(const Buffer<T>& h_buf, const cudaStream_t& stream) {
+    if (ptr_ != nullptr) cudaFree(ptr_);
     s_ = h_buf.size;
-    CUDA_CHECK(cudaMalloc((void **)&ptr_, s_));
+    CUDA_CHECK(cudaMalloc((void**)&ptr_, s_));
     CUDA_CHECK(
         cudaMemcpyAsync(ptr_, h_buf.data, s_, cudaMemcpyHostToDevice, stream));
   }
 
   // Initialize the DeviceOwnedBuffer<T> with a buffer
   // Parameters:
-  void Init(const Buffer<T> &h_buf) {
-    if (ptr_ != nullptr)
-      cudaFree(ptr_);
+  void Init(const Buffer<T>& h_buf) {
+    if (ptr_ != nullptr) cudaFree(ptr_);
     s_ = h_buf.size;
     CUDA_CHECK(cudaMalloc(&ptr_, s_));
     CUDA_CHECK(cudaMemcpy(ptr_, h_buf.data, s_, cudaMemcpyHostToDevice));
@@ -90,16 +89,14 @@ public:
   // Parameters:
   //   s: Size of the buffer to be allocated on the device
   void Init(size_t s) {
-    if (ptr_ != nullptr)
-      cudaFree(ptr_);
+    if (ptr_ != nullptr) cudaFree(ptr_);
     s_ = s;
     CUDA_CHECK(cudaMalloc(&ptr_, s_));
     CUDA_CHECK(cudaMemset(ptr_, 0, s_));
   }
 
-  void Init(size_t s, const cudaStream_t &stream) {
-    if (ptr_ != nullptr)
-      cudaFree(ptr_);
+  void Init(size_t s, const cudaStream_t& stream) {
+    if (ptr_ != nullptr) cudaFree(ptr_);
     s_ = s;
     CUDA_CHECK(cudaMalloc(&ptr_, s_));
     CUDA_CHECK(cudaMemsetAsync(ptr_, 0, s_, stream));
@@ -114,7 +111,7 @@ public:
   //   This function asynchronously copies data from the device to the host
   //   using the specified CUDA stream.
   // @Warning: The size of h_buf must be the same as the size of this->GetSize()
-  void Device2Host(const cudaStream_t &stream, Buffer<T> *h_buf) {
+  void Device2Host(const cudaStream_t& stream, Buffer<T>* h_buf) {
     h_buf->size = s_;
     CUDA_CHECK(
         cudaMemcpyAsync(h_buf->data, ptr_, s_, cudaMemcpyDeviceToHost, stream));
@@ -124,7 +121,7 @@ public:
   // @Parameters:
   //   h_buf: Pointer to the host buffer where the data will be copied
   // @Warning: The size of h_buf must be the same as the size of this->GetSize()
-  void Device2Host(Buffer<T> *h_buf) {
+  void Device2Host(Buffer<T>* h_buf) {
     h_buf->size = s_;
     CUDA_CHECK(cudaMemcpy(h_buf->data, ptr_, s_, cudaMemcpyDeviceToHost));
   }
@@ -133,7 +130,7 @@ public:
   // @Returns:
   //   Pointer to the device buffer
   // @Warning: The size of h_buf must be the same as the size of this->GetSize()
-  T *GetPtr() const { return (ptr_); };
+  T* GetPtr() const { return (ptr_); };
 
   // @Brif: Get the size of the device buffer
   // @Returns:
@@ -142,17 +139,17 @@ public:
 
   size_t GetElementSize() const { return sizeof(T); }
 
-private:
-  void SetPtr(T *val) { ptr_ = val; }
+ private:
+  void SetPtr(T* val) { ptr_ = val; }
   void SetSize(size_t s) { s_ = s; }
 
-  T *ptr_ = nullptr; // Pointer to device memory
-  size_t s_ = 0;     // Size of the device memory allocation
+  T* ptr_ = nullptr;  // Pointer to device memory
+  size_t s_ = 0;      // Size of the device memory allocation
 };
 
-} // namespace data_structures
-} // namespace core
-} // namespace matrixgraph
-} // namespace sics
+}  // namespace data_structures
+}  // namespace core
+}  // namespace matrixgraph
+}  // namespace sics
 
-#endif // MATRIXGRAPH_CORE_DATA_STRUCTURES_DEVICE_BUFFER_CUH_
+#endif  // MATRIXGRAPH_CORE_DATA_STRUCTURES_DEVICE_BUFFER_CUH_

@@ -1,12 +1,12 @@
 #ifndef MATRIXGRAPH_CORE_TASK_GPU_TASK_EXECUTE_AGG_PRIM_CUH_
 #define MATRIXGRAPH_CORE_TASK_GPU_TASK_EXECUTE_AGG_PRIM_CUH_
 
-#include <cuda_runtime.h>
-#include <cstdint>
-#include <vector>
-
 #include "core/data_structures/attributes.h"
 #include "core/task/gpu_task/task_base.cuh"
+
+#include <cstdint>
+#include <cuda_runtime.h>
+#include <vector>
 
 namespace sics {
 namespace matrixgraph {
@@ -22,11 +22,11 @@ using StringView = sics::matrixgraph::core::data_structures::StringView;
 struct FeatureValue {
   ValueType type;
   union {
-    int64_t i64;    // kInt, kTime
-    double f64;     // kFloat64
-    float f32;      // kFloat32
-    bool b;         // kBool
-    StringView str; // kString
+    int64_t i64;     // kInt, kTime
+    double f64;      // kFloat64
+    float f32;       // kFloat32
+    bool b;          // kBool
+    StringView str;  // kString
   };
 
   __host__ __device__ bool IsValid() const {
@@ -151,8 +151,7 @@ namespace kernel {
 // -----------------------------------------------------------------------------
 // list_offset: global list index for the first block in this launch.
 // total_n_lists: total number of lists across all streams (for bounds check).
-__global__ void ComputeAggPrimKernel(AggPrim prim,
-                                     const FeatureValue* d_values,
+__global__ void ComputeAggPrimKernel(AggPrim prim, const FeatureValue* d_values,
                                      const uint32_t* d_offsets,
                                      uint32_t list_offset,
                                      uint32_t total_n_lists,
@@ -161,13 +160,10 @@ __global__ void ComputeAggPrimKernel(AggPrim prim,
 // Multi-primitive batch: each input list is processed by one block, which
 // computes every requested primitive sequentially. Output layout is row-major:
 // d_outputs[list_idx * n_prims + prim_idx].
-__global__ void ComputeBatchMultiPrimKernel(const FeatureValue* d_values,
-                                            const uint32_t* d_offsets,
-                                            const AggPrim* d_prims,
-                                            uint32_t n_prims,
-                                            uint32_t list_offset,
-                                            uint32_t total_n_lists,
-                                            FeatureValue* d_outputs);
+__global__ void ComputeBatchMultiPrimKernel(
+    const FeatureValue* d_values, const uint32_t* d_offsets,
+    const AggPrim* d_prims, uint32_t n_prims, uint32_t list_offset,
+    uint32_t total_n_lists, FeatureValue* d_outputs);
 
 __global__ void ComputeAllAggPrimsKernel(const FeatureValue* d_values,
                                          const uint32_t* d_offsets,
@@ -191,13 +187,10 @@ __global__ void ComputeAggStreamingKernel(const FeatureValue* d_values,
 // NumUnique via a per-list open-addressing hash table held in global scratch.
 // Block b handles list d_list_ids[b]; its table occupies
 // d_hash[d_hash_offsets[b] .. d_hash_offsets[b+1]). No sort, no list staging.
-__global__ void ComputeNumUniqueHashKernel(const FeatureValue* d_values,
-                                           const uint32_t* d_offsets,
-                                           const uint32_t* d_list_ids,
-                                           uint32_t n_group,
-                                           unsigned long long* d_hash,
-                                           const uint32_t* d_hash_offsets,
-                                           FeatureValue* d_outputs);
+__global__ void ComputeNumUniqueHashKernel(
+    const FeatureValue* d_values, const uint32_t* d_offsets,
+    const uint32_t* d_list_ids, uint32_t n_group, unsigned long long* d_hash,
+    const uint32_t* d_hash_offsets, FeatureValue* d_outputs);
 
 }  // namespace kernel
 
@@ -221,8 +214,7 @@ class ExecuteAggPrim : public TaskBase {
   __host__ void SetNumStreams(uint32_t n_streams);
 
   // Compute a single aggregation primitive on a host-side value list.
-  __host__ FeatureValue Compute(AggPrim prim,
-                                const FeatureValue* host_values,
+  __host__ FeatureValue Compute(AggPrim prim, const FeatureValue* host_values,
                                 uint32_t n);
 
   // Compute the same primitive for many host-side value lists.
@@ -258,8 +250,7 @@ class ExecuteAggPrim : public TaskBase {
 
   __host__ std::vector<std::vector<FeatureValue>> ComputeBatchMultiPrimFlat(
       const FeatureValue* h_flat, const uint32_t* offsets, uint32_t n_lists,
-      uint32_t total_values, uint32_t max_n,
-      const std::vector<AggPrim>& prims);
+      uint32_t total_values, uint32_t max_n, const std::vector<AggPrim>& prims);
 
   // Per-list single-primitive dispatch with no shared-memory list staging.
   // list_prims[i] is the AggPrim (as uint8) for list i. Reduce-class prims go
@@ -267,9 +258,11 @@ class ExecuteAggPrim : public TaskBase {
   // the rare sort-only prims (median/mode/entropy/quarter/quartile3) fall back
   // to the legacy shared-staging single-prim kernel. results[i] is the value
   // for list i. h_flat should be pinned for fast H2D.
-  __host__ std::vector<FeatureValue> ComputeByPrim(
-      const FeatureValue* h_flat, const uint32_t* offsets, uint32_t n_lists,
-      uint32_t total_values, const uint8_t* list_prims);
+  __host__ std::vector<FeatureValue> ComputeByPrim(const FeatureValue* h_flat,
+                                                   const uint32_t* offsets,
+                                                   uint32_t n_lists,
+                                                   uint32_t total_values,
+                                                   const uint8_t* list_prims);
 
   // Returns a persistent, pinned host buffer with capacity >= n FeatureValues,
   // grown on demand. The caller writes its converted values here, then passes
@@ -284,14 +277,22 @@ class ExecuteAggPrim : public TaskBase {
 
   // Persistent scratch reused across ComputeByPrim calls (capacities in
   // elements; grown on demand, never shrunk). Removes per-call cudaMalloc/Free.
-  FeatureValue* h_values_ = nullptr;       size_t h_values_cap_ = 0;  // pinned
-  FeatureValue* d_values_ = nullptr;       size_t d_values_cap_ = 0;
-  uint32_t* d_offsets_ = nullptr;          size_t d_offsets_cap_ = 0;
-  FeatureValue* d_outputs_ = nullptr;      size_t d_outputs_cap_ = 0;
-  uint32_t* d_ids_ = nullptr;              size_t d_ids_cap_ = 0;
-  AggPrim* d_prims_ = nullptr;             size_t d_prims_cap_ = 0;
-  uint32_t* d_hoff_ = nullptr;             size_t d_hoff_cap_ = 0;
-  unsigned long long* d_hash_ = nullptr;   size_t d_hash_cap_ = 0;
+  FeatureValue* h_values_ = nullptr;
+  size_t h_values_cap_ = 0;  // pinned
+  FeatureValue* d_values_ = nullptr;
+  size_t d_values_cap_ = 0;
+  uint32_t* d_offsets_ = nullptr;
+  size_t d_offsets_cap_ = 0;
+  FeatureValue* d_outputs_ = nullptr;
+  size_t d_outputs_cap_ = 0;
+  uint32_t* d_ids_ = nullptr;
+  size_t d_ids_cap_ = 0;
+  AggPrim* d_prims_ = nullptr;
+  size_t d_prims_cap_ = 0;
+  uint32_t* d_hoff_ = nullptr;
+  size_t d_hoff_cap_ = 0;
+  unsigned long long* d_hash_ = nullptr;
+  size_t d_hash_cap_ = 0;
 };
 
 }  // namespace task

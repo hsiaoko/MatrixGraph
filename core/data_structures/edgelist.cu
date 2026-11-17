@@ -4,14 +4,15 @@
 #include "core/util/atomic.h"
 #include "core/util/bitmap.h"
 #include "core/util/bitmap_ownership.h"
+#include "core/util/error.h"
 #include "core/util/parallel.h"
+
 #include <algorithm>
 #include <filesystem>
 #include <fstream>
 #include <numeric>
 #include <random>
 #include <thread>
-#include "core/util/error.h"
 
 namespace sics {
 
@@ -88,27 +89,27 @@ void Edges::Init(EdgeIndex n_edges, VertexID* edges_buf,
 
   // Get Min Max vertex ID.
   ParallelFor(worker.begin(), worker.end(),
-             [this, n_edges, step, &edges_buf, &min_vid, &max_vid](auto w) {
-               for (EdgeIndex _ = w; _ < n_edges; _ += step) {
-                 edges_ptr_[_].src = edges_buf[_ * 2];
-                 edges_ptr_[_].dst = edges_buf[_ * 2 + 1];
-                 WriteMin(&min_vid, edges_ptr_[_].src);
-                 WriteMin(&min_vid, edges_ptr_[_].dst);
-                 WriteMax(&max_vid, edges_ptr_[_].src);
-                 WriteMax(&max_vid, edges_ptr_[_].dst);
-               }
-             });
+              [this, n_edges, step, &edges_buf, &min_vid, &max_vid](auto w) {
+                for (EdgeIndex _ = w; _ < n_edges; _ += step) {
+                  edges_ptr_[_].src = edges_buf[_ * 2];
+                  edges_ptr_[_].dst = edges_buf[_ * 2 + 1];
+                  WriteMin(&min_vid, edges_ptr_[_].src);
+                  WriteMin(&min_vid, edges_ptr_[_].dst);
+                  WriteMax(&max_vid, edges_ptr_[_].src);
+                  WriteMax(&max_vid, edges_ptr_[_].dst);
+                }
+              });
 
   BitmapOwnership visited(max_vid);
 
   // Get number of vertices.
   ParallelFor(worker.begin(), worker.end(),
-             [this, &visited, step, n_edges](auto w) {
-               for (EdgeIndex _ = w; _ < n_edges; _ += step) {
-                 visited.SetBit(edges_ptr_[_].src);
-                 visited.SetBit(edges_ptr_[_].dst);
-               }
-             });
+              [this, &visited, step, n_edges](auto w) {
+                for (EdgeIndex _ = w; _ < n_edges; _ += step) {
+                  visited.SetBit(edges_ptr_[_].src);
+                  visited.SetBit(edges_ptr_[_].dst);
+                }
+              });
 
   edgelist_metadata_.num_edges = n_edges;
   edgelist_metadata_.num_vertices = visited.Count();
@@ -175,8 +176,8 @@ void Edges::ReadFromBin(const std::string& input_path) {
 
   std::ifstream in_localid2globalid_file(input_path + "localid2globalid.bin");
   if (!in_localid2globalid_file) {
-    throw util::Error(util::ErrorCode::kIo, "Open file failed: " +
-                      input_path + "localid2globalid.bin");
+    throw util::Error(util::ErrorCode::kIo, "Open file failed: " + input_path +
+                                                "localid2globalid.bin");
   }
 
   // Read local id to global id.
@@ -241,10 +242,13 @@ void Edges::ReadFromCSV(const std::string& filename, const std::string& sep,
   edgelist_metadata_.max_vid = max_vid;
 
   vertex_label_base_pointer_ =
-      new VertexLabel[keep_original_vid ? (max_vid + 1) : (((max_vid + 1) >> 6) << 6) + 64]();
+      new VertexLabel[keep_original_vid ? (max_vid + 1)
+                                        : (((max_vid + 1) >> 6) << 6) + 64]();
 
   if (keep_original_vid) {
-    std::cout << "[Edges] Reading CSV: keeping original vertex IDs (no compression) ..." << std::endl;
+    std::cout << "[Edges] Reading CSV: keeping original vertex IDs (no "
+                 "compression) ..."
+              << std::endl;
     // Keep original vertex IDs (no compression): num_vertices = max_vid + 1
     edgelist_metadata_.num_vertices = max_vid + 1;
     edges_ptr_ = new Edge[n_edges]();
@@ -260,7 +264,9 @@ void Edges::ReadFromCSV(const std::string& filename, const std::string& sep,
     }
     delete[] buffer_edges;
   } else {
-    std::cout << "[Edges] Reading CSV: compressing vertex IDs to contiguous range ..." << std::endl;
+    std::cout
+        << "[Edges] Reading CSV: compressing vertex IDs to contiguous range ..."
+        << std::endl;
     // Compress vertex IDs to contiguous range [0, num_vertices)
     auto aligned_max_vid = (((max_vid + 1) >> 6) << 6) + 64;
     edges_ptr_ = new Edge[n_edges]();
@@ -324,19 +330,19 @@ void Edges::GenerateLocalID2GlobalID() {
 
   edgelist_metadata_.num_vertices = bitmap.Count();
   ParallelFor(worker.begin(), worker.end(),
-             [this, step, &vid_map, &new_localid_to_globalid](auto w) {
-               for (auto i = w; i < get_metadata().num_edges; i += step) {
-                 auto e = get_edge_by_index(i);
-                 if (localid_to_globalid_ != nullptr) {
-                   e.src = localid_to_globalid_[e.src];
-                   e.dst = localid_to_globalid_[e.dst];
-                 }
-                 new_localid_to_globalid[vid_map[e.src]] = e.src;
-                 new_localid_to_globalid[vid_map[e.dst]] = e.dst;
-                 edges_ptr_[i].src = vid_map[e.src];
-                 edges_ptr_[i].dst = vid_map[e.dst];
-               }
-             });
+              [this, step, &vid_map, &new_localid_to_globalid](auto w) {
+                for (auto i = w; i < get_metadata().num_edges; i += step) {
+                  auto e = get_edge_by_index(i);
+                  if (localid_to_globalid_ != nullptr) {
+                    e.src = localid_to_globalid_[e.src];
+                    e.dst = localid_to_globalid_[e.dst];
+                  }
+                  new_localid_to_globalid[vid_map[e.src]] = e.src;
+                  new_localid_to_globalid[vid_map[e.dst]] = e.dst;
+                  edges_ptr_[i].src = vid_map[e.src];
+                  edges_ptr_[i].dst = vid_map[e.dst];
+                }
+              });
   delete[] vid_map;
   delete[] localid_to_globalid_;
   localid_to_globalid_ = new_localid_to_globalid;
@@ -380,8 +386,7 @@ void Edges::Transpose() {
 }
 
 void Edges::SortBySrc() {
-  std::sort(edges_ptr_,
-            edges_ptr_ + edgelist_metadata_.num_edges);
+  std::sort(edges_ptr_, edges_ptr_ + edgelist_metadata_.num_edges);
 }
 
 void Edges::ShowGraph(EdgeIndex n_edges) const {

@@ -1,5 +1,4 @@
 #include "core/task/gpu_task/task_base.cuh"
-
 #include "core/util/cuda_check.cuh"
 
 namespace sics {

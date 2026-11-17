@@ -1,18 +1,16 @@
-#include <gflags/gflags.h>
-
-#include <iostream>
-#include <string>
-
-#include "core/common/types.h"
 #include "apps/backend_flag.h"
+#include "core/common/types.h"
 #include "core/engine/engine.h"
 #include "core/task/gpu_task/lftj_subiso_gpu.cuh"
+
+#include <gflags/gflags.h>
+#include <iostream>
+#include <string>
 
 DEFINE_string(p, "", "Path to the pattern graph directory (required)");
 DEFINE_string(g, "", "Path to the data graph directory (required)");
 DEFINE_string(o, "", "Path for optional output (default: none)");
-DEFINE_int32(t, 0,
-             "Number of GPU threads; 0 means use default (default: 0)");
+DEFINE_int32(t, 0, "Number of GPU threads; 0 means use default (default: 0)");
 DEFINE_bool(canonical, false,
             "Enforce increasing vertex IDs with matching depth to avoid "
             "automorphic duplicates (correct for cliques, default: false)");
@@ -81,7 +79,8 @@ int main(int argc, char** argv) {
   std::cout << "Data Graph: " << FLAGS_g << std::endl;
   std::cout << "Output Path: " << (FLAGS_o.empty() ? "(none)" : FLAGS_o)
             << std::endl;
-  std::cout << "GPU Threads: " << (FLAGS_t == 0 ? "default" : std::to_string(FLAGS_t))
+  std::cout << "GPU Threads: "
+            << (FLAGS_t == 0 ? "default" : std::to_string(FLAGS_t))
             << std::endl;
   std::cout << "Canonical: " << (FLAGS_canonical ? "true" : "false")
             << std::endl;

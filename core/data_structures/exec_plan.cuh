@@ -1,11 +1,6 @@
 #ifndef MATRIXGRAPH_CORE_DATA_STRUCTURES_EXEC_PLAN_CUH_
 #define MATRIXGRAPH_CORE_DATA_STRUCTURES_EXEC_PLAN_CUH_
 
-#include <algorithm>
-#include <numeric>
-#include <queue>
-#include <vector>
-
 #include "core/common/consts.h"
 #include "core/common/types.h"
 #include "core/data_structures/device_buffer.cuh"
@@ -13,9 +8,14 @@
 #include "core/data_structures/immutable_csr.cuh"
 #include "core/data_structures/metadata.h"
 #include "core/data_structures/unified_buffer.cuh"
+#include "core/task/cpu_task/pattern_vertex_order.cuh"
 #include "core/util/bitmap_no_ownership.h"
 #include "core/util/bitmap_ownership.h"
-#include "core/task/cpu_task/pattern_vertex_order.cuh"
+
+#include <algorithm>
+#include <numeric>
+#include <queue>
+#include <vector>
 
 namespace sics {
 namespace matrixgraph {
@@ -88,8 +88,8 @@ class ExecutionPlan {
     n_vertices_ = p.get_num_vertices();
 
     // Compute pruning-power order using the one-min filter cost model.
-    auto order = sics::matrixgraph::core::task::PatternVertexOrder::ComputeOrder(
-        p, g);
+    auto order =
+        sics::matrixgraph::core::task::PatternVertexOrder::ComputeOrder(p, g);
     std::vector<VertexID> rank_by_local_id(n_vertices_);
     for (VertexID i = 0; i < n_vertices_; ++i) {
       rank_by_local_id[order[i]] = i;
@@ -173,8 +173,7 @@ class ExecutionPlan {
                                                   2);
 
     sequential_exec_path_in_edges_->GetPtr()[0] = kMaxVertexID;
-    sequential_exec_path_in_edges_->GetPtr()[1] =
-        p.GetGlobalIDByLocalID(root);
+    sequential_exec_path_in_edges_->GetPtr()[1] = p.GetGlobalIDByLocalID(root);
     cudaMemcpy(sequential_exec_path_->GetPtr(), output.data(),
                sizeof(VertexID) * output.size(), cudaMemcpyHostToHost);
     cudaMemcpy(sequential_exec_path_in_edges_->GetPtr() + 2,

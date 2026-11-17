@@ -4,12 +4,9 @@
 namespace sics {
 namespace matrixgraph {
 namespace tools {
-namespace converter {
+namespace converter {}
+}  // namespace tools
+}  // namespace matrixgraph
+}  // namespace sics
 
-
-}
-} // namespace tools
-} // namespace matrixgraph
-} // namespace sics
-
-#endif // MATRIXGRAPH_TOOLS_GRAPH_CONVERTER_CONVERTER_GRID_EDGELIST_2_BIT_TILED_MATRIX_CUH_
+#endif  // MATRIXGRAPH_TOOLS_GRAPH_CONVERTER_CONVERTER_GRID_EDGELIST_2_BIT_TILED_MATRIX_CUH_

@@ -1,5 +1,3 @@
-#include <algorithm>
-
 #include "core/engine/engine.h"
 #include "core/engine/engine_internal.h"
 #include "core/task/cpu_task/cpu_task_base.h"
@@ -7,6 +5,8 @@
 #include "core/util/cuda_check.cuh"
 #include "core/util/cuda_device.cuh"
 #include "core/util/error.h"
+
+#include <algorithm>
 
 namespace sics {
 namespace matrixgraph {
@@ -23,9 +23,8 @@ class GpuEngine : public Engine {
     if (device_count == 0) {
       throw util::Error(util::ErrorCode::kCuda, "GpuEngine: no CUDA devices");
     }
-    devices_ = options.devices.empty()
-                   ? util::MatrixGraphCudaDeviceList()
-                   : options.devices;
+    devices_ = options.devices.empty() ? util::MatrixGraphCudaDeviceList()
+                                       : options.devices;
     if (devices_.empty()) devices_.push_back(util::MatrixGraphCudaDevice());
     for (int device : devices_) {
       if (device < 0 || device >= device_count) {

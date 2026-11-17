@@ -1,16 +1,16 @@
-#include <gflags/gflags.h>
+#include "core/task/gpu_task/bfs.cuh"
+
+#include "apps/backend_flag.h"
+#include "core/common/types.h"
+#include "core/engine/engine.h"
+#include "core/task/gpu_task/task_base.cuh"
 
 #include <fstream>
+#include <gflags/gflags.h>
 #include <iostream>
 #include <list>
 #include <string>
 #include <utility>
-
-#include "core/common/types.h"
-#include "apps/backend_flag.h"
-#include "core/engine/engine.h"
-#include "core/task/gpu_task/bfs.cuh"
-#include "core/task/gpu_task/task_base.cuh"
 
 // Input/Output flags
 DEFINE_string(g, "", "Path to the input graph file (required)");
@@ -40,7 +40,7 @@ void PrintConfig() {
   std::cout << "\n=== BFS Configuration ===" << std::endl;
   std::cout << "Input Graph: " << FLAGS_g << std::endl;
   std::cout << "Source: " << FLAGS_src << std::endl;
-    std::cout << "=======================\n" << std::endl;
+  std::cout << "=======================\n" << std::endl;
 }
 
 int main(int argc, char* argv[]) {
@@ -64,7 +64,7 @@ int main(int argc, char* argv[]) {
 
     auto* task = new BFS(FLAGS_g, FLAGS_src);
     engine->Run(*task);
-    //delete task;
+    // delete task;
 
   } catch (const std::exception& e) {
     std::cerr << "Error: " << e.what() << std::endl;

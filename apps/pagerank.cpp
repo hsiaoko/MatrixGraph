@@ -1,17 +1,17 @@
-#include <gflags/gflags.h>
+#include "core/task/gpu_task/pagerank.cuh"
+
+#include "apps/backend_flag.h"
+#include "core/common/types.h"
+#include "core/common/yaml_config.h"
+#include "core/engine/engine.h"
+#include "core/task/gpu_task/task_base.cuh"
 
 #include <fstream>
+#include <gflags/gflags.h>
 #include <iostream>
 #include <list>
 #include <string>
 #include <utility>
-
-#include "core/common/types.h"
-#include "core/common/yaml_config.h"
-#include "apps/backend_flag.h"
-#include "core/engine/engine.h"
-#include "core/task/gpu_task/pagerank.cuh"
-#include "core/task/gpu_task/task_base.cuh"
 
 // Input/Output flags
 DEFINE_string(g, "", "Path to the input graph file (required)");
@@ -66,7 +66,7 @@ void PrintConfig() {
   std::cout << "Damping Factor: " << FLAGS_damping << std::endl;
   std::cout << "Convergence Threshold: " << FLAGS_epsilon << std::endl;
   std::cout << "Max Iterations: " << FLAGS_max_iter << std::endl;
-    std::cout << "==========================\n" << std::endl;
+  std::cout << "==========================\n" << std::endl;
 }
 
 int main(int argc, char* argv[]) {

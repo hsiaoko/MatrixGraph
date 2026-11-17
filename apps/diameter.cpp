@@ -1,14 +1,14 @@
-#include <gflags/gflags.h>
+#include "core/task/cpu_task/diameter.h"
 
+#include "apps/backend_flag.h"
+#include "core/common/types.h"
+#include "core/engine/engine.h"
+#include "core/task/gpu_task/task_base.cuh"
+
+#include <gflags/gflags.h>
 #include <iostream>
 #include <string>
 #include <utility>
-
-#include "core/common/types.h"
-#include "apps/backend_flag.h"
-#include "core/engine/engine.h"
-#include "core/task/cpu_task/diameter.h"
-#include "core/task/gpu_task/task_base.cuh"
 
 DEFINE_string(g, "", "Path to the input graph file (required)");
 DEFINE_int32(
@@ -43,18 +43,19 @@ bool ValidateParameters() {
 void PrintConfig() {
   std::cout << "\n=== Graph Diameter ===" << std::endl;
   std::cout << "Input Graph: " << FLAGS_g << std::endl;
-    std::cout << "Metric: undirected diameter (out + in adjacency as undirected)"
+  std::cout << "Metric: undirected diameter (out + in adjacency as undirected)"
             << std::endl;
   if (FLAGS_diameter_samples == 0) {
     std::cout << "Mode: exact (all vertices as BFS sources; O(n*(n+m)))"
               << std::endl;
   } else {
-    std::cout << "Mode: approximate, diameter_samples=" << FLAGS_diameter_samples
+    std::cout << "Mode: approximate, diameter_samples="
+              << FLAGS_diameter_samples
               << ", diameter_seed=" << FLAGS_diameter_seed << std::endl;
   }
   if (FLAGS_cpu_parallel > 0) {
-    std::cout << "CPU parallelism cap (TBB, BFS sources): " << FLAGS_cpu_parallel
-              << std::endl;
+    std::cout << "CPU parallelism cap (TBB, BFS sources): "
+              << FLAGS_cpu_parallel << std::endl;
   } else {
     std::cout << "CPU parallelism cap (TBB): default (unlimited)" << std::endl;
   }
@@ -81,10 +82,9 @@ int main(int argc, char* argv[]) {
     const auto backend = mg_app::ParseBackend(FLAGS_backend);
     auto engine = sics::matrixgraph::core::engine::MakeEngine(backend);
 
-    auto* task = new Diameter(FLAGS_g,
-                              static_cast<size_t>(FLAGS_diameter_samples),
-                              FLAGS_diameter_seed,
-                              static_cast<size_t>(FLAGS_cpu_parallel));
+    auto* task = new Diameter(
+        FLAGS_g, static_cast<size_t>(FLAGS_diameter_samples),
+        FLAGS_diameter_seed, static_cast<size_t>(FLAGS_cpu_parallel));
     engine->Run(*task);
     delete task;
   } catch (const std::exception& e) {

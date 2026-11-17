@@ -14,14 +14,13 @@
  *     shared-memory size helper.
  */
 
+#include "core/common/consts.h"
 #include "core/task/gpu_task/kernel/kernel_graph_aggregate.cuh"
 
-#include <cuda_runtime.h>
-#include <cstdint>
-#include <cmath>
 #include <cfloat>
-
-#include "core/common/consts.h"
+#include <cmath>
+#include <cstdint>
+#include <cuda_runtime.h>
 
 namespace sics {
 namespace matrixgraph {
@@ -35,14 +34,13 @@ using ValueType = sics::matrixgraph::core::data_structures::ValueType;
 using AttributeName = sics::matrixgraph::core::data_structures::AttributeName;
 using Attributes = sics::matrixgraph::core::data_structures::Attributes;
 using Attribute = sics::matrixgraph::core::data_structures::Attribute;
-using sics::matrixgraph::core::data_structures::GetInt;
-using sics::matrixgraph::core::data_structures::GetFloat64;
 using sics::matrixgraph::core::data_structures::GetBool;
+using sics::matrixgraph::core::data_structures::GetFloat64;
+using sics::matrixgraph::core::data_structures::GetInt;
 
 // Attribute access helpers
 // ---------------------------------------------------------------------------
-__device__ inline bool ReadAttributeValue(const Attribute* attr,
-                                          uint32_t row,
+__device__ inline bool ReadAttributeValue(const Attribute* attr, uint32_t row,
                                           FeatureValue* out) {
   if (!attr) return false;
   out->type = attr->type;
@@ -55,7 +53,8 @@ __device__ inline bool ReadAttributeValue(const Attribute* attr,
       out->f64 = GetFloat64(*attr, row);
       break;
     case ValueType::kFloat32:
-      out->f64 = static_cast<double>(*(static_cast<const float*>(attr->data) + row));
+      out->f64 =
+          static_cast<double>(*(static_cast<const float*>(attr->data) + row));
       break;
     case ValueType::kBool:
       out->b = GetBool(*attr, row);
@@ -71,36 +70,28 @@ __device__ inline bool ReadAttributeValue(const Attribute* attr,
 // Cooperative neighbor value collection
 // ---------------------------------------------------------------------------
 __device__ inline uint32_t CollectNeighborValuesBlock(
-    const uint8_t* graph_data,
-    uint32_t n_vertices,
-    uint32_t n_in_edges,
-    uint32_t n_out_edges,
-    const Attributes* vertex_attrs,
-    const Attributes* edge_attrs_out,
-    const Attributes* edge_attrs_in,
-    uint32_t pivot_vid,
-    const AttributeName& attr_name,
-    bool use_outgoing,
-    bool use_edge_attrs,
-    FeatureValue* shared_buf,
-    uint32_t max_neighbors,
+    const uint8_t* graph_data, uint32_t n_vertices, uint32_t n_in_edges,
+    uint32_t n_out_edges, const Attributes* vertex_attrs,
+    const Attributes* edge_attrs_out, const Attributes* edge_attrs_in,
+    uint32_t pivot_vid, const AttributeName& attr_name, bool use_outgoing,
+    bool use_edge_attrs, FeatureValue* shared_buf, uint32_t max_neighbors,
     uint32_t* scratch) {
   // Parse CSR layout (matches ImmutableCSR::ParseBasePtr)
   const VertexID* globalid = reinterpret_cast<const VertexID*>(graph_data);
   const VertexID* indegree = globalid + n_vertices;
   const VertexID* outdegree = indegree + n_vertices;
-  const EdgeIndex* in_offset = reinterpret_cast<const EdgeIndex*>(outdegree + n_vertices);
+  const EdgeIndex* in_offset =
+      reinterpret_cast<const EdgeIndex*>(outdegree + n_vertices);
   const EdgeIndex* out_offset = in_offset + n_vertices + 1;
-  const VertexID* incoming_edges = reinterpret_cast<const VertexID*>(out_offset + n_vertices + 1);
+  const VertexID* incoming_edges =
+      reinterpret_cast<const VertexID*>(out_offset + n_vertices + 1);
   const VertexID* outgoing_edges = incoming_edges + n_in_edges;
 
   uint32_t deg = use_outgoing ? outdegree[pivot_vid] : indegree[pivot_vid];
-  const VertexID* edges = use_outgoing
-      ? outgoing_edges + out_offset[pivot_vid]
-      : incoming_edges + in_offset[pivot_vid];
-  const uint32_t edge_base = use_outgoing
-      ? out_offset[pivot_vid]
-      : in_offset[pivot_vid];
+  const VertexID* edges = use_outgoing ? outgoing_edges + out_offset[pivot_vid]
+                                       : incoming_edges + in_offset[pivot_vid];
+  const uint32_t edge_base =
+      use_outgoing ? out_offset[pivot_vid] : in_offset[pivot_vid];
   const Attributes* edge_attrs = use_outgoing ? edge_attrs_out : edge_attrs_in;
 
   // Single-pass cooperative collection with a shared atomic counter.
@@ -115,7 +106,8 @@ __device__ inline uint32_t CollectNeighborValuesBlock(
       row = edge_base + i;
     } else {
       VertexID neighbor = edges[i];
-      attr = vertex_attrs ? vertex_attrs[neighbor].attr_map.find(attr_name) : nullptr;
+      attr = vertex_attrs ? vertex_attrs[neighbor].attr_map.find(attr_name)
+                          : nullptr;
       row = 0;
     }
     if (!attr) continue;
@@ -136,21 +128,14 @@ __device__ inline uint32_t CollectNeighborValuesBlock(
 // cap is unreachable (release needs ~130, debug -G callee needs 86), so every
 // launch died with error 701 and, with no post-launch check, silently returned
 // zeroed results. See consts.h for the budget arithmetic.
-__launch_bounds__(common::kFeatureRequestBlockDim)
-__global__ void ComputeFeaturesKernel(
-    const uint8_t* graph_data,
-    uint32_t n_vertices,
-    uint32_t n_in_edges,
-    uint32_t n_out_edges,
-    const Attributes* vertex_attrs,
-    const Attributes* edge_attrs_out,
-    const Attributes* edge_attrs_in,
-    const uint32_t* pivot_vertex_ids,
-    uint32_t n_pivots,
-    const FeatureRequest* requests,
-    uint32_t n_requests,
-    uint32_t max_neighbors,
-    FeatureValue* d_outputs) {
+__launch_bounds__(common::kFeatureRequestBlockDim) __global__
+    void ComputeFeaturesKernel(
+        const uint8_t* graph_data, uint32_t n_vertices, uint32_t n_in_edges,
+        uint32_t n_out_edges, const Attributes* vertex_attrs,
+        const Attributes* edge_attrs_out, const Attributes* edge_attrs_in,
+        const uint32_t* pivot_vertex_ids, uint32_t n_pivots,
+        const FeatureRequest* requests, uint32_t n_requests,
+        uint32_t max_neighbors, FeatureValue* d_outputs) {
   extern __shared__ uint8_t shared_mem[];
   FeatureValue* shared_buf = reinterpret_cast<FeatureValue*>(shared_mem);
   uint32_t* scratch = reinterpret_cast<uint32_t*>(
@@ -164,16 +149,14 @@ __global__ void ComputeFeaturesKernel(
 
   for (uint32_t req_idx = 0; req_idx < n_requests; ++req_idx) {
     uint32_t n_collected = CollectNeighborValuesBlock(
-        graph_data, n_vertices, n_in_edges, n_out_edges,
-        vertex_attrs, edge_attrs_out, edge_attrs_in, vid,
-        requests[req_idx].attr_name,
-        requests[req_idx].use_outgoing,
-        requests[req_idx].use_edge_attrs,
+        graph_data, n_vertices, n_in_edges, n_out_edges, vertex_attrs,
+        edge_attrs_out, edge_attrs_in, vid, requests[req_idx].attr_name,
+        requests[req_idx].use_outgoing, requests[req_idx].use_edge_attrs,
         shared_buf, max_neighbors, scratch);
 
     __syncthreads();
-    FeatureValue result = BlockApplyAggPrim(
-        requests[req_idx].prim, shared_buf, n_collected, ws);
+    FeatureValue result =
+        BlockApplyAggPrim(requests[req_idx].prim, shared_buf, n_collected, ws);
 
     if (threadIdx.x == 0) {
       d_outputs[pivot_idx * n_requests + req_idx] = result;
@@ -182,22 +165,14 @@ __global__ void ComputeFeaturesKernel(
   }
 }
 
-__launch_bounds__(common::kAllFeaturesBlockDim)
-__global__ void ComputeAllFeaturesKernel(
-    const uint8_t* graph_data,
-    uint32_t n_vertices,
-    uint32_t n_in_edges,
-    uint32_t n_out_edges,
-    const Attributes* vertex_attrs,
-    const Attributes* edge_attrs_out,
-    const Attributes* edge_attrs_in,
-    const uint32_t* pivot_vertex_ids,
-    uint32_t n_pivots,
-    AttributeName attr_name,
-    bool use_outgoing,
-    bool use_edge_attrs,
-    uint32_t max_neighbors,
-    AllFeatures* d_outputs) {
+__launch_bounds__(common::kAllFeaturesBlockDim) __global__
+    void ComputeAllFeaturesKernel(
+        const uint8_t* graph_data, uint32_t n_vertices, uint32_t n_in_edges,
+        uint32_t n_out_edges, const Attributes* vertex_attrs,
+        const Attributes* edge_attrs_out, const Attributes* edge_attrs_in,
+        const uint32_t* pivot_vertex_ids, uint32_t n_pivots,
+        AttributeName attr_name, bool use_outgoing, bool use_edge_attrs,
+        uint32_t max_neighbors, AllFeatures* d_outputs) {
   extern __shared__ uint8_t shared_mem[];
   FeatureValue* shared_buf = reinterpret_cast<FeatureValue*>(shared_mem);
   uint32_t* scratch = reinterpret_cast<uint32_t*>(
@@ -216,14 +191,13 @@ __global__ void ComputeAllFeaturesKernel(
   req.use_edge_attrs = use_edge_attrs;
 
   uint32_t n_collected = CollectNeighborValuesBlock(
-      graph_data, n_vertices, n_in_edges, n_out_edges,
-      vertex_attrs, edge_attrs_out, edge_attrs_in, vid,
-      req.attr_name, req.use_outgoing, req.use_edge_attrs,
-      shared_buf, max_neighbors, scratch);
+      graph_data, n_vertices, n_in_edges, n_out_edges, vertex_attrs,
+      edge_attrs_out, edge_attrs_in, vid, req.attr_name, req.use_outgoing,
+      req.use_edge_attrs, shared_buf, max_neighbors, scratch);
 
   __syncthreads();
-  AllFeatures result = BlockComputeAllFeaturesFromValues(
-      shared_buf, n_collected, ws);
+  AllFeatures result =
+      BlockComputeAllFeaturesFromValues(shared_buf, n_collected, ws);
 
   if (threadIdx.x == 0) {
     d_outputs[pivot_idx] = result;

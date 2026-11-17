@@ -14,103 +14,102 @@ namespace kernel {
 class MatrixOperationsKernelWrapper {
   using EdgeIndex = sics::matrixgraph::core::common::EdgeIndex;
 
-public:
-  static void
-  MatrixBitAnd(const cudaStream_t &stream,
-               const data_structures::DeviceOwnedBuffer<uint64_t> &matrix_a_buf,
-               const data_structures::DeviceOwnedBuffer<uint64_t> &matrix_b_buf,
-               data_structures::DeviceOwnedBuffer<uint64_t> *matrix_c_buf,
-               uint32_t m, uint32_t k, uint32_t n);
+ public:
+  static void MatrixBitAnd(
+      const cudaStream_t& stream,
+      const data_structures::DeviceOwnedBuffer<uint64_t>& matrix_a_buf,
+      const data_structures::DeviceOwnedBuffer<uint64_t>& matrix_b_buf,
+      data_structures::DeviceOwnedBuffer<uint64_t>* matrix_c_buf, uint32_t m,
+      uint32_t k, uint32_t n);
 
-  static void
-  MatrixBitCount(const cudaStream_t &stream,
-                 const data_structures::DeviceOwnedBuffer<uint64_t> &matrix_buf,
-                 data_structures::DeviceOwnedBuffer<uint64_t> *count_buf,
-                 uint64_t size);
+  static void MatrixBitCount(
+      const cudaStream_t& stream,
+      const data_structures::DeviceOwnedBuffer<uint64_t>& matrix_buf,
+      data_structures::DeviceOwnedBuffer<uint64_t>* count_buf, uint64_t size);
 
   static void InitBitTiledMatrixMetadataByLayoutMatrix(
-      const cudaStream_t &stream,
-      const data_structures::DeviceOwnedBuffer<uint64_t> &layout_matrix,
-      data_structures::DeviceOwnedBuffer<uint32_t> *tile_offset_row,
-      data_structures::DeviceOwnedBuffer<uint32_t> *tile_row_idx,
-      data_structures::DeviceOwnedBuffer<uint32_t> *tile_col_idx,
+      const cudaStream_t& stream,
+      const data_structures::DeviceOwnedBuffer<uint64_t>& layout_matrix,
+      data_structures::DeviceOwnedBuffer<uint32_t>* tile_offset_row,
+      data_structures::DeviceOwnedBuffer<uint32_t>* tile_row_idx,
+      data_structures::DeviceOwnedBuffer<uint32_t>* tile_col_idx,
       uint32_t tile_size);
 
   static void FillTiles(
-      const cudaStream_t &stream, size_t tile_size, size_t n_strips,
+      const cudaStream_t& stream, size_t tile_size, size_t n_strips,
       size_t n_nz_tile_a, size_t n_nz_tile_b, size_t n_nz_tile_c,
-      const data_structures::UnifiedOwnedBuffer<uint64_t> &layout_matrix_c,
-      const data_structures::UnifiedOwnedBuffer<uint32_t> &tile_offset_row_a,
-      const data_structures::UnifiedOwnedBuffer<uint32_t> &tile_offset_row_b,
-      const data_structures::UnifiedOwnedBuffer<uint32_t> &tile_offset_row_c,
-      const data_structures::UnifiedOwnedBuffer<uint32_t> &tile_row_idx_a,
-      const data_structures::UnifiedOwnedBuffer<uint32_t> &tile_row_idx_b,
-      const data_structures::UnifiedOwnedBuffer<uint32_t> &tile_row_idx_c,
-      const data_structures::UnifiedOwnedBuffer<uint32_t> &tile_col_idx_a,
-      const data_structures::UnifiedOwnedBuffer<uint32_t> &tile_col_idx_b,
-      const data_structures::UnifiedOwnedBuffer<uint32_t> &tile_col_idx_c,
-      const data_structures::UnifiedOwnedBuffer<uint64_t> &data_a,
-      const data_structures::UnifiedOwnedBuffer<uint64_t> &data_b,
-      data_structures::UnifiedOwnedBuffer<uint64_t> *data_c);
+      const data_structures::UnifiedOwnedBuffer<uint64_t>& layout_matrix_c,
+      const data_structures::UnifiedOwnedBuffer<uint32_t>& tile_offset_row_a,
+      const data_structures::UnifiedOwnedBuffer<uint32_t>& tile_offset_row_b,
+      const data_structures::UnifiedOwnedBuffer<uint32_t>& tile_offset_row_c,
+      const data_structures::UnifiedOwnedBuffer<uint32_t>& tile_row_idx_a,
+      const data_structures::UnifiedOwnedBuffer<uint32_t>& tile_row_idx_b,
+      const data_structures::UnifiedOwnedBuffer<uint32_t>& tile_row_idx_c,
+      const data_structures::UnifiedOwnedBuffer<uint32_t>& tile_col_idx_a,
+      const data_structures::UnifiedOwnedBuffer<uint32_t>& tile_col_idx_b,
+      const data_structures::UnifiedOwnedBuffer<uint32_t>& tile_col_idx_c,
+      const data_structures::UnifiedOwnedBuffer<uint64_t>& data_a,
+      const data_structures::UnifiedOwnedBuffer<uint64_t>& data_b,
+      data_structures::UnifiedOwnedBuffer<uint64_t>* data_c);
 
   static void FillCSRTiles(
-      const cudaStream_t &stream, size_t tile_size, size_t n_strips,
+      const cudaStream_t& stream, size_t tile_size, size_t n_strips,
       size_t n_nz_tile_a, size_t n_nz_tile_b, size_t n_nz_tile_c,
-      const data_structures::UnifiedOwnedBuffer<uint32_t> &csr_n_vertices_a,
-      const data_structures::UnifiedOwnedBuffer<uint32_t> &csr_n_vertices_b,
-      const data_structures::UnifiedOwnedBuffer<uint32_t> &tcsr_n_vertices_c,
-      const data_structures::UnifiedOwnedBuffer<uint64_t> &csr_n_edges_a,
-      const data_structures::UnifiedOwnedBuffer<uint64_t> &csr_n_edges_b,
-      const data_structures::UnifiedOwnedBuffer<uint64_t> &csr_n_edges_c,
-      const data_structures::UnifiedOwnedBuffer<uint64_t> &layout_matrix_c,
-      const data_structures::UnifiedOwnedBuffer<uint32_t> &tile_offset_row_a,
-      const data_structures::UnifiedOwnedBuffer<uint32_t> &tile_offset_row_b,
-      const data_structures::UnifiedOwnedBuffer<uint32_t> &tile_offset_row_c,
-      const data_structures::UnifiedOwnedBuffer<uint32_t> &tile_row_idx_a,
-      const data_structures::UnifiedOwnedBuffer<uint32_t> &tile_row_idx_b,
-      const data_structures::UnifiedOwnedBuffer<uint32_t> &tile_row_idx_c,
-      const data_structures::UnifiedOwnedBuffer<uint32_t> &tile_col_idx_a,
-      const data_structures::UnifiedOwnedBuffer<uint32_t> &tile_col_idx_b,
-      const data_structures::UnifiedOwnedBuffer<uint32_t> &tile_col_idx_c,
-      const data_structures::UnifiedOwnedBuffer<uint64_t> &csr_offset_a,
-      const data_structures::UnifiedOwnedBuffer<uint64_t> &csr_offset_b,
-      const data_structures::UnifiedOwnedBuffer<uint64_t> &csr_offset_c,
-      const data_structures::UnifiedOwnedBuffer<uint8_t> &data_a,
-      const data_structures::UnifiedOwnedBuffer<uint8_t> &data_b,
-      data_structures::UnifiedOwnedBuffer<uint8_t> *data_c);
+      const data_structures::UnifiedOwnedBuffer<uint32_t>& csr_n_vertices_a,
+      const data_structures::UnifiedOwnedBuffer<uint32_t>& csr_n_vertices_b,
+      const data_structures::UnifiedOwnedBuffer<uint32_t>& tcsr_n_vertices_c,
+      const data_structures::UnifiedOwnedBuffer<uint64_t>& csr_n_edges_a,
+      const data_structures::UnifiedOwnedBuffer<uint64_t>& csr_n_edges_b,
+      const data_structures::UnifiedOwnedBuffer<uint64_t>& csr_n_edges_c,
+      const data_structures::UnifiedOwnedBuffer<uint64_t>& layout_matrix_c,
+      const data_structures::UnifiedOwnedBuffer<uint32_t>& tile_offset_row_a,
+      const data_structures::UnifiedOwnedBuffer<uint32_t>& tile_offset_row_b,
+      const data_structures::UnifiedOwnedBuffer<uint32_t>& tile_offset_row_c,
+      const data_structures::UnifiedOwnedBuffer<uint32_t>& tile_row_idx_a,
+      const data_structures::UnifiedOwnedBuffer<uint32_t>& tile_row_idx_b,
+      const data_structures::UnifiedOwnedBuffer<uint32_t>& tile_row_idx_c,
+      const data_structures::UnifiedOwnedBuffer<uint32_t>& tile_col_idx_a,
+      const data_structures::UnifiedOwnedBuffer<uint32_t>& tile_col_idx_b,
+      const data_structures::UnifiedOwnedBuffer<uint32_t>& tile_col_idx_c,
+      const data_structures::UnifiedOwnedBuffer<uint64_t>& csr_offset_a,
+      const data_structures::UnifiedOwnedBuffer<uint64_t>& csr_offset_b,
+      const data_structures::UnifiedOwnedBuffer<uint64_t>& csr_offset_c,
+      const data_structures::UnifiedOwnedBuffer<uint8_t>& data_a,
+      const data_structures::UnifiedOwnedBuffer<uint8_t>& data_b,
+      data_structures::UnifiedOwnedBuffer<uint8_t>* data_c);
 
-  static void
-  Walk(const cudaStream_t &stream, size_t tile_size, size_t n_strips,
-       size_t n_nz_tile_a, size_t n_nz_tile_b,
-       const data_structures::UnifiedOwnedBuffer<uint32_t> &csr_n_vertices_a,
-       const data_structures::UnifiedOwnedBuffer<uint32_t> &csr_n_vertices_b,
-       const data_structures::UnifiedOwnedBuffer<uint64_t> &csr_n_edges_a,
-       const data_structures::UnifiedOwnedBuffer<uint64_t> &csr_n_edges_b,
-       const data_structures::UnifiedOwnedBuffer<uint32_t> &tile_offset_row_a,
-       const data_structures::UnifiedOwnedBuffer<uint32_t> &tile_offset_row_b,
-       const data_structures::UnifiedOwnedBuffer<uint32_t> &tile_row_idx_a,
-       const data_structures::UnifiedOwnedBuffer<uint32_t> &tile_row_idx_b,
-       const data_structures::UnifiedOwnedBuffer<uint32_t> &tile_col_idx_a,
-       const data_structures::UnifiedOwnedBuffer<uint32_t> &tile_col_idx_b,
-       const data_structures::UnifiedOwnedBuffer<uint64_t> &csr_offset_a,
-       const data_structures::UnifiedOwnedBuffer<uint64_t> &csr_offset_b,
-       const data_structures::UnifiedOwnedBuffer<uint8_t> &data_a,
-       const data_structures::UnifiedOwnedBuffer<uint8_t> &data_b,
-       data_structures::UnifiedOwnedBuffer<uint32_t> *edgelist_c,
-       data_structures::UnifiedOwnedBuffer<EdgeIndex> *output_offset);
+  static void Walk(
+      const cudaStream_t& stream, size_t tile_size, size_t n_strips,
+      size_t n_nz_tile_a, size_t n_nz_tile_b,
+      const data_structures::UnifiedOwnedBuffer<uint32_t>& csr_n_vertices_a,
+      const data_structures::UnifiedOwnedBuffer<uint32_t>& csr_n_vertices_b,
+      const data_structures::UnifiedOwnedBuffer<uint64_t>& csr_n_edges_a,
+      const data_structures::UnifiedOwnedBuffer<uint64_t>& csr_n_edges_b,
+      const data_structures::UnifiedOwnedBuffer<uint32_t>& tile_offset_row_a,
+      const data_structures::UnifiedOwnedBuffer<uint32_t>& tile_offset_row_b,
+      const data_structures::UnifiedOwnedBuffer<uint32_t>& tile_row_idx_a,
+      const data_structures::UnifiedOwnedBuffer<uint32_t>& tile_row_idx_b,
+      const data_structures::UnifiedOwnedBuffer<uint32_t>& tile_col_idx_a,
+      const data_structures::UnifiedOwnedBuffer<uint32_t>& tile_col_idx_b,
+      const data_structures::UnifiedOwnedBuffer<uint64_t>& csr_offset_a,
+      const data_structures::UnifiedOwnedBuffer<uint64_t>& csr_offset_b,
+      const data_structures::UnifiedOwnedBuffer<uint8_t>& data_a,
+      const data_structures::UnifiedOwnedBuffer<uint8_t>& data_b,
+      data_structures::UnifiedOwnedBuffer<uint32_t>* edgelist_c,
+      data_structures::UnifiedOwnedBuffer<EdgeIndex>* output_offset);
 
-  //static void Test();
+  // static void Test();
 
-  static void Count(const cudaStream_t &stream, size_t tile_size,
+  static void Count(const cudaStream_t& stream, size_t tile_size,
                     size_t n_strips, size_t n_nz_tile,
-                    const data_structures::UnifiedOwnedBuffer<uint64_t> &data,
-                    data_structures::UnifiedOwnedBuffer<uint64_t> *count);
+                    const data_structures::UnifiedOwnedBuffer<uint64_t>& data,
+                    data_structures::UnifiedOwnedBuffer<uint64_t>* count);
 };
 
-} // namespace kernel
-} // namespace task
-} // namespace core
-} // namespace matrixgraph
-} // namespace sics
+}  // namespace kernel
+}  // namespace task
+}  // namespace core
+}  // namespace matrixgraph
+}  // namespace sics
 
-#endif // MATRIXGRAPH_CORE_TASK_GPU_TASK_KERNEL_MATRIX_OPERATIONS_CUH_
+#endif  // MATRIXGRAPH_CORE_TASK_GPU_TASK_KERNEL_MATRIX_OPERATIONS_CUH_

@@ -1,15 +1,15 @@
 #ifndef MATRIXGRAPH_CORE_TASK_GPU_TASK_COMPUTE_FEATURES_CUH_
 #define MATRIXGRAPH_CORE_TASK_GPU_TASK_COMPUTE_FEATURES_CUH_
 
-#include <memory>
-#include <string>
-#include <vector>
-
 #include "core/data_structures/attributes.h"
 #include "core/data_structures/immutable_csr.cuh"
 #include "core/task/gpu_task/compute_features_types.h"
 #include "core/task/gpu_task/kernel/kernel_compute_features.cuh"
 #include "core/task/gpu_task/task_base.cuh"
+
+#include <memory>
+#include <string>
+#include <vector>
 
 namespace sics {
 namespace matrixgraph {
@@ -77,9 +77,8 @@ class ComputeFeaturesTask : public TaskBase {
    *                  `values` pointers only need to remain valid for the
    *                  duration of this call.
    */
-  __host__ void LoadAttributes(
-      uint32_t n_columns,
-      const ComputeFeaturesAttributeColumn* columns);
+  __host__ void LoadAttributes(uint32_t n_columns,
+                               const ComputeFeaturesAttributeColumn* columns);
 
   /**
    * @brief Load optional per-vertex labels.
@@ -123,7 +122,8 @@ class ComputeFeaturesTask : public TaskBase {
   /** @brief Release all device buffers owned by this task. */
   __host__ void FreeDeviceBuffers();
 
-  /** @brief Size in bytes of one element of the given MatrixGraph value type. */
+  /** @brief Size in bytes of one element of the given MatrixGraph value type.
+   */
   __host__ static size_t ValueTypeSize(MatrixGraphValueType type);
 
   /** @brief Convert an int32_t value-type code to the typed enum. */

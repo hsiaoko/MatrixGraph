@@ -1,12 +1,12 @@
 #ifndef MATRIXGRAPH_CORE_TASK_GPU_TASK_KERNEL_KERNEL_COMPUTE_FEATURES_CUH_
 #define MATRIXGRAPH_CORE_TASK_GPU_TASK_KERNEL_KERNEL_COMPUTE_FEATURES_CUH_
 
-#include <cuda_runtime.h>
-#include <cstdint>
-
 #include "core/common/types.h"
 #include "core/data_structures/attributes.h"
 #include "core/task/gpu_task/compute_features_types.h"
+
+#include <cstdint>
+#include <cuda_runtime.h>
 
 namespace sics {
 namespace matrixgraph {
@@ -63,19 +63,11 @@ constexpr uint32_t kComputeFeaturesMaxNeighbors = 256;
  * @return The typed feature value produced by the expression.
  */
 __device__ MGFeatureValue EvalExpr(
-    const MGPlanNode* plan,
-    const MGPlanNode* navs,
-    const MGCondNode* conds,
-    const Attributes* vertex_attrs,
-    const uint8_t* graph_data,
-    uint32_t n_vertices,
-    uint32_t n_in_edges,
-    uint32_t n_out_edges,
-    const uint32_t* labels,
-    uint32_t pivot_vid,
-    int32_t expr_idx,
-    MGFeatureValue* workspace,
-    uint32_t workspace_capacity);
+    const MGPlanNode* plan, const MGPlanNode* navs, const MGCondNode* conds,
+    const Attributes* vertex_attrs, const uint8_t* graph_data,
+    uint32_t n_vertices, uint32_t n_in_edges, uint32_t n_out_edges,
+    const uint32_t* labels, uint32_t pivot_vid, int32_t expr_idx,
+    MGFeatureValue* workspace, uint32_t workspace_capacity);
 
 /**
  * @brief Main kernel: one CUDA block per pivot, one thread per slot.
@@ -88,26 +80,14 @@ __device__ MGFeatureValue EvalExpr(
  *                            workspace_capacity * max_workspace_depth.
  */
 __global__ void ComputeFeaturesKernel(
-    const uint8_t* graph_data,
-    uint32_t n_vertices,
-    uint32_t n_in_edges,
-    uint32_t n_out_edges,
-    const uint32_t* labels,
-    const Attributes* vertex_attrs,
-    const uint32_t* pivot_vertex_ids,
-    uint32_t n_pivots,
-    const MGPlanNode* plan,
-    uint32_t n_plan_nodes,
-    const MGPlanNode* navs,
-    uint32_t n_navs,
-    const MGCondNode* conds,
-    uint32_t n_conds,
-    const int32_t* output_expr_indices,
-    uint32_t n_outputs,
-    MGFeatureValue* workspace,
-    uint32_t workspace_capacity,
-    uint32_t per_pivot_workspace,
-    MGFeatureValue* outputs);
+    const uint8_t* graph_data, uint32_t n_vertices, uint32_t n_in_edges,
+    uint32_t n_out_edges, const uint32_t* labels,
+    const Attributes* vertex_attrs, const uint32_t* pivot_vertex_ids,
+    uint32_t n_pivots, const MGPlanNode* plan, uint32_t n_plan_nodes,
+    const MGPlanNode* navs, uint32_t n_navs, const MGCondNode* conds,
+    uint32_t n_conds, const int32_t* output_expr_indices, uint32_t n_outputs,
+    MGFeatureValue* workspace, uint32_t workspace_capacity,
+    uint32_t per_pivot_workspace, MGFeatureValue* outputs);
 
 }  // namespace kernel
 }  // namespace task

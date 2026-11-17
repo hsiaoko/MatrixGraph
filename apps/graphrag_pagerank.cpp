@@ -1,14 +1,7 @@
-// GraphRAG wrapper: run MatrixGraph PageRank and write per-vertex scores to disk.
-#include <gflags/gflags.h>
-
-#include <cuda_runtime.h>
-#include <filesystem>
-#include <fstream>
-#include <iostream>
-#include <string>
-
-#include "core/common/types.h"
+// GraphRAG wrapper: run MatrixGraph PageRank and write per-vertex scores to
+// disk.
 #include "apps/backend_flag.h"
+#include "core/common/types.h"
 #include "core/data_structures/host_buffer.cuh"
 #include "core/data_structures/immutable_csr.cuh"
 #include "core/data_structures/unified_buffer.cuh"
@@ -18,6 +11,13 @@
 #include "core/util/cuda_check.cuh"
 #include "core/util/cuda_device.cuh"
 #include "core/util/cuda_prefetch.cuh"
+
+#include <cuda_runtime.h>
+#include <filesystem>
+#include <fstream>
+#include <gflags/gflags.h>
+#include <iostream>
+#include <string>
 
 DEFINE_string(g, "", "Path to the input CSR graph directory (required)");
 DEFINE_string(o, "", "Path to the output directory (required)");
@@ -101,15 +101,16 @@ int main(int argc, char* argv[]) {
         {reinterpret_cast<void*>(unified_page_ranks.GetPtr()),
          unified_page_ranks.GetSize()}};
     sics::matrixgraph::core::util::MatrixGraphPrefetchManagedToDevice(
-        primary_gpu, sics::matrixgraph::core::util::MatrixGraphCudaStreamsPerGpu(),
+        primary_gpu,
+        sics::matrixgraph::core::util::MatrixGraphCudaStreamsPerGpu(),
         prefetch);
 
     cudaStream_t stream;
     CUDA_CHECK(cudaStreamCreate(&stream));
 
     PageRankKernelWrapper::PageRank(
-        stream, g.get_num_vertices(), g.get_num_outgoing_edges(), unified_data_g,
-        unified_page_ranks, static_cast<float>(FLAGS_damping),
+        stream, g.get_num_vertices(), g.get_num_outgoing_edges(),
+        unified_data_g, unified_page_ranks, static_cast<float>(FLAGS_damping),
         static_cast<float>(FLAGS_epsilon), FLAGS_max_iter);
 
     CUDA_CHECK(cudaStreamDestroy(stream));
@@ -123,7 +124,8 @@ int main(int argc, char* argv[]) {
     std::filesystem::create_directories(FLAGS_o);
 
     // Write scores for every local vertex.
-    std::ofstream score_file(FLAGS_o + "/pagerank_scores.bin", std::ios::binary);
+    std::ofstream score_file(FLAGS_o + "/pagerank_scores.bin",
+                             std::ios::binary);
     score_file.write(reinterpret_cast<const char*>(page_ranks_ptr),
                      sizeof(float) * g.get_num_vertices());
     score_file.close();

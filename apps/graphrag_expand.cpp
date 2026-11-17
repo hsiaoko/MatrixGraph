@@ -2,12 +2,14 @@
 // MatrixGraph CSR and return the indices of expanded edges (into the CSR
 // outgoing_edges array). Python can then map these indices back to
 // edge Attributes / chunk_text.
-#include <gflags/gflags.h>
+#include "core/common/types.h"
+#include "core/data_structures/immutable_csr.cuh"
 
 #include <algorithm>
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
+#include <gflags/gflags.h>
 #include <iostream>
 #include <queue>
 #include <set>
@@ -15,15 +17,14 @@
 #include <unordered_set>
 #include <vector>
 
-#include "core/common/types.h"
-#include "core/data_structures/immutable_csr.cuh"
-
 DEFINE_string(g, "", "Path to the input CSR graph directory (required)");
-DEFINE_string(s, "", "Path to the seeds file: one local vertex id per line (required)");
+DEFINE_string(
+    s, "", "Path to the seeds file: one local vertex id per line (required)");
 DEFINE_string(o, "", "Path to the output directory (required)");
 DEFINE_int32(k, 2, "Maximum hop depth (default: 2)");
 DEFINE_int32(max_degree, 10,
-             "Max outgoing edges to expand per vertex per hop; 0 = unlimited (default: 10)");
+             "Max outgoing edges to expand per vertex per hop; 0 = unlimited "
+             "(default: 10)");
 
 using sics::matrixgraph::core::common::EdgeIndex;
 using sics::matrixgraph::core::common::VertexID;
@@ -71,13 +72,10 @@ std::vector<VertexID> LoadSeeds(const std::string& path) {
 // Returns:
 //   - expanded_edge_indices: offsets into CSR outgoing_edges (sorted, unique)
 //   - reached_vertices: local vertex ids that are reachable within k hops
-void Expand(
-    const ImmutableCSR& g,
-    const std::vector<VertexID>& seeds,
-    int max_hop,
-    int max_degree,
-    std::vector<EdgeIndex>* expanded_edge_indices,
-    std::vector<VertexID>* reached_vertices) {
+void Expand(const ImmutableCSR& g, const std::vector<VertexID>& seeds,
+            int max_hop, int max_degree,
+            std::vector<EdgeIndex>* expanded_edge_indices,
+            std::vector<VertexID>* reached_vertices) {
   std::set<EdgeIndex> edge_set;
   std::unordered_set<VertexID> visited;
   std::queue<std::pair<VertexID, int>> q;
@@ -169,11 +167,9 @@ int main(int argc, char* argv[]) {
     summary_file.close();
 
     std::cout << "[GraphRAG Expand] seeds=" << seeds.size()
-              << ", hop=" << FLAGS_k
-              << ", max_degree=" << FLAGS_max_degree
+              << ", hop=" << FLAGS_k << ", max_degree=" << FLAGS_max_degree
               << ", edges=" << edge_indices.size()
-              << ", vertices=" << reached_vertices.size()
-              << std::endl;
+              << ", vertices=" << reached_vertices.size() << std::endl;
     std::cout << "[GraphRAG Expand] Wrote " << edge_indices.size()
               << " edge indices to " << FLAGS_o << "/expanded_edges.bin"
               << std::endl;

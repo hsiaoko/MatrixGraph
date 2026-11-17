@@ -9,7 +9,8 @@ namespace core {
 namespace util {
 
 // Optional launch geometry for WCC / BFS / PageRank kernels (host-side reads at
-// kernel launch). When unset or invalid, callers pass their compile-time defaults.
+// kernel launch). When unset or invalid, callers pass their compile-time
+// defaults.
 inline unsigned MatrixGraphEnvLaunchGridDim(unsigned default_grid) {
   const char* s = std::getenv("MG_GPU_GRID");
   if (s != nullptr && s[0] != '\0') {

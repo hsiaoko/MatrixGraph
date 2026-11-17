@@ -1,16 +1,15 @@
 #ifndef MATRIXGRAPH_CORE_DATA_STRUCTURES_CSR_TILED_MATRIX_CUH_
 #define MATRIXGRAPH_CORE_DATA_STRUCTURES_CSR_TILED_MATRIX_CUH_
 
-#include <memory>
-#include <stdint.h>
-
-#include <cuda_runtime.h>
-
 #include "core/common/types.h"
 #include "core/data_structures/metadata.h"
 #include "core/util/bitmap.h"
 #include "core/util/bitmap_no_ownership.h"
 #include "core/util/gpu_bitmap.cuh"
+
+#include <cuda_runtime.h>
+#include <memory>
+#include <stdint.h>
 
 namespace sics {
 namespace matrixgraph {
@@ -25,23 +24,23 @@ class CSRTiledMatrix {
   using GPUBitmap = sics::matrixgraph::core::util::GPUBitmap;
   using BitmapNoOwnerShip = sics::matrixgraph::core::util::BitmapNoOwnerShip;
 
-public:
+ public:
   CSRTiledMatrix() = default;
 
   ~CSRTiledMatrix();
 
-  void Init(const TiledMatrixMetadata &metadata,
-            GPUBitmap *nz_tile_bm = nullptr);
+  void Init(const TiledMatrixMetadata& metadata,
+            GPUBitmap* nz_tile_bm = nullptr);
 
-  void Init(VertexID tile_size, VertexID n_strips, Bitmap *bm);
+  void Init(VertexID tile_size, VertexID n_strips, Bitmap* bm);
 
-  void SetNzBitmapPtr(GPUBitmap *nz_bitmap_ptr) { nz_tile_bm_ = nz_bitmap_ptr; }
+  void SetNzBitmapPtr(GPUBitmap* nz_bitmap_ptr) { nz_tile_bm_ = nz_bitmap_ptr; }
 
-  void SetData(uint8_t *buf) { data_ = buf; }
+  void SetData(uint8_t* buf) { data_ = buf; }
 
   void InitData(uint64_t size);
 
-  void SetCSRMetadata(const SubGraphMetadata &sub_graph_metadata, VertexID i) {
+  void SetCSRMetadata(const SubGraphMetadata& sub_graph_metadata, VertexID i) {
     metadata_vec_[i] = sub_graph_metadata;
   }
 
@@ -61,7 +60,7 @@ public:
     return metadata_vec_;
   };
 
-  void SetCSRMetadata(std::vector<SubGraphMetadata> &metadata) {
+  void SetCSRMetadata(std::vector<SubGraphMetadata>& metadata) {
     metadata_vec_ = metadata;
   };
 
@@ -69,48 +68,48 @@ public:
     return metadata_vec_[i];
   }
 
-  VertexID *GetTileOffsetRowPtr() const { return tile_offset_row_; }
+  VertexID* GetTileOffsetRowPtr() const { return tile_offset_row_; }
 
-  VertexID *GetTileRowIdxPtr() const { return tile_row_idx_; }
+  VertexID* GetTileRowIdxPtr() const { return tile_row_idx_; }
 
-  VertexID *GetTileColIdxPtr() const { return tile_col_idx_; }
+  VertexID* GetTileColIdxPtr() const { return tile_col_idx_; }
 
-  GPUBitmap *GetNzTileBitmapPtr() const { return nz_tile_bm_; }
+  GPUBitmap* GetNzTileBitmapPtr() const { return nz_tile_bm_; }
 
-  uint64_t *GetDataPtrByIdx(uint32_t idx) const;
+  uint64_t* GetDataPtrByIdx(uint32_t idx) const;
 
-  uint64_t *GetCSROffsetPtr() const { return csr_offset_; }
+  uint64_t* GetCSROffsetPtr() const { return csr_offset_; }
 
-  uint8_t *GetCSRBasePtrByIdx(uint32_t idx) const;
+  uint8_t* GetCSRBasePtrByIdx(uint32_t idx) const;
 
-  uint8_t *GetDataPtr() const { return data_; }
+  uint8_t* GetDataPtr() const { return data_; }
 
   void InitDataPtr(size_t size) {
-    cudaHostAlloc((void **)&data_, size, cudaHostAllocDefault);
+    cudaHostAlloc((void**)&data_, size, cudaHostAllocDefault);
   }
 
   uint64_t GetDataBufferSize() const;
 
   void InitMetadataVec(VertexID n_csr) { metadata_vec_.resize(n_csr); }
 
-private:
+ private:
   TiledMatrixMetadata metadata_;
 
   std::vector<SubGraphMetadata> metadata_vec_;
 
-  GPUBitmap *nz_tile_bm_ = nullptr;
+  GPUBitmap* nz_tile_bm_ = nullptr;
 
-  uint8_t *data_ = nullptr;
-  uint64_t *csr_offset_ = nullptr;
+  uint8_t* data_ = nullptr;
+  uint64_t* csr_offset_ = nullptr;
 
-  VertexID *tile_offset_row_ = nullptr;
-  VertexID *tile_row_idx_ = nullptr;
-  VertexID *tile_col_idx_ = nullptr;
+  VertexID* tile_offset_row_ = nullptr;
+  VertexID* tile_row_idx_ = nullptr;
+  VertexID* tile_col_idx_ = nullptr;
 };
 
-} // namespace data_structures
-} // namespace core
-} // namespace matrixgraph
-} // namespace sics
+}  // namespace data_structures
+}  // namespace core
+}  // namespace matrixgraph
+}  // namespace sics
 
-#endif // MATRIXGRAPH_CORE_DATA_STRUCTURES_CSR_TILED_MATRIX_CUH_
+#endif  // MATRIXGRAPH_CORE_DATA_STRUCTURES_CSR_TILED_MATRIX_CUH_

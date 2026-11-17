@@ -1,17 +1,3 @@
-#include <algorithm>
-#include <atomic>
-#include <chrono>
-#include <cstdint>
-#include <fstream>
-#include <functional>
-#include <unordered_set>
-#include "core/util/parallel.h"
-#include <iostream>
-#include <mutex>
-#include <queue>
-#include <thread>
-#include <vector>
-
 #include "core/common/consts.h"
 #include "core/common/types.h"
 #include "core/data_structures/exec_plan.cuh"
@@ -24,14 +10,28 @@
 #include "core/data_structures/unified_buffer.cuh"
 #include "core/data_structures/woj_exec_plan.cuh"
 #include "core/data_structures/woj_matches.cuh"
-#include "core/task/cpu_task/subiso_cpu.cuh"
 #include "core/task/cpu_task/min_wise_filter.h"
+#include "core/task/cpu_task/subiso_cpu.cuh"
 #include "core/task/gpu_task/kernel/algorithms/hash.cuh"
 #include "core/task/gpu_task/kernel/algorithms/sort.cuh"
 #include "core/task/gpu_task/matrix_ops.cuh"
 #include "core/util/bitmap_no_ownership.h"
 #include "core/util/bitmap_ownership.h"
 #include "core/util/format_converter.cuh"
+#include "core/util/parallel.h"
+
+#include <algorithm>
+#include <atomic>
+#include <chrono>
+#include <cstdint>
+#include <fstream>
+#include <functional>
+#include <iostream>
+#include <mutex>
+#include <queue>
+#include <thread>
+#include <unordered_set>
+#include <vector>
 
 namespace sics {
 
@@ -62,16 +62,16 @@ using WOJExecutionPlan =
     sics::matrixgraph::core::data_structures::WOJExecutionPlan;
 using ExecutionPlan = sics::matrixgraph::core::data_structures::ExecutionPlan;
 using BitmapOwnership = sics::matrixgraph::core::util::BitmapOwnership;
+using sics::matrixgraph::core::common::kMaxMatchTableRows;
 using sics::matrixgraph::core::common::kMaxNumLocalWeft;
 using sics::matrixgraph::core::common::kMaxNumWeft;
-using sics::matrixgraph::core::common::kMaxMatchTableRows;
 using sics::matrixgraph::core::common::kMaxVertexID;
+using sics::matrixgraph::core::common::kSubIsoLocalMatchesSizeBuffer;
 using sics::matrixgraph::core::common::kSubIsoMaxBacktrackNodes;
 using sics::matrixgraph::core::common::kSubIsoMaxMsPerWeft;
 using sics::matrixgraph::core::common::kSubIsoMaxValidateWefts;
-using sics::matrixgraph::core::common::kSubIsoValidateMatchingTimeoutSec;
 using sics::matrixgraph::core::common::kSubIsoProgressPrintInterval;
-using sics::matrixgraph::core::common::kSubIsoLocalMatchesSizeBuffer;
+using sics::matrixgraph::core::common::kSubIsoValidateMatchingTimeoutSec;
 using BitmapNoOwnerShip = sics::matrixgraph::core::util::BitmapNoOwnerShip;
 using sics::matrixgraph::core::common::kDefaultHeapCapacity;
 
@@ -199,24 +199,24 @@ static void BuildBloomSignatures(const ImmutableCSR& csr,
   auto step = worker.size();
 
   ParallelFor(worker.begin(), worker.end(),
-      [step, n, &csr, &signatures, labels](auto w) {
-        for (VertexID v = w; v < n; v += step) {
-          uint64_t sig = 0;
-          auto out_deg = csr.GetOutDegreeByLocalID(v);
-          auto out_edges = csr.GetOutgoingEdgesByLocalID(v);
-          for (VertexID i = 0; i < out_deg; ++i) {
-            VertexLabel lbl = labels[out_edges[i]];
-            if (lbl < 64) sig |= (1ULL << lbl);
-          }
-          auto in_deg = csr.GetInDegreeByLocalID(v);
-          auto in_edges = csr.GetIncomingEdgesByLocalID(v);
-          for (VertexID i = 0; i < in_deg; ++i) {
-            VertexLabel lbl = labels[in_edges[i]];
-            if (lbl < 64) sig |= (1ULL << lbl);
-          }
-          signatures[v] = sig;
-        }
-      });
+              [step, n, &csr, &signatures, labels](auto w) {
+                for (VertexID v = w; v < n; v += step) {
+                  uint64_t sig = 0;
+                  auto out_deg = csr.GetOutDegreeByLocalID(v);
+                  auto out_edges = csr.GetOutgoingEdgesByLocalID(v);
+                  for (VertexID i = 0; i < out_deg; ++i) {
+                    VertexLabel lbl = labels[out_edges[i]];
+                    if (lbl < 64) sig |= (1ULL << lbl);
+                  }
+                  auto in_deg = csr.GetInDegreeByLocalID(v);
+                  auto in_edges = csr.GetIncomingEdgesByLocalID(v);
+                  for (VertexID i = 0; i < in_deg; ++i) {
+                    VertexLabel lbl = labels[in_edges[i]];
+                    if (lbl < 64) sig |= (1ULL << lbl);
+                  }
+                  signatures[v] = sig;
+                }
+              });
 }
 
 static inline uint64_t PatternVertexNeighborLabelMask(VertexID u_idx,
@@ -251,8 +251,8 @@ static thread_local std::vector<uint32_t> tl_filter_visited;
 static thread_local uint32_t tl_filter_stamp = 0;
 
 static void BuildFilterCache(const ImmutableCSR& csr,
-                             std::vector<VertexFilterCache>& cache,
-                             int hop, int k) {
+                             std::vector<VertexFilterCache>& cache, int hop,
+                             int k) {
   auto n = csr.get_num_vertices();
   cache.resize(n);
 
@@ -261,8 +261,8 @@ static void BuildFilterCache(const ImmutableCSR& csr,
   std::iota(worker.begin(), worker.end(), 0);
   auto step = worker.size();
 
-  ParallelFor(worker.begin(), worker.end(),
-      [step, n, hop, k, &csr, &cache](auto w) {
+  ParallelFor(
+      worker.begin(), worker.end(), [step, n, hop, k, &csr, &cache](auto w) {
         for (VertexID v = w; v < n; v += step) {
           auto& fc = cache[v];
 
@@ -272,7 +272,9 @@ static void BuildFilterCache(const ImmutableCSR& csr,
           uint32_t hash_freq[16] = {0};
           VertexID out_min = kMaxVertexID;
 
-          detail::CollectEllHopOutLabels(csr, v, hop, out_bitmap, hash_freq, out_min, tl_filter_visited, tl_filter_stamp);
+          detail::CollectEllHopOutLabels(csr, v, hop, out_bitmap, hash_freq,
+                                         out_min, tl_filter_visited,
+                                         tl_filter_stamp);
           fc.out_neighbor_label_count = out_bitmap.Count();
           fc.out_min_hash = out_min;
 
@@ -294,7 +296,9 @@ static void BuildFilterCache(const ImmutableCSR& csr,
           memset(hash_freq, 0, sizeof(hash_freq));
           VertexID in_min = kMaxVertexID;
 
-          detail::CollectEllHopInLabels(csr, v, hop, in_bitmap, hash_freq, in_min, tl_filter_visited, tl_filter_stamp);
+          detail::CollectEllHopInLabels(csr, v, hop, in_bitmap, hash_freq,
+                                        in_min, tl_filter_visited,
+                                        tl_filter_stamp);
           fc.in_neighbor_label_count = in_bitmap.Count();
           fc.in_min_hash = in_min;
 
@@ -417,7 +421,6 @@ static inline bool LabelDegreeFilter(VertexID u_idx, VertexID v_idx,
          g.GetInDegreeByLocalID(v_idx) >= p.GetInDegreeByLocalID(u_idx);
 }
 
-
 static bool NeighborLabelCounterFilter(VertexID u_idx, VertexID v_idx,
                                        const ImmutableCSR& /*p*/,
                                        const ImmutableCSR& /*g*/) {
@@ -473,7 +476,7 @@ static bool RuntimeNLCFilter(VertexID u_idx, VertexID v_idx,
 }
 
 static bool MinWiseIPFilter(VertexID u_idx, VertexID v_idx,
-                              const ImmutableCSR& p, const ImmutableCSR& g) {
+                            const ImmutableCSR& p, const ImmutableCSR& g) {
   auto u_label = p.GetVLabelBasePointer()[u_idx];
   auto v_label = g.GetVLabelBasePointer()[v_idx];
   if (u_label != v_label) return false;
@@ -588,7 +591,8 @@ static bool Filter(VertexID u_idx, VertexID v_idx, const ImmutableCSR& p,
   if (v_idx == kMaxVertexID) return false;
 
   // Manually reordered filter pipeline for experimentation:
-  // min-wise-bloom -> nlc -> label -> label-degree -> runtime-nlc -> lpf -> bloom.
+  // min-wise-bloom -> nlc -> label -> label-degree -> runtime-nlc -> lpf ->
+  // bloom.
 
   // 1. k-min-wise Bloom filter.
   if (g_enable_min_wise_bloom_filter) {
@@ -874,7 +878,8 @@ static std::vector<WOJMatches*> WOJFilter(
     VertexID src_idx = p.GetLocalIDByGlobalID(u_src);
     VertexID dst_idx = p.GetLocalIDByGlobalID(u_dst);
 
-    ParallelFor(worker.begin(), worker.end(),
+    ParallelFor(
+        worker.begin(), worker.end(),
         [step, &p, &g, eid, u_src, u_dst, src_idx, dst_idx, &exec_plan,
          &woj_matches_vec, &m_vec, &m_unified_buffer_vec](auto w) {
           for (VertexID v_idx = w; v_idx < g.get_num_vertices();
@@ -910,7 +915,8 @@ static inline void Join(VertexID /*n_vertices_g*/,
                         const WOJMatches& left_woj_matches,
                         const WOJMatches& right_woj_matches,
                         WOJMatches* output_woj_matches, VertexID left_hash_idx,
-                        VertexID right_hash_idx, BitmapOwnership& /*right_visited*/,
+                        VertexID right_hash_idx,
+                        BitmapOwnership& /*right_visited*/,
                         BitmapOwnership& /*jump_visited*/) {
   auto parallelism = std::thread::hardware_concurrency();
   std::vector<size_t> worker(parallelism);
@@ -929,7 +935,8 @@ static inline void Join(VertexID /*n_vertices_g*/,
   VertexID right_y_offset = right_woj_matches.get_y_offset();
   VertexID* output_y_offset_ptr = output_woj_matches->get_y_offset_ptr();
 
-  ParallelFor(worker.begin(), worker.end(),
+  ParallelFor(
+      worker.begin(), worker.end(),
       [step, &left_woj_matches, &right_woj_matches, &left_data, &right_data,
        &output_data, left_x_offset, right_x_offset, output_x_offset,
        left_y_offset, right_y_offset, left_hash_idx, right_hash_idx,
@@ -1145,10 +1152,10 @@ static void DFSExtend(
 
     if ((pre_v_idx == kMaxVertexID) ^ (u_src == kMaxVertexID)) continue;
 
-    //if (!LabelFilter(u_dst, v_idx, p, g)) {
-    //  __sync_fetch_and_add(&label_filter_count, 1);
-    //  continue;
-    //}
+    // if (!LabelFilter(u_dst, v_idx, p, g)) {
+    //   __sync_fetch_and_add(&label_filter_count, 1);
+    //   continue;
+    // }
 
     if (level == 1) {
       if (!MatrixFilter(u_src, pre_v_idx, p, g, m_vec, m_unified_buffer_vec,
@@ -1216,8 +1223,8 @@ static inline void Enumerating(
         LocalMatches local_matches;
         local_matches.data =
             new VertexID[exec_plan.get_n_edges() * 2 * kMaxNumLocalWeft]();
-        local_matches.size =
-            new VertexID[exec_plan.get_n_edges() + kSubIsoLocalMatchesSizeBuffer]();
+        local_matches.size = new VertexID[exec_plan.get_n_edges() +
+                                          kSubIsoLocalMatchesSizeBuffer]();
         return local_matches;
       });
 
@@ -1236,10 +1243,11 @@ static inline void Enumerating(
   }
 
   std::cout << "Enumerating" << std::endl;
-  ParallelFor(worker.begin(), worker.end(),
+  ParallelFor(
+      worker.begin(), worker.end(),
       [step, &mtx, &p, &g, &exec_plan, &m_vec, &m_unified_buffer_vec, &matches,
-       &local_matches_vec, &matches_visited_pairs_vec, &rejected_pairs_vec](
-          auto w) {
+       &local_matches_vec, &matches_visited_pairs_vec,
+       &rejected_pairs_vec](auto w) {
         auto& matches_visited_pairs = matches_visited_pairs_vec[w];
 
         auto& local_matches = local_matches_vec[w];
@@ -1276,9 +1284,8 @@ static inline void Enumerating(
               int weft_size = 0;
               for (VertexID _ = 0; _ < exec_plan.get_n_edges(); _++) {
                 weft_size += local_matches.size[_];
-                matches->GetVCandidateOffsetPtr()[weft_idx *
-                                                      (exec_plan.get_n_edges() + 1) +
-                                                  _ + 1] =
+                matches->GetVCandidateOffsetPtr()
+                    [weft_idx * (exec_plan.get_n_edges() + 1) + _ + 1] =
                     matches->GetVCandidateOffsetPtr()
                         [weft_idx * (exec_plan.get_n_edges() + 1) + _] +
                     local_matches.size[_];
@@ -1324,9 +1331,9 @@ static bool ValidateWeft(const ImmutableCSR& p, const ImmutableCSR& g,
   for (VertexID e = 0; e < n_edges; ++e) {
     auto offset =
         matches->GetVCandidateOffsetPtr()[weft_id * (n_edges + 1) + e];
-    auto size = matches->GetVCandidateOffsetPtr()[weft_id * (n_edges + 1) +
-                                                  e + 1] -
-                offset;
+    auto size =
+        matches->GetVCandidateOffsetPtr()[weft_id * (n_edges + 1) + e + 1] -
+        offset;
     edge_cands[e].reserve(size);
     for (VertexID c = 0; c < size; ++c) {
       auto idx = weft_id * n_edges * 2 * matches->get_max_n_local_weft() +
@@ -1344,7 +1351,8 @@ static bool ValidateWeft(const ImmutableCSR& p, const ImmutableCSR& g,
   auto weft_start_time = std::chrono::steady_clock::now();
   auto time_exceeded = [&]() -> bool {
     auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(
-        std::chrono::steady_clock::now() - weft_start_time).count();
+                  std::chrono::steady_clock::now() - weft_start_time)
+                  .count();
     return ms > (long long)max_ms_per_weft;
   };
 
@@ -1389,8 +1397,12 @@ static bool ValidateWeft(const ImmutableCSR& p, const ImmutableCSR& g,
     // Filter edge candidates by current vertex candidates.
     for (VertexID e = 0; e < n_edges; ++e) {
       auto h = matches->GetHeader()[e];
-      VertexID u_src_local = (h.first == kMaxVertexID) ? kMaxVertexID : p.GetLocalIDByGlobalID(h.first);
-      VertexID u_dst_local = (h.second == kMaxVertexID) ? kMaxVertexID : p.GetLocalIDByGlobalID(h.second);
+      VertexID u_src_local = (h.first == kMaxVertexID)
+                                 ? kMaxVertexID
+                                 : p.GetLocalIDByGlobalID(h.first);
+      VertexID u_dst_local = (h.second == kMaxVertexID)
+                                 ? kMaxVertexID
+                                 : p.GetLocalIDByGlobalID(h.second);
       auto& ecands = edge_cands[e];
       size_t write_idx = 0;
       for (size_t i = 0; i < ecands.size(); ++i) {
@@ -1465,7 +1477,8 @@ static bool ValidateWeft(const ImmutableCSR& p, const ImmutableCSR& g,
   std::function<bool(VertexID)> dfs = [&](VertexID depth) -> bool {
     if (++nodes_visited > max_nodes) return false;
     auto elapsed_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
-        std::chrono::steady_clock::now() - dfs_start_time).count();
+                          std::chrono::steady_clock::now() - dfs_start_time)
+                          .count();
     if (elapsed_ms > (long long)max_ms_per_weft) return false;
     if (depth == n_pattern_vertices) {
       bool ok = true;
@@ -1476,7 +1489,8 @@ static bool ValidateWeft(const ImmutableCSR& p, const ImmutableCSR& g,
           if (u_local >= nbr_local) continue;
           VertexID v_u_local = g.GetLocalIDByGlobalID(mapping[u_local]);
           VertexID v_nbr_local = g.GetLocalIDByGlobalID(mapping[nbr_local]);
-          if (v_u_local >= g.get_num_vertices() || v_nbr_local >= g.get_num_vertices()) {
+          if (v_u_local >= g.get_num_vertices() ||
+              v_nbr_local >= g.get_num_vertices()) {
             ok = false;
             break;
           }
@@ -1577,9 +1591,9 @@ static void RewriteWeftWithMapping(const ImmutableCSR& p, Matches* matches,
       dst = mapping[u_dst_local];
     }
 
-    size_t base = static_cast<size_t>(weft_id) * n_edges * 2 *
-                      max_n_local_weft +
-                  i * 2 * max_n_local_weft;
+    size_t base =
+        static_cast<size_t>(weft_id) * n_edges * 2 * max_n_local_weft +
+        i * 2 * max_n_local_weft;
     data_ptr[base] = src;
     data_ptr[base + 1] = dst;
 
@@ -1594,10 +1608,10 @@ static void RewriteWeftWithMapping(const ImmutableCSR& p, Matches* matches,
   offset_ptr[weft_id * (n_edges + 1) + n_edges] = n_edges;
 }
 
-static void ValidateMatching(const ImmutableCSR& p, const ImmutableCSR& g,
-                             const ExecutionPlan& exec_plan, Matches* matches,
-                             VertexID max_wefts =
-                                 std::numeric_limits<VertexID>::max()) {
+static void ValidateMatching(
+    const ImmutableCSR& p, const ImmutableCSR& g,
+    const ExecutionPlan& exec_plan, Matches* matches,
+    VertexID max_wefts = std::numeric_limits<VertexID>::max()) {
   std::cout << "\tValidateMatching (max_wefts=" << max_wefts << ") ..."
             << std::endl;
   VertexID invalid_count = 0;
@@ -1618,7 +1632,8 @@ static void ValidateMatching(const ImmutableCSR& p, const ImmutableCSR& g,
       RewriteWeftWithMapping(p, matches, weft_id, mapping);
     }
     auto elapsed_sec = std::chrono::duration_cast<std::chrono::seconds>(
-        std::chrono::steady_clock::now() - global_start).count();
+                           std::chrono::steady_clock::now() - global_start)
+                           .count();
     if (elapsed_sec >
         static_cast<decltype(elapsed_sec)>(kSubIsoValidateMatchingTimeoutSec)) {
       std::cout << "\tValidateMatching timed out after "
@@ -1954,39 +1969,45 @@ void SubIsoCPU::Run() {
 
   std::cout << "=== Filter Counts ===" << std::endl;
   std::cout << "Total Filters:      " << filter_count << std::endl;
-  std::cout << "Label Filters:      " << label_filter_count << " (calls: "
-            << label_filter_calls << ", survivors: "
-            << (label_filter_calls - label_filter_count) << ")" << std::endl;
+  std::cout << "Label Filters:      " << label_filter_count
+            << " (calls: " << label_filter_calls
+            << ", survivors: " << (label_filter_calls - label_filter_count)
+            << ")" << std::endl;
   std::cout << "Label Degree Filters:      " << label_degree_filter_count
             << " (calls: " << label_degree_filter_calls << ", survivors: "
-            << (label_degree_filter_calls - label_degree_filter_count)
-            << ")" << std::endl;
-  std::cout << "NLC Filters:        " << nlc_filter_count << " (calls: "
-            << nlc_filter_calls << ", survivors: "
-            << (nlc_filter_calls - nlc_filter_count) << ")" << std::endl;
-  std::cout << "Runtime NLC Filters:" << runtime_nlc_filter_count << " (calls: "
-            << runtime_nlc_filter_calls << ", survivors: "
+            << (label_degree_filter_calls - label_degree_filter_count) << ")"
+            << std::endl;
+  std::cout << "NLC Filters:        " << nlc_filter_count
+            << " (calls: " << nlc_filter_calls
+            << ", survivors: " << (nlc_filter_calls - nlc_filter_count) << ")"
+            << std::endl;
+  std::cout << "Runtime NLC Filters:" << runtime_nlc_filter_count
+            << " (calls: " << runtime_nlc_filter_calls << ", survivors: "
             << (runtime_nlc_filter_calls - runtime_nlc_filter_count) << ")"
             << std::endl;
-  std::cout << "LPF Filters:        " << lpf_filter_count << " (calls: "
-            << lpf_filter_calls << ", survivors: "
-            << (lpf_filter_calls - lpf_filter_count) << ")" << std::endl;
-  std::cout << "Bloom Filters:      " << bloom_filter_count << " (calls: "
-            << bloom_filter_calls << ", survivors: "
-            << (bloom_filter_calls - bloom_filter_count) << ")" << std::endl;
+  std::cout << "LPF Filters:        " << lpf_filter_count
+            << " (calls: " << lpf_filter_calls
+            << ", survivors: " << (lpf_filter_calls - lpf_filter_count) << ")"
+            << std::endl;
+  std::cout << "Bloom Filters:      " << bloom_filter_count
+            << " (calls: " << bloom_filter_calls
+            << ", survivors: " << (bloom_filter_calls - bloom_filter_count)
+            << ")" << std::endl;
   std::cout << "Min-Wise Bloom Filters: " << min_wise_bloom_filter_count
             << " (calls: " << min_wise_bloom_filter_calls << ", survivors: "
             << (min_wise_bloom_filter_calls - min_wise_bloom_filter_count)
             << ")" << std::endl;
   std::cout << "LCF Filters:        " << lcf_filter_count << std::endl;
-  std::cout << "IP Filters:        " << ip_filter_count << " (calls: "
-            << ip_filter_calls << ", survivors: "
-            << (ip_filter_calls - ip_filter_count) << ")" << std::endl;
+  std::cout << "IP Filters:        " << ip_filter_count
+            << " (calls: " << ip_filter_calls
+            << ", survivors: " << (ip_filter_calls - ip_filter_count) << ")"
+            << std::endl;
   std::cout << "GNN Filters:        " << gnn_filter_count << std::endl;
   std::cout << "Index Filters:        " << index_filter_count << std::endl;
 
   std::cout << "\n=== Filter Survivors & Delta H ===" << std::endl;
-  auto print_survivor_dh = [](const char* name, int64_t calls, int64_t rejects) {
+  auto print_survivor_dh = [](const char* name, int64_t calls,
+                              int64_t rejects) {
     if (calls == 0) return;
     int64_t survivors = calls - rejects;
     double p = static_cast<double>(rejects) / calls;
@@ -2021,7 +2042,7 @@ void SubIsoCPU::Run() {
   std::cout << "Runtime NLC:  " << runtime_nlc_filter_cycles.load()
             << " cycles total, "
             << avg_cycles(runtime_nlc_filter_cycles.load(),
-                         runtime_nlc_filter_count)
+                          runtime_nlc_filter_count)
             << " cycles/call" << std::endl;
   std::cout << "LPF:          " << lpf_filter_cycles.load() << " cycles total, "
             << avg_cycles(lpf_filter_cycles.load(), lpf_filter_count)
@@ -2033,7 +2054,7 @@ void SubIsoCPU::Run() {
   std::cout << "Min-Wise-Bloom: " << min_wise_bloom_filter_cycles.load()
             << " cycles total, "
             << avg_cycles(min_wise_bloom_filter_cycles.load(),
-                         min_wise_bloom_filter_count)
+                          min_wise_bloom_filter_count)
             << " cycles/call" << std::endl;
   std::cout << "Min-Wise: " << ip_filter_cycles.load() << " cycles total, "
             << avg_cycles(ip_filter_cycles.load(), ip_filter_count)

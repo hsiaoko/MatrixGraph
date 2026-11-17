@@ -1,21 +1,22 @@
-#include <gflags/gflags.h>
+#include "core/task/cpu_task/skew.h"
 
+#include "apps/backend_flag.h"
+#include "core/common/types.h"
+#include "core/engine/engine.h"
+#include "core/task/gpu_task/task_base.cuh"
+
+#include <gflags/gflags.h>
 #include <iostream>
 #include <string>
 #include <utility>
-
-#include "core/common/types.h"
-#include "apps/backend_flag.h"
-#include "core/engine/engine.h"
-#include "core/task/cpu_task/skew.h"
-#include "core/task/gpu_task/task_base.cuh"
 
 DEFINE_string(g, "", "Path to the input graph file (required)");
 DEFINE_int32(
     skew_samples, 50,
     "Approximate d_hat: number of random BFS source vertices. "
     "Use 0 for exact d_hat (BFS from every vertex; can be very slow).");
-DEFINE_uint64(skew_seed, 42, "RNG seed for sampling sources when skew_samples > 0.");
+DEFINE_uint64(skew_seed, 42,
+              "RNG seed for sampling sources when skew_samples > 0.");
 DEFINE_uint32(
     cpu_parallel, 0,
     "Cap TBB parallelism for the BFS-source loop (matches batch cpu_cores); "
@@ -47,15 +48,15 @@ void PrintConfig() {
                "same sampling as Diameter"
             << std::endl;
   std::cout << "  d_bar: mean total degree (|E_out|+|E_in|)/n" << std::endl;
-    if (FLAGS_skew_samples == 0) {
+  if (FLAGS_skew_samples == 0) {
     std::cout << "Mode: exact d_hat (all vertices as BFS sources)" << std::endl;
   } else {
     std::cout << "Mode: approximate d_hat, skew_samples=" << FLAGS_skew_samples
               << ", skew_seed=" << FLAGS_skew_seed << std::endl;
   }
   if (FLAGS_cpu_parallel > 0) {
-    std::cout << "CPU parallelism cap (TBB, BFS sources): " << FLAGS_cpu_parallel
-              << std::endl;
+    std::cout << "CPU parallelism cap (TBB, BFS sources): "
+              << FLAGS_cpu_parallel << std::endl;
   } else {
     std::cout << "CPU parallelism cap (TBB): default (unlimited)" << std::endl;
   }
@@ -82,9 +83,9 @@ int main(int argc, char* argv[]) {
     const auto backend = mg_app::ParseBackend(FLAGS_backend);
     auto engine = sics::matrixgraph::core::engine::MakeEngine(backend);
 
-    auto* task = new Skew(FLAGS_g, static_cast<size_t>(FLAGS_skew_samples),
-                          FLAGS_skew_seed,
-                          static_cast<size_t>(FLAGS_cpu_parallel));
+    auto* task =
+        new Skew(FLAGS_g, static_cast<size_t>(FLAGS_skew_samples),
+                 FLAGS_skew_seed, static_cast<size_t>(FLAGS_cpu_parallel));
     engine->Run(*task);
     delete task;
   } catch (const std::exception& e) {

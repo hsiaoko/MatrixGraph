@@ -1,15 +1,3 @@
-#include <cuda_runtime.h>
-
-#include <algorithm>
-#include <ctime>
-#include <iostream>
-#include <mutex>
-#include <numeric>
-#include <thread>
-#include <unordered_map>
-
-#include "core/util/parallel.h"
-
 #include "core/common/consts.h"
 #include "core/common/host_algorithms.cuh"
 #include "core/common/types.h"
@@ -24,6 +12,16 @@
 #include "core/util/bitmap_no_ownership.h"
 #include "core/util/bitmap_ownership.h"
 #include "core/util/format_converter.cuh"
+#include "core/util/parallel.h"
+
+#include <algorithm>
+#include <ctime>
+#include <cuda_runtime.h>
+#include <iostream>
+#include <mutex>
+#include <numeric>
+#include <thread>
+#include <unordered_map>
 
 namespace sics {
 
@@ -132,7 +130,8 @@ __host__ void GEMM::InitC() {
   tile_row_idx.resize(M * N);
   tile_col_idx.resize(M * N);
 
-  ParallelFor(worker.begin(), worker.end(),
+  ParallelFor(
+      worker.begin(), worker.end(),
       [this, M, N, K, step, n_strips, &tile_count_row](auto w) {
         for (VertexID i = w; i < M; i += step) {
           for (VertexID j = 0; j < N; j++) {
@@ -161,76 +160,77 @@ __host__ void GEMM::InitC() {
   std::vector<cudaStream_t> p_streams_vec;
   p_streams_vec.resize(M * N);
   ParallelFor(worker.begin(), worker.end(),
-                [this, M, N, K, step, &p_streams_vec, &mtx](auto w) {
-                  for (VertexID i = w; i < N; i += step) {
-                    for (VertexID j = 0; j < M; j++) {
-                      cudaSetDevice(common::hash_function(i * N + j) % 4);
-                      cudaStreamCreate(&p_streams_vec[i * N + j]);
-                    }
+              [this, M, N, K, step, &p_streams_vec, &mtx](auto w) {
+                for (VertexID i = w; i < N; i += step) {
+                  for (VertexID j = 0; j < M; j++) {
+                    cudaSetDevice(common::hash_function(i * N + j) % 4);
+                    cudaStreamCreate(&p_streams_vec[i * N + j]);
                   }
-                });
+                }
+              });
 
   // Step 1 compute layout_matrix for each block of matrix C.
   std::cout << "[InitResultMatrix] Computing layout matrix for each block ..."
             << std::endl;
   ParallelFor(worker.begin(), worker.end(),
-      [this, M, N, K, step, &device_owned_buffers_matrix_a,
-       &device_owned_buffers_matrix_b, &device_owned_buffers_matrix_c,
-       &p_streams_vec, &buffers_matrix_a, &buffers_matrix_b, &buffers_matrix_c,
-       n_strips, n_chunks, tile_size, &mtx](auto w) {
-        for (VertexID k = w; k < K; k += step) {
-          for (VertexID i = 0; i < M; i++) {
-            for (VertexID j = 0; j < N; j++) {
-              auto block_a = A_->GetTiledMatrixPtrByIdx(i * K + k);
-              auto block_b = B_->GetTiledMatrixPtrByIdx(j * K + k);
+              [this, M, N, K, step, &device_owned_buffers_matrix_a,
+               &device_owned_buffers_matrix_b, &device_owned_buffers_matrix_c,
+               &p_streams_vec, &buffers_matrix_a, &buffers_matrix_b,
+               &buffers_matrix_c, n_strips, n_chunks, tile_size, &mtx](auto w) {
+                for (VertexID k = w; k < K; k += step) {
+                  for (VertexID i = 0; i < M; i++) {
+                    for (VertexID j = 0; j < N; j++) {
+                      auto block_a = A_->GetTiledMatrixPtrByIdx(i * K + k);
+                      auto block_b = B_->GetTiledMatrixPtrByIdx(j * K + k);
 
-              if (block_a->GetMetadata().n_nz_tile == 0) continue;
-              if (block_b->GetMetadata().n_nz_tile == 0) continue;
+                      if (block_a->GetMetadata().n_nz_tile == 0) continue;
+                      if (block_b->GetMetadata().n_nz_tile == 0) continue;
 
-              cudaSetDevice(common::hash_function(i * N + j) % 4);
-              cudaStream_t& p_stream = p_streams_vec[i * N + j];
+                      cudaSetDevice(common::hash_function(i * N + j) % 4);
+                      cudaStream_t& p_stream = p_streams_vec[i * N + j];
 
-              {
-                std::lock_guard<std::mutex> lock(mtx);
-                if (device_owned_buffers_matrix_c[i * N + j].GetPtr() ==
-                    nullptr) {
-                  buffers_matrix_c[i * N + j].size =
-                      sizeof(uint64_t) * (WORD_OFFSET(n_strips * n_strips) + 1);
-                  cudaHostAlloc(&buffers_matrix_c[i * N + j].data,
-                                buffers_matrix_c[i * N + j].size,
-                                cudaHostAllocDefault);
+                      {
+                        std::lock_guard<std::mutex> lock(mtx);
+                        if (device_owned_buffers_matrix_c[i * N + j].GetPtr() ==
+                            nullptr) {
+                          buffers_matrix_c[i * N + j].size =
+                              sizeof(uint64_t) *
+                              (WORD_OFFSET(n_strips * n_strips) + 1);
+                          cudaHostAlloc(&buffers_matrix_c[i * N + j].data,
+                                        buffers_matrix_c[i * N + j].size,
+                                        cudaHostAllocDefault);
 
-                  device_owned_buffers_matrix_c[i * N + j].Init(
-                      buffers_matrix_c[i * N + j].GetSize(), p_stream);
+                          device_owned_buffers_matrix_c[i * N + j].Init(
+                              buffers_matrix_c[i * N + j].GetSize(), p_stream);
+                        }
+                      }
+
+                      auto& matrix_a_buf = buffers_matrix_a[i * K + k];
+                      matrix_a_buf.data =
+                          (uint64_t*)block_a->GetNzTileBitmapPtr()->data();
+                      matrix_a_buf.size =
+                          block_a->GetNzTileBitmapPtr()->GetBufferSize();
+
+                      auto& matrix_b_buf = buffers_matrix_b[j * K + k];
+                      matrix_b_buf.data =
+                          (uint64_t*)block_b->GetNzTileBitmapPtr()->data();
+                      matrix_b_buf.size =
+                          block_b->GetNzTileBitmapPtr()->GetBufferSize();
+
+                      device_owned_buffers_matrix_a[i * K + k].Init(
+                          matrix_a_buf, p_stream);
+                      device_owned_buffers_matrix_b[j * K + k].Init(
+                          matrix_b_buf, p_stream);
+
+                      MatrixOperationsKernelWrapper::MatrixBitAnd(
+                          p_stream, device_owned_buffers_matrix_a[i * K + k],
+                          device_owned_buffers_matrix_b[j * K + k],
+                          &device_owned_buffers_matrix_c[i * N + j], n_strips,
+                          n_strips, n_strips);
+                    }
+                  }
                 }
-              }
-
-              auto& matrix_a_buf = buffers_matrix_a[i * K + k];
-              matrix_a_buf.data =
-                  (uint64_t*)block_a->GetNzTileBitmapPtr()->data();
-              matrix_a_buf.size =
-                  block_a->GetNzTileBitmapPtr()->GetBufferSize();
-
-              auto& matrix_b_buf = buffers_matrix_b[j * K + k];
-              matrix_b_buf.data =
-                  (uint64_t*)block_b->GetNzTileBitmapPtr()->data();
-              matrix_b_buf.size =
-                  block_b->GetNzTileBitmapPtr()->GetBufferSize();
-
-              device_owned_buffers_matrix_a[i * K + k].Init(matrix_a_buf,
-                                                            p_stream);
-              device_owned_buffers_matrix_b[j * K + k].Init(matrix_b_buf,
-                                                            p_stream);
-
-              MatrixOperationsKernelWrapper::MatrixBitAnd(
-                  p_stream, device_owned_buffers_matrix_a[i * K + k],
-                  device_owned_buffers_matrix_b[j * K + k],
-                  &device_owned_buffers_matrix_c[i * N + j], n_strips, n_strips,
-                  n_strips);
-            }
-          }
-        }
-      });
+              });
 
   // Step 3 compute Nonzero tile
   std::vector<BufferUint64> buffers_matrix_c_count;
@@ -240,7 +240,8 @@ __host__ void GEMM::InitC() {
 
   cudaDeviceSynchronize();
   std::cout << "[InitResultMatrix] Counting nz tile ..." << std::endl;
-  ParallelFor(worker.begin(), worker.end(),
+  ParallelFor(
+      worker.begin(), worker.end(),
       [this, M, N, K, step, &buffers_matrix_c, &mtx,
        &device_owned_buffers_matrix_c_count, &p_streams_vec,
        &device_owned_buffers_matrix_c, n_strips](auto w) {
@@ -263,7 +264,8 @@ __host__ void GEMM::InitC() {
       });
 
   // Copy data back to the host.
-  ParallelFor(worker.begin(), worker.end(),
+  ParallelFor(
+      worker.begin(), worker.end(),
       [this, M, N, K, step, &device_owned_buffers_matrix_a,
        &device_owned_buffers_matrix_b, &device_owned_buffers_matrix_c_count,
        &device_owned_buffers_matrix_c, &p_streams_vec, &buffers_matrix_c,
@@ -294,7 +296,8 @@ __host__ void GEMM::InitC() {
 
   std::cout << "[InitResultMatrix] Allocating space for Matrix C ..."
             << std::endl;
-  ParallelFor(worker.begin(), worker.end(),
+  ParallelFor(
+      worker.begin(), worker.end(),
       [this, M, N, K, step, &device_owned_buffers_matrix_a,
        &device_owned_buffers_matrix_b, &device_owned_buffers_matrix_c_count,
        &device_owned_buffers_matrix_c, &p_streams_vec, &buffers_matrix_c_count,
@@ -323,7 +326,8 @@ __host__ void GEMM::InitC() {
 
   std::cout << "[InitResultMatrix] Initialize BitTiledMatrix metadata."
             << std::endl;
-  ParallelFor(worker.begin(), worker.end(),
+  ParallelFor(
+      worker.begin(), worker.end(),
       [this, M, N, K, step, &device_owned_buffers_matrix_c_count,
        &device_owned_buffers_matrix_c, &tile_count_row, &tile_row_idx,
        &tile_col_idx, &device_owned_tile_offset_row,
@@ -374,7 +378,8 @@ __host__ void GEMM::InitC() {
         }
       });
 
-  ParallelFor(worker.begin(), worker.end(),
+  ParallelFor(
+      worker.begin(), worker.end(),
       [this, M, N, K, step, &device_owned_buffers_matrix_c_count,
        &device_owned_buffers_matrix_c, &tile_count_row, &tile_row_idx,
        &tile_col_idx, &device_owned_tile_count_row, &device_owned_tile_row_idx,
@@ -414,7 +419,8 @@ __host__ void GEMM::InitC() {
   std::cout << "[InitResultMatrix] Computing tile_offset_row for each "
                "TiledMatrix ..."
             << std::endl;
-  ParallelFor(worker.begin(), worker.end(),
+  ParallelFor(
+      worker.begin(), worker.end(),
       [this, M, N, K, step, &device_owned_buffers_matrix_c_count,
        &device_owned_buffers_matrix_c, &tile_offset_row, &tile_count_row,
        &tile_row_idx, &tile_col_idx, &device_owned_tile_offset_row,
@@ -444,11 +450,11 @@ __host__ void GEMM::InitC() {
 
   std::cout << "[InitResultMatrix] Done!" << std::endl;
   ParallelFor(tile_count_row.begin(), tile_count_row.end(),
-             [](auto& d) { delete[] d.data; });
+              [](auto& d) { delete[] d.data; });
   ParallelFor(p_streams_vec.begin(), p_streams_vec.end(),
-             [](auto& s) { cudaStreamDestroy(s); });
+              [](auto& s) { cudaStreamDestroy(s); });
   ParallelFor(buffers_matrix_c_count.begin(), buffers_matrix_c_count.end(),
-             [](auto& d) { cudaFreeHost(d.data); });
+              [](auto& d) { cudaFreeHost(d.data); });
 }
 
 __host__ Edges* GEMM::Walks(const GridCSRTiledMatrix& A,
@@ -469,14 +475,14 @@ __host__ Edges* GEMM::Walks(const GridCSRTiledMatrix& A,
   std::vector<cudaStream_t> p_streams_vec;
   p_streams_vec.resize(M * N);
   ParallelFor(worker.begin(), worker.end(),
-                [this, M, N, K, step, &p_streams_vec, &mtx](auto w) {
-                  for (VertexID i = w; i < N; i += step) {
-                    for (VertexID j = 0; j < M; j++) {
-                      cudaSetDevice(common::hash_function(i * N + j) % 4);
-                      cudaStreamCreate(&p_streams_vec[i * N + j]);
-                    }
+              [this, M, N, K, step, &p_streams_vec, &mtx](auto w) {
+                for (VertexID i = w; i < N; i += step) {
+                  for (VertexID j = 0; j < M; j++) {
+                    cudaSetDevice(common::hash_function(i * N + j) % 4);
+                    cudaStreamCreate(&p_streams_vec[i * N + j]);
                   }
-                });
+                }
+              });
 
   std::cout << "[Walks]"
             << " Starting ...  - n_strips: " << n_strips
@@ -547,22 +553,22 @@ __host__ Edges* GEMM::Walks(const GridCSRTiledMatrix& A,
 
   std::cout << "[Walks] Initializing buffers for results ..." << std::endl;
   ParallelFor(worker.begin(), worker.end(),
-      [this, M, N, K, step, &p_streams_vec, tile_size, n_strips,
-       tile_buffer_size, &mtx, &unified_edgelist_c,
-       &unified_output_offset](auto w) {
-        for (VertexID i = w; i < M; i += step) {
-          for (VertexID j = 0; j < N; j++) {
-            {
-              std::lock_guard<std::mutex> lock(mtx);
+              [this, M, N, K, step, &p_streams_vec, tile_size, n_strips,
+               tile_buffer_size, &mtx, &unified_edgelist_c,
+               &unified_output_offset](auto w) {
+                for (VertexID i = w; i < M; i += step) {
+                  for (VertexID j = 0; j < N; j++) {
+                    {
+                      std::lock_guard<std::mutex> lock(mtx);
 
-              unified_edgelist_c[i * N + j].Init(sizeof(VertexID) *
-                                                 kMaxNumEdgesPerBlock * 2);
+                      unified_edgelist_c[i * N + j].Init(
+                          sizeof(VertexID) * kMaxNumEdgesPerBlock * 2);
 
-              unified_output_offset[i * N + j].Init(sizeof(EdgeIndex));
-            }
-          }
-        }
-      });
+                      unified_output_offset[i * N + j].Init(sizeof(EdgeIndex));
+                    }
+                  }
+                }
+              });
   UnifiedOwnedBufferUint32 global_output_edgelist;
   global_output_edgelist.Init(sizeof(VertexID) * 2 * kMaxNumEdges);
   std::cout << sizeof(VertexID) * 2 * kMaxNumEdges << std::endl;
@@ -571,7 +577,8 @@ __host__ Edges* GEMM::Walks(const GridCSRTiledMatrix& A,
 
   // Init input Buffer for A and B, respectively.
   std::cout << "[Walks] Initializing input buffers for A and B." << std::endl;
-  ParallelFor(worker.begin(), worker.end(),
+  ParallelFor(
+      worker.begin(), worker.end(),
       [this, M, N, K, step, &A, &p_streams_vec, tile_size, tile_buffer_size,
        &mtx, &tile_offset_row_a, &tile_row_idx_a, &tile_col_idx_a,
        &csr_offset_a, &data_a, &unified_tile_offset_row_a,
@@ -627,7 +634,8 @@ __host__ Edges* GEMM::Walks(const GridCSRTiledMatrix& A,
         }
       });
 
-  ParallelFor(worker.begin(), worker.end(),
+  ParallelFor(
+      worker.begin(), worker.end(),
       [this, M, N, K, &B, step, &p_streams_vec, tile_size, tile_buffer_size,
        &mtx, &tile_offset_row_b, &tile_row_idx_b, &tile_col_idx_b,
        &csr_offset_b, &data_b, &unified_tile_offset_row_b,
@@ -716,8 +724,8 @@ __host__ Edges* GEMM::Walks(const GridCSRTiledMatrix& A,
                     << "C: (" << i << ", " << j << ")"
                     << "nz A: " << block_a->GetMetadata().n_nz_tile
                     << ", nz B: " << block_b->GetMetadata().n_nz_tile
-                    << " to device: "
-                    << common::hash_function(i * N + j) % 4 << std::endl;
+                    << " to device: " << common::hash_function(i * N + j) % 4
+                    << std::endl;
 
           cudaSetDevice(common::hash_function(i * N + j) % 4);
 
@@ -725,8 +733,7 @@ __host__ Edges* GEMM::Walks(const GridCSRTiledMatrix& A,
             std::lock_guard<std::mutex> lock(mtx);
             cudaStream_t& p_stream = p_streams_vec[i * N + j];
             MatrixOperationsKernelWrapper::Walk(
-                p_stream, tile_size, n_strips,
-                block_a->GetMetadata().n_nz_tile,
+                p_stream, tile_size, n_strips, block_a->GetMetadata().n_nz_tile,
                 block_b->GetMetadata().n_nz_tile,
                 unified_csr_n_vertices_a[i * K + k],
                 unified_csr_n_vertices_b[k * K + j],
@@ -740,8 +747,8 @@ __host__ Edges* GEMM::Walks(const GridCSRTiledMatrix& A,
                 unified_tile_col_idx_b[k * K + j],
                 unified_csr_offset_a[i * K + k],
                 unified_csr_offset_b[k * K + j], unified_data_a[i * K + k],
-                unified_data_b[k * K + j],
-                &global_output_edgelist, &global_output_offset);
+                unified_data_b[k * K + j], &global_output_edgelist,
+                &global_output_offset);
             cudaDeviceSynchronize();
           }
         }
@@ -821,7 +828,8 @@ __host__ std::vector<Edges>* GEMM::GridPartitioning(const Edges& edges,
   // std::cout << "[GridCut] Computing key parameters under chunk scope of "
   //           << scope_per_chunk << " ...\n"
   //           << std::endl;
-  ParallelFor(worker.begin(), worker.end(),
+  ParallelFor(
+      worker.begin(), worker.end(),
       [this, step, &edges, scope_per_chunk, n_partitions,
        &n_edges_for_each_block, &max_vid_for_each_block,
        &min_vid_for_each_block, &vertices_bm_for_each_block](auto w) {
@@ -860,7 +868,8 @@ __host__ std::vector<Edges>* GEMM::GridPartitioning(const Edges& edges,
       new std::atomic<EdgeIndex>[n_partitions * n_partitions]();
 
   // std::cout << "[GridCut] Dropping edges into blocks...\n" << std::endl;
-  ParallelFor(worker.begin(), worker.end(),
+  ParallelFor(
+      worker.begin(), worker.end(),
       [this, step, &edges, scope_per_chunk, n_partitions, &edge_blocks_buf,
        &n_edges_for_each_block, &offset_for_each_block](auto w) {
         for (auto eid = w; eid < edges.get_metadata().num_edges; eid += step) {
@@ -881,9 +890,8 @@ __host__ std::vector<Edges>* GEMM::GridPartitioning(const Edges& edges,
 
   // std::cout << "[GridCut] Constructing Edgelist of blocks...\n" << std::endl;
   for (GraphID _ = 0; _ < n_partitions * n_partitions; _++) {
-    EdgelistMetadata meta{.num_vertices =
-                              static_cast<VertexID>(
-                                  vertices_bm_for_each_block[_].Count()),
+    EdgelistMetadata meta{.num_vertices = static_cast<VertexID>(
+                              vertices_bm_for_each_block[_].Count()),
                           .num_edges = n_edges_for_each_block[_],
                           .max_vid = max_vid_for_each_block[_],
                           .min_vid = min_vid_for_each_block[_]};
@@ -916,8 +924,6 @@ __host__ GridCSRTiledMatrix* GEMM::ConvertGridEdgelist2GridTiledMatrix(
 
   return grid_tiled_matrix;
 }
-
-
 
 __host__ void GEMM::Run() {
   auto start_time_0 = std::chrono::system_clock::now();

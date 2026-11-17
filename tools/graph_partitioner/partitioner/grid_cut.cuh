@@ -10,31 +10,31 @@ namespace tools {
 namespace partitioner {
 
 class GridCutPartitioner : public PartitionerBase {
-private:
+ private:
   using StoreStrategy = sics::matrixgraph::core::common::StoreStrategy;
   using VertexID = sics::matrixgraph::core::common::VertexID;
   using EdgeIndex = sics::matrixgraph::core::common::EdgeIndex;
   using GraphID = sics::matrixgraph::core::common::GraphID;
 
-public:
-  GridCutPartitioner(const std::string &input_path,
-                     const std::string &output_path,
+ public:
+  GridCutPartitioner(const std::string& input_path,
+                     const std::string& output_path,
                      StoreStrategy store_strategy, GraphID n_partitions)
       : PartitionerBase(input_path, output_path, store_strategy),
         n_partitions_(n_partitions) {}
 
   void RunPartitioner() override;
 
-private:
+ private:
   const GraphID n_partitions_;
 
   VertexID GetBucketID(VertexID vid, VertexID n_bucket,
                        size_t n_vertices) const;
 };
 
-} // namespace partitioner
-} // namespace tools
-} // namespace matrixgraph
-} // namespace sics
+}  // namespace partitioner
+}  // namespace tools
+}  // namespace matrixgraph
+}  // namespace sics
 
-#endif // MATRIXGRAPH_TOOLS_GRAPH_PARTITIONER_PARTITIONER_GRID_CUT_H_
+#endif  // MATRIXGRAPH_TOOLS_GRAPH_PARTITIONER_PARTITIONER_GRID_CUT_H_

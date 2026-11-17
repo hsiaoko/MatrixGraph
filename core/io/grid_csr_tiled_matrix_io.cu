@@ -1,12 +1,11 @@
+#include "core/common/types.h"
+#include "core/data_structures/metadata.h"
+#include "core/io/csr_tiled_matrix_io.cuh"
 #include "core/io/grid_csr_tiled_matrix_io.cuh"
 
 #include <cmath>
 #include <fstream>
 #include <yaml-cpp/yaml.h>
-
-#include "core/common/types.h"
-#include "core/data_structures/metadata.h"
-#include "core/io/csr_tiled_matrix_io.cuh"
 
 namespace sics {
 namespace matrixgraph {
@@ -19,8 +18,8 @@ using EdgeIndex = sics::matrixgraph::core::common::EdgeIndex;
 using GraphID = sics::matrixgraph::core::common::GraphID;
 using VertexLabel = sics::matrixgraph::core::common::VertexLabel;
 
-void GridCSRTiledMatrixIO::Read(const std::string &input_path,
-                                GridCSRTiledMatrix **grid_tiled_matrix) {
+void GridCSRTiledMatrixIO::Read(const std::string& input_path,
+                                GridCSRTiledMatrix** grid_tiled_matrix) {
   YAML::Node node = YAML::LoadFile(input_path + "meta.yaml");
 
   std::ifstream label_file(input_path + "label.bin", std::ios::binary);
@@ -42,7 +41,7 @@ void GridCSRTiledMatrixIO::Read(const std::string &input_path,
        gid++) {
     std::string block_dir = input_path + "block" + std::to_string(gid) + "/";
 
-    auto *csr_tiled_matrix_ptr =
+    auto* csr_tiled_matrix_ptr =
         (*grid_tiled_matrix)->GetTiledMatrixPtrByIdx(gid);
 
     csr_tiled_matrix_io.Read(block_dir, csr_tiled_matrix_ptr);
@@ -56,12 +55,12 @@ void GridCSRTiledMatrixIO::Read(const std::string &input_path,
   (*grid_tiled_matrix)
       ->SetVLabelBasePointer(
           new VertexLabel[grid_tiled_matrix_metadata.n_vertices]());
-  auto *buffer_vlabel = (*grid_tiled_matrix)->GetVLabelBasePointer();
-  label_file.read(reinterpret_cast<char *>(buffer_vlabel), file_size);
+  auto* buffer_vlabel = (*grid_tiled_matrix)->GetVLabelBasePointer();
+  label_file.read(reinterpret_cast<char*>(buffer_vlabel), file_size);
 }
 
-void GridCSRTiledMatrixIO::Write(const std::string &output_path,
-                                 const GridCSRTiledMatrix &grid_tiled_matrix) {
+void GridCSRTiledMatrixIO::Write(const std::string& output_path,
+                                 const GridCSRTiledMatrix& grid_tiled_matrix) {
   if (!std::filesystem::exists(output_path))
     std::filesystem::create_directory(output_path);
 
@@ -75,9 +74,9 @@ void GridCSRTiledMatrixIO::Write(const std::string &output_path,
   }
 
   // Write VLabel.
-  VertexLabel *buffer_vlabel = grid_tiled_matrix.GetVLabelBasePointer();
+  VertexLabel* buffer_vlabel = grid_tiled_matrix.GetVLabelBasePointer();
   std::ofstream out_label_file(output_path + "label.bin", std::ios::binary);
-  out_label_file.write(reinterpret_cast<char *>(buffer_vlabel),
+  out_label_file.write(reinterpret_cast<char*>(buffer_vlabel),
                        sizeof(VertexLabel) * meta.n_vertices);
   delete[] buffer_vlabel;
 
@@ -93,7 +92,7 @@ void GridCSRTiledMatrixIO::Write(const std::string &output_path,
   out_meta_file.close();
 }
 
-} // namespace io
-} // namespace core
-} // namespace matrixgraph
-} // namespace sics
+}  // namespace io
+}  // namespace core
+}  // namespace matrixgraph
+}  // namespace sics

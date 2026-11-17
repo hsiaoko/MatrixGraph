@@ -1,9 +1,8 @@
 #ifndef MATRIXGRAPH_CORE_DATA_STRUCTURES_MATRIX_CUH_
 #define MATRIXGRAPH_CORE_DATA_STRUCTURES_MATRIX_CUH_
 
-#include <string>
 #include <stdint.h>
-
+#include <string>
 
 namespace sics {
 namespace matrixgraph {

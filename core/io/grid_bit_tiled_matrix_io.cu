@@ -1,12 +1,11 @@
+#include "core/common/types.h"
+#include "core/data_structures/metadata.h"
+#include "core/io/bit_tiled_matrix_io.cuh"
 #include "core/io/grid_bit_tiled_matrix_io.cuh"
 
 #include <cmath>
 #include <fstream>
 #include <yaml-cpp/yaml.h>
-
-#include "core/common/types.h"
-#include "core/data_structures/metadata.h"
-#include "core/io/bit_tiled_matrix_io.cuh"
 
 namespace sics {
 namespace matrixgraph {
@@ -19,8 +18,8 @@ using BitTiledMatrixIO = sics::matrixgraph::core::io::BitTiledMatrixIO;
 using EdgeIndex = sics::matrixgraph::core::common::EdgeIndex;
 using GraphID = sics::matrixgraph::core::common::GraphID;
 
-void GridBitTiledMatrixIO::Read(const std::string &input_path,
-                                GridBitTiledMatrix **grid_tiled_matrix) {
+void GridBitTiledMatrixIO::Read(const std::string& input_path,
+                                GridBitTiledMatrix** grid_tiled_matrix) {
   YAML::Node node = YAML::LoadFile(input_path + "meta.yaml");
 
   GridGraphMetadata grid_tiled_matrix_metadata = {
@@ -36,16 +35,15 @@ void GridBitTiledMatrixIO::Read(const std::string &input_path,
        gid++) {
     std::string block_dir = input_path + "block" + std::to_string(gid) + "/";
 
-    auto *bit_tiled_matrix_ptr =
+    auto* bit_tiled_matrix_ptr =
         (*grid_tiled_matrix)->GetBitTileMatrixPtrByIdx(gid);
 
     bit_tiled_matrix_io.Read(block_dir, bit_tiled_matrix_ptr);
   }
 }
 
-void GridBitTiledMatrixIO::Write(const std::string &output_path,
-                                 const GridBitTiledMatrix &grid_tiled_matrix) {
-
+void GridBitTiledMatrixIO::Write(const std::string& output_path,
+                                 const GridBitTiledMatrix& grid_tiled_matrix) {
   auto meta = grid_tiled_matrix.get_metadata();
 
   BitTiledMatrixIO bit_tiled_matrix_io;
@@ -65,7 +63,7 @@ void GridBitTiledMatrixIO::Write(const std::string &output_path,
   out_meta_file.close();
 }
 
-} // namespace io
-} // namespace core
-} // namespace matrixgraph
-} // namespace sics
+}  // namespace io
+}  // namespace core
+}  // namespace matrixgraph
+}  // namespace sics

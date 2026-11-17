@@ -1,14 +1,14 @@
 #ifndef MATRIXGRAPH_CORE_TASK_CPU_TASK_LFTJ_SUBISO_CUH_
 #define MATRIXGRAPH_CORE_TASK_CPU_TASK_LFTJ_SUBISO_CUH_
 
-#include <atomic>
-#include <string>
-#include <vector>
-
 #include "core/common/types.h"
 #include "core/data_structures/immutable_csr.cuh"
 #include "core/task/cpu_task/cpu_task_base.h"
 #include "core/task/cpu_task/min_wise_filter.h"
+
+#include <atomic>
+#include <string>
+#include <vector>
 
 namespace sics {
 namespace matrixgraph {
@@ -29,15 +29,14 @@ class LFTJSubIso : public CPUTaskBase {
 
  public:
   LFTJSubIso(const std::string& pattern_path,
-             const std::string& data_graph_path,
-             const std::string& output_path, int num_threads,
+             const std::string& data_graph_path, const std::string& output_path,
+             int num_threads,
              uint64_t output_limit = std::numeric_limits<uint64_t>::max(),
              bool canonical = false, bool enable_min_wise_filter = true,
              int filter_hop = 1, int filter_k = 3,
-             bool disable_matching_order = false,
-             bool enable_ldf_filter = true, bool enable_nlc_filter = true,
-             bool enable_lpf_filter = true, bool enable_lcf_filter = true,
-             bool enable_bloom_filter = true,
+             bool disable_matching_order = false, bool enable_ldf_filter = true,
+             bool enable_nlc_filter = true, bool enable_lpf_filter = true,
+             bool enable_lcf_filter = true, bool enable_bloom_filter = true,
              bool enable_min_wise_bloom_filter = true,
              const std::string& reject_output_path = "")
       : output_limit_(output_limit),
@@ -119,9 +118,9 @@ class LFTJSubIso : public CPUTaskBase {
   std::vector<std::vector<VertexID>> candidates_;
 
   // Matching order and auxiliary structures.
-  std::vector<VertexID> order_;                // order[depth] = pattern local id
-  std::vector<VertexID> order_pos_;            // order_pos[u] = depth of u
-  std::vector<std::vector<VertexID>> bn_list_; // backward neighbors per depth
+  std::vector<VertexID> order_;      // order[depth] = pattern local id
+  std::vector<VertexID> order_pos_;  // order_pos[u] = depth of u
+  std::vector<std::vector<VertexID>> bn_list_;  // backward neighbors per depth
 
   // DFS state.
   std::vector<VertexID> embedding_;
@@ -167,7 +166,8 @@ class LFTJSubIso : public CPUTaskBase {
 
   // Label-degree filter (directed out/in degree check, like subiso_cpu).
   // Disabled by default: LFTJ treats the graph as undirected, so this filter
-  // is only sound when the CSR is symmetric (undirected stored as bidirectional).
+  // is only sound when the CSR is symmetric (undirected stored as
+  // bidirectional).
   bool enable_ldf_filter_ = false;
 
   // Materialized embeddings, stored row-major. Only populated when

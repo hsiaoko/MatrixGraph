@@ -1,3 +1,4 @@
+#include "core/common/consts.h"
 #include "core/task/gpu_task/gar_match.cuh"
 #include "core/task/gpu_task/kernel/kernel_gar_match.cuh"
 
@@ -10,10 +11,7 @@
 #include <limits>
 #include <sstream>
 #include <stdexcept>
-
 #include <yaml-cpp/yaml.h>
-
-#include "core/common/consts.h"
 
 namespace sics {
 namespace matrixgraph {
@@ -54,7 +52,8 @@ std::string ExecCommand(const std::string& command) {
 }
 
 bool CommandExists(const std::string& command_name) {
-  const std::string cmd = "command -v " + command_name + " >/dev/null 2>&1; echo $?";
+  const std::string cmd =
+      "command -v " + command_name + " >/dev/null 2>&1; echo $?";
   const std::string out = ExecCommand(cmd);
   return !out.empty() && out[0] == '0';
 }
@@ -87,10 +86,12 @@ bool ExtractIntField(const std::string& json, const std::string& field_name,
   auto pos = json.find(key);
   if (pos == std::string::npos) return false;
   pos += key.size();
-  while (pos < json.size() && std::isspace(static_cast<unsigned char>(json[pos])))
+  while (pos < json.size() &&
+         std::isspace(static_cast<unsigned char>(json[pos])))
     ++pos;
   size_t end = pos;
-  while (end < json.size() && std::isdigit(static_cast<unsigned char>(json[end])))
+  while (end < json.size() &&
+         std::isdigit(static_cast<unsigned char>(json[end])))
     ++end;
   if (end == pos) return false;
   *out = std::stoi(json.substr(pos, end - pos));
@@ -182,8 +183,7 @@ void PrintGraphTopN(
 
 void TrimEOL(std::string* line) {
   if (line == nullptr) return;
-  while (!line->empty() &&
-         (line->back() == '\n' || line->back() == '\r')) {
+  while (!line->empty() && (line->back() == '\n' || line->back() == '\r')) {
     line->pop_back();
   }
 }
@@ -262,28 +262,29 @@ __host__ void GARMatch::LoadData() {
 
   const std::string auth_url = scheme + "://" + user + ":" + pass + "@" + host +
                                ":" + std::to_string(port);
-  const std::string base_db_url =
-      auth_url + "/_db/" + db + "/_api";
+  const std::string base_db_url = auth_url + "/_db/" + db + "/_api";
 
-  const std::string ping_cmd = "curl -s '" + EscapeShellSingleQuotes(auth_url) +
-                               "/_api/version'";
+  const std::string ping_cmd =
+      "curl -s '" + EscapeShellSingleQuotes(auth_url) + "/_api/version'";
   const std::string ping_resp = ExecCommand(ping_cmd);
   if (ping_resp.find("\"server\":\"arango\"") == std::string::npos) {
-    throw std::runtime_error(
-        "Failed to connect to ArangoDB with config: " + config_path_);
+    throw std::runtime_error("Failed to connect to ArangoDB with config: " +
+                             config_path_);
   }
   std::cout << "[GARMatch] ArangoDB connected: " << host << ":" << port
             << ", db=" << db << std::endl;
 
   const std::string count_cmd =
-      "curl -s '" + EscapeShellSingleQuotes(base_db_url + "/collection/" +
-                                            pivot_graphs_collection + "/count") +
+      "curl -s '" +
+      EscapeShellSingleQuotes(base_db_url + "/collection/" +
+                              pivot_graphs_collection + "/count") +
       "'";
   const std::string count_resp = ExecCommand(count_cmd);
   int pivot_graph_count = 0;
   if (!ExtractIntField(count_resp, "count", &pivot_graph_count)) {
-    std::cout << "[GARMatch] Warning: cannot parse pivot_graph count, use fallback."
-              << std::endl;
+    std::cout
+        << "[GARMatch] Warning: cannot parse pivot_graph count, use fallback."
+        << std::endl;
     pivot_graph_count = 1;
   }
   std::cout << "[GARMatch] pivot_graphs count: " << pivot_graph_count
@@ -292,116 +293,120 @@ __host__ void GARMatch::LoadData() {
   std::string data_dump_cmd;
   const bool has_arangosh = CommandExists("arangosh");
   if (has_arangosh) {
+    std::ostringstream js;
+    js << "const c=db._collection(\""
+       << EscapeForJSDoubleQuote(pivot_graphs_collection) << "\");"
+       << "if(!c){throw new Error(\"collection not found\");}"
+       << "let q='FOR d IN " << EscapeForJSDoubleQuote(pivot_graphs_collection)
+       << "';"
+       << "const hasG=" << (graph_id.empty() ? "false" : "true") << ";"
+       << "const hasB=" << (business_id.empty() ? "false" : "true") << ";"
+       << "if(hasG&&hasB){q+=' FILTER TO_STRING(d.graph_id)==@g AND "
+          "TO_STRING(d.business_id)==@b';}"
+       << "else if(hasG){q+=' FILTER TO_STRING(d.graph_id)==@g';}"
+       << "else if(hasB){q+=' FILTER TO_STRING(d.business_id)==@b';}"
+       << (pivot_limit > 0 ? "q+=' LIMIT @l';" : "") << "q+=' RETURN d';"
+       << "const bind={g:\"" << EscapeForJSDoubleQuote(graph_id) << "\",b:\""
+       << EscapeForJSDoubleQuote(business_id) << "\""
+       << (pivot_limit > 0 ? ",l:" + std::to_string(pivot_limit) : "") << "};"
+       << "const cur=db._query(q,bind);"
+       << "let docs=0;"
+       << "while(cur.hasNext()){"
+       << "docs++;"
+       << "const d=cur.next();"
+       << "const g=d.graph||{};"
+       << "const main=g.main||{};"
+       << "const vs=main.vertices||[];"
+       << "for(let i=0;i<vs.length;i++){const v=vs[i];"
+       << "print(\"V\\t\"+String(v.id||\"\")+\"\\t\"+String(v.label||\"\"));}"
+       << "const es=main.edges||[];"
+       << "for(let i=0;i<es.length;i++){const e=es[i];"
+       << "print(\"E\\t\"+String(e.srcId||\"\")+\"\\t\"+String(e.dstId||\"\")+"
+          "\"\\t\"+String(e.label||\"\"));}"
+       << "}"
+       << "print(\"M\\tDOCS\\t\"+String(docs));";
 
-  std::ostringstream js;
-  js << "const c=db._collection(\"" << EscapeForJSDoubleQuote(pivot_graphs_collection)
-     << "\");"
-     << "if(!c){throw new Error(\"collection not found\");}"
-     << "let q='FOR d IN " << EscapeForJSDoubleQuote(pivot_graphs_collection)
-     << "';"
-     << "const hasG=" << (graph_id.empty() ? "false" : "true") << ";"
-     << "const hasB=" << (business_id.empty() ? "false" : "true") << ";"
-     << "if(hasG&&hasB){q+=' FILTER TO_STRING(d.graph_id)==@g AND TO_STRING(d.business_id)==@b';}"
-     << "else if(hasG){q+=' FILTER TO_STRING(d.graph_id)==@g';}"
-     << "else if(hasB){q+=' FILTER TO_STRING(d.business_id)==@b';}"
-     << (pivot_limit > 0 ? "q+=' LIMIT @l';" : "")
-     << "q+=' RETURN d';"
-     << "const bind={g:\""
-     << EscapeForJSDoubleQuote(graph_id) << "\",b:\""
-     << EscapeForJSDoubleQuote(business_id) << "\""
-     << (pivot_limit > 0 ? ",l:" + std::to_string(pivot_limit) : "") << "};"
-     << "const cur=db._query(q,bind);"
-     << "let docs=0;"
-     << "while(cur.hasNext()){"
-     << "docs++;"
-     << "const d=cur.next();"
-     << "const g=d.graph||{};"
-     << "const main=g.main||{};"
-     << "const vs=main.vertices||[];"
-     << "for(let i=0;i<vs.length;i++){const v=vs[i];"
-     << "print(\"V\\t\"+String(v.id||\"\")+\"\\t\"+String(v.label||\"\"));}"
-     << "const es=main.edges||[];"
-     << "for(let i=0;i<es.length;i++){const e=es[i];"
-     << "print(\"E\\t\"+String(e.srcId||\"\")+\"\\t\"+String(e.dstId||\"\")+\"\\t\"+String(e.label||\"\"));}"
-     << "}"
-     << "print(\"M\\tDOCS\\t\"+String(docs));";
-
-  const std::string arangosh_cmd =
-      "arangosh --server.endpoint 'http+tcp://" + EscapeShellSingleQuotes(host) +
-      ":" + std::to_string(port) + "' --server.username '" +
-      EscapeShellSingleQuotes(user) + "' --server.password '" +
-      EscapeShellSingleQuotes(pass) + "' --server.database '" +
-      EscapeShellSingleQuotes(db) +
-      "' --quiet --javascript.execute /dev/stdin 2>&1 <<'ARANGOSH_EOF'\n" +
-      js.str() + "\nARANGOSH_EOF\n";
-  data_dump_cmd = arangosh_cmd;
+    const std::string arangosh_cmd =
+        "arangosh --server.endpoint 'http+tcp://" +
+        EscapeShellSingleQuotes(host) + ":" + std::to_string(port) +
+        "' --server.username '" + EscapeShellSingleQuotes(user) +
+        "' --server.password '" + EscapeShellSingleQuotes(pass) +
+        "' --server.database '" + EscapeShellSingleQuotes(db) +
+        "' --quiet --javascript.execute /dev/stdin 2>&1 <<'ARANGOSH_EOF'\n" +
+        js.str() + "\nARANGOSH_EOF\n";
+    data_dump_cmd = arangosh_cmd;
   } else if (CommandExists("python3")) {
     std::ostringstream py_cmd;
-    py_cmd
-        << "ARANGO_SCHEME='" << EscapeShellSingleQuotes(scheme) << "' "
-        << "ARANGO_HOST='" << EscapeShellSingleQuotes(host) << "' "
-        << "ARANGO_PORT='" << std::to_string(port) << "' "
-        << "ARANGO_DB='" << EscapeShellSingleQuotes(db) << "' "
-        << "ARANGO_USER='" << EscapeShellSingleQuotes(user) << "' "
-        << "ARANGO_PASS='" << EscapeShellSingleQuotes(pass) << "' "
-        << "ARANGO_COLLECTION='"
-        << EscapeShellSingleQuotes(pivot_graphs_collection) << "' "
-        << "ARANGO_GRAPH_ID='" << EscapeShellSingleQuotes(graph_id) << "' "
-        << "ARANGO_BUSINESS_ID='" << EscapeShellSingleQuotes(business_id) << "' "
-        << "ARANGO_PIVOT_LIMIT='" << std::to_string(pivot_limit) << "' "
-        << "python3 - 2>&1 <<'PY'\n"
-        << "import os, json, base64, urllib.request\n"
-        << "scheme=os.environ.get('ARANGO_SCHEME','http')\n"
-        << "host=os.environ.get('ARANGO_HOST','127.0.0.1')\n"
-        << "port=os.environ.get('ARANGO_PORT','8529')\n"
-        << "db=os.environ.get('ARANGO_DB','_system')\n"
-        << "user=os.environ.get('ARANGO_USER','root')\n"
-        << "pwd=os.environ.get('ARANGO_PASS','')\n"
-        << "coll=os.environ.get('ARANGO_COLLECTION','pivot_graphs')\n"
-        << "gid=os.environ.get('ARANGO_GRAPH_ID','')\n"
-        << "bid=os.environ.get('ARANGO_BUSINESS_ID','')\n"
-        << "limit=int(os.environ.get('ARANGO_PIVOT_LIMIT','0') or 0)\n"
-        << "base=f\"{scheme}://{host}:{port}/_db/{db}/_api/cursor\"\n"
-        << "auth='Basic '+base64.b64encode(f\"{user}:{pwd}\".encode()).decode()\n"
-        << "q=f\"FOR d IN {coll}\"\n"
-        << "if gid and bid: q += \" FILTER TO_STRING(d.graph_id)==@g AND TO_STRING(d.business_id)==@b\"\n"
-        << "elif gid: q += \" FILTER TO_STRING(d.graph_id)==@g\"\n"
-        << "elif bid: q += \" FILTER TO_STRING(d.business_id)==@b\"\n"
-        << "if limit>0: q += \" LIMIT @l\"\n"
-        << "q += \" RETURN d\"\n"
-        << "bind={}\n"
-        << "if gid: bind['g']=gid\n"
-        << "if bid: bind['b']=bid\n"
-        << "if limit>0: bind['l']=limit\n"
-        << "payload={'query':q,'bindVars':bind,'batchSize':64}\n"
-        << "def req(url, method='POST', body=None):\n"
-        << "  data=None if body is None else json.dumps(body).encode()\n"
-        << "  r=urllib.request.Request(url, data=data, method=method)\n"
-        << "  r.add_header('Authorization', auth)\n"
-        << "  r.add_header('Content-Type','application/json')\n"
-        << "  with urllib.request.urlopen(r, timeout=60) as resp:\n"
-        << "    return json.loads(resp.read().decode())\n"
-        << "def emit(doc):\n"
-        << "  gm=doc.get('graph') or {}\n"
-        << "  main=gm.get('main') or {}\n"
-        << "  for v in (main.get('vertices') or []):\n"
-        << "    print('V\\t'+str(v.get('id',''))+'\\t'+str(v.get('label','')))\n"
-        << "  for e in (main.get('edges') or []):\n"
-        << "    print('E\\t'+str(e.get('srcId',''))+'\\t'+str(e.get('dstId',''))+'\\t'+str(e.get('label','')))\n"
-        << "try:\n"
-        << "  docs=0\n"
-        << "  first=req(base,'POST',payload)\n"
-        << "  for d in (first.get('result') or []): emit(d); docs+=1\n"
-        << "  while first.get('hasMore'):\n"
-        << "    cid=first.get('id')\n"
-        << "    if not cid: break\n"
-        << "    first=req(base+'/'+cid,'PUT',{})\n"
-        << "    for d in (first.get('result') or []): emit(d); docs+=1\n"
-        << "  print('M\\tDOCS\\t'+str(docs))\n"
-        << "except Exception as ex:\n"
-        << "  print('ERR\\t'+str(ex))\n"
-        << "  raise\n"
-        << "PY";
+    py_cmd << "ARANGO_SCHEME='" << EscapeShellSingleQuotes(scheme) << "' "
+           << "ARANGO_HOST='" << EscapeShellSingleQuotes(host) << "' "
+           << "ARANGO_PORT='" << std::to_string(port) << "' "
+           << "ARANGO_DB='" << EscapeShellSingleQuotes(db) << "' "
+           << "ARANGO_USER='" << EscapeShellSingleQuotes(user) << "' "
+           << "ARANGO_PASS='" << EscapeShellSingleQuotes(pass) << "' "
+           << "ARANGO_COLLECTION='"
+           << EscapeShellSingleQuotes(pivot_graphs_collection) << "' "
+           << "ARANGO_GRAPH_ID='" << EscapeShellSingleQuotes(graph_id) << "' "
+           << "ARANGO_BUSINESS_ID='" << EscapeShellSingleQuotes(business_id)
+           << "' "
+           << "ARANGO_PIVOT_LIMIT='" << std::to_string(pivot_limit) << "' "
+           << "python3 - 2>&1 <<'PY'\n"
+           << "import os, json, base64, urllib.request\n"
+           << "scheme=os.environ.get('ARANGO_SCHEME','http')\n"
+           << "host=os.environ.get('ARANGO_HOST','127.0.0.1')\n"
+           << "port=os.environ.get('ARANGO_PORT','8529')\n"
+           << "db=os.environ.get('ARANGO_DB','_system')\n"
+           << "user=os.environ.get('ARANGO_USER','root')\n"
+           << "pwd=os.environ.get('ARANGO_PASS','')\n"
+           << "coll=os.environ.get('ARANGO_COLLECTION','pivot_graphs')\n"
+           << "gid=os.environ.get('ARANGO_GRAPH_ID','')\n"
+           << "bid=os.environ.get('ARANGO_BUSINESS_ID','')\n"
+           << "limit=int(os.environ.get('ARANGO_PIVOT_LIMIT','0') or 0)\n"
+           << "base=f\"{scheme}://{host}:{port}/_db/{db}/_api/cursor\"\n"
+           << "auth='Basic "
+              "'+base64.b64encode(f\"{user}:{pwd}\".encode()).decode()\n"
+           << "q=f\"FOR d IN {coll}\"\n"
+           << "if gid and bid: q += \" FILTER TO_STRING(d.graph_id)==@g AND "
+              "TO_STRING(d.business_id)==@b\"\n"
+           << "elif gid: q += \" FILTER TO_STRING(d.graph_id)==@g\"\n"
+           << "elif bid: q += \" FILTER TO_STRING(d.business_id)==@b\"\n"
+           << "if limit>0: q += \" LIMIT @l\"\n"
+           << "q += \" RETURN d\"\n"
+           << "bind={}\n"
+           << "if gid: bind['g']=gid\n"
+           << "if bid: bind['b']=bid\n"
+           << "if limit>0: bind['l']=limit\n"
+           << "payload={'query':q,'bindVars':bind,'batchSize':64}\n"
+           << "def req(url, method='POST', body=None):\n"
+           << "  data=None if body is None else json.dumps(body).encode()\n"
+           << "  r=urllib.request.Request(url, data=data, method=method)\n"
+           << "  r.add_header('Authorization', auth)\n"
+           << "  r.add_header('Content-Type','application/json')\n"
+           << "  with urllib.request.urlopen(r, timeout=60) as resp:\n"
+           << "    return json.loads(resp.read().decode())\n"
+           << "def emit(doc):\n"
+           << "  gm=doc.get('graph') or {}\n"
+           << "  main=gm.get('main') or {}\n"
+           << "  for v in (main.get('vertices') or []):\n"
+           << "    "
+              "print('V\\t'+str(v.get('id',''))+'\\t'+str(v.get('label','')))\n"
+           << "  for e in (main.get('edges') or []):\n"
+           << "    "
+              "print('E\\t'+str(e.get('srcId',''))+'\\t'+str(e.get('dstId',''))"
+              "+'\\t'+str(e.get('label','')))\n"
+           << "try:\n"
+           << "  docs=0\n"
+           << "  first=req(base,'POST',payload)\n"
+           << "  for d in (first.get('result') or []): emit(d); docs+=1\n"
+           << "  while first.get('hasMore'):\n"
+           << "    cid=first.get('id')\n"
+           << "    if not cid: break\n"
+           << "    first=req(base+'/'+cid,'PUT',{})\n"
+           << "    for d in (first.get('result') or []): emit(d); docs+=1\n"
+           << "  print('M\\tDOCS\\t'+str(docs))\n"
+           << "except Exception as ex:\n"
+           << "  print('ERR\\t'+str(ex))\n"
+           << "  raise\n"
+           << "PY";
     data_dump_cmd = py_cmd.str();
     std::cout << "[GARMatch] arangosh not found, using python3 cursor loader."
               << std::endl;
@@ -475,8 +480,7 @@ __host__ void GARMatch::LoadData() {
   }
 
   // Allocate raw space for all seen vertex tokens, then deduplicate in-place.
-  std::unique_ptr<uint32_t[]> vertex_tokens(
-      new uint32_t[vertex_token_count]());
+  std::unique_ptr<uint32_t[]> vertex_tokens(new uint32_t[vertex_token_count]());
 
   pipe = popen(data_dump_cmd.c_str(), "r");
   if (pipe == nullptr) {
@@ -519,7 +523,8 @@ __host__ void GARMatch::LoadData() {
   }
 
   std::sort(vertex_tokens.get(), vertex_tokens.get() + v_write);
-  const int unique_vertex_count = UniqueInPlaceUInt32(vertex_tokens.get(), v_write);
+  const int unique_vertex_count =
+      UniqueInPlaceUInt32(vertex_tokens.get(), v_write);
 
   owned_g_.n_vertices = unique_vertex_count;
   owned_g_.n_edges = edge_count;
@@ -559,10 +564,14 @@ __host__ void GARMatch::LoadData() {
     const uint32_t dst_id = ParseVertexIDStable(dst);
 
     if (e_write >= owned_g_.n_edges) break;
-    int src_local = LowerBoundUInt32(vertex_tokens.get(), unique_vertex_count, src_id);
-    int dst_local = LowerBoundUInt32(vertex_tokens.get(), unique_vertex_count, dst_id);
-    if (src_local >= unique_vertex_count || vertex_tokens[src_local] != src_id ||
-        dst_local >= unique_vertex_count || vertex_tokens[dst_local] != dst_id) {
+    int src_local =
+        LowerBoundUInt32(vertex_tokens.get(), unique_vertex_count, src_id);
+    int dst_local =
+        LowerBoundUInt32(vertex_tokens.get(), unique_vertex_count, dst_id);
+    if (src_local >= unique_vertex_count ||
+        vertex_tokens[src_local] != src_id ||
+        dst_local >= unique_vertex_count ||
+        vertex_tokens[dst_local] != dst_id) {
       continue;
     }
     owned_g_.e_src[e_write] = static_cast<uint32_t>(src_local);

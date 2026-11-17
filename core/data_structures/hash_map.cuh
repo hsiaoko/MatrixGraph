@@ -1,11 +1,11 @@
 #ifndef MATRIXGRAPH_CORE_DATA_STRUCTURES_HASH_MAP_CUH_
 #define MATRIXGRAPH_CORE_DATA_STRUCTURES_HASH_MAP_CUH_
 
-#include <cuda_runtime.h>
-#include <cstdint>
-#include <type_traits>
-
 #include "core/util/cuda_check.cuh"
+
+#include <cstdint>
+#include <cuda_runtime.h>
+#include <type_traits>
 
 namespace sics {
 namespace matrixgraph {
@@ -110,9 +110,7 @@ struct DefaultEqual {
 //   - HostHashMap  -> pointers live in host memory
 //   - DeviceHashMap -> pointers live in device memory
 // ---------------------------------------------------------------------------
-template <typename Key,
-          typename Value,
-          typename Hash = DefaultHash<Key>,
+template <typename Key, typename Value, typename Hash = DefaultHash<Key>,
           typename KeyEqual = DefaultEqual<Key>>
 struct HashMap {
   static_assert(std::is_trivially_copyable_v<Key>,
@@ -161,9 +159,7 @@ struct HashMap {
 // ---------------------------------------------------------------------------
 // HostHashMap  (owns host memory)
 // ---------------------------------------------------------------------------
-template <typename Key,
-          typename Value,
-          typename Hash = DefaultHash<Key>,
+template <typename Key, typename Value, typename Hash = DefaultHash<Key>,
           typename KeyEqual = DefaultEqual<Key>>
 class HostHashMap {
  public:
@@ -258,9 +254,7 @@ class HostHashMap {
 // ---------------------------------------------------------------------------
 // DeviceHashMap  (owns device memory; builds on host temp buffer then H2D)
 // ---------------------------------------------------------------------------
-template <typename Key,
-          typename Value,
-          typename Hash = DefaultHash<Key>,
+template <typename Key, typename Value, typename Hash = DefaultHash<Key>,
           typename KeyEqual = DefaultEqual<Key>>
 class DeviceHashMap {
  public:
@@ -298,8 +292,8 @@ class DeviceHashMap {
     CUDA_CHECK(cudaMalloc(&values_, sizeof(Value) * capacity_));
     CUDA_CHECK(cudaMalloc(&occupied_, sizeof(uint8_t) * capacity_));
 
-    CUDA_CHECK(
-        cudaMemcpy(keys_, h_keys, sizeof(Key) * capacity_, cudaMemcpyHostToDevice));
+    CUDA_CHECK(cudaMemcpy(keys_, h_keys, sizeof(Key) * capacity_,
+                          cudaMemcpyHostToDevice));
     CUDA_CHECK(cudaMemcpy(values_, h_values, sizeof(Value) * capacity_,
                           cudaMemcpyHostToDevice));
     CUDA_CHECK(cudaMemcpy(occupied_, h_occupied, sizeof(uint8_t) * capacity_,

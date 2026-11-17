@@ -1,13 +1,12 @@
-#include "core/task/gpu_task/execute_agg_prim.cuh"
+#include "core/common/consts.h"
 #include "core/task/gpu_task/block_agg_prims.cuh"
+#include "core/task/gpu_task/execute_agg_prim.cuh"
+#include "core/util/cuda_check.cuh"
 
-#include <cmath>
 #include <cfloat>
+#include <cmath>
 #include <cstring>
 #include <iostream>
-
-#include "core/common/consts.h"
-#include "core/util/cuda_check.cuh"
 
 namespace sics {
 namespace matrixgraph {
@@ -92,13 +91,10 @@ namespace kernel {
 // Launched at kBlockDim=1024 threads, so registers must stay at or below
 // 64/thread; debug (-G) builds inflate register pressure past the launch
 // limit without this bound (error 701). Spills are accepted in debug.
-__launch_bounds__(common::kBlockDim)
-__global__ void ComputeAggPrimKernel(AggPrim prim,
-                                     const FeatureValue* d_values,
-                                     const uint32_t* d_offsets,
-                                     uint32_t list_offset,
-                                     uint32_t total_n_lists,
-                                     FeatureValue* d_outputs) {
+__launch_bounds__(common::kBlockDim) __global__
+    void ComputeAggPrimKernel(AggPrim prim, const FeatureValue* d_values,
+                              const uint32_t* d_offsets, uint32_t list_offset,
+                              uint32_t total_n_lists, FeatureValue* d_outputs) {
   extern __shared__ uint8_t shared_mem[];
   FeatureValue* shared_buf = reinterpret_cast<FeatureValue*>(shared_mem);
 
@@ -125,14 +121,13 @@ __global__ void ComputeAggPrimKernel(AggPrim prim,
 }
 
 // Same 1024-thread launch budget as ComputeAggPrimKernel; see its comment.
-__launch_bounds__(common::kBlockDim)
-__global__ void ComputeBatchMultiPrimKernel(const FeatureValue* d_values,
-                                            const uint32_t* d_offsets,
-                                            const AggPrim* d_prims,
-                                            uint32_t n_prims,
-                                            uint32_t list_offset,
-                                            uint32_t total_n_lists,
-                                            FeatureValue* d_outputs) {
+__launch_bounds__(common::kBlockDim) __global__
+    void ComputeBatchMultiPrimKernel(const FeatureValue* d_values,
+                                     const uint32_t* d_offsets,
+                                     const AggPrim* d_prims, uint32_t n_prims,
+                                     uint32_t list_offset,
+                                     uint32_t total_n_lists,
+                                     FeatureValue* d_outputs) {
   extern __shared__ uint8_t shared_mem[];
   FeatureValue* shared_buf = reinterpret_cast<FeatureValue*>(shared_mem);
 
@@ -162,12 +157,11 @@ __global__ void ComputeBatchMultiPrimKernel(const FeatureValue* d_values,
   }
 }
 
-__launch_bounds__(common::kAllFeaturesBlockDim)
-__global__ void ComputeAllAggPrimsKernel(const FeatureValue* d_values,
-                                         const uint32_t* d_offsets,
-                                         uint32_t list_offset,
-                                         uint32_t total_n_lists,
-                                         AllFeatures* d_outputs) {
+__launch_bounds__(common::kAllFeaturesBlockDim) __global__
+    void ComputeAllAggPrimsKernel(const FeatureValue* d_values,
+                                  const uint32_t* d_offsets,
+                                  uint32_t list_offset, uint32_t total_n_lists,
+                                  AllFeatures* d_outputs) {
   extern __shared__ uint8_t shared_mem[];
   FeatureValue* shared_buf = reinterpret_cast<FeatureValue*>(shared_mem);
 
@@ -197,11 +191,9 @@ __global__ void ComputeAllAggPrimsKernel(const FeatureValue* d_values,
 // -----------------------------------------------------------------------------
 namespace {
 
-
-
 // Block argmin/argmax over (key, index); returns winning index to all threads.
 __device__ __forceinline__ int BlockArgReduce(double key, int idx, double* sk,
-                                               int* si, bool is_max) {
+                                              int* si, bool is_max) {
   int lane = threadIdx.x & 31;
   int wid = threadIdx.x >> 5;
 #pragma unroll
@@ -210,9 +202,15 @@ __device__ __forceinline__ int BlockArgReduce(double key, int idx, double* sk,
     int oi = __shfl_down_sync(0xffffffffu, idx, o);
     bool take = is_max ? (ok > key || (ok == key && oi < idx))
                        : (ok < key || (ok == key && oi < idx));
-    if (take) { key = ok; idx = oi; }
+    if (take) {
+      key = ok;
+      idx = oi;
+    }
   }
-  if (lane == 0) { sk[wid] = key; si[wid] = idx; }
+  if (lane == 0) {
+    sk[wid] = key;
+    si[wid] = idx;
+  }
   __syncthreads();
   if (threadIdx.x == 0) {
     int nwarps = (blockDim.x + 31) >> 5;
@@ -221,7 +219,10 @@ __device__ __forceinline__ int BlockArgReduce(double key, int idx, double* sk,
     for (int i = 1; i < nwarps; ++i) {
       bool take = is_max ? (sk[i] > bk || (sk[i] == bk && si[i] < bi))
                          : (sk[i] < bk || (sk[i] == bk && si[i] < bi));
-      if (take) { bk = sk[i]; bi = si[i]; }
+      if (take) {
+        bk = sk[i];
+        bi = si[i];
+      }
     }
     si[0] = bi;
   }
@@ -355,13 +356,12 @@ __device__ __forceinline__ unsigned long long HashMix(unsigned long long x) {
 
 }  // namespace
 
-__launch_bounds__(common::kStreamingAggBlockDim)
-__global__ void ComputeAggStreamingKernel(const FeatureValue* d_values,
-                                          const uint32_t* d_offsets,
-                                          const uint32_t* d_list_ids,
-                                          const AggPrim* d_list_prims,
-                                          uint32_t n_group,
-                                          FeatureValue* d_outputs) {
+__launch_bounds__(common::kStreamingAggBlockDim) __global__
+    void ComputeAggStreamingKernel(const FeatureValue* d_values,
+                                   const uint32_t* d_offsets,
+                                   const uint32_t* d_list_ids,
+                                   const AggPrim* d_list_prims,
+                                   uint32_t n_group, FeatureValue* d_outputs) {
   uint32_t g = blockIdx.x;
   if (g >= n_group) return;
   __shared__ double sd[32];
@@ -374,14 +374,14 @@ __global__ void ComputeAggStreamingKernel(const FeatureValue* d_values,
   if (threadIdx.x == 0) d_outputs[list] = r;
 }
 
-__launch_bounds__(common::kNumUniqueHashBlockDim)
-__global__ void ComputeNumUniqueHashKernel(const FeatureValue* d_values,
-                                           const uint32_t* d_offsets,
-                                           const uint32_t* d_list_ids,
-                                           uint32_t n_group,
-                                           unsigned long long* d_hash,
-                                           const uint32_t* d_hash_offsets,
-                                           FeatureValue* d_outputs) {
+__launch_bounds__(common::kNumUniqueHashBlockDim) __global__
+    void ComputeNumUniqueHashKernel(const FeatureValue* d_values,
+                                    const uint32_t* d_offsets,
+                                    const uint32_t* d_list_ids,
+                                    uint32_t n_group,
+                                    unsigned long long* d_hash,
+                                    const uint32_t* d_hash_offsets,
+                                    FeatureValue* d_outputs) {
   uint32_t g = blockIdx.x;
   if (g >= n_group) return;
   uint32_t list = d_list_ids[g];
@@ -391,11 +391,15 @@ __global__ void ComputeNumUniqueHashKernel(const FeatureValue* d_values,
   const unsigned long long kHashEmpty = 0xFFFFFFFFFFFFFFFFull;
   __shared__ unsigned int s_count;
   __shared__ int s_has_empty;
-  if (threadIdx.x == 0) { s_count = 0u; s_has_empty = 0; }
+  if (threadIdx.x == 0) {
+    s_count = 0u;
+    s_has_empty = 0;
+  }
 
   unsigned long long* table = d_hash + d_hash_offsets[g];
   uint32_t cap = d_hash_offsets[g + 1] - d_hash_offsets[g];
-  for (uint32_t i = threadIdx.x; i < cap; i += blockDim.x) table[i] = kHashEmpty;
+  for (uint32_t i = threadIdx.x; i < cap; i += blockDim.x)
+    table[i] = kHashEmpty;
   __syncthreads();
 
   if (n == 0) {
@@ -413,7 +417,10 @@ __global__ void ComputeNumUniqueHashKernel(const FeatureValue* d_values,
     uint32_t slot = static_cast<uint32_t>(HashMix(key) & mask);
     while (true) {
       unsigned long long old = atomicCAS(&table[slot], kHashEmpty, key);
-      if (old == kHashEmpty) { atomicAdd(&s_count, 1u); break; }
+      if (old == kHashEmpty) {
+        atomicAdd(&s_count, 1u);
+        break;
+      }
       if (old == key) break;
       slot = (slot + 1u) & mask;
     }
@@ -462,7 +469,8 @@ __host__ void BuildOffsets(const std::vector<std::vector<FeatureValue>>& lists,
   }
 }
 
-__host__ uint32_t ComputeMaxN(const std::vector<std::vector<FeatureValue>>& lists) {
+__host__ uint32_t
+ComputeMaxN(const std::vector<std::vector<FeatureValue>>& lists) {
   uint32_t max_n = 0;
   for (const auto& list : lists) {
     max_n = std::max(max_n, static_cast<uint32_t>(list.size()));
@@ -483,25 +491,41 @@ __host__ ExecuteAggPrim::~ExecuteAggPrim() {
 }
 
 __host__ ExecuteAggPrim::ExecuteAggPrim(ExecuteAggPrim&& other) noexcept
-    : h_values_(other.h_values_), h_values_cap_(other.h_values_cap_),
-      d_values_(other.d_values_), d_values_cap_(other.d_values_cap_),
-      d_offsets_(other.d_offsets_), d_offsets_cap_(other.d_offsets_cap_),
-      d_outputs_(other.d_outputs_), d_outputs_cap_(other.d_outputs_cap_),
-      d_ids_(other.d_ids_), d_ids_cap_(other.d_ids_cap_),
-      d_prims_(other.d_prims_), d_prims_cap_(other.d_prims_cap_),
-      d_hoff_(other.d_hoff_), d_hoff_cap_(other.d_hoff_cap_),
-      d_hash_(other.d_hash_), d_hash_cap_(other.d_hash_cap_) {
+    : h_values_(other.h_values_),
+      h_values_cap_(other.h_values_cap_),
+      d_values_(other.d_values_),
+      d_values_cap_(other.d_values_cap_),
+      d_offsets_(other.d_offsets_),
+      d_offsets_cap_(other.d_offsets_cap_),
+      d_outputs_(other.d_outputs_),
+      d_outputs_cap_(other.d_outputs_cap_),
+      d_ids_(other.d_ids_),
+      d_ids_cap_(other.d_ids_cap_),
+      d_prims_(other.d_prims_),
+      d_prims_cap_(other.d_prims_cap_),
+      d_hoff_(other.d_hoff_),
+      d_hoff_cap_(other.d_hoff_cap_),
+      d_hash_(other.d_hash_),
+      d_hash_cap_(other.d_hash_cap_) {
   n_streams_ = other.n_streams_;
   streams_ = std::move(other.streams_);
   other.n_streams_ = 1;
-  other.h_values_ = nullptr; other.h_values_cap_ = 0;
-  other.d_values_ = nullptr; other.d_values_cap_ = 0;
-  other.d_offsets_ = nullptr; other.d_offsets_cap_ = 0;
-  other.d_outputs_ = nullptr; other.d_outputs_cap_ = 0;
-  other.d_ids_ = nullptr; other.d_ids_cap_ = 0;
-  other.d_prims_ = nullptr; other.d_prims_cap_ = 0;
-  other.d_hoff_ = nullptr; other.d_hoff_cap_ = 0;
-  other.d_hash_ = nullptr; other.d_hash_cap_ = 0;
+  other.h_values_ = nullptr;
+  other.h_values_cap_ = 0;
+  other.d_values_ = nullptr;
+  other.d_values_cap_ = 0;
+  other.d_offsets_ = nullptr;
+  other.d_offsets_cap_ = 0;
+  other.d_outputs_ = nullptr;
+  other.d_outputs_cap_ = 0;
+  other.d_ids_ = nullptr;
+  other.d_ids_cap_ = 0;
+  other.d_prims_ = nullptr;
+  other.d_prims_cap_ = 0;
+  other.d_hoff_ = nullptr;
+  other.d_hoff_cap_ = 0;
+  other.d_hash_ = nullptr;
+  other.d_hash_cap_ = 0;
 }
 
 __host__ ExecuteAggPrim& ExecuteAggPrim::operator=(
@@ -511,23 +535,39 @@ __host__ ExecuteAggPrim& ExecuteAggPrim::operator=(
     FreeBuffers();
     n_streams_ = other.n_streams_;
     streams_ = std::move(other.streams_);
-    h_values_ = other.h_values_; h_values_cap_ = other.h_values_cap_;
-    d_values_ = other.d_values_; d_values_cap_ = other.d_values_cap_;
-    d_offsets_ = other.d_offsets_; d_offsets_cap_ = other.d_offsets_cap_;
-    d_outputs_ = other.d_outputs_; d_outputs_cap_ = other.d_outputs_cap_;
-    d_ids_ = other.d_ids_; d_ids_cap_ = other.d_ids_cap_;
-    d_prims_ = other.d_prims_; d_prims_cap_ = other.d_prims_cap_;
-    d_hoff_ = other.d_hoff_; d_hoff_cap_ = other.d_hoff_cap_;
-    d_hash_ = other.d_hash_; d_hash_cap_ = other.d_hash_cap_;
+    h_values_ = other.h_values_;
+    h_values_cap_ = other.h_values_cap_;
+    d_values_ = other.d_values_;
+    d_values_cap_ = other.d_values_cap_;
+    d_offsets_ = other.d_offsets_;
+    d_offsets_cap_ = other.d_offsets_cap_;
+    d_outputs_ = other.d_outputs_;
+    d_outputs_cap_ = other.d_outputs_cap_;
+    d_ids_ = other.d_ids_;
+    d_ids_cap_ = other.d_ids_cap_;
+    d_prims_ = other.d_prims_;
+    d_prims_cap_ = other.d_prims_cap_;
+    d_hoff_ = other.d_hoff_;
+    d_hoff_cap_ = other.d_hoff_cap_;
+    d_hash_ = other.d_hash_;
+    d_hash_cap_ = other.d_hash_cap_;
     other.n_streams_ = 1;
-    other.h_values_ = nullptr; other.h_values_cap_ = 0;
-    other.d_values_ = nullptr; other.d_values_cap_ = 0;
-    other.d_offsets_ = nullptr; other.d_offsets_cap_ = 0;
-    other.d_outputs_ = nullptr; other.d_outputs_cap_ = 0;
-    other.d_ids_ = nullptr; other.d_ids_cap_ = 0;
-    other.d_prims_ = nullptr; other.d_prims_cap_ = 0;
-    other.d_hoff_ = nullptr; other.d_hoff_cap_ = 0;
-    other.d_hash_ = nullptr; other.d_hash_cap_ = 0;
+    other.h_values_ = nullptr;
+    other.h_values_cap_ = 0;
+    other.d_values_ = nullptr;
+    other.d_values_cap_ = 0;
+    other.d_offsets_ = nullptr;
+    other.d_offsets_cap_ = 0;
+    other.d_outputs_ = nullptr;
+    other.d_outputs_cap_ = 0;
+    other.d_ids_ = nullptr;
+    other.d_ids_cap_ = 0;
+    other.d_prims_ = nullptr;
+    other.d_prims_cap_ = 0;
+    other.d_hoff_ = nullptr;
+    other.d_hoff_cap_ = 0;
+    other.d_hash_ = nullptr;
+    other.d_hash_cap_ = 0;
   }
   return *this;
 }
@@ -541,14 +581,22 @@ __host__ void ExecuteAggPrim::FreeBuffers() {
   if (d_prims_) cudaFree(d_prims_);
   if (d_hoff_) cudaFree(d_hoff_);
   if (d_hash_) cudaFree(d_hash_);
-  h_values_ = nullptr; h_values_cap_ = 0;
-  d_values_ = nullptr; d_values_cap_ = 0;
-  d_offsets_ = nullptr; d_offsets_cap_ = 0;
-  d_outputs_ = nullptr; d_outputs_cap_ = 0;
-  d_ids_ = nullptr; d_ids_cap_ = 0;
-  d_prims_ = nullptr; d_prims_cap_ = 0;
-  d_hoff_ = nullptr; d_hoff_cap_ = 0;
-  d_hash_ = nullptr; d_hash_cap_ = 0;
+  h_values_ = nullptr;
+  h_values_cap_ = 0;
+  d_values_ = nullptr;
+  d_values_cap_ = 0;
+  d_offsets_ = nullptr;
+  d_offsets_cap_ = 0;
+  d_outputs_ = nullptr;
+  d_outputs_cap_ = 0;
+  d_ids_ = nullptr;
+  d_ids_cap_ = 0;
+  d_prims_ = nullptr;
+  d_prims_cap_ = 0;
+  d_hoff_ = nullptr;
+  d_hoff_cap_ = 0;
+  d_hash_ = nullptr;
+  d_hash_cap_ = 0;
 }
 
 __host__ FeatureValue* ExecuteAggPrim::EnsurePinnedValues(uint32_t n) {
@@ -675,9 +723,9 @@ __host__ std::vector<FeatureValue> ExecuteAggPrim::ComputeBatchFlat(
                                  sizeof(FeatureValue) * vc,
                                  cudaMemcpyHostToDevice, streams_[s]));
     }
-    kernel::ComputeAggPrimKernel<<<count, common::kBlockDim,
-                                   shared_mem, streams_[s]>>>(
-        prim, d_values, d_offsets, begin, n_lists, d_outputs);
+    kernel::ComputeAggPrimKernel<<<count, common::kBlockDim, shared_mem,
+                                   streams_[s]>>>(prim, d_values, d_offsets,
+                                                  begin, n_lists, d_outputs);
     CUDA_CHECK(cudaMemcpyAsync(h_results + begin, d_outputs + begin,
                                sizeof(FeatureValue) * count,
                                cudaMemcpyDeviceToHost, streams_[s]));
@@ -724,8 +772,9 @@ __host__ AllFeatures ExecuteAggPrim::ComputeAll(const FeatureValue* host_values,
   CUDA_CHECK(cudaFuncSetAttribute(kernel::ComputeAllAggPrimsKernel,
                                   cudaFuncAttributeMaxDynamicSharedMemorySize,
                                   static_cast<int>(shared_mem)));
-  kernel::ComputeAllAggPrimsKernel<<<1, common::kAllFeaturesBlockDim, shared_mem>>>(
-      d_values, d_offsets, 0, 1, d_output);
+  kernel::
+      ComputeAllAggPrimsKernel<<<1, common::kAllFeaturesBlockDim, shared_mem>>>(
+          d_values, d_offsets, 0, 1, d_output);
   CUDA_CHECK(cudaGetLastError());
   CUDA_CHECK(cudaDeviceSynchronize());
 
@@ -825,9 +874,11 @@ ExecuteAggPrim::ComputeBatchMultiPrim(
 }
 
 __host__ std::vector<std::vector<FeatureValue>>
-ExecuteAggPrim::ComputeBatchMultiPrimFlat(
-    const FeatureValue* h_flat, const uint32_t* offsets, uint32_t n_lists,
-    uint32_t total_values, uint32_t max_n, const std::vector<AggPrim>& prims) {
+ExecuteAggPrim::ComputeBatchMultiPrimFlat(const FeatureValue* h_flat,
+                                          const uint32_t* offsets,
+                                          uint32_t n_lists,
+                                          uint32_t total_values, uint32_t max_n,
+                                          const std::vector<AggPrim>& prims) {
   std::vector<std::vector<FeatureValue>> results;
   if (n_lists == 0 || prims.empty()) return results;
   uint32_t n_prims = static_cast<uint32_t>(prims.size());
@@ -848,8 +899,8 @@ ExecuteAggPrim::ComputeBatchMultiPrimFlat(
 
   // Pinned host results buffer for truly async D2H.
   FeatureValue* h_results = nullptr;
-  CUDA_CHECK(cudaMallocHost(&h_results,
-                            sizeof(FeatureValue) * n_lists * n_prims));
+  CUDA_CHECK(
+      cudaMallocHost(&h_results, sizeof(FeatureValue) * n_lists * n_prims));
 
   // Small metadata copies once on the default stream (host-blocking).
   CUDA_CHECK(cudaMemcpy(d_offsets, offsets, sizeof(uint32_t) * (n_lists + 1),
@@ -876,8 +927,8 @@ ExecuteAggPrim::ComputeBatchMultiPrimFlat(
                                  sizeof(FeatureValue) * vc,
                                  cudaMemcpyHostToDevice, streams_[s]));
     }
-    kernel::ComputeBatchMultiPrimKernel<<<count, common::kBlockDim,
-                                          shared_mem, streams_[s]>>>(
+    kernel::ComputeBatchMultiPrimKernel<<<count, common::kBlockDim, shared_mem,
+                                          streams_[s]>>>(
         d_values, d_offsets, d_prims, n_prims, begin, n_lists, d_outputs);
     CUDA_CHECK(cudaMemcpyAsync(h_results + begin * n_prims,
                                d_outputs + begin * n_prims,

@@ -2,6 +2,7 @@
 #define MATRIXGRAPH_CORE_DATA_STRUCTURES_METADATA_H_
 
 #include "core/common/types.h"
+
 #include <vector>
 
 namespace sics {
@@ -10,12 +11,12 @@ namespace core {
 namespace data_structures {
 
 struct GridGraphMetadata {
-private:
+ private:
   using VertexID = sics::matrixgraph::core::common::VertexID;
   using GraphID = sics::matrixgraph::core::common::GraphID;
   using EdgeIndex = sics::matrixgraph::core::common::EdgeIndex;
 
-public:
+ public:
   GraphID n_chunks = 0;
   VertexID n_vertices = 0;
   EdgeIndex n_edges = 0;
@@ -23,10 +24,10 @@ public:
 };
 
 struct TiledMatrixMetadata {
-private:
+ private:
   using VertexID = sics::matrixgraph::core::common::VertexID;
 
-public:
+ public:
   VertexID n_strips = 0;
   VertexID n_nz_tile = 0;
   VertexID tile_size = 0;
@@ -65,9 +66,9 @@ struct GraphMetadata {
   std::vector<SubGraphMetadata> subgraphs;
 };
 
-} // namespace data_structures
-} // namespace core
-} // namespace matrixgraph
-} // namespace sics
+}  // namespace data_structures
+}  // namespace core
+}  // namespace matrixgraph
+}  // namespace sics
 
-#endif // MATRIXGRAPH_CORE_DATA_STRUCTURES_METADATA_H_
+#endif  // MATRIXGRAPH_CORE_DATA_STRUCTURES_METADATA_H_

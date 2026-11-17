@@ -132,7 +132,8 @@ std::uint64_t HomMatcher::Enumerate(
 
   auto has_edge = [&](std::uint32_t src, std::uint32_t dst,
                       std::uint32_t slot) {
-    return idx.RelationPairSet(static_cast<int>(slot)).count(PackPair(src, dst)) != 0;
+    return idx.RelationPairSet(static_cast<int>(slot))
+               .count(PackPair(src, dst)) != 0;
   };
 
   std::vector<std::uint32_t> emb(static_cast<std::size_t>(n), 0);
@@ -140,9 +141,8 @@ std::uint64_t HomMatcher::Enumerate(
 
   auto candidates = [&](const Adj& driver, std::vector<std::uint32_t>* out_c) {
     out_c->clear();
-    const std::uint32_t slot = driver.is_out
-                                   ? FlipSlot(driver.slot, R)
-                                   : driver.slot;
+    const std::uint32_t slot =
+        driver.is_out ? FlipSlot(driver.slot, R) : driver.slot;
     const std::uint32_t anchor = emb[driver.other];
     const auto& pairs = idx.RelationPairs(static_cast<int>(slot));
     const std::uint64_t key = PackPair(anchor, 0);

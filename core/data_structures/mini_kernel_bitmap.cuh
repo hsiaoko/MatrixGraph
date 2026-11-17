@@ -1,9 +1,8 @@
 #ifndef MATRIXGRAPH_CORE_DATA_STRUCTURES_MINI_KERNEL_BITMAP_CUH_
 #define MATRIXGRAPH_CORE_DATA_STRUCTURES_MINI_KERNEL_BITMAP_CUH_
 
-#include <cuda_runtime.h>
-
 #include <cstdint>
+#include <cuda_runtime.h>
 
 namespace sics {
 namespace matrixgraph {

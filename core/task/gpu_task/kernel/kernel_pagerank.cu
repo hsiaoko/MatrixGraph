@@ -1,8 +1,3 @@
-#include <cuda_runtime.h>
-
-#include <chrono>
-#include <iostream>
-
 #include "core/common/consts.h"
 #include "core/common/types.h"
 #include "core/data_structures/kernel_bitmap.cuh"
@@ -10,6 +5,10 @@
 #include "core/task/gpu_task/kernel/kernel_pagerank.cuh"
 #include "core/util/bitmap_no_ownership.h"
 #include "core/util/cuda_launch_dims.cuh"
+
+#include <chrono>
+#include <cuda_runtime.h>
+#include <iostream>
 
 namespace sics {
 namespace matrixgraph {
@@ -200,8 +199,8 @@ void PageRankKernelWrapper::PageRank(
     // PageRankRangeKernel<<<dim_grid, dim_block, 0, stream>>>(params);
 
     // Swap buffers and check for convergence
-    SwapAndCheckConvergenceKernel<<<dim_grid, dim_block, 0, stream>>>(params,
-                                                                    d_max_diff);
+    SwapAndCheckConvergenceKernel<<<dim_grid, dim_block, 0, stream>>>(
+        params, d_max_diff);
 
     // Copy max_diff back to host
     cudaMemcpyAsync(&h_max_diff, d_max_diff, sizeof(float),

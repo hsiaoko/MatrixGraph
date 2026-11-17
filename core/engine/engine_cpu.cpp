@@ -1,12 +1,11 @@
-#include <algorithm>
-#include <thread>
-
-#include <oneapi/tbb/global_control.h>
-
 #include "core/engine/engine.h"
 #include "core/engine/engine_internal.h"
 #include "core/task/cpu_task/cpu_task_base.h"
 #include "core/util/error.h"
+
+#include <algorithm>
+#include <oneapi/tbb/global_control.h>
+#include <thread>
 
 namespace sics {
 namespace matrixgraph {

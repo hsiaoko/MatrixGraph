@@ -1,16 +1,16 @@
 #ifndef MATRIXGRAPH_CORE_TASK_CPU_TASK_SUBISO_CPU_CUH_
 #define MATRIXGRAPH_CORE_TASK_CPU_TASK_SUBISO_CPU_CUH_
 
-#include <string>
-#include <thread>
-#include <vector>
-
 #include "core/common/types.h"
 #include "core/data_structures/edgelist.h"
 #include "core/data_structures/immutable_csr.cuh"
 #include "core/data_structures/matrix.cuh"
 #include "core/data_structures/unified_buffer.cuh"
 #include "core/task/cpu_task/cpu_task_base.h"
+
+#include <string>
+#include <thread>
+#include <vector>
 
 namespace sics {
 namespace matrixgraph {
@@ -37,14 +37,11 @@ class SubIsoCPU : public CPUTaskBase {
             const std::string& matrix_path4 = "",
             const std::string& matrix_path5 = "",
             const std::string& matrix_path6 = "",
-            const std::string& reject_output_path = "",
-            int filter_hop = 1, int filter_k = 3,
-            bool enable_min_wise_filter = true,
+            const std::string& reject_output_path = "", int filter_hop = 1,
+            int filter_k = 3, bool enable_min_wise_filter = true,
             bool enable_label_degree_filter = true,
-            bool enable_nlc_filter = true,
-            bool enable_matching_order = true,
-            bool enable_lpf_filter = true,
-            bool enable_lcf_filter = true,
+            bool enable_nlc_filter = true, bool enable_matching_order = true,
+            bool enable_lpf_filter = true, bool enable_lcf_filter = true,
             bool enable_bloom_filter = true,
             bool enable_min_wise_bloom_filter = true,
             bool enable_runtime_nlc_filter = true)

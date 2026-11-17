@@ -1,6 +1,11 @@
 #ifndef MATRIXGRAPH_CORE_TASK_CPU_TASK_MIN_WISE_FILTER_H_
 #define MATRIXGRAPH_CORE_TASK_CPU_TASK_MIN_WISE_FILTER_H_
 
+#include "core/common/consts.h"
+#include "core/common/types.h"
+#include "core/data_structures/immutable_csr.cuh"
+#include "core/util/parallel.h"
+
 #include <algorithm>
 #include <atomic>
 #include <cstring>
@@ -8,11 +13,6 @@
 #include <thread>
 #include <utility>
 #include <vector>
-
-#include "core/common/consts.h"
-#include "core/common/types.h"
-#include "core/data_structures/immutable_csr.cuh"
-#include "core/util/parallel.h"
 
 namespace sics {
 
@@ -65,22 +65,38 @@ class MinWiseBitmap {
 // Maps a label hash bucket index (0..15) to a permutation bucket.
 static inline VertexID MinWiseHashTable(VertexID key) {
   switch (key) {
-    case 0: return 12;
-    case 1: return 3;
-    case 2: return 11;
-    case 3: return 9;
-    case 4: return 15;
-    case 5: return 2;
-    case 6: return 8;
-    case 7: return 4;
-    case 8: return 13;
-    case 9: return 10;
-    case 10: return 5;
-    case 11: return 7;
-    case 12: return 14;
-    case 13: return 6;
-    case 14: return 1;
-    case 15: return 0;
+    case 0:
+      return 12;
+    case 1:
+      return 3;
+    case 2:
+      return 11;
+    case 3:
+      return 9;
+    case 4:
+      return 15;
+    case 5:
+      return 2;
+    case 6:
+      return 8;
+    case 7:
+      return 4;
+    case 8:
+      return 13;
+    case 9:
+      return 10;
+    case 10:
+      return 5;
+    case 11:
+      return 7;
+    case 12:
+      return 14;
+    case 13:
+      return 6;
+    case 14:
+      return 1;
+    case 15:
+      return 0;
   }
   return 0;
 }
@@ -103,8 +119,7 @@ struct MinWiseFilterCache {
 
 namespace detail {
 
-inline void EnsureVisitedBuffer(VertexID n,
-                                std::vector<uint32_t>& visited,
+inline void EnsureVisitedBuffer(VertexID n, std::vector<uint32_t>& visited,
                                 uint32_t& stamp) {
   if (visited.size() < n) {
     visited.assign(n, 0);
@@ -118,8 +133,7 @@ inline void EnsureVisitedBuffer(VertexID n,
 template <class Bitmap>
 inline void CollectEllHopOutLabels(const ImmutableCSR& csr, VertexID src,
                                    int hop, Bitmap& bitmap,
-                                   uint32_t hash_freq[16],
-                                   VertexID& min_hash,
+                                   uint32_t hash_freq[16], VertexID& min_hash,
                                    std::vector<uint32_t>& visited,
                                    uint32_t& stamp) {
   auto n = csr.get_num_vertices();
@@ -167,8 +181,7 @@ inline void CollectEllHopOutLabels(const ImmutableCSR& csr, VertexID src,
 template <class Bitmap>
 inline void CollectEllHopInLabels(const ImmutableCSR& csr, VertexID src,
                                   int hop, Bitmap& bitmap,
-                                  uint32_t hash_freq[16],
-                                  VertexID& min_hash,
+                                  uint32_t hash_freq[16], VertexID& min_hash,
                                   std::vector<uint32_t>& visited,
                                   uint32_t& stamp) {
   auto n = csr.get_num_vertices();
@@ -227,8 +240,8 @@ inline void BuildMinWiseFilterCache(const ImmutableCSR& csr,
   std::iota(worker.begin(), worker.end(), 0);
   auto step = worker.size();
 
-  ParallelFor(worker.begin(), worker.end(),
-      [step, n, hop, k, &csr, &cache](auto w) {
+  ParallelFor(
+      worker.begin(), worker.end(), [step, n, hop, k, &csr, &cache](auto w) {
         // Per-thread reusable BFS state.
         std::vector<uint32_t> visited;
         uint32_t stamp = 0;

@@ -1,10 +1,10 @@
 #ifndef MATRIXGRAPH_CORE_DATA_STRUCTURES_ATTRIBUTES_H_
 #define MATRIXGRAPH_CORE_DATA_STRUCTURES_ATTRIBUTES_H_
 
-#include <cuda_runtime.h>
-#include <cstdint>
-
 #include "core/data_structures/hash_map.cuh"
+
+#include <cstdint>
+#include <cuda_runtime.h>
 
 namespace sics {
 namespace matrixgraph {
@@ -31,17 +31,28 @@ enum class ValueType : uint8_t {
 
 __host__ __device__ inline const char* ValueTypeToString(ValueType type) {
   switch (type) {
-    case ValueType::kInvalid:    return "Invalid";
-    case ValueType::kFloat64:    return "Float64";
-    case ValueType::kFloatList:  return "FloatList";
-    case ValueType::kInt:        return "Int";
-    case ValueType::kIntList:    return "IntList";
-    case ValueType::kString:     return "String";
-    case ValueType::kStringList: return "StringList";
-    case ValueType::kTime:       return "Time";
-    case ValueType::kTimeList:   return "TimeList";
-    case ValueType::kBool:       return "Bool";
-    case ValueType::kFloat32:    return "Float32";
+    case ValueType::kInvalid:
+      return "Invalid";
+    case ValueType::kFloat64:
+      return "Float64";
+    case ValueType::kFloatList:
+      return "FloatList";
+    case ValueType::kInt:
+      return "Int";
+    case ValueType::kIntList:
+      return "IntList";
+    case ValueType::kString:
+      return "String";
+    case ValueType::kStringList:
+      return "StringList";
+    case ValueType::kTime:
+      return "Time";
+    case ValueType::kTimeList:
+      return "TimeList";
+    case ValueType::kBool:
+      return "Bool";
+    case ValueType::kFloat32:
+      return "Float32";
   }
   return "Unknown";
 }
@@ -56,11 +67,13 @@ struct StringView {
 struct Attribute {
   char name[kMaxAttributeNameLength + 1];  // null-terminated
   ValueType type = ValueType::kInvalid;
-  uint32_t n_rows = 0;       // number of entities (rows)
-  uint32_t n_elements = 0;   // total number of primitive elements in data
-  const void* data = nullptr;      // pointer to the flat value buffer
-  const uint32_t* offsets = nullptr;  // nullptr for scalars; length n_rows + 1 for lists
-  const uint8_t* valid = nullptr;  // nullptr = all valid; else n_rows bytes (1 = valid)
+  uint32_t n_rows = 0;         // number of entities (rows)
+  uint32_t n_elements = 0;     // total number of primitive elements in data
+  const void* data = nullptr;  // pointer to the flat value buffer
+  const uint32_t* offsets =
+      nullptr;  // nullptr for scalars; length n_rows + 1 for lists
+  const uint8_t* valid =
+      nullptr;  // nullptr = all valid; else n_rows bytes (1 = valid)
 };
 
 // Whether row `row` of `attr` holds a valid (present) value. A null valid mask
@@ -132,9 +145,8 @@ __host__ __device__ inline const int64_t* GetTimeList(const Attribute& attr,
   return static_cast<const int64_t*>(attr.data) + start;
 }
 
-__host__ __device__ inline const StringView* GetStringList(const Attribute& attr,
-                                                           uint32_t row,
-                                                           uint32_t* size) {
+__host__ __device__ inline const StringView* GetStringList(
+    const Attribute& attr, uint32_t row, uint32_t* size) {
   const uint32_t start = attr.offsets[row];
   *size = attr.offsets[row + 1] - start;
   return static_cast<const StringView*>(attr.data) + start;
@@ -195,34 +207,34 @@ struct DefaultEqual<AttributeName> {
 // their vertex / thread id inside the Attribute columns.
 // ---------------------------------------------------------------------------
 struct Attributes {
-  uint32_t entity_id = 0;  // label id, graph id, vertex id, edge id, or any entity grouping id
+  uint32_t entity_id =
+      0;  // label id, graph id, vertex id, edge id, or any entity grouping id
   HashMap<AttributeName, Attribute> attr_map;
 };
 
 // ---------------------------------------------------------------------------
 // DeviceAttributes  (builds an Attributes table in device memory)
 //
-// The caller is responsible for keeping the Attribute::data / Attribute::offsets
-// buffers alive on the device; DeviceAttributes only manages the hash-map
-// buckets (keys / values / occupied) that map attribute names to Attribute
-// descriptors.
+// The caller is responsible for keeping the Attribute::data /
+// Attribute::offsets buffers alive on the device; DeviceAttributes only manages
+// the hash-map buckets (keys / values / occupied) that map attribute names to
+// Attribute descriptors.
 // ---------------------------------------------------------------------------
 class DeviceAttributes {
  public:
   DeviceAttributes() = default;
 
   // Build from host-side attribute name / Attribute descriptor pairs.
-  DeviceAttributes(uint32_t entity_id,
-                   const AttributeName* names,
-                   const Attribute* attrs,
-                   uint32_t n,
+  DeviceAttributes(uint32_t entity_id, const AttributeName* names,
+                   const Attribute* attrs, uint32_t n,
                    float load_factor = 0.7f) {
     if (n == 0) {
       view_.entity_id = entity_id;
       return;
     }
 
-    uint32_t min_cap = static_cast<uint32_t>(static_cast<float>(n) / load_factor) + 1;
+    uint32_t min_cap =
+        static_cast<uint32_t>(static_cast<float>(n) / load_factor) + 1;
     capacity_ = 1;
     while (capacity_ < min_cap) capacity_ <<= 1;
 

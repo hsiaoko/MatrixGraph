@@ -1,13 +1,13 @@
 #ifndef MATRIXGRAPH_CORE_TASK_GPU_TASK_KERNEL_KERNEL_PAGERANK_CUH_
 #define MATRIXGRAPH_CORE_TASK_GPU_TASK_KERNEL_KERNEL_PAGERANK_CUH_
 
-#include <vector>
-
 #include "core/common/types.h"
 #include "core/data_structures/device_buffer.cuh"
 #include "core/data_structures/edgelist.h"
 #include "core/data_structures/immutable_csr.cuh"
 #include "core/data_structures/unified_buffer.cuh"
+
+#include <vector>
 
 namespace sics {
 namespace matrixgraph {
@@ -34,7 +34,6 @@ class PageRankKernelWrapper {
       data_structures::UnifiedOwnedBuffer<float>& page_ranks,
       float damping_factor = 0.85f, float epsilon = 1e-6f,
       int max_iterations = 10);
-
 };
 
 }  // namespace kernel

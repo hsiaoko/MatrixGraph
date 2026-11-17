@@ -1,8 +1,6 @@
 #ifndef MATRIXGRAPH_TOOLS_GRAPH_CONVERTER_CONVERTER_GRID_EDGELIST_2_BIT_TILED_MATRIX_CUH_
 #define MATRIXGRAPH_TOOLS_GRAPH_CONVERTER_CONVERTER_GRID_EDGELIST_2_BIT_TILED_MATRIX_CUH_
 
-#include <cmath>
-
 #include "core/common/yaml_config.h"
 #include "core/data_structures/bit_tiled_matrix.cuh"
 #include "core/data_structures/edgelist.h"
@@ -11,6 +9,8 @@
 #include "core/io/bit_tiled_matrix_io.cuh"
 #include "core/util/format_converter.cuh"
 #include "tools/common/edgelist_subgraphs_io.cuh"
+
+#include <cmath>
 
 namespace sics {
 namespace matrixgraph {
@@ -31,8 +31,8 @@ using EdgelistSubGraphsIO =
 using BitTiledMatrix = sics::matrixgraph::core::data_structures::BitTiledMatrix;
 using sics::matrixgraph::core::util::format_converter::Edgelist2BitTiledMatrix;
 
-static void ConvertGridGraph2BitTiledMatrix(const std::string &input_path,
-                                            const std::string &output_path,
+static void ConvertGridGraph2BitTiledMatrix(const std::string& input_path,
+                                            const std::string& output_path,
                                             size_t tile_size) {
   if (!std::filesystem::exists(output_path))
     std::filesystem::create_directory(output_path);
@@ -50,12 +50,11 @@ static void ConvertGridGraph2BitTiledMatrix(const std::string &input_path,
   size_t block_scope = graph_metadata.num_vertices / n_chunks;
 
   for (GraphID gid = 0; gid < graph_metadata.num_subgraphs; ++gid) {
-
     std::string block_dir = output_path + "block" + std::to_string(gid) + "/";
 
     edges_blocks[gid].ShowGraph(3);
 
-    auto *bit_tile_matrix =
+    auto* bit_tile_matrix =
         Edgelist2BitTiledMatrix(edges_blocks[gid], tile_size, block_scope);
 
     std::cout << "Write block " << gid << " to " << block_dir << std::endl;
@@ -73,9 +72,9 @@ static void ConvertGridGraph2BitTiledMatrix(const std::string &input_path,
   out_meta_file.close();
 }
 
-} // namespace converter
-} // namespace tools
-} // namespace matrixgraph
-} // namespace sics
+}  // namespace converter
+}  // namespace tools
+}  // namespace matrixgraph
+}  // namespace sics
 
-#endif // MATRIXGRAPH_TOOLS_GRAPH_CONVERTER_CONVERTER_GRID_EDGELIST_2_BIT_TILED_MATRIX_CUH_
+#endif  // MATRIXGRAPH_TOOLS_GRAPH_CONVERTER_CONVERTER_GRID_EDGELIST_2_BIT_TILED_MATRIX_CUH_

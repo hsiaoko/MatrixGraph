@@ -1,8 +1,3 @@
-#include <cmath>
-#include <filesystem>
-#include <fstream>
-#include <vector>
-
 #include "core/common/yaml_config.h"
 #include "core/data_structures/csr_tiled_matrix.cuh"
 #include "core/data_structures/immutable_csr.cuh"
@@ -10,6 +5,11 @@
 #include "core/io/csr_tiled_matrix_io.cuh"
 #include "core/util/atomic.h"
 #include "core/util/bitmap_ownership.h"
+
+#include <cmath>
+#include <filesystem>
+#include <fstream>
+#include <vector>
 
 namespace sics {
 namespace matrixgraph {

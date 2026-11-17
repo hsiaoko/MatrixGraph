@@ -1,16 +1,15 @@
 #ifndef MATRIXGRAPH_CORE_TASK_GPU_TASK_MATRIX_OPS_CUH_
 #define MATRIXGRAPH_CORE_TASK_GPU_TASK_MATRIX_OPS_CUH_
 
-#include <cublas_v2.h>
-
-#include <string>
-
 #include "core/common/types.h"
 #include "core/data_structures/edgelist.h"
 #include "core/data_structures/immutable_csr.cuh"
 #include "core/data_structures/unified_buffer.cuh"
 #include "core/task/gpu_task/kernel/kernel_matrix_ops.cuh"
 #include "core/task/gpu_task/task_base.cuh"
+
+#include <cublas_v2.h>
+#include <string>
 
 namespace sics {
 namespace matrixgraph {

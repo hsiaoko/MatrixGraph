@@ -3,6 +3,7 @@
 
 #include "core/data_structures/host_buffer.cuh"
 #include "core/util/cuda_check.cuh"
+
 #include <cuda_runtime.h>
 
 namespace sics {

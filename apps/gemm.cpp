@@ -1,18 +1,18 @@
+#include "core/task/gpu_task/gemm.cuh"
+
+#include "apps/backend_flag.h"
+#include "core/common/types.h"
+#include "core/common/yaml_config.h"
+#include "core/engine/engine.h"
+#include "core/task/gpu_task/task_base.cuh"
+
 #include <cuda_runtime.h>
 #include <device_launch_parameters.h>
-#include <gflags/gflags.h>
-
 #include <fstream>
+#include <gflags/gflags.h>
 #include <iostream>
 #include <list>
 #include <utility>
-
-#include "core/common/types.h"
-#include "core/common/yaml_config.h"
-#include "apps/backend_flag.h"
-#include "core/engine/engine.h"
-#include "core/task/gpu_task/gemm.cuh"
-#include "core/task/gpu_task/task_base.cuh"
 
 DEFINE_string(i, "", "input data dir path for graph.");
 DEFINE_string(it, "", "input data dir path for transposed graph.");
@@ -23,7 +23,6 @@ DEFINE_string(backend, "gpu",
               "default: gpu)");
 
 using sics::matrixgraph::core::task::GEMM;
-
 
 int main(int argc, char* argv[]) {
   gflags::ParseCommandLineFlags(&argc, &argv, true);

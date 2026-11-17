@@ -1,12 +1,12 @@
 #ifndef MATRIXGRAPH_CORE_IO_ATTRIBUTES_IO_CUH_
 #define MATRIXGRAPH_CORE_IO_ATTRIBUTES_IO_CUH_
 
+#include "core/data_structures/attributes.h"
+
 #include <cstdint>
 #include <memory>
 #include <string>
 #include <vector>
-
-#include "core/data_structures/attributes.h"
 
 namespace sics {
 namespace matrixgraph {

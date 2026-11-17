@@ -20,9 +20,7 @@ using sics::matrixgraph::core::data_structures::HostHashMap;
 // If the key is not found, write NaN.
 // ---------------------------------------------------------------------------
 __global__ void lookup_kernel(const HashMap<uint32_t, float> map,
-                              const uint32_t* keys,
-                              float* out,
-                              uint32_t n) {
+                              const uint32_t* keys, float* out, uint32_t n) {
   uint32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
   if (idx >= n) return;
 

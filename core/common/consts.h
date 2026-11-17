@@ -47,8 +47,10 @@ static const uint32_t kLogWarpSize = 5;
 
 // Specialized block dimensions for shared-memory-heavy aggregation kernels.
 // kBlockDim (1024) is the generic default; these are per-kernel tunings.
-static const uint32_t kAllFeaturesBlockDim = 512;    // fused all-primitives kernels
-static const uint32_t kStreamingAggBlockDim = 256;   // streaming reduction primitives
+static const uint32_t kAllFeaturesBlockDim =
+    512;  // fused all-primitives kernels
+static const uint32_t kStreamingAggBlockDim =
+    256;  // streaming reduction primitives
 static const uint32_t kNumUniqueHashBlockDim = 256;  // hash-based unique count
 // Per-request feature kernel: 1024 threads would cap registers at 64/thread,
 // which even the release build cannot meet (~130 needed) and debug (-G)

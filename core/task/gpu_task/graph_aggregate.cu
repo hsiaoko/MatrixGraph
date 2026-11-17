@@ -12,7 +12,10 @@
  * this TU owns only host orchestration and data movement.
  */
 
+#include "core/common/consts.h"
 #include "core/task/gpu_task/graph_aggregate.cuh"
+#include "core/util/cuda_check.cuh"
+#include "core/util/cuda_device.cuh"
 
 #include <algorithm>
 #include <cuda_runtime.h>
@@ -21,10 +24,6 @@
 #include <memory>
 #include <set>
 #include <unordered_map>
-
-#include "core/common/consts.h"
-#include "core/util/cuda_check.cuh"
-#include "core/util/cuda_device.cuh"
 
 namespace sics {
 namespace matrixgraph {
@@ -54,6 +53,7 @@ class CudaDeviceGuard {
   ~CudaDeviceGuard() {
     if (original_device_ >= 0) cudaSetDevice(original_device_);
   }
+
  private:
   int original_device_;
 };
@@ -143,8 +143,8 @@ __host__ void GraphAggregate::DevicePerVertexAttributes::Build(
   }
 
   if (total_hash_capacity_ > 0) {
-    CUDA_CHECK(
-        cudaMalloc(&d_hash_keys_, sizeof(AttributeName) * total_hash_capacity_));
+    CUDA_CHECK(cudaMalloc(&d_hash_keys_,
+                          sizeof(AttributeName) * total_hash_capacity_));
     CUDA_CHECK(
         cudaMalloc(&d_hash_values_, sizeof(Attribute) * total_hash_capacity_));
     CUDA_CHECK(
@@ -227,14 +227,12 @@ __host__ void GraphAggregate::DevicePerVertexAttributes::Build(
       if (h_attrs[i].attr_map.values) {
         CUDA_CHECK(cudaMemcpy(d_hash_values_ + offset,
                               h_attrs[i].attr_map.values,
-                              sizeof(Attribute) * cap,
-                              cudaMemcpyHostToDevice));
+                              sizeof(Attribute) * cap, cudaMemcpyHostToDevice));
       }
       if (h_attrs[i].attr_map.occupied) {
         CUDA_CHECK(cudaMemcpy(d_hash_occupied_ + offset,
                               h_attrs[i].attr_map.occupied,
-                              sizeof(uint8_t) * cap,
-                              cudaMemcpyHostToDevice));
+                              sizeof(uint8_t) * cap, cudaMemcpyHostToDevice));
       }
       offset += cap;
     }
@@ -244,7 +242,8 @@ __host__ void GraphAggregate::DevicePerVertexAttributes::Build(
 }
 
 __host__ GraphAggregate::DevicePerVertexAttributes
-GraphAggregate::DevicePerVertexAttributes::CloneToDevice(int target_device) const {
+GraphAggregate::DevicePerVertexAttributes::CloneToDevice(
+    int target_device) const {
   DevicePerVertexAttributes cloned;
   if (n_vertices_ == 0) return cloned;
 
@@ -359,8 +358,8 @@ GraphAggregate::DevicePerVertexAttributes::CloneToDevice(int target_device) cons
       }
       {
         CudaDeviceGuard dst_guard(target_device);
-        CUDA_CHECK(cudaMemcpy(d_target, staging.get(), bytes,
-                              cudaMemcpyHostToDevice));
+        CUDA_CHECK(
+            cudaMemcpy(d_target, staging.get(), bytes, cudaMemcpyHostToDevice));
       }
       staging_buffers.push_back(std::move(staging));
     }
@@ -424,9 +423,7 @@ __host__ void GraphAggregate::StreamBuffers::Free() {
 }
 
 __host__ void GraphAggregate::StreamBuffers::EnsureCapacity(
-    uint32_t n_pivots,
-    uint32_t n_requests,
-    uint32_t /*max_neighbors*/) {
+    uint32_t n_pivots, uint32_t n_requests, uint32_t /*max_neighbors*/) {
   // Pivot ids.
   if (pivot_capacity < n_pivots) {
     if (d_pivot_vids) cudaFree(d_pivot_vids);
@@ -438,17 +435,15 @@ __host__ void GraphAggregate::StreamBuffers::EnsureCapacity(
   if (output_request_capacity < n_requests || pivot_capacity < n_pivots) {
     if (d_outputs) cudaFree(d_outputs);
     CUDA_CHECK(cudaMalloc(
-        &d_outputs,
-        sizeof(kernel::FeatureValue) * n_pivots * n_requests));
+        &d_outputs, sizeof(kernel::FeatureValue) * n_pivots * n_requests));
     output_request_capacity = n_requests;
   }
 
   // All-features outputs.
   if (all_output_pivot_capacity < n_pivots) {
     if (d_all_outputs) cudaFree(d_all_outputs);
-    CUDA_CHECK(cudaMalloc(
-        &d_all_outputs,
-        sizeof(kernel::AllFeatures) * n_pivots));
+    CUDA_CHECK(
+        cudaMalloc(&d_all_outputs, sizeof(kernel::AllFeatures) * n_pivots));
     all_output_pivot_capacity = n_pivots;
   }
 }
@@ -505,8 +500,9 @@ __host__ void GraphAggregate::ValidateDevices() {
 
 __host__ void GraphAggregate::SetDevices(const std::vector<int>& device_ids) {
   if (graph_ != nullptr) {
-    std::cerr << "[GraphAggregate] SetDevices must be called before loading data."
-              << std::endl;
+    std::cerr
+        << "[GraphAggregate] SetDevices must be called before loading data."
+        << std::endl;
     return;
   }
   device_ids_ = device_ids;
@@ -516,8 +512,7 @@ __host__ void GraphAggregate::SetDevices(const std::vector<int>& device_ids) {
 
 __host__ void GraphAggregate::SetNumStreams(uint32_t n_streams) {
   if (n_streams == 0) n_streams = 1;
-  if (!per_gpu_states_.empty() &&
-      !per_gpu_states_[0].streams.empty()) {
+  if (!per_gpu_states_.empty() && !per_gpu_states_[0].streams.empty()) {
     std::cerr << "[GraphAggregate] SetNumStreams called after streams are in "
                  "use; change will take effect on next construction."
               << std::endl;
@@ -542,9 +537,9 @@ __host__ void GraphAggregate::LoadGraph(const std::string& graph_path) {
   graph_ = std::make_unique<ImmutableCSR>();
   graph_->Read(graph_path);
   max_degree_ = ComputeMaxDegree();
-  std::cout << "[GraphAggregate] Loaded graph: "
-            << graph_->get_num_vertices() << " vertices, "
-            << graph_->get_num_outgoing_edges() << " outgoing edges, "
+  std::cout << "[GraphAggregate] Loaded graph: " << graph_->get_num_vertices()
+            << " vertices, " << graph_->get_num_outgoing_edges()
+            << " outgoing edges, "
             << "max degree=" << max_degree_ << std::endl;
   TransferGraphToAllGpus();
 }
@@ -561,8 +556,8 @@ __host__ void GraphAggregate::TransferGraphToAllGpus() {
     if (gpu.d_graph_data) cudaFree(gpu.d_graph_data);
     gpu.d_graph_data_size = buf_size;
     CUDA_CHECK(cudaMalloc(&gpu.d_graph_data, buf_size));
-    CUDA_CHECK(cudaMemcpy(gpu.d_graph_data, h_buf, buf_size,
-                          cudaMemcpyHostToDevice));
+    CUDA_CHECK(
+        cudaMemcpy(gpu.d_graph_data, h_buf, buf_size, cudaMemcpyHostToDevice));
   }
 
   std::cout << "[GraphAggregate] Graph data replicated to "
@@ -589,8 +584,8 @@ __host__ uint32_t GraphAggregate::ComputeMaxDegree() const {
   return max_deg;
 }
 
-__host__ uint32_t GraphAggregate::ComputeLaunchMaxNeighbors(
-    size_t* shared_mem_size) const {
+__host__ uint32_t
+GraphAggregate::ComputeLaunchMaxNeighbors(size_t* shared_mem_size) const {
   constexpr uint32_t kMaxNeighborsCap = 4096;
   uint32_t max_neighbors = std::min(max_degree_, kMaxNeighborsCap);
 
@@ -620,8 +615,7 @@ __host__ uint32_t GraphAggregate::ComputeLaunchMaxNeighbors(
 }
 
 __host__ void GraphAggregate::LoadAttributes(
-    uint32_t n_columns,
-    const GraphAggregateAttributeColumn* columns) {
+    uint32_t n_columns, const GraphAggregateAttributeColumn* columns) {
   if (!graph_) {
     std::cerr << "[GraphAggregate::LoadAttributes] Graph not loaded"
               << std::endl;
@@ -641,8 +635,9 @@ __host__ void GraphAggregate::LoadAttributes(
     }
     size_t elem_size = ValueTypeSize(columns[c].value_type);
     if (elem_size == 0 || columns[c].values == nullptr) {
-      std::cerr << "[GraphAggregate::LoadAttributes] Unsupported or empty column"
-                << std::endl;
+      std::cerr
+          << "[GraphAggregate::LoadAttributes] Unsupported or empty column"
+          << std::endl;
       return;
     }
   }
@@ -716,8 +711,8 @@ __host__ void GraphAggregate::LoadAttributes(
   }
 
   std::cout << "[GraphAggregate] Loaded " << n_columns
-            << " attribute column(s) on " << per_gpu_states_.size()
-            << " GPU(s)" << std::endl;
+            << " attribute column(s) on " << per_gpu_states_.size() << " GPU(s)"
+            << std::endl;
 }
 
 __host__ void GraphAggregate::SetVertexAttributes(
@@ -740,13 +735,13 @@ __host__ void GraphAggregate::SetVertexAttributes(
   // Clone to remaining GPUs.
   for (size_t i = 1; i < per_gpu_states_.size(); ++i) {
     per_gpu_states_[i].vertex_attrs =
-        per_gpu_states_[0].vertex_attrs.CloneToDevice(per_gpu_states_[i].device_id);
+        per_gpu_states_[0].vertex_attrs.CloneToDevice(
+            per_gpu_states_[i].device_id);
   }
 }
 
 __host__ void GraphAggregate::LoadEdgeAttributes(
-    bool is_outgoing,
-    uint32_t n_columns,
+    bool is_outgoing, uint32_t n_columns,
     const GraphAggregateEdgeAttributeColumn* columns) {
   if (!graph_) {
     std::cerr << "[GraphAggregate::LoadEdgeAttributes] Graph not loaded"
@@ -760,22 +755,22 @@ __host__ void GraphAggregate::LoadEdgeAttributes(
     return;
   }
 
-  const uint32_t n_edges = is_outgoing
-                               ? graph_->get_num_outgoing_edges()
-                               : graph_->get_num_incoming_edges();
+  const uint32_t n_edges = is_outgoing ? graph_->get_num_outgoing_edges()
+                                       : graph_->get_num_incoming_edges();
 
   // Validate columns.
   for (uint32_t c = 0; c < n_columns; ++c) {
     if (columns[c].n_values != n_edges) {
-      std::cerr << "[GraphAggregate::LoadEdgeAttributes] Column '" << columns[c].key
-                << "' has " << columns[c].n_values << " values, expected "
-                << n_edges << std::endl;
+      std::cerr << "[GraphAggregate::LoadEdgeAttributes] Column '"
+                << columns[c].key << "' has " << columns[c].n_values
+                << " values, expected " << n_edges << std::endl;
       return;
     }
     size_t elem_size = ValueTypeSize(columns[c].value_type);
     if (elem_size == 0 || columns[c].values == nullptr) {
-      std::cerr << "[GraphAggregate::LoadEdgeAttributes] Unsupported or empty column"
-                << std::endl;
+      std::cerr
+          << "[GraphAggregate::LoadEdgeAttributes] Unsupported or empty column"
+          << std::endl;
       return;
     }
   }
@@ -836,8 +831,8 @@ __host__ void GraphAggregate::LoadEdgeAttributes(
 
   std::cout << "[GraphAggregate] Loaded " << n_columns
             << " edge attribute column(s) for "
-            << (is_outgoing ? "outgoing" : "incoming")
-            << " edges on " << per_gpu_states_.size() << " GPU(s)" << std::endl;
+            << (is_outgoing ? "outgoing" : "incoming") << " edges on "
+            << per_gpu_states_.size() << " GPU(s)" << std::endl;
 }
 
 __host__ void GraphAggregate::Run() {
@@ -884,9 +879,9 @@ __host__ void GraphAggregate::FreeDeviceBuffers() {
 __host__ std::vector<kernel::FeatureValue> GraphAggregate::ComputeFeatures(
     const std::vector<uint32_t>& pivot_vertex_ids,
     const std::vector<kernel::FeatureRequest>& requests) {
+  using kernel::ComputeFeaturesKernel;
   using kernel::FeatureRequest;
   using kernel::FeatureValue;
-  using kernel::ComputeFeaturesKernel;
 
   std::vector<FeatureValue> host_results;
 
@@ -934,14 +929,14 @@ __host__ std::vector<kernel::FeatureValue> GraphAggregate::ComputeFeatures(
   size_t shared_mem_size = 0;
   const uint32_t max_neighbors = ComputeLaunchMaxNeighbors(&shared_mem_size);
 
-  // Opt-in to larger dynamic shared memory if the default 48 KB is insufficient.
+  // Opt-in to larger dynamic shared memory if the default 48 KB is
+  // insufficient.
   constexpr int kDefaultSharedMem = 48 * 1024;
   if (shared_mem_size > static_cast<size_t>(kDefaultSharedMem)) {
     for (auto& gpu : per_gpu_states_) {
       CudaDeviceGuard guard(gpu.device_id);
       CUDA_CHECK(cudaFuncSetAttribute(
-          ComputeFeaturesKernel,
-          cudaFuncAttributeMaxDynamicSharedMemorySize,
+          ComputeFeaturesKernel, cudaFuncAttributeMaxDynamicSharedMemorySize,
           static_cast<int>(shared_mem_size)));
     }
   }
@@ -951,8 +946,7 @@ __host__ std::vector<kernel::FeatureValue> GraphAggregate::ComputeFeatures(
   std::vector<uint32_t> gpu_offsets(n_gpus + 1, 0);
   for (uint32_t g = 0; g < n_gpus; ++g) {
     gpu_offsets[g + 1] =
-        std::min(n_pivots,
-                 gpu_offsets[g] + (n_pivots + n_gpus - 1) / n_gpus);
+        std::min(n_pivots, gpu_offsets[g] + (n_pivots + n_gpus - 1) / n_gpus);
   }
 
   // Launch each GPU asynchronously.
@@ -977,9 +971,8 @@ __host__ std::vector<kernel::FeatureValue> GraphAggregate::ComputeFeatures(
     // Partition chunk across streams.
     std::vector<uint32_t> stream_offsets(n_streams_ + 1, 0);
     for (uint32_t s = 0; s < n_streams_; ++s) {
-      stream_offsets[s + 1] =
-          std::min(chunk_n,
-                   stream_offsets[s] + (chunk_n + n_streams_ - 1) / n_streams_);
+      stream_offsets[s + 1] = std::min(
+          chunk_n, stream_offsets[s] + (chunk_n + n_streams_ - 1) / n_streams_);
     }
 
     for (uint32_t s = 0; s < n_streams_; ++s) {
@@ -992,37 +985,26 @@ __host__ std::vector<kernel::FeatureValue> GraphAggregate::ComputeFeatures(
       StreamBuffers& sb = gpu_state.stream_buffers[s];
       sb.EnsureCapacity(sub_chunk_n, n_requests, max_neighbors);
 
-      CUDA_CHECK(cudaMemcpyAsync(
-          sb.d_pivot_vids,
-          pivot_vertex_ids.data() + global_begin,
-          sizeof(uint32_t) * sub_chunk_n,
-          cudaMemcpyHostToDevice,
-          gpu_state.streams[s]));
+      CUDA_CHECK(cudaMemcpyAsync(sb.d_pivot_vids,
+                                 pivot_vertex_ids.data() + global_begin,
+                                 sizeof(uint32_t) * sub_chunk_n,
+                                 cudaMemcpyHostToDevice, gpu_state.streams[s]));
 
       const uint32_t grid_size = sub_chunk_n;
       ComputeFeaturesKernel<<<grid_size, common::kFeatureRequestBlockDim,
                               shared_mem_size, gpu_state.streams[s]>>>(
-          gpu_state.d_graph_data,
-          graph_->get_num_vertices(),
-          graph_->get_num_incoming_edges(),
-          graph_->get_num_outgoing_edges(),
+          gpu_state.d_graph_data, graph_->get_num_vertices(),
+          graph_->get_num_incoming_edges(), graph_->get_num_outgoing_edges(),
           gpu_state.vertex_attrs.GetDevicePtr(),
           gpu_state.edge_attrs_out_.GetDevicePtr(),
-          gpu_state.edge_attrs_in_.GetDevicePtr(),
-          sb.d_pivot_vids,
-          sub_chunk_n,
-          d_requests_per_gpu[g],
-          n_requests,
-          max_neighbors,
-          sb.d_outputs);
+          gpu_state.edge_attrs_in_.GetDevicePtr(), sb.d_pivot_vids, sub_chunk_n,
+          d_requests_per_gpu[g], n_requests, max_neighbors, sb.d_outputs);
       CUDA_CHECK(cudaGetLastError());
 
       CUDA_CHECK(cudaMemcpyAsync(
-          pinned_results + global_begin * n_requests,
-          sb.d_outputs,
+          pinned_results + global_begin * n_requests, sb.d_outputs,
           sizeof(FeatureValue) * sub_chunk_n * n_requests,
-          cudaMemcpyDeviceToHost,
-          gpu_state.streams[s]));
+          cudaMemcpyDeviceToHost, gpu_state.streams[s]));
     }
   }
 
@@ -1050,8 +1032,7 @@ __host__ std::vector<kernel::FeatureValue> GraphAggregate::ComputeFeatures(
 // ---------------------------------------------------------------------------
 __host__ std::vector<kernel::AllFeatures> GraphAggregate::ComputeAll(
     const std::vector<uint32_t>& pivot_vertex_ids,
-    const kernel::AttributeName& attr_name,
-    bool use_outgoing,
+    const kernel::AttributeName& attr_name, bool use_outgoing,
     bool use_edge_attrs) {
   using kernel::AllFeatures;
   using kernel::ComputeAllFeaturesKernel;
@@ -1082,8 +1063,7 @@ __host__ std::vector<kernel::AllFeatures> GraphAggregate::ComputeAll(
 
   // Pinned host buffer for async D2H copies.
   AllFeatures* pinned_results = nullptr;
-  CUDA_CHECK(cudaMallocHost(&pinned_results,
-                            sizeof(AllFeatures) * n_pivots));
+  CUDA_CHECK(cudaMallocHost(&pinned_results, sizeof(AllFeatures) * n_pivots));
 
   size_t shared_mem_size = 0;
   const uint32_t max_neighbors = ComputeLaunchMaxNeighbors(&shared_mem_size);
@@ -1095,8 +1075,7 @@ __host__ std::vector<kernel::AllFeatures> GraphAggregate::ComputeAll(
     for (auto& gpu : per_gpu_states_) {
       CudaDeviceGuard guard(gpu.device_id);
       CUDA_CHECK(cudaFuncSetAttribute(
-          ComputeAllFeaturesKernel,
-          cudaFuncAttributeMaxDynamicSharedMemorySize,
+          ComputeAllFeaturesKernel, cudaFuncAttributeMaxDynamicSharedMemorySize,
           static_cast<int>(shared_mem_size)));
     }
   }
@@ -1110,8 +1089,7 @@ __host__ std::vector<kernel::AllFeatures> GraphAggregate::ComputeAll(
   std::vector<uint32_t> gpu_offsets(n_gpus + 1, 0);
   for (uint32_t g = 0; g < n_gpus; ++g) {
     gpu_offsets[g + 1] =
-        std::min(n_pivots,
-                 gpu_offsets[g] + (n_pivots + n_gpus - 1) / n_gpus);
+        std::min(n_pivots, gpu_offsets[g] + (n_pivots + n_gpus - 1) / n_gpus);
   }
 
   for (uint32_t g = 0; g < n_gpus; ++g) {
@@ -1133,9 +1111,8 @@ __host__ std::vector<kernel::AllFeatures> GraphAggregate::ComputeAll(
 
     std::vector<uint32_t> stream_offsets(n_streams_ + 1, 0);
     for (uint32_t s = 0; s < n_streams_; ++s) {
-      stream_offsets[s + 1] =
-          std::min(chunk_n,
-                   stream_offsets[s] + (chunk_n + n_streams_ - 1) / n_streams_);
+      stream_offsets[s + 1] = std::min(
+          chunk_n, stream_offsets[s] + (chunk_n + n_streams_ - 1) / n_streams_);
     }
 
     for (uint32_t s = 0; s < n_streams_; ++s) {
@@ -1148,37 +1125,26 @@ __host__ std::vector<kernel::AllFeatures> GraphAggregate::ComputeAll(
       StreamBuffers& sb = gpu_state.stream_buffers[s];
       sb.EnsureCapacity(sub_chunk_n, 1, max_neighbors);
 
-      CUDA_CHECK(cudaMemcpyAsync(
-          sb.d_pivot_vids,
-          pivot_vertex_ids.data() + global_begin,
-          sizeof(uint32_t) * sub_chunk_n,
-          cudaMemcpyHostToDevice,
-          gpu_state.streams[s]));
+      CUDA_CHECK(cudaMemcpyAsync(sb.d_pivot_vids,
+                                 pivot_vertex_ids.data() + global_begin,
+                                 sizeof(uint32_t) * sub_chunk_n,
+                                 cudaMemcpyHostToDevice, gpu_state.streams[s]));
 
       const uint32_t grid_size = sub_chunk_n;
       ComputeAllFeaturesKernel<<<grid_size, common::kAllFeaturesBlockDim,
                                  shared_mem_size, gpu_state.streams[s]>>>(
-          gpu_state.d_graph_data,
-          graph_->get_num_vertices(),
-          graph_->get_num_incoming_edges(),
-          graph_->get_num_outgoing_edges(),
+          gpu_state.d_graph_data, graph_->get_num_vertices(),
+          graph_->get_num_incoming_edges(), graph_->get_num_outgoing_edges(),
           gpu_state.vertex_attrs.GetDevicePtr(),
           gpu_state.edge_attrs_out_.GetDevicePtr(),
-          gpu_state.edge_attrs_in_.GetDevicePtr(),
-          sb.d_pivot_vids,
-          sub_chunk_n,
-          attr_name,
-          use_outgoing,
-          use_edge_attrs,
-          max_neighbors,
+          gpu_state.edge_attrs_in_.GetDevicePtr(), sb.d_pivot_vids, sub_chunk_n,
+          attr_name, use_outgoing, use_edge_attrs, max_neighbors,
           sb.d_all_outputs);
 
-      CUDA_CHECK(cudaMemcpyAsync(
-          pinned_results + global_begin,
-          sb.d_all_outputs,
-          sizeof(AllFeatures) * sub_chunk_n,
-          cudaMemcpyDeviceToHost,
-          gpu_state.streams[s]));
+      CUDA_CHECK(cudaMemcpyAsync(pinned_results + global_begin,
+                                 sb.d_all_outputs,
+                                 sizeof(AllFeatures) * sub_chunk_n,
+                                 cudaMemcpyDeviceToHost, gpu_state.streams[s]));
     }
   }
 
@@ -1195,8 +1161,8 @@ __host__ std::vector<kernel::AllFeatures> GraphAggregate::ComputeAll(
   CUDA_CHECK(cudaEventElapsedTime(&elapsed_ms, timer_start, timer_stop));
   cudaEventDestroy(timer_start);
   cudaEventDestroy(timer_stop);
-  std::cout << "[GraphAggregate::ComputeAll] GPU kernel time: "
-            << elapsed_ms << " ms" << std::endl;
+  std::cout << "[GraphAggregate::ComputeAll] GPU kernel time: " << elapsed_ms
+            << " ms" << std::endl;
 
   std::memcpy(host_results.data(), pinned_results,
               sizeof(AllFeatures) * n_pivots);
@@ -1222,16 +1188,15 @@ __host__ void GraphAggregate::LoadSyntheticData(
   uint32_t n_edges = n_vertices * out_degree_per_vertex;
   uint32_t max_vid = n_vertices - 1;
 
-  size_t buf_size =
-      sizeof(VertexID) * n_vertices +                    // globalid
-      sizeof(VertexID) * n_vertices +                    // indegree
-      sizeof(VertexID) * n_vertices +                    // outdegree
-      sizeof(EdgeIndex) * (n_vertices + 1) +             // in_offset
-      sizeof(EdgeIndex) * (n_vertices + 1) +             // out_offset
-      sizeof(VertexID) * n_edges +                       // incoming_edges
-      sizeof(VertexID) * n_edges +                       // outgoing_edges
-      sizeof(VertexID) * (max_vid + 1) +                 // edges_globalid
-      sizeof(VertexID) * (max_vid + 1);                  // localid_by_globalid
+  size_t buf_size = sizeof(VertexID) * n_vertices +         // globalid
+                    sizeof(VertexID) * n_vertices +         // indegree
+                    sizeof(VertexID) * n_vertices +         // outdegree
+                    sizeof(EdgeIndex) * (n_vertices + 1) +  // in_offset
+                    sizeof(EdgeIndex) * (n_vertices + 1) +  // out_offset
+                    sizeof(VertexID) * n_edges +            // incoming_edges
+                    sizeof(VertexID) * n_edges +            // outgoing_edges
+                    sizeof(VertexID) * (max_vid + 1) +      // edges_globalid
+                    sizeof(VertexID) * (max_vid + 1);  // localid_by_globalid
 
   uint8_t* buf = new uint8_t[buf_size]();
   csr->SetNumVertices(n_vertices);
@@ -1296,8 +1261,9 @@ __host__ void GraphAggregate::LoadSyntheticData(
 
 __host__ void GraphAggregate::GenerateSyntheticAttributes() {
   if (!graph_) {
-    std::cerr << "[GraphAggregate::GenerateSyntheticAttributes] Graph not loaded"
-              << std::endl;
+    std::cerr
+        << "[GraphAggregate::GenerateSyntheticAttributes] Graph not loaded"
+        << std::endl;
     return;
   }
 

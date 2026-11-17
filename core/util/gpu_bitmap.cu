@@ -1,5 +1,6 @@
 #include "core/util/cuda_check.cuh"
 #include "core/util/gpu_bitmap.cuh"
+
 #include <cuda_runtime.h>
 
 namespace sics {
@@ -76,7 +77,7 @@ size_t GPUBitmap::GPUCount() const {
   cudaMemset(count_ptr, 0, sizeof(unsigned long long));
 
   matrix_count_kernel<<<dim_grid, dim_block, 0, stream>>>(size_, data_,
-                                                        count_ptr);
+                                                          count_ptr);
   cudaStreamSynchronize(stream);
   cudaStreamDestroy(stream);
 
@@ -101,7 +102,8 @@ size_t GPUBitmap::GPUPreElementCount(size_t idx) const {
   cudaMallocManaged(&count_ptr, sizeof(unsigned long long));
   cudaMemset(count_ptr, 0, sizeof(unsigned long long));
 
-  matrix_count_kernel<<<dim_grid, dim_block, 0, stream>>>(idx, data_, count_ptr);
+  matrix_count_kernel<<<dim_grid, dim_block, 0, stream>>>(idx, data_,
+                                                          count_ptr);
   cudaStreamSynchronize(stream);
   cudaStreamDestroy(stream);
 

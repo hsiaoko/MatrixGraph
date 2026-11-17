@@ -1,18 +1,17 @@
 #include "core/task/cpu_task/subiso_cpu.cuh"
 
-#include <gflags/gflags.h>
-
-#include <fstream>
-#include <iostream>
-#include <list>
-#include <utility>
-
+#include "apps/backend_flag.h"
 #include "core/common/consts.h"
 #include "core/common/types.h"
 #include "core/common/yaml_config.h"
-#include "apps/backend_flag.h"
 #include "core/engine/engine.h"
 #include "core/task/cpu_task/cpu_task_base.h"
+
+#include <fstream>
+#include <gflags/gflags.h>
+#include <iostream>
+#include <list>
+#include <utility>
 
 // Input/Output flags
 DEFINE_string(p, "", "Path to the pattern graph file (required)");
@@ -25,28 +24,27 @@ DEFINE_string(o, "",
 DEFINE_string(reject_output, "",
               "Path to write rejected (u,v) candidates, empty disables it");
 DEFINE_int32(t, 72, "Number of CPU threads to use (default: 1)");
-DEFINE_int32(filter_hop, 1,
-             "Number of hops for min-wise filter neighbor collection (default: 1)");
-DEFINE_int32(filter_k, 3,
-             "Number of minimum hash values (k) for k-min-wise filter (default: 3)");
-DEFINE_bool(disable_min_wise_filter, false,
-            "Disable min-wise IP filter");
-DEFINE_bool(disable_ldf_filter, false,
-            "Disable label-degree filter");
-DEFINE_bool(disable_nlc_filter, false,
-            "Disable neighbor-label-counter filter");
-DEFINE_bool(disable_lpf_filter, false,
-            "Disable label-pair-frequency filter");
-DEFINE_bool(disable_lcf_filter, false,
-            "Disable global label-count filter");
+DEFINE_int32(
+    filter_hop, 1,
+    "Number of hops for min-wise filter neighbor collection (default: 1)");
+DEFINE_int32(
+    filter_k, 3,
+    "Number of minimum hash values (k) for k-min-wise filter (default: 3)");
+DEFINE_bool(disable_min_wise_filter, false, "Disable min-wise IP filter");
+DEFINE_bool(disable_ldf_filter, false, "Disable label-degree filter");
+DEFINE_bool(disable_nlc_filter, false, "Disable neighbor-label-counter filter");
+DEFINE_bool(disable_lpf_filter, false, "Disable label-pair-frequency filter");
+DEFINE_bool(disable_lcf_filter, false, "Disable global label-count filter");
 DEFINE_bool(disable_bloom_filter, false,
             "Disable Bloom neighbor-label-set filter");
 DEFINE_bool(disable_min_wise_bloom_filter, false,
             "Disable k-min-wise Bloom filter");
-DEFINE_bool(disable_runtime_nlc_filter, false,
-            "Disable runtime NLC filter (per-embedding neighbor-label-count check)");
-DEFINE_bool(disable_matching_order, false,
-            "Disable cost-model-based matching order (use default local-id DFS)");
+DEFINE_bool(
+    disable_runtime_nlc_filter, false,
+    "Disable runtime NLC filter (per-embedding neighbor-label-count check)");
+DEFINE_bool(
+    disable_matching_order, false,
+    "Disable cost-model-based matching order (use default local-id DFS)");
 
 // System configuration
 DEFINE_string(backend, "cpu",
@@ -105,8 +103,7 @@ void PrintConfig() {
             << (FLAGS_disable_min_wise_filter ? "disabled" : "enabled")
             << std::endl;
   std::cout << "Label-Degree Filter: "
-            << (FLAGS_disable_ldf_filter ? "disabled" : "enabled")
-            << std::endl;
+            << (FLAGS_disable_ldf_filter ? "disabled" : "enabled") << std::endl;
   std::cout << "NLC Filter: "
             << (FLAGS_disable_nlc_filter ? "disabled" : "enabled") << std::endl;
   std::cout << "LPF Filter: "
@@ -125,7 +122,7 @@ void PrintConfig() {
   std::cout << "Matching Order: "
             << (FLAGS_disable_matching_order ? "default" : "cost-model")
             << std::endl;
-    std::cout << "==============================\n" << std::endl;
+  std::cout << "==============================\n" << std::endl;
 }
 
 int main(int argc, char* argv[]) {
@@ -154,13 +151,12 @@ int main(int argc, char* argv[]) {
     auto engine = sics::matrixgraph::core::engine::MakeEngine(backend);
 
     auto* task = new SubIsoCPU(
-        FLAGS_p, FLAGS_g, FLAGS_o, FLAGS_t, FLAGS_m1, FLAGS_m2, "", "", "",
-        "", FLAGS_reject_output, FLAGS_filter_hop, FLAGS_filter_k,
+        FLAGS_p, FLAGS_g, FLAGS_o, FLAGS_t, FLAGS_m1, FLAGS_m2, "", "", "", "",
+        FLAGS_reject_output, FLAGS_filter_hop, FLAGS_filter_k,
         !FLAGS_disable_min_wise_filter, !FLAGS_disable_ldf_filter,
         !FLAGS_disable_nlc_filter, !FLAGS_disable_matching_order,
         !FLAGS_disable_lpf_filter, !FLAGS_disable_lcf_filter,
-        !FLAGS_disable_bloom_filter,
-        !FLAGS_disable_min_wise_bloom_filter,
+        !FLAGS_disable_bloom_filter, !FLAGS_disable_min_wise_bloom_filter,
         !FLAGS_disable_runtime_nlc_filter);
     engine->Run(*task);
     delete task;

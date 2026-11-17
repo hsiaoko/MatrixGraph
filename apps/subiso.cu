@@ -1,16 +1,15 @@
-#include <gflags/gflags.h>
-
-#include <fstream>
-#include <iostream>
-#include <list>
-#include <utility>
-
+#include "apps/backend_flag.h"
 #include "core/common/types.h"
 #include "core/common/yaml_config.h"
-#include "apps/backend_flag.h"
 #include "core/engine/engine.h"
 #include "core/task/gpu_task/subiso.cuh"
 #include "core/task/gpu_task/task_base.cuh"
+
+#include <fstream>
+#include <gflags/gflags.h>
+#include <iostream>
+#include <list>
+#include <utility>
 
 // Input/Output flags
 DEFINE_string(p, "", "Path to the pattern graph file (required)");
@@ -63,7 +62,7 @@ void PrintConfig() {
   std::cout << "Data Graph: " << FLAGS_g << std::endl;
   std::cout << "Edge List: " << FLAGS_e << std::endl;
   std::cout << "Output Path: " << FLAGS_o << std::endl;
-    std::cout << "Min-Wise Filter: "
+  std::cout << "Min-Wise Filter: "
             << (FLAGS_disable_min_wise_filter ? "disabled" : "enabled")
             << std::endl;
   std::cout << "LDF Filter: "
@@ -106,14 +105,11 @@ int main(int argc, char* argv[]) {
     const auto backend = mg_app::ParseBackend(FLAGS_backend);
     auto engine = sics::matrixgraph::core::engine::MakeEngine(backend);
 
-    auto* task = new SubIso(FLAGS_p, FLAGS_g, FLAGS_e, FLAGS_o,
-                            !FLAGS_disable_min_wise_filter,
-                            !FLAGS_disable_ldf_filter,
-                            !FLAGS_disable_nlc_filter,
-                            !FLAGS_disable_lpf_filter,
-                            !FLAGS_disable_lcf_filter,
-                            !FLAGS_disable_bloom_filter,
-                            !FLAGS_disable_min_wise_bloom_filter);
+    auto* task = new SubIso(
+        FLAGS_p, FLAGS_g, FLAGS_e, FLAGS_o, !FLAGS_disable_min_wise_filter,
+        !FLAGS_disable_ldf_filter, !FLAGS_disable_nlc_filter,
+        !FLAGS_disable_lpf_filter, !FLAGS_disable_lcf_filter,
+        !FLAGS_disable_bloom_filter, !FLAGS_disable_min_wise_bloom_filter);
     engine->Run(*task);
     delete task;
 

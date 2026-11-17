@@ -1,12 +1,12 @@
 #ifndef MATRIXGRAPH_CORE_TASK_GPU_TASK_GEMM_CUH_
 #define MATRIXGRAPH_CORE_TASK_GPU_TASK_GEMM_CUH_
 
-#include <string>
-
 #include "core/common/types.h"
 #include "core/data_structures/edgelist.h"
 #include "core/data_structures/grid_csr_tiled_matrix.cuh"
 #include "core/task/gpu_task/task_base.cuh"
+
+#include <string>
 
 namespace sics {
 namespace matrixgraph {
@@ -59,8 +59,6 @@ class GEMM : public TaskBase {
   __host__ GridCSRTiledMatrix* ConvertGridEdgelist2GridTiledMatrix(
       const std::vector<Edges>& edges_blocks,
       const GridGraphMetadata& grid_graph_metadata, VertexID tile_size);
-
-
 
   GridCSRTiledMatrix* A_;
   GridCSRTiledMatrix* B_;

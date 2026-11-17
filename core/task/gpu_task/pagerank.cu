@@ -1,15 +1,3 @@
-#include <cuda_runtime.h>
-
-#include <algorithm>
-#include <ctime>
-#include <iostream>
-#include <mutex>
-#include <numeric>
-#include <thread>
-#include <unordered_map>
-#include <vector>
-
-
 #include "core/common/consts.h"
 #include "core/common/host_algorithms.cuh"
 #include "core/common/types.h"
@@ -23,6 +11,16 @@
 #include "core/util/cuda_check.cuh"
 #include "core/util/cuda_device.cuh"
 #include "core/util/cuda_prefetch.cuh"
+
+#include <algorithm>
+#include <ctime>
+#include <cuda_runtime.h>
+#include <iostream>
+#include <mutex>
+#include <numeric>
+#include <thread>
+#include <unordered_map>
+#include <vector>
 
 namespace sics {
 namespace matrixgraph {
@@ -70,8 +68,7 @@ __host__ void PageRank::ComputePageRank(const ImmutableCSR& g) {
 
   const std::vector<int> cuda_devices =
       sics::matrixgraph::core::util::MatrixGraphCudaDeviceList();
-  const int primary_gpu =
-      cuda_devices.empty() ? 0 : cuda_devices[0];
+  const int primary_gpu = cuda_devices.empty() ? 0 : cuda_devices[0];
   CUDA_CHECK(cudaSetDevice(primary_gpu));
 
   // Init data_graph.
@@ -110,10 +107,10 @@ __host__ void PageRank::ComputePageRank(const ImmutableCSR& g) {
        {reinterpret_cast<void*>(unified_page_ranks.GetPtr()),
         unified_page_ranks.GetSize()}});
 
-  PageRankKernelWrapper::PageRank(
-      PrimaryStream(), g.get_num_vertices(), g.get_num_outgoing_edges(),
-      unified_data_g, unified_page_ranks, damping_factor_, epsilon_,
-      max_iterations_);
+  PageRankKernelWrapper::PageRank(PrimaryStream(), g.get_num_vertices(),
+                                  g.get_num_outgoing_edges(), unified_data_g,
+                                  unified_page_ranks, damping_factor_, epsilon_,
+                                  max_iterations_);
 }
 
 __host__ void PageRank::Run() {

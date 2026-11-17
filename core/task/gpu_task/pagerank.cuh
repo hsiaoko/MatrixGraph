@@ -1,11 +1,11 @@
 #ifndef MATRIXGRAPH_CORE_TASK_GPU_TASK_PAGERANK_CUH_
 #define MATRIXGRAPH_CORE_TASK_GPU_TASK_PAGERANK_CUH_
 
-#include <string>
-
 #include "core/common/types.h"
 #include "core/data_structures/immutable_csr.cuh"
 #include "core/task/gpu_task/task_base.cuh"
+
+#include <string>
 
 namespace sics {
 namespace matrixgraph {

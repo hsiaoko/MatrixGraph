@@ -6,16 +6,15 @@
  * populated.  They mirror the checks in apps/compute_features.cpp.
  */
 
-#include <gtest/gtest.h>
-
-#include <cstring>
-#include <memory>
-#include <string>
-#include <vector>
-
 #include "core/data_structures/immutable_csr.cuh"
 #include "core/task/gpu_task/compute_features.cuh"
 #include "core/util/cuda_check.cuh"
+
+#include <cstring>
+#include <gtest/gtest.h>
+#include <memory>
+#include <string>
+#include <vector>
 
 namespace sics {
 namespace matrixgraph {
@@ -35,16 +34,15 @@ std::unique_ptr<ImmutableCSR> BuildRingCSR(uint32_t n_vertices) {
   uint32_t n_edges = n_vertices;
   uint32_t max_vid = n_vertices - 1;
 
-  size_t buf_size =
-      sizeof(VertexID) * n_vertices +         // globalid
-      sizeof(VertexID) * n_vertices +         // indegree
-      sizeof(VertexID) * n_vertices +         // outdegree
-      sizeof(EdgeIndex) * (n_vertices + 1) +  // in_offset
-      sizeof(EdgeIndex) * (n_vertices + 1) +  // out_offset
-      sizeof(VertexID) * n_edges +            // incoming_edges
-      sizeof(VertexID) * n_edges +            // outgoing_edges
-      sizeof(VertexID) * (max_vid + 1) +      // edges_globalid
-      sizeof(VertexID) * (max_vid + 1);       // localid_by_globalid
+  size_t buf_size = sizeof(VertexID) * n_vertices +         // globalid
+                    sizeof(VertexID) * n_vertices +         // indegree
+                    sizeof(VertexID) * n_vertices +         // outdegree
+                    sizeof(EdgeIndex) * (n_vertices + 1) +  // in_offset
+                    sizeof(EdgeIndex) * (n_vertices + 1) +  // out_offset
+                    sizeof(VertexID) * n_edges +            // incoming_edges
+                    sizeof(VertexID) * n_edges +            // outgoing_edges
+                    sizeof(VertexID) * (max_vid + 1) +      // edges_globalid
+                    sizeof(VertexID) * (max_vid + 1);  // localid_by_globalid
 
   uint8_t* buf = new uint8_t[buf_size]();
   csr->SetNumVertices(n_vertices);
@@ -154,8 +152,8 @@ TEST(ComputeFeaturesTest, SelfAttributeAndConstantAndNeighborAgg) {
   task.LoadAttributes(1, &score_col);
 
   std::vector<MatrixGraphPlanNode> plan;
-  plan.push_back(AttrNode("score"));        // 0
-  plan.push_back(ConstFloatNode(3.14));     // 1
+  plan.push_back(AttrNode("score"));           // 0
+  plan.push_back(ConstFloatNode(3.14));        // 1
   plan.push_back(AggNode(MG_AGG_SUM, 0, 0));   // 2
   plan.push_back(AggNode(MG_AGG_MEAN, 0, 0));  // 3
 

@@ -1,9 +1,3 @@
-#include <algorithm>
-#include <fstream>
-#include <mutex>
-#include <thread>
-#include <unordered_map>
-
 #include "core/common/consts.h"
 #include "core/common/types.h"
 #include "core/common/yaml_config.h"
@@ -12,9 +6,15 @@
 #include "core/util/atomic.h"
 #include "core/util/bitmap_ownership.h"
 #include "core/util/format_converter.cuh"
-#include "tools/common/edgelist_subgraphs_io.cuh"
 #include "core/util/parallel.h"
+#include "tools/common/edgelist_subgraphs_io.cuh"
 #include "tools/graph_partitioner/partitioner/grid_cut.cuh"
+
+#include <algorithm>
+#include <fstream>
+#include <mutex>
+#include <thread>
+#include <unordered_map>
 
 namespace sics {
 
@@ -105,7 +105,8 @@ void GridCutPartitioner::RunPartitioner() {
       << "[GridCutPartitioner] Computing key parameters under chunk scope of "
       << scope_per_chunk << " ...\n"
       << std::endl;
-  ParallelFor(worker.begin(), worker.end(),
+  ParallelFor(
+      worker.begin(), worker.end(),
       [this, step, &edges, scope_per_chunk, &n_edges_for_each_block,
        &max_vid_for_each_block, &min_vid_for_each_block,
        &vertices_bm_for_each_block](auto w) {
@@ -148,7 +149,8 @@ void GridCutPartitioner::RunPartitioner() {
 
   std::cout << "[GridCutPartitioner] Dropping edges into blocks...\n"
             << std::endl;
-  ParallelFor(worker.begin(), worker.end(),
+  ParallelFor(
+      worker.begin(), worker.end(),
       [this, step, &edges, scope_per_chunk, &edge_blocks_buf,
        &n_edges_for_each_block, &offset_for_each_block](auto w) {
         for (auto eid = w; eid < edges.get_metadata().num_edges; eid += step) {
@@ -173,9 +175,8 @@ void GridCutPartitioner::RunPartitioner() {
   std::cout << "[GridCutPartitioner] Constructing Edgelist of blocks...\n"
             << std::endl;
   for (unsigned _ = 0; _ < n_partitions_ * n_partitions_; _++) {
-    EdgelistMetadata meta{.num_vertices =
-                              static_cast<uint32_t>(
-                                  vertices_bm_for_each_block[_].Count()),
+    EdgelistMetadata meta{.num_vertices = static_cast<uint32_t>(
+                              vertices_bm_for_each_block[_].Count()),
                           .num_edges = n_edges_for_each_block[_],
                           .max_vid = max_vid_for_each_block[_],
                           .min_vid = min_vid_for_each_block[_]};

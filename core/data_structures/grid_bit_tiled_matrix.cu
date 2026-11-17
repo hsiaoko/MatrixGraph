@@ -11,12 +11,12 @@ namespace data_structures {
 using GraphID = sics::matrixgraph::core::common::GraphID;
 using VertexID = sics::matrixgraph::core::common::VertexID;
 
-GridBitTiledMatrix::GridBitTiledMatrix(const GridGraphMetadata &metadata) {
+GridBitTiledMatrix::GridBitTiledMatrix(const GridGraphMetadata& metadata) {
   metadata_ = metadata;
   tiled_matrix_vec_.resize(pow(metadata_.n_chunks, 2));
 
-  std::generate(tiled_matrix_vec_.begin(),
-                tiled_matrix_vec_.end(), []() { return new BitTiledMatrix(); });
+  std::generate(tiled_matrix_vec_.begin(), tiled_matrix_vec_.end(),
+                []() { return new BitTiledMatrix(); });
 }
 
 void GridBitTiledMatrix::Print() const {
@@ -35,7 +35,7 @@ void GridBitTiledMatrix::Print() const {
   }
 }
 
-} // namespace data_structures
-} // namespace core
-} // namespace matrixgraph
-} // namespace sics
+}  // namespace data_structures
+}  // namespace core
+}  // namespace matrixgraph
+}  // namespace sics

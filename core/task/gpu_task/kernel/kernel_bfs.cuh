@@ -1,15 +1,14 @@
 #ifndef MATRIXGRAPH_CORE_TASK_GPU_TASK_KERNEL_KERNEL_BFS_CUH_
 #define MATRIXGRAPH_CORE_TASK_GPU_TASK_KERNEL_KERNEL_BFS_CUH_
 
-#include <cuda_runtime.h>
-
-#include <vector>
-
 #include "core/common/types.h"
 #include "core/data_structures/device_buffer.cuh"
 #include "core/data_structures/edgelist.h"
 #include "core/data_structures/immutable_csr.cuh"
 #include "core/data_structures/unified_buffer.cuh"
+
+#include <cuda_runtime.h>
+#include <vector>
 
 namespace sics {
 namespace matrixgraph {
@@ -28,13 +27,11 @@ class BFSKernelWrapper {
   using Edges = sics::matrixgraph::core::data_structures::Edges;
 
  public:
-
   static void BFS(
       const cudaStream_t& stream, VertexID n_vertices_g, EdgeIndex n_edges_g,
       VertexID source_vertex,
       const data_structures::UnifiedOwnedBuffer<uint8_t>& data_g,
       const data_structures::UnifiedOwnedBuffer<VertexLabel>& v_level_g);
-
 };
 
 }  // namespace kernel

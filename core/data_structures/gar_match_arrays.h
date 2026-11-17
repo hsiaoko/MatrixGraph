@@ -22,11 +22,10 @@ namespace data_structures {
 // - num_conditions:
 //     Usually set to pattern node count (p.n_nodes) in current GAR path.
 // - row_* arrays (same length = *row_size):
-//     row_pivot_id[i] : pivot vertex ID in data graph (instance ID, not local idx)
-//     row_cond_j[i]   : condition index j (currently same as pos in this pipeline)
-//     row_pos[i]      : pattern vertex position
-//     row_offset[i]   : start index in matched_v_ids
-//     row_count[i]    : number of IDs for this row
+//     row_pivot_id[i] : pivot vertex ID in data graph (instance ID, not local
+//     idx) row_cond_j[i]   : condition index j (currently same as pos in this
+//     pipeline) row_pos[i]      : pattern vertex position row_offset[i]   :
+//     start index in matched_v_ids row_count[i]    : number of IDs for this row
 // - matched_v_ids:
 //     Global pool storing concatenated row values.
 //     For row i, slice is:
@@ -73,9 +72,9 @@ struct GARMatchArrays {
     const int rs = (row_size ? *row_size : 0);
     const int ms = (match_size ? *match_size : 0);
     const int show_rows = std::max(0, std::min(k, rs));
-    std::cout << "[GARMatchArrays] num_conditions=" << nc
-              << " row_size=" << rs << "/" << row_capacity
-              << " match_size=" << ms << "/" << match_capacity << std::endl;
+    std::cout << "[GARMatchArrays] num_conditions=" << nc << " row_size=" << rs
+              << "/" << row_capacity << " match_size=" << ms << "/"
+              << match_capacity << std::endl;
     if (show_rows <= 0) {
       std::cout << "[GARMatchArrays] no rows to print." << std::endl;
       return;
@@ -86,9 +85,8 @@ struct GARMatchArrays {
       const int32_t pos = row_pos ? row_pos[i] : -1;
       const int32_t offset = row_offset ? row_offset[i] : -1;
       const int32_t count = row_count ? row_count[i] : 0;
-      std::cout << "  [row " << i << "] pivot=" << pivot
-                << " cond_j=" << cond_j << " pos=" << pos
-                << " offset=" << offset << " count=" << count;
+      std::cout << "  [row " << i << "] pivot=" << pivot << " cond_j=" << cond_j
+                << " pos=" << pos << " offset=" << offset << " count=" << count;
       if (matched_v_ids && offset >= 0 && count > 0) {
         const int begin = offset;
         const int safe_end = std::max(begin, std::min(begin + count, ms));

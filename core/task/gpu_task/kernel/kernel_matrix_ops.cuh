@@ -1,15 +1,14 @@
 #ifndef MATRIXGRAPH_CORE_TASK_GPU_TASK_KERNEL_KERNEL_MATRIX_OPS_CUH_
 #define MATRIXGRAPH_CORE_TASK_GPU_TASK_KERNEL_KERNEL_MATRIX_OPS_CUH_
 
-#include <cuda_runtime.h>
-
-#include <vector>
-
 #include "core/common/types.h"
 #include "core/data_structures/device_buffer.cuh"
 #include "core/data_structures/edgelist.h"
 #include "core/data_structures/immutable_csr.cuh"
 #include "core/data_structures/unified_buffer.cuh"
+
+#include <cuda_runtime.h>
+#include <vector>
 
 namespace sics {
 namespace matrixgraph {
@@ -28,7 +27,6 @@ class MatrixOpsKernelWrapper {
   using Edges = sics::matrixgraph::core::data_structures::Edges;
 
  public:
-
   static void MatMult(const cudaStream_t& stream, float* A, float* B, float* C,
                       int m, int k, int n, bool transposed_a = false,
                       bool transposed_b = false);
@@ -63,7 +61,6 @@ class MatrixOpsKernelWrapper {
 
   static void CPUSimdSquaredDifference(const float* v_a, const float* v_b,
                                        float* v_c, size_t n);
-
 };
 
 }  // namespace kernel

@@ -12,13 +12,13 @@
 // A pattern edge with label >= num_relations therefore walks the flipped
 // slot's pair array, exactly like the old TripleGraph.
 
+#include "core/data_structures/gar_graph_arrays.h"
+#include "core/data_structures/gar_pattern_arrays.h"
+
 #include <cstdint>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
-
-#include "core/data_structures/gar_graph_arrays.h"
-#include "core/data_structures/gar_pattern_arrays.h"
 
 namespace sics {
 namespace matrixgraph {
@@ -26,8 +26,7 @@ namespace core {
 namespace task {
 namespace cpu_task {
 
-using GARGraphArrays =
-    sics::matrixgraph::core::data_structures::GARGraphArrays;
+using GARGraphArrays = sics::matrixgraph::core::data_structures::GARGraphArrays;
 using GARPatternArrays =
     sics::matrixgraph::core::data_structures::GARPatternArrays;
 

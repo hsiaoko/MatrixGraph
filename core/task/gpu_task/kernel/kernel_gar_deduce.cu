@@ -1,9 +1,8 @@
+#include "core/common/consts.h"
 #include "core/task/gpu_task/kernel/kernel_gar_deduce.cuh"
+#include "core/util/cuda_check.cuh"
 
 #include <cuda_runtime.h>
-
-#include "core/common/consts.h"
-#include "core/util/cuda_check.cuh"
 
 namespace sics {
 namespace matrixgraph {
@@ -80,8 +79,8 @@ __global__ void GARDeducePackCandidatesKernel(const uint32_t* cand_src,
 }
 
 // lower_bound over sorted uint64 keys.
-__device__ __forceinline__ int GARDeduceLowerBound(const uint64_t* keys,
-                                                   int n, uint64_t key) {
+__device__ __forceinline__ int GARDeduceLowerBound(const uint64_t* keys, int n,
+                                                   uint64_t key) {
   int lo = 0, hi = n;
   while (lo < hi) {
     const int mid = (lo + hi) >> 1;
@@ -130,10 +129,12 @@ __global__ void GARDeduceInitEmbeddingsKernel(const uint64_t* fwd_keys,
 //   src bound only        -> scan the fwd segment with src == au;
 //   dst bound only        -> scan the bwd segment with dst == av;
 //   neither bound         -> full scan (BFS join order prevents this).
-__global__ void GARDeduceExpandEmbeddingsKernel(
-    const int32_t* curr, int n_curr, int n_nodes, int p_u, int p_v,
-    const uint64_t* fwd_keys, const uint64_t* bwd_keys, int n_cand,
-    int32_t* next, int* next_count, int cap) {
+__global__ void GARDeduceExpandEmbeddingsKernel(const int32_t* curr, int n_curr,
+                                                int n_nodes, int p_u, int p_v,
+                                                const uint64_t* fwd_keys,
+                                                const uint64_t* bwd_keys,
+                                                int n_cand, int32_t* next,
+                                                int* next_count, int cap) {
   const unsigned int tid = blockIdx.x * blockDim.x + threadIdx.x;
   const unsigned int step = blockDim.x * gridDim.x;
   for (int t = static_cast<int>(tid); t < n_curr; t += static_cast<int>(step)) {
@@ -160,28 +161,26 @@ __global__ void GARDeduceExpandEmbeddingsKernel(
     } else if (au >= 0) {
       const uint64_t prefix = static_cast<uint64_t>(au) << 32;
       const int lo = GARDeduceLowerBound(fwd_keys, n_cand, prefix);
-      for (int j = lo; j < n_cand && (fwd_keys[j] >> 32) ==
-                                     static_cast<uint64_t>(au);
+      for (int j = lo;
+           j < n_cand && (fwd_keys[j] >> 32) == static_cast<uint64_t>(au);
            ++j) {
         const int slot = atomicAdd(next_count, 1);
         if (slot >= cap) return;
         int32_t* out_row = next + static_cast<size_t>(slot) * n_nodes;
         for (int i = 0; i < n_nodes; ++i) out_row[i] = row[i];
-        out_row[p_v] = static_cast<int32_t>(
-            static_cast<uint32_t>(fwd_keys[j]));
+        out_row[p_v] = static_cast<int32_t>(static_cast<uint32_t>(fwd_keys[j]));
       }
     } else if (av >= 0) {
       const uint64_t prefix = static_cast<uint64_t>(av) << 32;
       const int lo = GARDeduceLowerBound(bwd_keys, n_cand, prefix);
-      for (int j = lo; j < n_cand && (bwd_keys[j] >> 32) ==
-                                     static_cast<uint64_t>(av);
+      for (int j = lo;
+           j < n_cand && (bwd_keys[j] >> 32) == static_cast<uint64_t>(av);
            ++j) {
         const int slot = atomicAdd(next_count, 1);
         if (slot >= cap) return;
         int32_t* out_row = next + static_cast<size_t>(slot) * n_nodes;
         for (int i = 0; i < n_nodes; ++i) out_row[i] = row[i];
-        out_row[p_u] = static_cast<int32_t>(
-            static_cast<uint32_t>(bwd_keys[j]));
+        out_row[p_u] = static_cast<int32_t>(static_cast<uint32_t>(bwd_keys[j]));
       }
     } else {
       for (int j = 0; j < n_cand; ++j) {
@@ -189,10 +188,9 @@ __global__ void GARDeduceExpandEmbeddingsKernel(
         if (slot >= cap) return;
         int32_t* out_row = next + static_cast<size_t>(slot) * n_nodes;
         for (int i = 0; i < n_nodes; ++i) out_row[i] = row[i];
-        out_row[p_u] = static_cast<int32_t>(
-            static_cast<uint32_t>(fwd_keys[j] >> 32));
-        out_row[p_v] = static_cast<int32_t>(
-            static_cast<uint32_t>(fwd_keys[j]));
+        out_row[p_u] =
+            static_cast<int32_t>(static_cast<uint32_t>(fwd_keys[j] >> 32));
+        out_row[p_v] = static_cast<int32_t>(static_cast<uint32_t>(fwd_keys[j]));
       }
     }
   }
@@ -201,12 +199,18 @@ __global__ void GARDeduceExpandEmbeddingsKernel(
 __device__ __forceinline__ bool GARDeduceEvalCmp(int op, double lhs,
                                                  double rhs) {
   switch (op) {
-    case 0: return lhs == rhs;
-    case 1: return lhs != rhs;
-    case 2: return lhs < rhs;
-    case 3: return lhs <= rhs;
-    case 4: return lhs > rhs;
-    case 5: return lhs >= rhs;
+    case 0:
+      return lhs == rhs;
+    case 1:
+      return lhs != rhs;
+    case 2:
+      return lhs < rhs;
+    case 3:
+      return lhs <= rhs;
+    case 4:
+      return lhs > rhs;
+    case 5:
+      return lhs >= rhs;
   }
   return false;
 }
@@ -261,8 +265,7 @@ __global__ void GARDeduceEvalEmitKernel(GARDeduceEvalParams params) {
           const uint32_t rj = static_cast<uint32_t>(row[pr.rhs_node]);
           const uint8_t* vmi = params.attr_valid[pr.col];
           const uint8_t* vmj = params.attr_valid[pr.rhs_col];
-          if ((vmi != nullptr && !vmi[ri]) ||
-              (vmj != nullptr && !vmj[rj])) {
+          if ((vmi != nullptr && !vmi[ri]) || (vmj != nullptr && !vmj[rj])) {
             ok = false;
             break;
           }
@@ -271,11 +274,10 @@ __global__ void GARDeduceEvalEmitKernel(GARDeduceEvalParams params) {
           break;
         }
         case 2:  // edge: edge_label(node, rhs_node) exists
-          ok = GARDeduceHasEdge(params.g_e_src, params.g_e_dst,
-                                params.g_e_label, params.g_n_edges,
-                                static_cast<uint32_t>(row[pr.node]),
-                                static_cast<uint32_t>(row[pr.rhs_node]),
-                                pr.edge_label);
+          ok = GARDeduceHasEdge(
+              params.g_e_src, params.g_e_dst, params.g_e_label,
+              params.g_n_edges, static_cast<uint32_t>(row[pr.node]),
+              static_cast<uint32_t>(row[pr.rhs_node]), pr.edge_label);
           break;
         case 3: {  // exists: node.col has a value
           const uint32_t r = static_cast<uint32_t>(row[pr.node]);
@@ -324,8 +326,7 @@ void LaunchGARDeducePackCandidates(const uint32_t* cand_src,
 
 void LaunchGARDeduceInitEmbeddings(const uint64_t* fwd_keys, int n_cand,
                                    int p_u, int p_v, int n_nodes,
-                                   int32_t* out_emb, int* out_count,
-                                   int cap) {
+                                   int32_t* out_emb, int* out_count, int cap) {
   GARDeduceInitEmbeddingsKernel<<<kGridDim, kBlockDim>>>(
       fwd_keys, n_cand, p_u, p_v, n_nodes, out_emb, out_count, cap);
   CUDA_CHECK(cudaGetLastError());
@@ -335,8 +336,7 @@ void LaunchGARDeduceExpandEmbeddings(const int32_t* curr, int n_curr,
                                      int n_nodes, int p_u, int p_v,
                                      const uint64_t* fwd_keys,
                                      const uint64_t* bwd_keys, int n_cand,
-                                     int32_t* next, int* next_count,
-                                     int cap) {
+                                     int32_t* next, int* next_count, int cap) {
   GARDeduceExpandEmbeddingsKernel<<<kGridDim, kBlockDim>>>(
       curr, n_curr, n_nodes, p_u, p_v, fwd_keys, bwd_keys, n_cand, next,
       next_count, cap);

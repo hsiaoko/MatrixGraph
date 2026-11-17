@@ -3,6 +3,7 @@
 
 #include "core/data_structures/edgelist.h"
 #include "core/data_structures/immutable_csr.cuh"
+
 #include <thread>
 
 namespace sics {

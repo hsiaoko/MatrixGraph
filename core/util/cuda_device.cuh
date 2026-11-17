@@ -59,9 +59,12 @@ inline void MatrixGraphParseDeviceList(const char* str, std::vector<int>* out) {
 
 // Active CUDA devices for multi-GPU execution.
 // Precedence:
-// - MATRIXGRAPH_CUDA_DEVICES="0,1,2" (non-empty after parsing valid ids) wins over
-//   MATRIXGRAPH_CUDA_ALL_DEVICES so an explicit list is never overridden by “use all”.
-// - MATRIXGRAPH_CUDA_ALL_DEVICES=1 — every visible device 0..count-1 (only when the
+// - MATRIXGRAPH_CUDA_DEVICES="0,1,2" (non-empty after parsing valid ids) wins
+// over
+//   MATRIXGRAPH_CUDA_ALL_DEVICES so an explicit list is never overridden by
+//   “use all”.
+// - MATRIXGRAPH_CUDA_ALL_DEVICES=1 — every visible device 0..count-1 (only when
+// the
 //   explicit list env is unset, empty, or parses to zero valid GPUs).
 // - Otherwise — single device { MatrixGraphCudaPrimaryDeviceIndex() }.
 inline std::vector<int> MatrixGraphCudaDeviceList() {
@@ -105,7 +108,9 @@ inline int MatrixGraphCudaStreamsPerGpu() {
 }
 
 // Same as MatrixGraphCudaPrimaryDeviceIndex (first / default GPU).
-inline int MatrixGraphCudaDevice() { return MatrixGraphCudaPrimaryDeviceIndex(); }
+inline int MatrixGraphCudaDevice() {
+  return MatrixGraphCudaPrimaryDeviceIndex();
+}
 
 }  // namespace util
 }  // namespace core

@@ -1,6 +1,8 @@
 #ifndef MATRIXGRAPH_CORE_COMMON_HOST_ALGORITHMS_CUH_
 #define MATRIXGRAPH_CORE_COMMON_HOST_ALGORITHMS_CUH_
 
+#include <cstdint>
+
 namespace sics {
 namespace matrixgraph {
 namespace core {
@@ -15,9 +17,9 @@ inline uint32_t hash_function(uint64_t x) {
   return x;
 }
 
-} // namespace common
-} // namespace core
-} // namespace matrixgraph
-} // namespace sics
+}  // namespace common
+}  // namespace core
+}  // namespace matrixgraph
+}  // namespace sics
 
-#endif // MATRIXGRAPH_CORE_COMMON_HOST_ALGORITHMS_CUH_
+#endif  // MATRIXGRAPH_CORE_COMMON_HOST_ALGORITHMS_CUH_

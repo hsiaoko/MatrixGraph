@@ -14,10 +14,9 @@ using sics::matrixgraph::core::data_structures::Mask;
 using sics::matrixgraph::core::data_structures::Tile;
 using sics::matrixgraph::core::data_structures::TiledMatrix;
 
-static void ConvertEdgelistBin2TiledMatrix(const std::string &input_path,
-                                           const std::string &output_path,
+static void ConvertEdgelistBin2TiledMatrix(const std::string& input_path,
+                                           const std::string& output_path,
                                            size_t tile_size) {
-
   YAML::Node node = YAML::LoadFile(input_path + "meta.yaml");
 
   sics::matrixgraph::core::data_structures::EdgelistMetadata edgelist_metadata =
@@ -31,12 +30,11 @@ static void ConvertEdgelistBin2TiledMatrix(const std::string &input_path,
 
   std::ifstream in_file(input_path + "edgelist.bin");
   if (!in_file) {
-
     std::cout << "Open file failed: " + input_path + "edgelist.bin"
               << std::endl;
     exit(EXIT_FAILURE);
   }
-  in_file.read(reinterpret_cast<char *>(buffer_edges),
+  in_file.read(reinterpret_cast<char*>(buffer_edges),
                sizeof(sics::matrixgraph::core::data_structures::Edge) *
                    edgelist_metadata.num_edges);
   sics::matrixgraph::core::data_structures::Edges edgelist(edgelist_metadata,
@@ -77,9 +75,9 @@ static void ConvertEdgelistBin2TiledMatrix(const std::string &input_path,
 // @PARAMETER: input_path and output_path indicates the input and output path
 // respectively, sep determines the separator for the csv file, read_head
 // indicates whether to read head.
-static void ConvertEdgelistCSV2TiledMatrix(const std::string &input_path,
-                                           const std::string &output_path,
-                                           const std::string &sep,
+static void ConvertEdgelistCSV2TiledMatrix(const std::string& input_path,
+                                           const std::string& output_path,
+                                           const std::string& sep,
                                            size_t tile_size) {
   if (!std::filesystem::exists(output_path))
     std::filesystem::create_directory(output_path);
@@ -113,9 +111,9 @@ static void ConvertEdgelistCSV2TiledMatrix(const std::string &input_path,
   delete tiled_matrix_ptr;
 }
 
-} // namespace converter
-} // namespace tools
-} // namespace matrixgraph
-} // namespace sics
+}  // namespace converter
+}  // namespace tools
+}  // namespace matrixgraph
+}  // namespace sics
 
-#endif // MATRIXGRAPH_TOOLS_GRAPH_CONVERTER_CONVERTER_TO_TILED_MATRIX_CUH_
+#endif  // MATRIXGRAPH_TOOLS_GRAPH_CONVERTER_CONVERTER_TO_TILED_MATRIX_CUH_

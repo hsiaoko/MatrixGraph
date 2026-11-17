@@ -1,14 +1,12 @@
 #include "core/task/gpu_task/gar_deduce.cuh"
+#include "core/task/gpu_task/kernel/kernel_gar_deduce.cuh"
+#include "core/util/cuda_check.cuh"
 
 #include <algorithm>
 #include <cstring>
+#include <cub/cub.cuh>
 #include <iostream>
 #include <vector>
-
-#include <cub/cub.cuh>
-
-#include "core/task/gpu_task/kernel/kernel_gar_deduce.cuh"
-#include "core/util/cuda_check.cuh"
 
 namespace sics {
 namespace matrixgraph {
@@ -54,8 +52,8 @@ int GARDeduce::Run(const GARPatternArrays& p, const GARPredicate* preds,
   *out->match_capped = 0;
   if (out->head_size != nullptr) *out->head_size = 0;
   if (out->emb_rows != nullptr) *out->emb_rows = 0;
-  if (p.n_nodes <= 0 || p.n_nodes > dk::kGARDeduceMaxNodes ||
-      p.n_edges <= 0 || n_preds > dk::kGARDeduceMaxPreds ||
+  if (p.n_nodes <= 0 || p.n_nodes > dk::kGARDeduceMaxNodes || p.n_edges <= 0 ||
+      n_preds > dk::kGARDeduceMaxPreds ||
       attrs.n_cols > GARAttrColumnSet::kMaxCols || frontier_cap <= 0 ||
       eval_cap <= 0) {
     status_ = 2;  // unsupported rule shape; caller treats as skipped
@@ -70,16 +68,18 @@ int GARDeduce::Run(const GARPatternArrays& p, const GARPredicate* preds,
   DeviceOwnedBuffer<int32_t> d_p_src;
   DeviceOwnedBuffer<int32_t> d_p_dst;
   DeviceOwnedBuffer<int32_t> d_p_label;
-  d_node_label.Init(Buffer<int32_t>{
-      const_cast<int32_t*>(p.node_label_idx),
-      sizeof(int32_t) * static_cast<size_t>(p.n_nodes)});
-  d_p_src.Init(Buffer<int32_t>{const_cast<int32_t*>(p.edge_src),
-                               sizeof(int32_t) * static_cast<size_t>(p.n_edges)});
-  d_p_dst.Init(Buffer<int32_t>{const_cast<int32_t*>(p.edge_dst),
-                               sizeof(int32_t) * static_cast<size_t>(p.n_edges)});
-  d_p_label.Init(Buffer<int32_t>{
-      const_cast<int32_t*>(p.edge_label_idx),
-      sizeof(int32_t) * static_cast<size_t>(p.n_edges)});
+  d_node_label.Init(
+      Buffer<int32_t>{const_cast<int32_t*>(p.node_label_idx),
+                      sizeof(int32_t) * static_cast<size_t>(p.n_nodes)});
+  d_p_src.Init(
+      Buffer<int32_t>{const_cast<int32_t*>(p.edge_src),
+                      sizeof(int32_t) * static_cast<size_t>(p.n_edges)});
+  d_p_dst.Init(
+      Buffer<int32_t>{const_cast<int32_t*>(p.edge_dst),
+                      sizeof(int32_t) * static_cast<size_t>(p.n_edges)});
+  d_p_label.Init(
+      Buffer<int32_t>{const_cast<int32_t*>(p.edge_label_idx),
+                      sizeof(int32_t) * static_cast<size_t>(p.n_edges)});
 
   // ---- candidate extraction (count pass, prefix sum, fill pass) ----
   DeviceOwnedBuffer<int> d_counts(sizeof(int) * static_cast<size_t>(p.n_edges));
@@ -89,9 +89,9 @@ int GARDeduce::Run(const GARPatternArrays& p, const GARPredicate* preds,
   fp.g_e_label = d_e_label_.GetPtr();
   fp.g_v_label = has_v_label_ ? d_v_label_.GetPtr() : nullptr;
   fp.g_n_edges = n_edges_;
-  fp.p = dk::GARDeducePatternDev{d_node_label.GetPtr(), d_p_src.GetPtr(),
-                                 d_p_dst.GetPtr(),      d_p_label.GetPtr(),
-                                 p.n_nodes,             p.n_edges};
+  fp.p = dk::GARDeducePatternDev{
+      d_node_label.GetPtr(), d_p_src.GetPtr(), d_p_dst.GetPtr(),
+      d_p_label.GetPtr(),    p.n_nodes,        p.n_edges};
   fp.cand_counts = d_counts.GetPtr();
   dk::LaunchGARDeduceCountCandidates(fp);
 
@@ -113,10 +113,10 @@ int GARDeduce::Run(const GARPatternArrays& p, const GARPredicate* preds,
   DeviceOwnedBuffer<int> d_cursors;
   Buffer<int> h_cursors_buf{h_cursors.data(), sizeof(int) * h_cursors.size()};
   d_cursors.Init(h_cursors_buf);
-  EnsureCapacity(d_cand_src_, sizeof(uint32_t) *
-                                 static_cast<size_t>(total_cand));
-  EnsureCapacity(d_cand_dst_, sizeof(uint32_t) *
-                                 static_cast<size_t>(total_cand));
+  EnsureCapacity(d_cand_src_,
+                 sizeof(uint32_t) * static_cast<size_t>(total_cand));
+  EnsureCapacity(d_cand_dst_,
+                 sizeof(uint32_t) * static_cast<size_t>(total_cand));
   fp.cand_offsets = d_offsets.GetPtr();
   fp.cand_src = d_cand_src_.GetPtr();
   fp.cand_dst = d_cand_dst_.GetPtr();
@@ -127,13 +127,12 @@ int GARDeduce::Run(const GARPatternArrays& p, const GARPredicate* preds,
   // segment (fwd by (src,dst), bwd by (dst,src)); the join's binary
   // searches run over these — the device analogue of the CPU matcher's
   // sorted rel-pair arrays ----
-  const size_t cand_bytes =
-      sizeof(uint64_t) * static_cast<size_t>(total_cand);
+  const size_t cand_bytes = sizeof(uint64_t) * static_cast<size_t>(total_cand);
   EnsureCapacity(d_fwd_in_, cand_bytes);
   EnsureCapacity(d_bwd_in_, cand_bytes);
-  dk::LaunchGARDeducePackCandidates(d_cand_src_.GetPtr(),
-                                    d_cand_dst_.GetPtr(), total_cand,
-                                    d_fwd_in_.GetPtr(), d_bwd_in_.GetPtr());
+  dk::LaunchGARDeducePackCandidates(d_cand_src_.GetPtr(), d_cand_dst_.GetPtr(),
+                                    total_cand, d_fwd_in_.GetPtr(),
+                                    d_bwd_in_.GetPtr());
   EnsureCapacity(d_fwd_, cand_bytes);
   EnsureCapacity(d_bwd_, cand_bytes);
   {
@@ -143,13 +142,11 @@ int GARDeduce::Run(const GARPatternArrays& p, const GARPredicate* preds,
         p.n_edges, d_offsets.GetPtr(), d_offsets.GetPtr() + 1);
     EnsureCapacity(d_sort_temp_, temp_bytes);
     cub::DeviceSegmentedRadixSort::SortKeys(
-        d_sort_temp_.GetPtr(), temp_bytes, d_fwd_in_.GetPtr(),
-        d_fwd_.GetPtr(), total_cand, p.n_edges, d_offsets.GetPtr(),
-        d_offsets.GetPtr() + 1);
+        d_sort_temp_.GetPtr(), temp_bytes, d_fwd_in_.GetPtr(), d_fwd_.GetPtr(),
+        total_cand, p.n_edges, d_offsets.GetPtr(), d_offsets.GetPtr() + 1);
     cub::DeviceSegmentedRadixSort::SortKeys(
-        d_sort_temp_.GetPtr(), temp_bytes, d_bwd_in_.GetPtr(),
-        d_bwd_.GetPtr(), total_cand, p.n_edges, d_offsets.GetPtr(),
-        d_offsets.GetPtr() + 1);
+        d_sort_temp_.GetPtr(), temp_bytes, d_bwd_in_.GetPtr(), d_bwd_.GetPtr(),
+        total_cand, p.n_edges, d_offsets.GetPtr(), d_offsets.GetPtr() + 1);
     CUDA_CHECK(cudaGetLastError());
     CUDA_CHECK(cudaDeviceSynchronize());
   }
@@ -159,8 +156,7 @@ int GARDeduce::Run(const GARPatternArrays& p, const GARPredicate* preds,
   // bound set (no cartesian blow-up) ----
   int e0 = 0;
   for (int pe = 1; pe < p.n_edges; ++pe) {
-    if (h_counts[static_cast<size_t>(pe)] <
-        h_counts[static_cast<size_t>(e0)]) {
+    if (h_counts[static_cast<size_t>(pe)] < h_counts[static_cast<size_t>(e0)]) {
       e0 = pe;
     }
   }
@@ -228,7 +224,8 @@ int GARDeduce::Run(const GARPatternArrays& p, const GARPredicate* preds,
     n_curr = std::min(h_count, frontier_cap);
     a_is_curr = !a_is_curr;
   }
-  int32_t* d_final = a_is_curr ? d_frontier_a_.GetPtr() : d_frontier_b_.GetPtr();
+  int32_t* d_final =
+      a_is_curr ? d_frontier_a_.GetPtr() : d_frontier_b_.GetPtr();
 
   // The eval cap mirrors the CPU chase's per-rule match cap: only the
   // first eval_cap embeddings are counted / X-evaluated / head-emitted.
@@ -268,8 +265,8 @@ int GARDeduce::Run(const GARPatternArrays& p, const GARPredicate* preds,
     }
     ep.attr_vals[c] = attr_vals_cache_.at(cid)->GetPtr();
     const auto it = attr_valid_cache_.find(cid);
-    ep.attr_valid[c] = it != attr_valid_cache_.end() ? it->second->GetPtr()
-                                                     : nullptr;
+    ep.attr_valid[c] =
+        it != attr_valid_cache_.end() ? it->second->GetPtr() : nullptr;
   }
   ep.has_head = (head_u >= 0 && head_v >= 0) ? 1 : 0;
   ep.head_u = head_u;
@@ -289,8 +286,7 @@ int GARDeduce::Run(const GARPatternArrays& p, const GARPredicate* preds,
     ep.has_head = 0;
   }
 
-  DeviceOwnedBuffer<unsigned long long> d_x_count(
-      sizeof(unsigned long long));
+  DeviceOwnedBuffer<unsigned long long> d_x_count(sizeof(unsigned long long));
   ep.x_count = d_x_count.GetPtr();
 
   if (out->emb_x_ok != nullptr) {

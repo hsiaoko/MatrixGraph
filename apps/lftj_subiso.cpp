@@ -1,13 +1,13 @@
-#include <gflags/gflags.h>
+#include "core/task/cpu_task/lftj_subiso.cuh"
 
+#include "apps/backend_flag.h"
+#include "core/common/types.h"
+#include "core/engine/engine.h"
+
+#include <gflags/gflags.h>
 #include <iostream>
 #include <string>
 #include <thread>
-
-#include "core/common/types.h"
-#include "apps/backend_flag.h"
-#include "core/engine/engine.h"
-#include "core/task/cpu_task/lftj_subiso.cuh"
 
 DEFINE_string(p, "", "Path to the pattern graph directory (required)");
 DEFINE_string(g, "", "Path to the data graph directory (required)");

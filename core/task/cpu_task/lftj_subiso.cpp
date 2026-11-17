@@ -1,7 +1,7 @@
 #include "core/task/cpu_task/lftj_subiso.cuh"
 
-#include <array>
 #include <algorithm>
+#include <array>
 #include <chrono>
 #include <cstring>
 #include <fstream>
@@ -48,8 +48,8 @@ void LFTJSubIso::Run() {
     for (int lbl = 0; lbl < kLcfLabelCap; ++lbl) {
       if (g_freq[lbl] < p_freq[lbl]) {
         std::cout << "[LFTJSubIso] LCF rejected globally (label " << lbl
-                  << " count: pattern=" << p_freq[lbl] << " data="
-                  << g_freq[lbl] << ")." << std::endl;
+                  << " count: pattern=" << p_freq[lbl]
+                  << " data=" << g_freq[lbl] << ")." << std::endl;
         std::cout << "=== Filter Counts ===" << std::endl;
         std::cout << "LCF Filters:        1" << std::endl;
         std::cout << "[LFTJSubIso] Total matches: 0" << std::endl;
@@ -80,9 +80,12 @@ void LFTJSubIso::Run() {
       std::chrono::duration_cast<std::chrono::microseconds>(t3 - t2).count() /
       1000.0;
 
-  std::cout << "[LFTJSubIso] Load+parse time: " << load_ms << " ms" << std::endl;
-  std::cout << "[LFTJSubIso] Plan+filter time: " << plan_ms << " ms" << std::endl;
-  std::cout << "[LFTJSubIso] Enumeration time: " << enum_ms << " ms" << std::endl;
+  std::cout << "[LFTJSubIso] Load+parse time: " << load_ms << " ms"
+            << std::endl;
+  std::cout << "[LFTJSubIso] Plan+filter time: " << plan_ms << " ms"
+            << std::endl;
+  std::cout << "[LFTJSubIso] Enumeration time: " << enum_ms << " ms"
+            << std::endl;
   std::cout << "[LFTJSubIso] Total matches: " << match_count_ << std::endl;
 
   std::cout << "=== Filter Counts ===" << std::endl;
@@ -94,8 +97,10 @@ void LFTJSubIso::Run() {
   std::cout << "LCF Filters:        " << lcf_filtered_count_ << std::endl;
   std::cout << "Bloom Filters:      " << bloom_filtered_count_ << std::endl;
   std::cout << "Min-Wise Filters:   " << min_wise_filtered_count_ << std::endl;
-  std::cout << "Min-Wise Bloom Filters: " << min_wise_bloom_filtered_count_ << std::endl;
-  std::cout << "Intersection Prune: " << intersection_pruned_count_ << std::endl;
+  std::cout << "Min-Wise Bloom Filters: " << min_wise_bloom_filtered_count_
+            << std::endl;
+  std::cout << "Intersection Prune: " << intersection_pruned_count_
+            << std::endl;
 
   if (materialize_ && match_count_ > 0) {
     VertexID pn = pattern_.get_num_vertices();
@@ -367,7 +372,8 @@ void LFTJSubIso::ComputeMatchingOrder() {
 
     const VertexLabel* plabels = pattern_.GetVLabelBasePointer();
 
-    // Greedily pick the vertex with the most edges to already-selected vertices.
+    // Greedily pick the vertex with the most edges to already-selected
+    // vertices.
     while (order_.size() < pn) {
       int max_edges = -1;
       VertexID chosen = 0;
@@ -584,12 +590,12 @@ uint64_t LFTJSubIso::Enumerate() {
       thread_counts[t] = 0;
       continue;
     }
-    workers.emplace_back([this, start, end, &thread_counts, t,
-                          &thread_matches]() {
-      thread_counts[t] = EnumerateRange(
-          start, end, std::numeric_limits<uint64_t>::max(),
-          materialize_ ? &thread_matches[t] : nullptr);
-    });
+    workers.emplace_back(
+        [this, start, end, &thread_counts, t, &thread_matches]() {
+          thread_counts[t] =
+              EnumerateRange(start, end, std::numeric_limits<uint64_t>::max(),
+                             materialize_ ? &thread_matches[t] : nullptr);
+        });
   }
 
   for (auto& w : workers) w.join();
@@ -598,8 +604,7 @@ uint64_t LFTJSubIso::Enumerate() {
   if (materialize_) {
     size_t total_rows = 0;
     for (const auto& buf : thread_matches) total_rows += buf.size() / pn;
-    uint64_t keep_rows =
-        std::min<uint64_t>(total_rows, output_limit_);
+    uint64_t keep_rows = std::min<uint64_t>(total_rows, output_limit_);
     materialized_matches_.clear();
     materialized_matches_.reserve(static_cast<size_t>(keep_rows) * pn);
     for (const auto& buf : thread_matches) {
@@ -609,9 +614,8 @@ uint64_t LFTJSubIso::Enumerate() {
                              : 0;
       size_t copy_rows = std::min(buf_rows, need_rows);
       if (copy_rows == 0) break;
-      materialized_matches_.insert(
-          materialized_matches_.end(), buf.begin(),
-          buf.begin() + copy_rows * pn);
+      materialized_matches_.insert(materialized_matches_.end(), buf.begin(),
+                                   buf.begin() + copy_rows * pn);
     }
   }
 

@@ -1,8 +1,6 @@
 #ifndef MATRIXGRAPH_TOOLS_GRAPH_CONVERTER_CONVERTER_GRID_EDGELIST_2_GIRD_CSR_TILED_MATRIX_CUH_
 #define MATRIXGRAPH_TOOLS_GRAPH_CONVERTER_CONVERTER_GRID_EDGELIST_2_GIRD_CSR_TILED_MATRIX_CUH_
 
-#include <cmath>
-
 #include "core/common/types.h"
 #include "core/common/yaml_config.h"
 #include "core/data_structures/bit_tiled_matrix.cuh"
@@ -13,6 +11,8 @@
 #include "core/io/csr_tiled_matrix_io.cuh"
 #include "core/util/format_converter.cuh"
 #include "tools/common/edgelist_subgraphs_io.cuh"
+
+#include <cmath>
 
 namespace sics {
 namespace matrixgraph {
@@ -35,8 +35,8 @@ using CSRTiledMatrix = sics::matrixgraph::core::data_structures::CSRTiledMatrix;
 using sics::matrixgraph::core::util::format_converter::Edgelist2BitTiledMatrix;
 using sics::matrixgraph::core::util::format_converter::Edgelist2CSRTiledMatrix;
 
-static void ConvertGridGraph2CSRTiledMatrix(const std::string &input_path,
-                                            const std::string &output_path,
+static void ConvertGridGraph2CSRTiledMatrix(const std::string& input_path,
+                                            const std::string& output_path,
                                             size_t tile_size) {
   if (!std::filesystem::exists(output_path))
     std::filesystem::create_directory(output_path);
@@ -57,16 +57,16 @@ static void ConvertGridGraph2CSRTiledMatrix(const std::string &input_path,
   for (GraphID gid = 0; gid < graph_metadata.num_subgraphs; ++gid) {
     std::string block_dir = output_path + "block" + std::to_string(gid) + "/";
 
-    auto *csr_tile_matrix =
+    auto* csr_tile_matrix =
         Edgelist2CSRTiledMatrix(edges_blocks[gid], tile_size, block_scope);
 
     CSRTiledMatrixIO::Write(block_dir, *csr_tile_matrix);
   }
 
   // Write VLabel of GridCSRTiledMatrix.
-  VertexLabel *buffer_vlabel = new VertexLabel[meta.num_vertices]();
+  VertexLabel* buffer_vlabel = new VertexLabel[meta.num_vertices]();
   std::ofstream out_label_file(output_path + "label.bin", std::ios::binary);
-  out_label_file.write(reinterpret_cast<char *>(buffer_vlabel),
+  out_label_file.write(reinterpret_cast<char*>(buffer_vlabel),
                        sizeof(VertexLabel) * meta.num_vertices);
   delete[] buffer_vlabel;
 
@@ -82,9 +82,9 @@ static void ConvertGridGraph2CSRTiledMatrix(const std::string &input_path,
   out_meta_file.close();
 }
 
-} // namespace converter
-} // namespace tools
-} // namespace matrixgraph
-} // namespace sics
+}  // namespace converter
+}  // namespace tools
+}  // namespace matrixgraph
+}  // namespace sics
 
-#endif // MATRIXGRAPH_TOOLS_GRAPH_CONVERTER_CONVERTER_GRID_EDGELIST_2_CSR_TILED_MATRIX_CUH_
+#endif  // MATRIXGRAPH_TOOLS_GRAPH_CONVERTER_CONVERTER_GRID_EDGELIST_2_CSR_TILED_MATRIX_CUH_

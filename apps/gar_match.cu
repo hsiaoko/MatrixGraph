@@ -1,11 +1,10 @@
-#include <gflags/gflags.h>
-
-#include <cuda_runtime.h>
-#include <iostream>
-
 #include "apps/backend_flag.h"
 #include "core/engine/engine.h"
 #include "core/task/gpu_task/gar_match.cuh"
+
+#include <cuda_runtime.h>
+#include <gflags/gflags.h>
+#include <iostream>
 
 // Input/Output flags
 DEFINE_string(config, "", "Path to GARMatch config (required)");
@@ -40,7 +39,7 @@ void PrintConfig() {
   std::cout << "\n=== GARMatch App Configuration ===" << std::endl;
   std::cout << "Config Path: " << FLAGS_config << std::endl;
   std::cout << "Output Path: " << FLAGS_o << std::endl;
-    std::cout << "Device: " << FLAGS_device << std::endl;
+  std::cout << "Device: " << FLAGS_device << std::endl;
   std::cout << "==================================\n" << std::endl;
 }
 

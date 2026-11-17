@@ -89,16 +89,15 @@ void Diameter::ComputeUndirectedDiameter(const ImmutableCSRGraph& g) {
 
   CpuParallelScope cap_threads(cpu_parallelism_);
   std::atomic<uint32_t> best{0};
-  std::for_each(std::execution::par, sources.begin(), sources.end(),
-                [&](VertexID s) {
-                  const uint32_t ecc = BfsMaxDistanceUndirected(g, s);
-                  uint32_t cur = best.load(std::memory_order_relaxed);
-                  while (ecc > cur &&
-                         !best.compare_exchange_weak(
-                             cur, ecc, std::memory_order_relaxed,
-                             std::memory_order_relaxed)) {
-                  }
-                });
+  std::for_each(
+      std::execution::par, sources.begin(), sources.end(), [&](VertexID s) {
+        const uint32_t ecc = BfsMaxDistanceUndirected(g, s);
+        uint32_t cur = best.load(std::memory_order_relaxed);
+        while (ecc > cur &&
+               !best.compare_exchange_weak(cur, ecc, std::memory_order_relaxed,
+                                           std::memory_order_relaxed)) {
+        }
+      });
 
   const uint32_t value = best.load();
   if (exact) {
@@ -106,10 +105,10 @@ void Diameter::ComputeUndirectedDiameter(const ImmutableCSRGraph& g) {
               << " BFS sources): " << value << std::endl;
   } else {
     std::cout << "[Diameter] undirected diameter (approximate, " << k
-              << " random BFS sources, seed=" << random_seed_
-              << "): " << value << std::endl;
+              << " random BFS sources, seed=" << random_seed_ << "): " << value
+              << std::endl;
     std::cout << "[Diameter] note: value is max eccentricity over sampled "
-                  "sources (≤ true undirected diameter)."
+                 "sources (≤ true undirected diameter)."
               << std::endl;
   }
 }

@@ -7,28 +7,27 @@
 // USAGE: graph-convert --convert_mode=[options] -i <input file path> -o <output
 // file path> --sep=[separator]
 
-#include <gflags/gflags.h>
-
-#include <algorithm>
-#include <cctype>
-#include <filesystem>
-#include <iostream>
-#include <string>
-#include <unordered_map>
-#include <vector>
-
 #include "core/common/types.h"
 #include "core/data_structures/edgelist.h"
 #include "core/data_structures/immutable_csr.cuh"
 #include "core/util/atomic.h"
 #include "core/util/bitmap.h"
 #include "core/util/format_converter.cuh"
-#include "tools/graph_converter/converter/to_bit_tiled_matrix.cuh"
 #include "tools/graph_converter/converter/to_arangodb_json.cuh"
+#include "tools/graph_converter/converter/to_bit_tiled_matrix.cuh"
 #include "tools/graph_converter/converter/to_edgelist.cuh"
 #include "tools/graph_converter/converter/to_egsm_graph.cuh"
 #include "tools/graph_converter/converter/to_grid_csr_tiled_matrix.cuh"
 #include "tools/graph_converter/converter/to_immutable_csr.cuh"
+
+#include <algorithm>
+#include <cctype>
+#include <filesystem>
+#include <gflags/gflags.h>
+#include <iostream>
+#include <string>
+#include <unordered_map>
+#include <vector>
 
 using sics::matrixgraph::core::common::EdgeIndex;
 using sics::matrixgraph::core::common::VertexID;
@@ -42,18 +41,19 @@ DEFINE_string(o, "", "Output file path");
 DEFINE_string(convert_mode, "",
               "Conversion mode (see help for available modes)");
 DEFINE_string(sep, ",", "Separator for CSV files (default: comma)");
-DEFINE_bool(keep_original_vid, false, "Keep original vertex IDs (no compression to contiguous range)");
+DEFINE_bool(keep_original_vid, false,
+            "Keep original vertex IDs (no compression to contiguous range)");
 DEFINE_uint32(tile_size, 64, "Size of a single tile");
 DEFINE_uint32(label_range, 1, "label range for initialization");
 DEFINE_string(graph_id, "1", "Graph ID for ArangoDB export (numeric)");
-DEFINE_string(business_id, "1",
-              "Business ID for ArangoDB export");
+DEFINE_string(business_id, "1", "Business ID for ArangoDB export");
 DEFINE_string(import_time, "1970-01-01T00:00:00Z",
               "Import time for ArangoDB export (_time)");
 DEFINE_string(pivot_time, "1970-01-01T00:00:00Z",
               "Business time for ArangoDB export (_pivot_time)");
-DEFINE_string(pivot_mode, "single",
-              "Pivot graph generation mode for ArangoDB export: single|source|k_hop");
+DEFINE_string(
+    pivot_mode, "single",
+    "Pivot graph generation mode for ArangoDB export: single|source|k_hop");
 DEFINE_uint32(k_hop, 2, "K-hop distance for k_hop pivot mode (default: 2)");
 DEFINE_string(default_vertex_label, "vertex",
               "Default vertex label for ArangoDB export");
@@ -77,18 +77,18 @@ enum class ConvertMode {
   kCSRBin2BitTiledMatrix,              // Convert binary CSR to bit-tiled matrix
   kEdgelistBin2CSRBin,                 // Convert binary edge list to binary CSR
   kEdgelistCSV2CSRBin,                 // Convert edge list CSV to binary CSR
-  kEdgelistCSV2EdgelistBin,  // Convert edge list CSV to binary edge list
-  kCSRBin2EdgelistBin,       // Convert binary CSR to binary edge list
-  kEdgelistCSV2CGGraphCSR,   // Convert edge list CSV to CG graph CSR
-  kEdgelistBin2CGGraphCSR,   // Convert binary edge list to CG graph CSR
-  kCSRBin2EGSM,              // Convert binary CSR to EGSM format
-  kCSRBin2CECI,              // Convert binary CSR to CECI format
-  kCSRBin2GNNPE,             // Convert binary CSR to GNNPE format
-  kCSRBin2VF3,               // Convert binary CSR to VF3 format
-  kEGSM2EdgelistBin,         // Convert EGSM format to binary edge list
-  kEGSM2CSRBin,              // Convert EGSM format to binary csr
-  kEdgelistCSV2ArangoDBJSON, // Convert edge list CSV to ArangoDB JSON files
-  kUndefined                 // Undefined conversion mode
+  kEdgelistCSV2EdgelistBin,   // Convert edge list CSV to binary edge list
+  kCSRBin2EdgelistBin,        // Convert binary CSR to binary edge list
+  kEdgelistCSV2CGGraphCSR,    // Convert edge list CSV to CG graph CSR
+  kEdgelistBin2CGGraphCSR,    // Convert binary edge list to CG graph CSR
+  kCSRBin2EGSM,               // Convert binary CSR to EGSM format
+  kCSRBin2CECI,               // Convert binary CSR to CECI format
+  kCSRBin2GNNPE,              // Convert binary CSR to GNNPE format
+  kCSRBin2VF3,                // Convert binary CSR to VF3 format
+  kEGSM2EdgelistBin,          // Convert EGSM format to binary edge list
+  kEGSM2CSRBin,               // Convert EGSM format to binary csr
+  kEdgelistCSV2ArangoDBJSON,  // Convert edge list CSV to ArangoDB JSON files
+  kUndefined                  // Undefined conversion mode
 };
 
 // Convert string to ConvertMode enum
@@ -149,25 +149,27 @@ void PrintUsage() {
       << "  egsm2edgelistbin           - Convert EGSM format to binary edge "
          "list\n"
       << "  egsm2csrbin                - Convert EGSM format to binary csr\n "
-      << "  edgelistcsv2arangodbjson   - Convert edge list CSV to ArangoDB JSON "
+      << "  edgelistcsv2arangodbjson   - Convert edge list CSV to ArangoDB "
+         "JSON "
          "files\n"
       << "\nOptions:\n"
       << "  --sep=<separator>           - Separator for CSV files (default: "
          "comma)\n"
-      << "  --keep_original_vid         - Keep original vertex IDs (no compression to contiguous range)\n"
+      << "  --keep_original_vid         - Keep original vertex IDs (no "
+         "compression to contiguous range)\n"
       << "  --tile_size=<size>         - Size of a single tile (default: 64)\n"
       << "  --graph_id=<id>             - Graph ID for ArangoDB export\n"
       << "  --business_id=<id>          - Business ID for ArangoDB export\n"
       << "  --import_time=<ts>          - Import time (_time)\n"
       << "  --pivot_time=<ts>           - Business time (_pivot_time)\n"
       << "  --pivot_mode=single|source|k_hop  - Pivot generation mode\n"
-      << "  --k_hop=<N>                 - K-hop distance for k_hop mode (default: 2)\n"
+      << "  --k_hop=<N>                 - K-hop distance for k_hop mode "
+         "(default: 2)\n"
       << "  --default_vertex_label=<l>  - Default vertex label\n"
       << "  --default_edge_label=<l>    - Default edge label\n"
       << "  --random_vertex_labels      - Random labels within --label_range\n"
       << std::endl;
 }
-
 
 // Validate input parameters
 bool ValidateParameters() {
@@ -195,9 +197,9 @@ bool ValidateParameters() {
   if (ConvertMode2Enum(FLAGS_convert_mode) ==
       ConvertMode::kEdgelistCSV2ArangoDBJSON) {
     auto is_numeric = [](const std::string& s) {
-      return !s.empty() &&
-             std::all_of(s.begin(), s.end(),
-                         [](unsigned char c) { return std::isdigit(c) != 0; });
+      return !s.empty() && std::all_of(s.begin(), s.end(), [](unsigned char c) {
+        return std::isdigit(c) != 0;
+      });
     };
     if (!is_numeric(FLAGS_graph_id) || !is_numeric(FLAGS_business_id)) {
       std::cerr << "Error: --graph_id and --business_id must be numeric."
@@ -230,11 +232,13 @@ int main(int argc, char** argv) {
         break;
       case ConvertMode::kEdgelistCSV2CSRBin:
         sics::matrixgraph::tools::converter::ConvertEdgelistCSV2ImmutableCSR(
-            FLAGS_i, FLAGS_o, FLAGS_sep, FLAGS_keep_original_vid, FLAGS_label_range);
+            FLAGS_i, FLAGS_o, FLAGS_sep, FLAGS_keep_original_vid,
+            FLAGS_label_range);
         break;
       case ConvertMode::kEdgelistCSV2EdgelistBin:
         sics::matrixgraph::tools::converter::ConvertEdgelistCSV2EdgelistBin(
-            FLAGS_i, FLAGS_o, FLAGS_sep, FLAGS_keep_original_vid, FLAGS_label_range);
+            FLAGS_i, FLAGS_o, FLAGS_sep, FLAGS_keep_original_vid,
+            FLAGS_label_range);
         break;
       case ConvertMode::kCSRBin2EdgelistBin:
         sics::matrixgraph::tools::converter::ConvertImmutableCSR2EdgelistBin(
@@ -292,8 +296,9 @@ int main(int argc, char** argv) {
         opt.default_edge_label = FLAGS_default_edge_label;
         opt.random_vertex_labels = FLAGS_random_vertex_labels;
         opt.label_range = FLAGS_label_range;
-        if (!sics::matrixgraph::tools::converter::ConvertEdgelistCSV2ArangoDBJSON(
-                FLAGS_i, FLAGS_o, FLAGS_sep, FLAGS_keep_original_vid, opt)) {
+        if (!sics::matrixgraph::tools::converter::
+                ConvertEdgelistCSV2ArangoDBJSON(FLAGS_i, FLAGS_o, FLAGS_sep,
+                                                FLAGS_keep_original_vid, opt)) {
           std::cerr << "Error: write ArangoDB JSON failed." << std::endl;
           return EXIT_FAILURE;
         }
