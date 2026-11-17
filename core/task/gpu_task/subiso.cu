@@ -19,7 +19,6 @@
 #include "core/data_structures/unified_buffer.cuh"
 #include "core/data_structures/woj_matches.cuh"
 #include "core/io/grid_csr_tiled_matrix_io.cuh"
-#include "core/task/gpu_task/kernel/kernel_subiso.cuh"
 #include "core/task/gpu_task/kernel/kernel_woj_subiso.cuh"
 #include "core/task/gpu_task/subiso.cuh"
 #include "core/util/atomic.h"
@@ -69,8 +68,6 @@ using BufferVertexLabel =
     sics::matrixgraph::core::data_structures::Buffer<VertexLabel>;
 using DeviceOwnedBufferUint64 =
     sics::matrixgraph::core::data_structures::DeviceOwnedBuffer<uint64_t>;
-using SubIsoKernelWrapper =
-    sics::matrixgraph::core::task::kernel::SubIsoKernelWrapper;
 using WOJSubIsoKernelWrapper =
     sics::matrixgraph::core::task::kernel::WOJSubIsoKernelWrapper;
 using GPUBitmap = sics::matrixgraph::core::util::GPUBitmap;
@@ -90,7 +87,6 @@ using EdgelistMetadata =
     sics::matrixgraph::core::data_structures::EdgelistMetadata;
 using GridGraphMetadata =
     sics::matrixgraph::core::data_structures::GridGraphMetadata;
-using Matches = sics::matrixgraph::core::data_structures::Matches;
 using WOJMatches = sics::matrixgraph::core::data_structures::WOJMatches;
 
 __host__ void SubIso::LoadData() {
@@ -102,96 +98,6 @@ __host__ void SubIso::LoadData() {
 
   //p_.PrintGraph(10);
   //g_.PrintGraph(1);
-}
-
-__host__ void SubIso::Matching(const ImmutableCSR& p, const ImmutableCSR& g) {
-  std::cout << "Matching ..." << std::endl;
-  auto parallelism = std::thread::hardware_concurrency();
-  std::vector<size_t> worker(parallelism);
-  std::mutex mtx;
-
-  std::iota(worker.begin(), worker.end(), 0);
-  auto step = worker.size();
-
-  CUDA_CHECK(cudaSetDevice(
-      sics::matrixgraph::core::util::MatrixGraphCudaDevice()));
-
-  // Init pattern.
-  BufferUint8 data_p;
-  BufferVertexLabel v_label_p;
-  UnifiedOwnedBufferUint8 unified_data_p;
-  UnifiedOwnedBufferVertexLabel unified_v_label_p;
-
-  data_p.data = p.GetGraphBuffer();
-  data_p.size = sizeof(VertexID) * p.get_num_vertices() +
-                sizeof(VertexID) * p.get_num_vertices() +
-                sizeof(VertexID) * p.get_num_vertices() +
-                sizeof(EdgeIndex) * (p.get_num_vertices() + 1) +
-                sizeof(EdgeIndex) * (p.get_num_vertices() + 1) +
-                sizeof(VertexID) * p.get_num_incoming_edges() +
-                sizeof(VertexID) * p.get_num_outgoing_edges() +
-                sizeof(VertexID) * (p.get_max_vid() + 1);
-
-  unified_data_p.Init(data_p);
-
-  v_label_p.data = p.GetVLabelBasePointer();
-  v_label_p.size = sizeof(VertexLabel) * p.get_num_vertices();
-
-  unified_v_label_p.Init(v_label_p);
-
-  // Init data_graph.
-  BufferUint8 data_g;
-  BufferVertexLabel v_label_g;
-  BufferVertexID data_edgelist_g;
-
-  UnifiedOwnedBufferUint8 unified_data_g;
-  UnifiedOwnedBufferVertexLabel unified_v_label_g;
-  UnifiedOwnedBufferVertexID unified_edgelist_g;
-
-  data_g.data = g.GetGraphBuffer();
-  data_g.size = sizeof(VertexID) * g.get_num_vertices() +
-                sizeof(VertexID) * g.get_num_vertices() +
-                sizeof(VertexID) * g.get_num_vertices() +
-                sizeof(EdgeIndex) * (g.get_num_vertices() + 1) +
-                sizeof(EdgeIndex) * (g.get_num_vertices() + 1) +
-                sizeof(VertexID) * g.get_num_incoming_edges() +
-                sizeof(VertexID) * g.get_num_outgoing_edges() +
-                sizeof(VertexID) * (g.get_max_vid() + 1);
-
-  unified_data_g.Init(data_g);
-
-  v_label_g.data = g.GetVLabelBasePointer();
-  v_label_g.size = sizeof(VertexLabel) * g.get_num_vertices();
-
-  unified_v_label_g.Init(v_label_g);
-
-  UnifiedOwnedBufferEdgeIndex unified_m_offset;
-  unified_m_offset.Init(sizeof(EdgeIndex) * p.get_num_vertices());
-
-  Matches matches(p.get_num_vertices(), g.get_num_vertices());
-
-  // Generate Execution Plan
-  ExecutionPlan exec_plan;
-  exec_plan.GenerateDFSExecutionPlan(p, g);
-
-  // Start Matching ...
-  cudaDeviceSynchronize();
-  cudaStream_t stream;
-  cudaStreamCreate(&stream);
-
-  SubIsoKernelWrapper::SubIso(
-      stream, exec_plan.get_depth(), *exec_plan.get_sequential_exec_path_ptr(),
-      *exec_plan.get_inverted_index_of_sequential_exec_path_ptr(),
-      *exec_plan.get_sequential_exec_path_in_edges_ptr(), p.get_num_vertices(),
-      p.get_num_outgoing_edges(), unified_data_p, unified_v_label_p,
-      g.get_num_vertices(), g.get_num_outgoing_edges(), unified_data_g,
-      unified_edgelist_g, unified_v_label_g, matches.weft_count_,
-      matches.weft_offset_, matches.weft_size_,
-      matches.v_candidate_offset_for_each_weft_, matches.matches_data_);
-
-  cudaDeviceSynchronize();
-
-  //matches.Print(3);
 }
 
 __host__ void SubIso::WOJMatching(
@@ -263,7 +169,6 @@ __host__ void SubIso::Run() {
   WOJMatching(p_, g_, enable_min_wise_filter_, enable_label_degree_filter_,
               enable_nlc_filter_, enable_lpf_filter_, enable_lcf_filter_,
               enable_bloom_filter_, enable_min_wise_bloom_filter_);
-  // Matching(p_, g_);
 
   auto start_time_2 = std::chrono::system_clock::now();
   auto start_time_3 = std::chrono::system_clock::now();

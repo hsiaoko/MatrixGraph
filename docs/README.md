@@ -89,8 +89,6 @@ edgelist → graph_partitioner (gridcut) → partitions
 partitions → graph_converter (gridedgelistbin2csrtiledmatrix) → tiled → gemm_exec
 ```
 
-(Personalized PageRank / `PPRQuery` lives in `core/task/gpu_task/ppr_query` but is not built as a separate `apps/` executable; use the library API or add an app wrapper if needed.)
-
 **SubIso ML filter training:**
 
 ```

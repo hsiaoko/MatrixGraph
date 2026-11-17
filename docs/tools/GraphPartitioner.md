@@ -61,5 +61,4 @@ Partitioned subgraphs
 CSR tiled matrix
     → gemm_exec
 ```
-
-(`PPRQuery` is library code under `core/task/gpu_task/ppr_query`; there is no `ppr_query_exec` in `apps/`.)
+

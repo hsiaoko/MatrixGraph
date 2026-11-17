@@ -44,7 +44,6 @@ enum StoreStrategy {
 // Enum defining different GPU task types
 enum TaskType {
   kGEMM,  // Default task type
-  kPPRQuery,
   kSubIso,
   kGARMatch,
   kSubIsoCPU,

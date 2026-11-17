@@ -90,8 +90,6 @@ class SubIso : public TaskBase {
 
   __host__ void AllocMappingBuf();
 
-  __host__ void Matching(const ImmutableCSR& p, const ImmutableCSR& g);
-
   __host__ void WOJMatching(const ImmutableCSR& p, const ImmutableCSR& g,
                             bool enable_min_wise_filter,
                             bool enable_label_degree_filter,

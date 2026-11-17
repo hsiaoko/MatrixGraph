@@ -48,7 +48,6 @@ static const uint32_t kLogWarpSize = 5;
 // Specialized block dimensions for shared-memory-heavy aggregation kernels.
 // kBlockDim (1024) is the generic default; these are per-kernel tunings.
 static const uint32_t kAllFeaturesBlockDim = 512;    // fused all-primitives kernels
-static const uint32_t kFilterAggBlockDim = 256;      // conditional filter+aggregate
 static const uint32_t kStreamingAggBlockDim = 256;   // streaming reduction primitives
 static const uint32_t kNumUniqueHashBlockDim = 256;  // hash-based unique count
 // Per-request feature kernel: 1024 threads would cap registers at 64/thread,
@@ -58,16 +57,6 @@ static const uint32_t kNumUniqueHashBlockDim = 256;  // hash-based unique count
 // blockDim-generic and the workspace is sized for kBlockDim, so the smaller
 // launch is safe. Retune with measurements, not guesses.
 static const uint32_t kFeatureRequestBlockDim = 512;
-
-// Memory-bounded chunking for GraphFilterAggregate::Compute. A batch of
-// (pivot x feature) requests is split into chunks dispatched round-robin across
-// the CUDA streams, so peak device memory (per-request buffers + flattened
-// conditions + NumUnique hash scratch) stays bounded by n_streams * per-chunk
-// budget regardless of how many total requests the batch has. A chunk is closed
-// when either cap is reached; a single request that alone exceeds the hash-slot
-// budget still forms its own chunk.
-static const uint32_t kFilterMaxChunkRequests = 1u << 17;      // 131072 requests/chunk
-static const size_t kFilterMaxChunkHashSlots = 1ull << 25;     // 33.5M NumUnique slots/chunk
 
 static const uint32_t kDefaultHeapCapacity = 32;
 
