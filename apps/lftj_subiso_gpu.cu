@@ -4,8 +4,8 @@
 #include <string>
 
 #include "core/common/types.h"
-#include "core/components/scheduler/scheduler.h"
-#include "core/matrixgraph.cuh"
+#include "apps/backend_flag.h"
+#include "core/engine/engine.h"
 #include "core/task/gpu_task/lftj_subiso_gpu.cuh"
 
 DEFINE_string(p, "", "Path to the pattern graph directory (required)");
@@ -42,18 +42,9 @@ DEFINE_bool(disable_bloom_filter, false,
             "Disable Bloom neighbor-label-set filter (default: false)");
 DEFINE_bool(disable_min_wise_bloom_filter, false,
             "Disable k-min-wise Bloom filter (default: false)");
-
-static sics::matrixgraph::core::components::scheduler::SchedulerType
-Scheduler2Enum(const std::string& s) {
-  using sics::matrixgraph::core::components::scheduler::SchedulerType;
-  if (s == "EvenSplit")
-    return sics::matrixgraph::core::components::scheduler::kEvenSplit;
-  else if (s == "CHBL")
-    return sics::matrixgraph::core::components::scheduler::kCHBL;
-  else if (s == "RoundRobin")
-    return sics::matrixgraph::core::components::scheduler::kRoundRobin;
-  return sics::matrixgraph::core::components::scheduler::kCHBL;
-}
+DEFINE_string(backend, "gpu",
+              "Execution backend (options: gpu, cpu, cpu_serial; "
+              "default: gpu)");
 
 static bool ValidateParameters() {
   bool ok = true;
@@ -119,8 +110,8 @@ int main(int argc, char** argv) {
   std::cout << "=====================================\n" << std::endl;
 
   try {
-    auto scheduler_type = Scheduler2Enum("CHBL");
-    sics::matrixgraph::core::MatrixGraph system(scheduler_type);
+    const auto backend = mg_app::ParseBackend(FLAGS_backend);
+    auto engine = sics::matrixgraph::core::engine::MakeEngine(backend);
 
     auto* task = new sics::matrixgraph::core::task::LFTJSubIsoGpu(
         FLAGS_p, FLAGS_g, FLAGS_o, FLAGS_t, FLAGS_canonical,
@@ -129,7 +120,7 @@ int main(int argc, char** argv) {
         !FLAGS_disable_nlc_filter, !FLAGS_disable_lpf_filter,
         !FLAGS_disable_lcf_filter, !FLAGS_disable_bloom_filter,
         !FLAGS_disable_min_wise_bloom_filter);
-    system.Run(sics::matrixgraph::core::common::kLFTJSubIsoGpu, task);
+    engine->Run(*task);
     delete task;
   } catch (const std::exception& e) {
     std::cerr << "Error: " << e.what() << std::endl;

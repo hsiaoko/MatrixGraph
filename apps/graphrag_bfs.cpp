@@ -9,11 +9,11 @@
 #include <string>
 
 #include "core/common/types.h"
-#include "core/components/scheduler/scheduler.h"
+#include "apps/backend_flag.h"
 #include "core/data_structures/host_buffer.cuh"
 #include "core/data_structures/immutable_csr.cuh"
 #include "core/data_structures/unified_buffer.cuh"
-#include "core/matrixgraph.cuh"
+#include "core/engine/engine.h"
 #include "core/task/gpu_task/kernel/kernel_bfs.cuh"
 #include "core/task/gpu_task/task_base.cuh"
 #include "core/util/cuda_check.cuh"
@@ -23,26 +23,13 @@
 DEFINE_string(g, "", "Path to the input CSR graph directory (required)");
 DEFINE_string(o, "", "Path to the output directory (required)");
 DEFINE_int32(src, 0, "Source vertex local id (default: 0)");
-DEFINE_string(scheduler, "CHBL",
-              "Scheduler type (options: CHBL, EvenSplit, RoundRobin)");
 
 using sics::matrixgraph::core::common::EdgeIndex;
 using sics::matrixgraph::core::common::VertexID;
 using sics::matrixgraph::core::common::VertexLabel;
-using sics::matrixgraph::core::components::scheduler::SchedulerType;
 using sics::matrixgraph::core::data_structures::ImmutableCSR;
 using sics::matrixgraph::core::data_structures::UnifiedOwnedBuffer;
 using sics::matrixgraph::core::task::kernel::BFSKernelWrapper;
-
-SchedulerType Scheduler2Enum(const std::string& s) {
-  if (s == "EvenSplit")
-    return sics::matrixgraph::core::components::scheduler::kEvenSplit;
-  else if (s == "CHBL")
-    return sics::matrixgraph::core::components::scheduler::kCHBL;
-  else if (s == "RoundRobin")
-    return sics::matrixgraph::core::components::scheduler::kRoundRobin;
-  return sics::matrixgraph::core::components::scheduler::kCHBL;
-}
 
 bool ValidateParameters() {
   bool is_valid = true;
@@ -73,9 +60,6 @@ int main(int argc, char* argv[]) {
   try {
     ImmutableCSR g;
     g.Read(FLAGS_g);
-
-    auto scheduler_type = Scheduler2Enum(FLAGS_scheduler);
-    sics::matrixgraph::core::MatrixGraph system(scheduler_type);
 
     // Replicate BFS::ExecuteBFS buffer setup.
     sics::matrixgraph::core::data_structures::Buffer<uint8_t> data_g;

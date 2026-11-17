@@ -5,8 +5,8 @@
 #include <utility>
 
 #include "core/common/types.h"
-#include "core/components/scheduler/scheduler.h"
-#include "core/matrixgraph.cuh"
+#include "apps/backend_flag.h"
+#include "core/engine/engine.h"
 #include "core/task/cpu_task/skew.h"
 #include "core/task/gpu_task/task_base.cuh"
 
@@ -20,22 +20,11 @@ DEFINE_uint32(
     cpu_parallel, 0,
     "Cap TBB parallelism for the BFS-source loop (matches batch cpu_cores); "
     "0 = default / unlimited.");
-DEFINE_string(
-    scheduler, "CHBL",
-    "Scheduler type (options: CHBL, EvenSplit, RoundRobin, default: CHBL)");
+DEFINE_string(backend, "cpu",
+              "Execution backend (options: gpu, cpu, cpu_serial; "
+              "default: cpu)");
 
-using sics::matrixgraph::core::components::scheduler::SchedulerType;
 using sics::matrixgraph::core::task::Skew;
-
-SchedulerType Scheduler2Enum(const std::string& s) {
-  if (s == "EvenSplit")
-    return sics::matrixgraph::core::components::scheduler::kEvenSplit;
-  if (s == "CHBL")
-    return sics::matrixgraph::core::components::scheduler::kCHBL;
-  if (s == "RoundRobin")
-    return sics::matrixgraph::core::components::scheduler::kRoundRobin;
-  return sics::matrixgraph::core::components::scheduler::kCHBL;
-}
 
 bool ValidateParameters() {
   if (FLAGS_g.empty()) {
@@ -58,8 +47,7 @@ void PrintConfig() {
                "same sampling as Diameter"
             << std::endl;
   std::cout << "  d_bar: mean total degree (|E_out|+|E_in|)/n" << std::endl;
-  std::cout << "Scheduler: " << FLAGS_scheduler << std::endl;
-  if (FLAGS_skew_samples == 0) {
+    if (FLAGS_skew_samples == 0) {
     std::cout << "Mode: exact d_hat (all vertices as BFS sources)" << std::endl;
   } else {
     std::cout << "Mode: approximate d_hat, skew_samples=" << FLAGS_skew_samples
@@ -91,13 +79,13 @@ int main(int argc, char* argv[]) {
   PrintConfig();
 
   try {
-    auto scheduler_type = Scheduler2Enum(FLAGS_scheduler);
-    sics::matrixgraph::core::MatrixGraph system(scheduler_type);
+    const auto backend = mg_app::ParseBackend(FLAGS_backend);
+    auto engine = sics::matrixgraph::core::engine::MakeEngine(backend);
 
     auto* task = new Skew(FLAGS_g, static_cast<size_t>(FLAGS_skew_samples),
                           FLAGS_skew_seed,
                           static_cast<size_t>(FLAGS_cpu_parallel));
-    system.Run(sics::matrixgraph::core::common::kSkew, task);
+    engine->Run(*task);
     delete task;
   } catch (const std::exception& e) {
     std::cerr << "Error: " << e.what() << std::endl;

@@ -10,8 +10,8 @@
 #include "core/common/consts.h"
 #include "core/common/types.h"
 #include "core/common/yaml_config.h"
-#include "core/components/scheduler/scheduler.h"
-#include "core/matrixgraph.cuh"
+#include "apps/backend_flag.h"
+#include "core/engine/engine.h"
 #include "core/task/cpu_task/cpu_task_base.h"
 
 // Input/Output flags
@@ -49,22 +49,11 @@ DEFINE_bool(disable_matching_order, false,
             "Disable cost-model-based matching order (use default local-id DFS)");
 
 // System configuration
-DEFINE_string(
-    scheduler, "CHBL",
-    "Scheduler type (options: CHBL, EvenSplit, RoundRobin, default: CHBL)");
+DEFINE_string(backend, "cpu",
+              "Execution backend (options: gpu, cpu, cpu_serial; "
+              "default: cpu)");
 
-using sics::matrixgraph::core::components::scheduler::SchedulerType;
 using sics::matrixgraph::core::task::SubIsoCPU;
-
-SchedulerType Scheduler2Enum(const std::string& s) {
-  if (s == "EvenSplit")
-    return sics::matrixgraph::core::components::scheduler::kEvenSplit;
-  else if (s == "CHBL")
-    return sics::matrixgraph::core::components::scheduler::kCHBL;
-  else if (s == "RoundRobin")
-    return sics::matrixgraph::core::components::scheduler::kRoundRobin;
-  return sics::matrixgraph::core::components::scheduler::kCHBL;
-}
 
 bool ValidateParameters() {
   bool is_valid = true;
@@ -136,8 +125,7 @@ void PrintConfig() {
   std::cout << "Matching Order: "
             << (FLAGS_disable_matching_order ? "default" : "cost-model")
             << std::endl;
-  std::cout << "Scheduler: " << FLAGS_scheduler << std::endl;
-  std::cout << "==============================\n" << std::endl;
+    std::cout << "==============================\n" << std::endl;
 }
 
 int main(int argc, char* argv[]) {
@@ -162,8 +150,8 @@ int main(int argc, char* argv[]) {
   PrintConfig();
 
   try {
-    auto scheduler_type = Scheduler2Enum(FLAGS_scheduler);
-    sics::matrixgraph::core::MatrixGraph system(scheduler_type);
+    const auto backend = mg_app::ParseBackend(FLAGS_backend);
+    auto engine = sics::matrixgraph::core::engine::MakeEngine(backend);
 
     auto* task = new SubIsoCPU(
         FLAGS_p, FLAGS_g, FLAGS_o, FLAGS_t, FLAGS_m1, FLAGS_m2, "", "", "",
@@ -174,7 +162,7 @@ int main(int argc, char* argv[]) {
         !FLAGS_disable_bloom_filter,
         !FLAGS_disable_min_wise_bloom_filter,
         !FLAGS_disable_runtime_nlc_filter);
-    system.Run(sics::matrixgraph::core::common::kSubIsoCPU, task);
+    engine->Run(*task);
     delete task;
 
   } catch (const std::exception& e) {
