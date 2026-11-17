@@ -18,7 +18,7 @@ This document covers the variables used by the **C++/CUDA** library and executab
 |----------|------|
 | **`MATRIXGRAPH_CUDA_DEVICES`** | Comma-separated logical indices, e.g. `0,1,2` or a single GPU `2`. |
 | **`MATRIXGRAPH_CUDA_ALL_DEVICES`** | When set exactly to **`1`**, only applies if step (1) did not produce a list. |
-| **`MATRIXGRAPH_CUDA_DEVICE`** | Default / single-GPU index when (1)–(2) do not apply; also used by `core/go_api/matrixgraph_go_api.cu` (`cudaSetDevice`). |
+| **`MATRIXGRAPH_CUDA_DEVICE`** | Default / single-GPU index when (1)–(2) do not apply. |
 | **`MATRIXGRAPH_CUDA_STREAMS`** | Streams per GPU for overlap (`MatrixGraphCudaStreamsPerGpu()`); default **2**, minimum **1**. |
 
 **Physical GPUs vs logical indices**: **`CUDA_VISIBLE_DEVICES`** (or the container) remaps hardware to logical `0, 1, …` before MatrixGraph sees them.

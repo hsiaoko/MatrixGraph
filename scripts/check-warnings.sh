@@ -7,6 +7,10 @@
 # baseline. The baseline only ratchets down: regenerate it after each unit
 # that removes warnings, never after one that adds any.
 #
+# NOTE: counts only warnings emitted during THIS build. Incremental builds
+# recompile few TUs, so a passing gate here does not re-prove untouched files;
+# run against a fresh build directory for a full measurement.
+#
 # Usage: scripts/check-warnings.sh <build-dir> [max-unique-warnings]
 # Default cap: 173 (Debug+Release union measured at HEAD 4cec1d5, see
 # .audit/warnings-baseline*.txt).

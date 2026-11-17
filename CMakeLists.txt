@@ -86,6 +86,13 @@ endif ()
 #######################
 # Third Party Libraries
 #######################
+# Third-party subprojects gate their own ctest registration on BUILD_TESTING
+# (gflags), which googletest's include(CTest) flips ON in the cache on the
+# first configure; every re-configure then registered 51 gflags tests whose
+# binaries are never built (EXCLUDE_FROM_ALL). Pin it OFF: this project's own
+# tests are registered unconditionally under if(TEST).
+set(BUILD_TESTING OFF CACHE BOOL "Disable third-party test trees" FORCE)
+
 # Gflags
 add_subdirectory("${GFLAGS_ROOT_DIR}" EXCLUDE_FROM_ALL)
 

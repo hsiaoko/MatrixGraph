@@ -139,5 +139,4 @@ MATRIXGRAPH_CUDA_STREAMS=4 ./bin/graph_aggregate_exec -n 100000 -deg 5 -compute_
 ## See also
 
 - [Applications index](README.md)
-- [Go API — GraphAggregate](../go_api/README.md#graphaggregate)
 - [GPU environment variables](../MATRIXGRAPH_ENV.md)
