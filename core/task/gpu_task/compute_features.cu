@@ -432,6 +432,19 @@ __host__ std::vector<MatrixGraphFeatureValue> ComputeFeaturesTask::Compute(
   CUDA_CHECK(cudaMalloc(&d_outputs,
                         sizeof(MatrixGraphFeatureValue) * n_pivots * n_outputs));
 
+#ifndef NDEBUG
+  // -G device-debug instrumentation inflates the plan interpreter's stack
+  // frames past the default 1 KB per-thread device stack (compute-sanitizer
+  // reports "Stack overflow", surfacing as error 719 at the post-launch
+  // sync). Raise the limit once per process; release builds are unaffected.
+  // The M3 engine layer will own this as GpuEngine configuration.
+  static const bool kStackLimitRaised = [] {
+    CUDA_CHECK(cudaDeviceSetLimit(cudaLimitStackSize, 32 * 1024));
+    return true;
+  }();
+  (void)kStackLimitRaised;
+#endif
+
   // Launch one block per pivot.
   kernel::ComputeFeaturesKernel<<<n_pivots, kWorkspaceCapacity>>>(
       d_graph_data_,

@@ -1003,7 +1003,7 @@ __host__ std::vector<kernel::FeatureValue> GraphAggregate::ComputeFeatures(
           gpu_state.streams[s]));
 
       const uint32_t grid_size = sub_chunk_n;
-      ComputeFeaturesKernel<<<grid_size, common::kBlockDim,
+      ComputeFeaturesKernel<<<grid_size, common::kFeatureRequestBlockDim,
                               shared_mem_size, gpu_state.streams[s]>>>(
           gpu_state.d_graph_data,
           graph_->get_num_vertices(),

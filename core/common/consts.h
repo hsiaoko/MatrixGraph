@@ -51,6 +51,13 @@ static const uint32_t kAllFeaturesBlockDim = 512;    // fused all-primitives ker
 static const uint32_t kFilterAggBlockDim = 256;      // conditional filter+aggregate
 static const uint32_t kStreamingAggBlockDim = 256;   // streaming reduction primitives
 static const uint32_t kNumUniqueHashBlockDim = 256;  // hash-based unique count
+// Per-request feature kernel: 1024 threads would cap registers at 64/thread,
+// which even the release build cannot meet (~130 needed) and debug (-G)
+// provably cannot (its CollectNeighborValuesBlock callee alone needs 86).
+// 512 threads give a 128-register budget; the block reductions are
+// blockDim-generic and the workspace is sized for kBlockDim, so the smaller
+// launch is safe. Retune with measurements, not guesses.
+static const uint32_t kFeatureRequestBlockDim = 512;
 
 // Memory-bounded chunking for GraphFilterAggregate::Compute. A batch of
 // (pivot x feature) requests is split into chunks dispatched round-robin across

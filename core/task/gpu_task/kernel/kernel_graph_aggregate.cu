@@ -132,11 +132,11 @@ __device__ inline uint32_t CollectNeighborValuesBlock(
 
 // Kernels: one block per pivot.
 // ---------------------------------------------------------------------------
-// 1024 threads/block caps registers at 64/thread; without this bound the
-// compiler allocates ~130 and every launch dies with error 701 (out of
-// resources), which used to pass silently because no post-launch check
-// existed. Spills are the accepted cost; retune block dim in a perf unit.
-__launch_bounds__(common::kBlockDim)
+// Bound to kFeatureRequestBlockDim (512): at 1024 threads the 64-register
+// cap is unreachable (release needs ~130, debug -G callee needs 86), so every
+// launch died with error 701 and, with no post-launch check, silently returned
+// zeroed results. See consts.h for the budget arithmetic.
+__launch_bounds__(common::kFeatureRequestBlockDim)
 __global__ void ComputeFeaturesKernel(
     const uint8_t* graph_data,
     uint32_t n_vertices,

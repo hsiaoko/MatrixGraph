@@ -89,6 +89,10 @@ namespace kernel {
 
 // Kernels
 // -----------------------------------------------------------------------------
+// Launched at kBlockDim=1024 threads, so registers must stay at or below
+// 64/thread; debug (-G) builds inflate register pressure past the launch
+// limit without this bound (error 701). Spills are accepted in debug.
+__launch_bounds__(common::kBlockDim)
 __global__ void ComputeAggPrimKernel(AggPrim prim,
                                      const FeatureValue* d_values,
                                      const uint32_t* d_offsets,
@@ -120,6 +124,8 @@ __global__ void ComputeAggPrimKernel(AggPrim prim,
   }
 }
 
+// Same 1024-thread launch budget as ComputeAggPrimKernel; see its comment.
+__launch_bounds__(common::kBlockDim)
 __global__ void ComputeBatchMultiPrimKernel(const FeatureValue* d_values,
                                             const uint32_t* d_offsets,
                                             const AggPrim* d_prims,
