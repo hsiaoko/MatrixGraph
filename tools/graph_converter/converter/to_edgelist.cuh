@@ -6,6 +6,7 @@
 #include "core/data_structures/immutable_csr.cuh"
 #include "core/util/atomic.h"
 #include "core/util/format_converter.cuh"
+#include <thread>
 
 namespace sics {
 namespace matrixgraph {

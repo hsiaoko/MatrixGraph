@@ -4,7 +4,7 @@
 #include "core/util/atomic.h"
 #include "core/util/bitmap.h"
 #include "core/util/bitmap_ownership.h"
-#include "core/util/execution_policy.h"
+#include "core/util/parallel.h"
 #include <algorithm>
 #include <filesystem>
 #include <fstream>
@@ -13,6 +13,8 @@
 #include <thread>
 
 namespace sics {
+
+using sics::matrixgraph::core::util::ParallelFor;
 namespace matrixgraph {
 namespace core {
 namespace data_structures {
@@ -84,7 +86,7 @@ void Edges::Init(EdgeIndex n_edges, VertexID* edges_buf,
   VertexID min_vid = MAX_VERTEX_ID;
 
   // Get Min Max vertex ID.
-  ParForEach(worker.begin(), worker.end(),
+  ParallelFor(worker.begin(), worker.end(),
              [this, n_edges, step, &edges_buf, &min_vid, &max_vid](auto w) {
                for (EdgeIndex _ = w; _ < n_edges; _ += step) {
                  edges_ptr_[_].src = edges_buf[_ * 2];
@@ -99,7 +101,7 @@ void Edges::Init(EdgeIndex n_edges, VertexID* edges_buf,
   BitmapOwnership visited(max_vid);
 
   // Get number of vertices.
-  ParForEach(worker.begin(), worker.end(),
+  ParallelFor(worker.begin(), worker.end(),
              [this, &visited, step, n_edges](auto w) {
                for (EdgeIndex _ = w; _ < n_edges; _ += step) {
                  visited.SetBit(edges_ptr_[_].src);
@@ -322,7 +324,7 @@ void Edges::GenerateLocalID2GlobalID() {
   }
 
   edgelist_metadata_.num_vertices = bitmap.Count();
-  ParForEach(worker.begin(), worker.end(),
+  ParallelFor(worker.begin(), worker.end(),
              [this, step, &vid_map, &new_localid_to_globalid](auto w) {
                for (auto i = w; i < get_metadata().num_edges; i += step) {
                  auto e = get_edge_by_index(i);
@@ -354,7 +356,7 @@ void Edges::Compacted() {
            sizeof(VertexID) * get_metadata().num_vertices);
   }
 
-  ParForEach(worker.begin(), worker.end(), [this, step](auto w) {
+  ParallelFor(worker.begin(), worker.end(), [this, step](auto w) {
     for (auto i = w; i < get_metadata().num_edges; i += step) {
       auto e = get_edge_by_index(i);
       localid_to_globalid_[e.src] = e.src;
@@ -369,7 +371,7 @@ void Edges::Transpose() {
   std::vector<size_t> worker(parallelism);
   std::iota(worker.begin(), worker.end(), 0);
   auto step = worker.size();
-  ParForEach(worker.begin(), worker.end(), [this, step](auto w) {
+  ParallelFor(worker.begin(), worker.end(), [this, step](auto w) {
     for (auto i = w; i < get_metadata().num_edges; i += step) {
       VertexID tmp = edges_ptr_[i].src;
       edges_ptr_[i].src = edges_ptr_[i].dst;  // swap src and dst
@@ -379,7 +381,7 @@ void Edges::Transpose() {
 }
 
 void Edges::SortBySrc() {
-  std::sort(MATRIXGRAPH_EXEC_POLICY edges_ptr_,
+  std::sort(edges_ptr_,
             edges_ptr_ + edgelist_metadata_.num_edges);
 }
 
@@ -412,14 +414,14 @@ void Edges::GenerateVLabel(VertexID range, bool random) {
 
     std::uniform_int_distribution<> dis(0, range);
 
-    ParForEach(worker.begin(), worker.end(), [this, step, &dis, &gen](auto w) {
+    ParallelFor(worker.begin(), worker.end(), [this, step, &dis, &gen](auto w) {
       for (auto vid = w; vid < edgelist_metadata_.num_vertices; vid += step) {
         auto vlabel_ptr = get_vertex_label_ptr();
         vlabel_ptr[vid] = dis(gen);
       }
     });
   } else {
-    ParForEach(worker.begin(), worker.end(), [this, step, range](auto w) {
+    ParallelFor(worker.begin(), worker.end(), [this, step, range](auto w) {
       for (auto vid = w; vid < edgelist_metadata_.num_vertices; vid += step) {
         auto vlabel_ptr = get_vertex_label_ptr();
         vlabel_ptr[vid] = vid % range;

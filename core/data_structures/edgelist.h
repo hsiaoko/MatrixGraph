@@ -5,7 +5,6 @@
 
 #include <cstring>
 #include <queue>
-#include "core/util/execution_policy.h"
 #include <iostream>
 
 #include "core/common/consts.h"

@@ -8,7 +8,7 @@
 #include <thread>
 #include <unordered_map>
 
-#include "core/util/execution_policy.h"
+#include "core/util/parallel.h"
 
 #include "core/common/consts.h"
 #include "core/common/host_algorithms.cuh"
@@ -26,6 +26,8 @@
 #include "core/util/format_converter.cuh"
 
 namespace sics {
+
+using sics::matrixgraph::core::util::ParallelFor;
 namespace matrixgraph {
 namespace core {
 namespace task {
@@ -130,7 +132,7 @@ __host__ void GEMM::InitC() {
   tile_row_idx.resize(M * N);
   tile_col_idx.resize(M * N);
 
-  ParForEach(worker.begin(), worker.end(),
+  ParallelFor(worker.begin(), worker.end(),
       [this, M, N, K, step, n_strips, &tile_count_row](auto w) {
         for (VertexID i = w; i < M; i += step) {
           for (VertexID j = 0; j < N; j++) {
@@ -158,7 +160,7 @@ __host__ void GEMM::InitC() {
 
   std::vector<cudaStream_t> p_streams_vec;
   p_streams_vec.resize(M * N);
-  ParForEach(worker.begin(), worker.end(),
+  ParallelFor(worker.begin(), worker.end(),
                 [this, M, N, K, step, &p_streams_vec, &mtx](auto w) {
                   for (VertexID i = w; i < N; i += step) {
                     for (VertexID j = 0; j < M; j++) {
@@ -171,7 +173,7 @@ __host__ void GEMM::InitC() {
   // Step 1 compute layout_matrix for each block of matrix C.
   std::cout << "[InitResultMatrix] Computing layout matrix for each block ..."
             << std::endl;
-  ParForEach(worker.begin(), worker.end(),
+  ParallelFor(worker.begin(), worker.end(),
       [this, M, N, K, step, &device_owned_buffers_matrix_a,
        &device_owned_buffers_matrix_b, &device_owned_buffers_matrix_c,
        &p_streams_vec, &buffers_matrix_a, &buffers_matrix_b, &buffers_matrix_c,
@@ -238,7 +240,7 @@ __host__ void GEMM::InitC() {
 
   cudaDeviceSynchronize();
   std::cout << "[InitResultMatrix] Counting nz tile ..." << std::endl;
-  ParForEach(worker.begin(), worker.end(),
+  ParallelFor(worker.begin(), worker.end(),
       [this, M, N, K, step, &buffers_matrix_c, &mtx,
        &device_owned_buffers_matrix_c_count, &p_streams_vec,
        &device_owned_buffers_matrix_c, n_strips](auto w) {
@@ -261,7 +263,7 @@ __host__ void GEMM::InitC() {
       });
 
   // Copy data back to the host.
-  ParForEach(worker.begin(), worker.end(),
+  ParallelFor(worker.begin(), worker.end(),
       [this, M, N, K, step, &device_owned_buffers_matrix_a,
        &device_owned_buffers_matrix_b, &device_owned_buffers_matrix_c_count,
        &device_owned_buffers_matrix_c, &p_streams_vec, &buffers_matrix_c,
@@ -292,7 +294,7 @@ __host__ void GEMM::InitC() {
 
   std::cout << "[InitResultMatrix] Allocating space for Matrix C ..."
             << std::endl;
-  ParForEach(worker.begin(), worker.end(),
+  ParallelFor(worker.begin(), worker.end(),
       [this, M, N, K, step, &device_owned_buffers_matrix_a,
        &device_owned_buffers_matrix_b, &device_owned_buffers_matrix_c_count,
        &device_owned_buffers_matrix_c, &p_streams_vec, &buffers_matrix_c_count,
@@ -321,7 +323,7 @@ __host__ void GEMM::InitC() {
 
   std::cout << "[InitResultMatrix] Initialize BitTiledMatrix metadata."
             << std::endl;
-  ParForEach(worker.begin(), worker.end(),
+  ParallelFor(worker.begin(), worker.end(),
       [this, M, N, K, step, &device_owned_buffers_matrix_c_count,
        &device_owned_buffers_matrix_c, &tile_count_row, &tile_row_idx,
        &tile_col_idx, &device_owned_tile_offset_row,
@@ -372,7 +374,7 @@ __host__ void GEMM::InitC() {
         }
       });
 
-  ParForEach(worker.begin(), worker.end(),
+  ParallelFor(worker.begin(), worker.end(),
       [this, M, N, K, step, &device_owned_buffers_matrix_c_count,
        &device_owned_buffers_matrix_c, &tile_count_row, &tile_row_idx,
        &tile_col_idx, &device_owned_tile_count_row, &device_owned_tile_row_idx,
@@ -412,7 +414,7 @@ __host__ void GEMM::InitC() {
   std::cout << "[InitResultMatrix] Computing tile_offset_row for each "
                "TiledMatrix ..."
             << std::endl;
-  ParForEach(worker.begin(), worker.end(),
+  ParallelFor(worker.begin(), worker.end(),
       [this, M, N, K, step, &device_owned_buffers_matrix_c_count,
        &device_owned_buffers_matrix_c, &tile_offset_row, &tile_count_row,
        &tile_row_idx, &tile_col_idx, &device_owned_tile_offset_row,
@@ -441,11 +443,11 @@ __host__ void GEMM::InitC() {
       });
 
   std::cout << "[InitResultMatrix] Done!" << std::endl;
-  ParForEach(tile_count_row.begin(), tile_count_row.end(),
+  ParallelFor(tile_count_row.begin(), tile_count_row.end(),
              [](auto& d) { delete[] d.data; });
-  ParForEach(p_streams_vec.begin(), p_streams_vec.end(),
+  ParallelFor(p_streams_vec.begin(), p_streams_vec.end(),
              [](auto& s) { cudaStreamDestroy(s); });
-  ParForEach(buffers_matrix_c_count.begin(), buffers_matrix_c_count.end(),
+  ParallelFor(buffers_matrix_c_count.begin(), buffers_matrix_c_count.end(),
              [](auto& d) { cudaFreeHost(d.data); });
 }
 
@@ -466,7 +468,7 @@ __host__ Edges* GEMM::Walks(const GridCSRTiledMatrix& A,
   VertexID N = B.get_metadata().n_chunks;
   std::vector<cudaStream_t> p_streams_vec;
   p_streams_vec.resize(M * N);
-  ParForEach(worker.begin(), worker.end(),
+  ParallelFor(worker.begin(), worker.end(),
                 [this, M, N, K, step, &p_streams_vec, &mtx](auto w) {
                   for (VertexID i = w; i < N; i += step) {
                     for (VertexID j = 0; j < M; j++) {
@@ -544,7 +546,7 @@ __host__ Edges* GEMM::Walks(const GridCSRTiledMatrix& A,
   unified_data_b.resize(N * K);
 
   std::cout << "[Walks] Initializing buffers for results ..." << std::endl;
-  ParForEach(worker.begin(), worker.end(),
+  ParallelFor(worker.begin(), worker.end(),
       [this, M, N, K, step, &p_streams_vec, tile_size, n_strips,
        tile_buffer_size, &mtx, &unified_edgelist_c,
        &unified_output_offset](auto w) {
@@ -569,7 +571,7 @@ __host__ Edges* GEMM::Walks(const GridCSRTiledMatrix& A,
 
   // Init input Buffer for A and B, respectively.
   std::cout << "[Walks] Initializing input buffers for A and B." << std::endl;
-  ParForEach(worker.begin(), worker.end(),
+  ParallelFor(worker.begin(), worker.end(),
       [this, M, N, K, step, &A, &p_streams_vec, tile_size, tile_buffer_size,
        &mtx, &tile_offset_row_a, &tile_row_idx_a, &tile_col_idx_a,
        &csr_offset_a, &data_a, &unified_tile_offset_row_a,
@@ -625,7 +627,7 @@ __host__ Edges* GEMM::Walks(const GridCSRTiledMatrix& A,
         }
       });
 
-  ParForEach(worker.begin(), worker.end(),
+  ParallelFor(worker.begin(), worker.end(),
       [this, M, N, K, &B, step, &p_streams_vec, tile_size, tile_buffer_size,
        &mtx, &tile_offset_row_b, &tile_row_idx_b, &tile_col_idx_b,
        &csr_offset_b, &data_b, &unified_tile_offset_row_b,
@@ -747,7 +749,7 @@ __host__ Edges* GEMM::Walks(const GridCSRTiledMatrix& A,
       }
     }
   };
-  ParForEach(worker.begin(), worker.end(), walk_fn);
+  ParallelFor(worker.begin(), worker.end(), walk_fn);
 
   VertexID* output_edges_buf =
       new VertexID[kDefalutNumEdgesPerTile * 2 * M * N]();
@@ -820,7 +822,7 @@ __host__ std::vector<Edges>* GEMM::GridPartitioning(const Edges& edges,
   // std::cout << "[GridCut] Computing key parameters under chunk scope of "
   //           << scope_per_chunk << " ...\n"
   //           << std::endl;
-  ParForEach(worker.begin(), worker.end(),
+  ParallelFor(worker.begin(), worker.end(),
       [this, step, &edges, scope_per_chunk, n_partitions,
        &n_edges_for_each_block, &max_vid_for_each_block,
        &min_vid_for_each_block, &vertices_bm_for_each_block](auto w) {
@@ -859,7 +861,7 @@ __host__ std::vector<Edges>* GEMM::GridPartitioning(const Edges& edges,
       new std::atomic<EdgeIndex>[n_partitions * n_partitions]();
 
   // std::cout << "[GridCut] Dropping edges into blocks...\n" << std::endl;
-  ParForEach(worker.begin(), worker.end(),
+  ParallelFor(worker.begin(), worker.end(),
       [this, step, &edges, scope_per_chunk, n_partitions, &edge_blocks_buf,
        &n_edges_for_each_block, &offset_for_each_block](auto w) {
         for (auto eid = w; eid < edges.get_metadata().num_edges; eid += step) {

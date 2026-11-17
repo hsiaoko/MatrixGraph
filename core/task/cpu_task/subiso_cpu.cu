@@ -5,7 +5,7 @@
 #include <fstream>
 #include <functional>
 #include <unordered_set>
-#include "core/util/execution_policy.h"
+#include "core/util/parallel.h"
 #include <iostream>
 #include <mutex>
 #include <queue>
@@ -34,6 +34,8 @@
 #include "core/util/format_converter.cuh"
 
 namespace sics {
+
+using sics::matrixgraph::core::util::ParallelFor;
 namespace matrixgraph {
 namespace core {
 namespace task {
@@ -196,7 +198,7 @@ static void BuildBloomSignatures(const ImmutableCSR& csr,
   std::iota(worker.begin(), worker.end(), 0);
   auto step = worker.size();
 
-  ParForEach(worker.begin(), worker.end(),
+  ParallelFor(worker.begin(), worker.end(),
       [step, n, &csr, &signatures, labels](auto w) {
         for (VertexID v = w; v < n; v += step) {
           uint64_t sig = 0;
@@ -259,7 +261,7 @@ static void BuildFilterCache(const ImmutableCSR& csr,
   std::iota(worker.begin(), worker.end(), 0);
   auto step = worker.size();
 
-  ParForEach(worker.begin(), worker.end(),
+  ParallelFor(worker.begin(), worker.end(),
       [step, n, hop, k, &csr, &cache](auto w) {
         for (VertexID v = w; v < n; v += step) {
           auto& fc = cache[v];
@@ -872,7 +874,7 @@ static std::vector<WOJMatches*> WOJFilter(
     VertexID src_idx = p.GetLocalIDByGlobalID(u_src);
     VertexID dst_idx = p.GetLocalIDByGlobalID(u_dst);
 
-    ParForEach(worker.begin(), worker.end(),
+    ParallelFor(worker.begin(), worker.end(),
         [step, &p, &g, eid, u_src, u_dst, src_idx, dst_idx, &exec_plan,
          &woj_matches_vec, &m_vec, &m_unified_buffer_vec](auto w) {
           for (VertexID v_idx = w; v_idx < g.get_num_vertices();
@@ -927,7 +929,7 @@ static inline void Join(VertexID n_vertices_g,
   VertexID right_y_offset = right_woj_matches.get_y_offset();
   VertexID* output_y_offset_ptr = output_woj_matches->get_y_offset_ptr();
 
-  ParForEach(worker.begin(), worker.end(),
+  ParallelFor(worker.begin(), worker.end(),
       [step, &left_woj_matches, &right_woj_matches, &left_data, &right_data,
        &output_data, left_x_offset, right_x_offset, output_x_offset,
        left_y_offset, right_y_offset, left_hash_idx, right_hash_idx,
@@ -1233,7 +1235,7 @@ static inline void Enumerating(
   }
 
   std::cout << "Enumerating" << std::endl;
-  ParForEach(worker.begin(), worker.end(),
+  ParallelFor(worker.begin(), worker.end(),
       [step, &mtx, &p, &g, &exec_plan, &m_vec, &m_unified_buffer_vec, &matches,
        &local_matches_vec, &matches_visited_pairs_vec, &rejected_pairs_vec](
           auto w) {

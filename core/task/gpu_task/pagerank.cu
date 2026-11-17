@@ -9,7 +9,6 @@
 #include <unordered_map>
 #include <vector>
 
-#include "core/util/execution_policy.h"
 
 #include "core/common/consts.h"
 #include "core/common/host_algorithms.cuh"

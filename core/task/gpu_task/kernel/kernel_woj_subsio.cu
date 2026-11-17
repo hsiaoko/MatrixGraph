@@ -161,8 +161,8 @@ size_t WojJoinHostWorkerCount(size_t n_join_stripes) {
   return std::max<size_t>(1, workers);
 }
 
-// ParForEach is serial under __CUDACC__ (see execution_policy.h). Use explicit
-// host threads so WOJ Filter/Join can drive multiple GPUs concurrently.
+// WOJ Filter/Join drives one CUDA stream per stripe, so it keeps explicit
+// host threads for the per-GPU concurrency; util::ParallelFor covers CPU work.
 template <typename F>
 void RunHostStripeParallel(size_t num_stripes, F&& f) {
   const size_t n = std::max<size_t>(1, num_stripes);

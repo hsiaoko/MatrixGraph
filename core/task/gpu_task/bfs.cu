@@ -2,7 +2,6 @@
 
 #include <algorithm>
 #include <ctime>
-#include "core/util/execution_policy.h"
 #include <iostream>
 #include <mutex>
 #include <thread>

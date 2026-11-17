@@ -2,7 +2,6 @@
 
 #include <algorithm>
 #include <cmath>
-#include "core/util/execution_policy.h"
 
 namespace sics {
 namespace matrixgraph {
@@ -16,7 +15,7 @@ GridCSRTiledMatrix::GridCSRTiledMatrix(const GridGraphMetadata &metadata) {
   metadata_ = metadata;
   tiled_matrix_vec_.resize(pow(metadata_.n_chunks, 2));
 
-  std::generate(MATRIXGRAPH_EXEC_POLICY tiled_matrix_vec_.begin(),
+  std::generate(tiled_matrix_vec_.begin(),
                 tiled_matrix_vec_.end(), []() { return new CSRTiledMatrix(); });
 }
 

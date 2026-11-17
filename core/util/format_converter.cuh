@@ -4,7 +4,7 @@
 #include <chrono>
 #include <cinttypes>
 #include <cmath>
-#include "core/util/execution_policy.h"
+#include "core/util/parallel.h"
 #include <iomanip>
 #include <list>
 #include <numeric>
@@ -19,8 +19,11 @@
 #include "core/util/bitmap_ownership.h"
 #include "core/util/cuda_check.cuh"
 #include "core/util/gpu_bitmap.cuh"
+#include <thread>
 
 namespace sics {
+
+using sics::matrixgraph::core::util::ParallelFor;
 namespace matrixgraph {
 namespace core {
 namespace util {
@@ -67,7 +70,7 @@ static Edges* ImmutableCSR2Edgelist(const ImmutableCSR& immutable_csr) {
 
   std::cout << "[ImmutableCSR2Edgelist] Converting immutable csr to edge buffer"
             << std::endl;
-  ParForEach(worker.begin(), worker.end(),
+  ParallelFor(worker.begin(), worker.end(),
       [step, &immutable_csr, &edge_ptr](auto w) {
         for (VertexID vid = w; vid < immutable_csr.get_num_vertices();
              vid += step) {
@@ -113,7 +116,7 @@ static ImmutableCSR* Edgelist2ImmutableCSR(const Edges& edgelist) {
 
   // Compute min_vid and obtain the num of incoming/outgoing edges for each
   // vertex.
-  ParForEach(worker.begin(), worker.end(),
+  ParallelFor(worker.begin(), worker.end(),
       [step, &min_vid, &num_out_edges_by_vid, &num_in_edges_by_vid, &visited,
        &edgelist, &buffer_edges_globalid_by_localid](auto& w) {
         for (EdgeIndex i = w; i < edgelist.get_metadata().num_edges;
@@ -137,7 +140,7 @@ static ImmutableCSR* Edgelist2ImmutableCSR(const Edges& edgelist) {
   EdgeIndex count_in_edges = 0, count_out_edges = 0;
 
   // Malloc space for each vertex.
-  ParForEach(worker.begin(), worker.end(),
+  ParallelFor(worker.begin(), worker.end(),
                 [&visited, &buffer_csr_vertices, &count_in_edges,
                  &count_out_edges, &num_in_edges_by_vid, &num_out_edges_by_vid,
                  aligned_max_vid, max_vid, step](auto w) {
@@ -165,7 +168,7 @@ static ImmutableCSR* Edgelist2ImmutableCSR(const Edges& edgelist) {
   EdgeIndex* offset_out_edges = new EdgeIndex[max_vid + 1]();
 
   // Fill edges in each vertex.
-  ParForEach(worker.begin(), worker.end(),
+  ParallelFor(worker.begin(), worker.end(),
       [step, &min_vid, &num_out_edges_by_vid, &num_in_edges_by_vid, &visited,
        &edgelist, &buffer_csr_vertices, &offset_in_edges,
        &offset_out_edges](auto& w) {
@@ -227,7 +230,7 @@ static ImmutableCSR* Edgelist2ImmutableCSR(const Edges& edgelist) {
 
   // Fill edges.
   vid = 0;
-  ParForEach(parallel_scope_vertices.begin(),
+  ParallelFor(parallel_scope_vertices.begin(),
       parallel_scope_vertices.end(),
       [&visited, &buffer_csr_vertices, &buffer_in_edges, &buffer_out_edges,
        &buffer_in_offset, &buffer_out_offset, &vid_map](auto j) {
@@ -254,7 +257,7 @@ static ImmutableCSR* Edgelist2ImmutableCSR(const Edges& edgelist) {
 
   VertexID* buffer_localid_by_globalid = new VertexID[max_vid + 1]();
 
-  ParForEach(worker.begin(), worker.end(),
+  ParallelFor(worker.begin(), worker.end(),
       [&buffer_edges_globalid_by_localid, &buffer_localid_by_globalid, step,
        max_vid](auto w) {
         for (auto j = w; j < max_vid + 1; j += step) {
@@ -302,7 +305,7 @@ static BitTiledMatrix* Edgelist2BitTiledMatrix(const Edges& edges,
   auto tile_visited = new GPUBitmap(n_strips * n_strips);
 
   VertexID n_nz_tile_per_row[n_strips] = {0};
-  ParForEach(worker.begin(), worker.end(),
+  ParallelFor(worker.begin(), worker.end(),
       [step, &edges, block_scope, tile_size, &tile_visited, &n_nz_tile_per_row,
        n_strips](auto w) {
         for (auto eid = w; eid < edges.get_metadata().num_edges; eid += step) {
@@ -337,7 +340,7 @@ static BitTiledMatrix* Edgelist2BitTiledMatrix(const Edges& edges,
 
   std::cout << "[Edgelist2BitTiledMatrix] Creating None Zero Tile: "
             << n_nz_tile << " in total" << std::endl;
-  ParForEach(worker.begin(), worker.end(),
+  ParallelFor(worker.begin(), worker.end(),
       [step, &edges, block_scope, tile_size, &tile_visited, &bit_tiled_matrix,
        &n_nz_tile_per_row, n_strips](auto w) {
         for (auto eid = w; eid < edges.get_metadata().num_edges; eid += step) {
@@ -467,7 +470,7 @@ static CSRTiledMatrix* Edgelist2CSRTiledMatrix(
   std::vector<VertexID> gid_map(n_csr);
 
   // Step 1. compute tile_id for each edge.
-  ParForEach(worker.begin(), worker.end(),
+  ParallelFor(worker.begin(), worker.end(),
       [&edges, step, block_scope, tile_size, n_strips, &buffer_csr_vertices_vec,
        &num_out_edges_by_vid_vec, &visited_vec, &graph_visited](auto& w) {
         for (EdgeIndex eid = w; eid < edges.get_metadata().num_edges;
@@ -494,7 +497,7 @@ static CSRTiledMatrix* Edgelist2CSRTiledMatrix(
         }
       });
 
-  ParForEach(worker.begin(), worker.end(),
+  ParallelFor(worker.begin(), worker.end(),
       [step, n_strips, tile_size, n_csr, &buffer_csr_vertices_vec,
        &graph_visited, &num_out_edges_by_vid_vec, &count_out_edges_vec, &edges,
        &visited_vec](auto& w) {
@@ -519,7 +522,7 @@ static CSRTiledMatrix* Edgelist2CSRTiledMatrix(
       });
 
   // Step 2. compute global id for src.
-  ParForEach(worker.begin(), worker.end(),
+  ParallelFor(worker.begin(), worker.end(),
       [&edges, step, block_scope, tile_size, n_strips, &buffer_csr_vertices_vec,
        &num_out_edges_by_vid_vec, &visited_vec, &graph_visited](auto& w) {
         for (EdgeIndex eid = w; eid < edges.get_metadata().num_edges;
@@ -546,7 +549,7 @@ static CSRTiledMatrix* Edgelist2CSRTiledMatrix(
   csr_tiled_matrix->Init(tile_meta_data, new GPUBitmap(n_csr * n_csr));
 
   VertexID gid = 0;
-  ParForEach(worker.begin(), worker.end(),
+  ParallelFor(worker.begin(), worker.end(),
                 [step, n_strips, &gid, tile_size, &visited_vec, n_csr,
                  &buffer_csr_vertices_vec, &num_out_edges_by_vid_vec,
                  &count_out_edges_vec, &csr_tiled_matrix, &graph_visited,
@@ -609,7 +612,7 @@ static CSRTiledMatrix* Edgelist2CSRTiledMatrix(
   std::vector<VertexID*> buffer_out_edges_vec(n_nz_tile);
   std::vector<VertexID*> y_vid_map_vec(n_nz_tile);
 
-  ParForEach(worker.begin(), worker.end(),
+  ParallelFor(worker.begin(), worker.end(),
       [step, n_csr, n_nz_tile, &csr_tiled_matrix, &buffer_globalid_vec,
        &buffer_outdegree_vec, &buffer_out_offset_vec, &buffer_out_edges_vec,
        &y_vid_map_vec](auto& w) {
@@ -627,7 +630,7 @@ static CSRTiledMatrix* Edgelist2CSRTiledMatrix(
       });
 
   // Fill edges in each vertex.
-  ParForEach(worker.begin(), worker.end(),
+  ParallelFor(worker.begin(), worker.end(),
       [tile_size, &edges, step, block_scope, n_strips, &buffer_csr_vertices_vec,
        &y_vid_map_vec, &offset_out_edges_vec, &csr_tiled_matrix,
        &gid_map](auto& w) {
@@ -660,7 +663,7 @@ static CSRTiledMatrix* Edgelist2CSRTiledMatrix(
 
   offset_out_edges_vec.clear();
 
-  ParForEach(worker.begin(), worker.end(),
+  ParallelFor(worker.begin(), worker.end(),
                 [tile_size, &edges, step, block_scope, n_strips, n_csr,
                  &offset_out_edges_vec, &buffer_csr_vertices_vec, &visited_vec,
                  &gid_map, &graph_visited, &buffer_outdegree_vec](auto& w) {
@@ -676,7 +679,7 @@ static CSRTiledMatrix* Edgelist2CSRTiledMatrix(
                 });
 
   // Construct offset.
-  ParForEach(worker.begin(), worker.end(),
+  ParallelFor(worker.begin(), worker.end(),
                 [tile_size, &edges, step, block_scope, n_strips, n_csr,
                  n_nz_tile, &offset_out_edges_vec, &buffer_csr_vertices_vec,
                  &visited_vec, &buffer_outdegree_vec, &buffer_out_offset_vec,
@@ -692,7 +695,7 @@ static CSRTiledMatrix* Edgelist2CSRTiledMatrix(
                 });
 
   // Fill edges.
-  ParForEach(worker.begin(), worker.end(),
+  ParallelFor(worker.begin(), worker.end(),
       [&visited_vec, step, n_csr, tile_size, &buffer_out_edges_vec,
        &buffer_csr_vertices_vec, &buffer_outdegree_vec, &gid_map,
        &graph_visited, &buffer_out_offset_vec](auto& w) {
@@ -712,7 +715,7 @@ static CSRTiledMatrix* Edgelist2CSRTiledMatrix(
       });
 
   // Generate global id
-  ParForEach(worker.begin(), worker.end(),
+  ParallelFor(worker.begin(), worker.end(),
       [&visited_vec, step, n_csr, n_nz_tile, tile_size, &buffer_out_edges_vec,
        &buffer_csr_vertices_vec, &buffer_globalid_vec, &graph_visited, &gid_map,
        &buffer_out_offset_vec](auto& w) {
@@ -728,7 +731,7 @@ static CSRTiledMatrix* Edgelist2CSRTiledMatrix(
         }
       });
 
-  ParForEach(worker.begin(), worker.end(),
+  ParallelFor(worker.begin(), worker.end(),
       [n_strips, &visited_vec, step, n_csr, n_nz_tile, tile_size,
        &n_nz_tile_per_row, &buffer_out_edges_vec, &buffer_csr_vertices_vec,
        &buffer_globalid_vec, &buffer_outdegree_vec, &buffer_out_offset_vec,

@@ -12,9 +12,11 @@
 #include "core/common/consts.h"
 #include "core/common/types.h"
 #include "core/data_structures/immutable_csr.cuh"
-#include "core/util/execution_policy.h"
+#include "core/util/parallel.h"
 
 namespace sics {
+
+using sics::matrixgraph::core::util::ParallelFor;
 namespace matrixgraph {
 namespace core {
 namespace task {
@@ -225,7 +227,7 @@ inline void BuildMinWiseFilterCache(const ImmutableCSR& csr,
   std::iota(worker.begin(), worker.end(), 0);
   auto step = worker.size();
 
-  ParForEach(worker.begin(), worker.end(),
+  ParallelFor(worker.begin(), worker.end(),
       [step, n, hop, k, &csr, &cache](auto w) {
         // Per-thread reusable BFS state.
         std::vector<uint32_t> visited;

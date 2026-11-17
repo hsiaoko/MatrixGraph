@@ -1,5 +1,5 @@
 #include <algorithm>
-#include "core/util/execution_policy.h"
+#include "core/util/parallel.h"
 #include <fstream>
 #include <mutex>
 #include <random>
@@ -12,6 +12,8 @@
 #include "core/util/bitmap.h"
 
 namespace sics {
+
+using sics::matrixgraph::core::util::ParallelFor;
 namespace matrixgraph {
 namespace core {
 namespace data_structures {
@@ -278,14 +280,14 @@ void ImmutableCSR::GenerateVLabel(VertexID range, bool random) {
     std::uniform_int_distribution<> dis(0, 65536);
     std::cout << " Label Range: " << range << std::endl;
 
-    ParForEach(worker.begin(), worker.end(),
+    ParallelFor(worker.begin(), worker.end(),
                   [this, step, &dis, &gen, &range, &vlabel_ptr](auto w) {
                     for (auto vid = w; vid < get_num_vertices(); vid += step) {
                       vlabel_ptr[vid] = (dis(gen) + vid) % range;
                     }
                   });
   } else {
-    ParForEach(worker.begin(), worker.end(),
+    ParallelFor(worker.begin(), worker.end(),
                   [this, step, &range, &vlabel_ptr](auto w) {
                     for (auto vid = w; vid < get_num_vertices(); vid += step) {
                       vlabel_ptr[vid] = vid % range;
@@ -305,7 +307,7 @@ void ImmutableCSR::SortByDegree() {
   VidCountPair* vids_and_degrees = new VidCountPair[n_vertices]();
 
   std::cout << "[SortByDegree] Computing degree of each vertex" << std::endl;
-  ParForEach(worker.begin(), worker.end(),
+  ParallelFor(worker.begin(), worker.end(),
                 [this, step, &vids_and_degrees, n_vertices](auto w) {
                   for (auto vid = w; vid < n_vertices; vid += step) {
                     vids_and_degrees[vid].vid = vid;
@@ -314,7 +316,7 @@ void ImmutableCSR::SortByDegree() {
                 });
 
   std::cout << "[SortByDegree] Sorting" << std::endl;
-  std::sort(MATRIXGRAPH_EXEC_POLICY vids_and_degrees,
+  std::sort(vids_and_degrees,
             vids_and_degrees + n_vertices,
             [](const auto a, const auto b) { return a.count > b.count; });
 
@@ -342,7 +344,7 @@ void ImmutableCSR::SortByDegree() {
   metadata_.min_vid = common::kMaxVertexID;
 
   std::cout << "[SortByDegree] Replacing old val by new val." << std::endl;
-   ParForEach(worker.begin(), worker.end(),
+   ParallelFor(worker.begin(), worker.end(),
       [this, step, n_vertices, &new_id_by_old_id, &vids_and_degrees,
        &new_buffer_globalid, &new_buffer_localid, &new_buffer_indegree,
        &new_buffer_outdegree, &new_buffer_in_offset, &new_buffer_out_offset,
