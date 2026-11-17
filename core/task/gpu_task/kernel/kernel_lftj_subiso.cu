@@ -313,7 +313,7 @@ uint64_t LFTJSubIsoKernelWrapper::Enumerate(
     const ImmutableCSR& pattern, const ImmutableCSR& data_graph,
     const std::vector<EdgeIndex>& data_offsets,
     const std::vector<VertexID>& data_neighbors,
-    const std::vector<std::vector<VertexID>>& pattern_adj,
+    const std::vector<std::vector<VertexID>>& /*pattern_adj*/,
     const std::vector<std::vector<VertexID>>& candidates,
     const std::vector<VertexID>& order,
     const std::vector<std::vector<VertexID>>& bn_list,

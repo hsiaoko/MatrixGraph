@@ -23,8 +23,8 @@ using sics::matrixgraph::core::common::kMaxVertexID;
 using sics::matrixgraph::core::common::VertexID;
 using sics::matrixgraph::core::task::kernel::KernelBitmap;
 
-#define WORD_OFFSET(i) (i >> 6)
-#define BIT_OFFSET(i) (i & 0x3f)
+#define WORD_OFFSET(i) ((i) >> 6)
+#define BIT_OFFSET(i) ((i) & 0x3f)
 #define min(a, b) ((a) < (b) ? (a) : (b))
 #define max(a, b) ((a) > (b) ? (a) : (b))
 
@@ -111,10 +111,10 @@ struct ParametersWalk {
 };
 
 struct ParametersCount {
-  unsigned n_nz_tile;
-  unsigned n_uint64_t;
-  unsigned long long* data;
-  unsigned long long* count;
+  unsigned n_nz_tile = 0;
+  unsigned n_uint64_t = 0;
+  unsigned long long* data = nullptr;
+  unsigned long long* count = nullptr;
 };
 
 __device__ static inline uint64_t get_bit(uint64_t* data, size_t i,
@@ -809,7 +809,7 @@ void MatrixOperationsKernelWrapper::FillCSRTiles(
 }
 
 void MatrixOperationsKernelWrapper::Walk(
-    const cudaStream_t& stream, size_t tile_size, size_t n_strips,
+    const cudaStream_t& /*stream*/, size_t tile_size, size_t n_strips,
     size_t n_nz_tile_a, size_t n_nz_tile_b,
     const data_structures::UnifiedOwnedBuffer<uint32_t>& csr_n_vertices_a,
     const data_structures::UnifiedOwnedBuffer<uint32_t>& csr_n_vertices_b,
@@ -865,8 +865,8 @@ void MatrixOperationsKernelWrapper::Walk(
 }
 
 void MatrixOperationsKernelWrapper::Count(
-    const cudaStream_t& stream, size_t tile_size, size_t n_strips,
-    size_t n_nz_tile, const data_structures::UnifiedOwnedBuffer<uint64_t>& data,
+    const cudaStream_t& stream, size_t /*tile_size*/, size_t /*n_strips*/,
+    size_t /*n_nz_tile*/, const data_structures::UnifiedOwnedBuffer<uint64_t>& data,
     data_structures::UnifiedOwnedBuffer<uint64_t>* count) {
   dim3 dim_block(256);
   dim3 dim_grid(256);

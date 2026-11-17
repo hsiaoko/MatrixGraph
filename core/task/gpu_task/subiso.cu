@@ -140,7 +140,7 @@ __host__ void SubIso::WOJMatching(
       WOJSubIsoKernelWrapper::Join(exec_plan, woj_matches);
   std::cout << "Join Down" << std::endl;
 
-  for (auto _ = 0; _ < output_woj_matches_vec.size(); _++) {
+  for (size_t _ = 0; _ < output_woj_matches_vec.size(); _++) {
     output_woj_matches_vec[_]->Print();
   }
 

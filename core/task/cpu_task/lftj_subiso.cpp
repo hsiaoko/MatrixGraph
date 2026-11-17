@@ -521,7 +521,7 @@ uint64_t LFTJSubIso::EnumerateRange(size_t cand_start, size_t cand_end,
     embedding[depth] = v;
     visited[v] = 1;
 
-    if (depth == pn - 1) {
+    if (depth == static_cast<int32_t>(pn) - 1) {
       ++count;
       if (thread_matches != nullptr) {
         thread_matches->insert(thread_matches->end(), embedding.begin(),

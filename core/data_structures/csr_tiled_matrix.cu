@@ -64,7 +64,8 @@ void CSRTiledMatrix::Init(const TiledMatrixMetadata &metadata,
   }
 }
 
-void CSRTiledMatrix::Init(VertexID tile_size, VertexID n_strips, Bitmap *bm) {}
+void CSRTiledMatrix::Init(VertexID /*tile_size*/, VertexID /*n_strips*/,
+                          Bitmap* /*bm*/) {}
 
 void CSRTiledMatrix::Print(VertexID max_n_nz_tile) const {
   if (metadata_.n_nz_tile == 0)

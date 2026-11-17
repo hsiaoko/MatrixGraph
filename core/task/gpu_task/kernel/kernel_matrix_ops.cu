@@ -93,7 +93,7 @@ static void SimdSquaredDifferenceSIMD(const float* v_a, const float* v_b,
   // }
 
   /// CPP
-  for (auto _ = 0; _ < n; _++) {
+  for (size_t _ = 0; _ < n; _++) {
     float diff = v_a[_] - v_b[_];
     v_c[_] = diff * diff;
   }
@@ -283,9 +283,9 @@ static __global__ void MatrixMulTransposedBKernel(ParametersMatrix<T> params) {
 
 template <typename T>
 static void MatrixTransposedBMulSIMD(ParametersMatrix<T> params) {
-  for (unsigned k_idx = 0; k_idx < params.k; k_idx++) {
-    for (unsigned m_idx = 0; m_idx < params.m; m_idx++) {
-      for (unsigned n_idx = 0; n_idx < params.n; n_idx++) {
+  for (int k_idx = 0; k_idx < params.k; k_idx++) {
+    for (int m_idx = 0; m_idx < params.m; m_idx++) {
+      for (int n_idx = 0; n_idx < params.n; n_idx++) {
         *(params.C + m_idx * params.n + n_idx) +=
             params.A[m_idx * params.k + k_idx] *
             params.B[k_idx * params.n + n_idx];
@@ -358,7 +358,7 @@ void MatrixAddSIMD(float* A, const float* B, int m, int n) {
 
 void MatrixOpsKernelWrapper::MatMult(const cudaStream_t& stream, float* A,
                                      float* B, float* C, int m, int k, int n,
-                                     bool transposed_a, bool transposed_b) {
+                                     bool /*transposed_a*/, bool transposed_b) {
   ParametersMatrix<float> params{
       .A = A, .B = B, .C = C, .m = m, .k = k, .n = n};
 
@@ -403,7 +403,8 @@ void MatrixOpsKernelWrapper::Transpose(const cudaStream_t& stream, float* input,
 
 void MatrixOpsKernelWrapper::CPUMatMult(const float* A, const float* B,
                                         float* C, int m, int k, int n,
-                                        bool transposed_a, bool transposed_b) {
+                                        bool /*transposed_a*/,
+                                        bool transposed_b) {
   ParametersMatrix<float> params{
       .A = A, .B = B, .C = C, .m = m, .k = k, .n = n};
   if (transposed_b) {

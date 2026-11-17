@@ -231,7 +231,7 @@ class ExecutionPlan {
               << std::endl;
     std::cout << "\t sequential_exec_path" << std::endl;
     std::cout << "\t";
-    for (int i = 0; i < n_vertices_; i++) {
+    for (VertexID i = 0; i < n_vertices_; i++) {
       auto ptr = get_sequential_exec_path_ptr()->GetPtr();
       std::cout << ptr[i] << " ";
     }
@@ -240,14 +240,14 @@ class ExecutionPlan {
     std::cout << "\t sequential_exec_path_in_edges:" << std::endl;
     // auto ptr = get_sequential_exec_path_in_edges_ptr()->GetPtr();
     auto ptr = exec_path_in_edges_;
-    for (int i = 0; i < n_edges_; i++) {
+    for (VertexID i = 0; i < n_edges_; i++) {
       std::cout << "\t* " << ptr[i * 2] << "->" << ptr[i * 2 + 1] << std::endl;
     }
   }
 
   bool IsInExecPathInEdges(VertexID src, VertexID dst) const {
     auto ptr = get_sequential_exec_path_in_edges_ptr()->GetPtr();
-    for (int i = 0; i < n_vertices_; i++) {
+    for (VertexID i = 0; i < n_vertices_; i++) {
       if (ptr[i * 2] == src && ptr[i * 2 + 1] == dst) {
         return true;
       }

@@ -19,8 +19,8 @@ namespace data_structures {
 using VertexID = sics::matrixgraph::core::common::VertexID;
 using BitmapNoOwnerShip = sics::matrixgraph::core::util::BitmapNoOwnerShip;
 
-#define WORD_OFFSET(i) (i >> 6)
-#define BIT_OFFSET(i) (i & 0x3f)
+#define WORD_OFFSET(i) ((i) >> 6)
+#define BIT_OFFSET(i) ((i) & 0x3f)
 
 BitTiledMatrix::~BitTiledMatrix() {
   delete[] tile_row_idx_;

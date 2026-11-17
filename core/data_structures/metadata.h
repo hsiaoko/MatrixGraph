@@ -16,10 +16,10 @@ private:
   using EdgeIndex = sics::matrixgraph::core::common::EdgeIndex;
 
 public:
-  GraphID n_chunks;
-  VertexID n_vertices;
-  EdgeIndex n_edges;
-  VertexID max_vid;
+  GraphID n_chunks = 0;
+  VertexID n_vertices = 0;
+  EdgeIndex n_edges = 0;
+  VertexID max_vid = 0;
 };
 
 struct TiledMatrixMetadata {

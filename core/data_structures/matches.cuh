@@ -91,7 +91,7 @@ class Matches {
       if (count++ > n_matches) break;
       std::cout << "Weft " << weft_id << std::endl;
 
-      for (auto i = 0; i < n_vertices_; i++) {
+      for (VertexID i = 0; i < n_vertices_; i++) {
         auto v_candidate_offset =
             GetVCandidateOffsetPtr()[weft_id * (n_vertices_ + 1) + i];
         auto v_candidate_size =
@@ -168,7 +168,7 @@ class Matches {
 
       auto tag = false;
       size_t weft_matches_count = 1;
-      for (auto i = 0; i < n_vertices_; i++) {
+      for (VertexID i = 0; i < n_vertices_; i++) {
         auto v_candidate_size =
             GetVCandidateOffsetPtr()[weft_id * (n_vertices_ + 1) + i + 1] -
             GetVCandidateOffsetPtr()[weft_id * (n_vertices_ + 1) + i];
@@ -202,7 +202,7 @@ class Matches {
     for (VertexID weft_id = 0; weft_id < *weft_count_.GetPtr(); weft_id++) {
       if (invalid_match_->GetBit(weft_id)) continue;
 
-      for (auto i = 0; i < n_vertices_; i++) {
+      for (VertexID i = 0; i < n_vertices_; i++) {
         auto v_candidate_size =
             GetVCandidateOffsetPtr()[weft_id * (n_vertices_ + 1) + i + 1] -
             GetVCandidateOffsetPtr()[weft_id * (n_vertices_ + 1) + i];
@@ -211,7 +211,7 @@ class Matches {
           break;
         }
 
-        auto invalid_count = 0;
+        VertexID invalid_count = 0;
         for (VertexID candidate_id = 0; candidate_id < v_candidate_size;
              candidate_id++) {
           if (*(matches_data_.GetPtr() +
@@ -240,7 +240,7 @@ class Matches {
     uint64_t* weft_root_buf =
         new uint64_t[get_weft_count() - GetInvalidMatchesCount()]();
     auto count = 0;
-    for (auto _ = 0; _ < get_weft_count(); _++) {
+    for (VertexID _ = 0; _ < get_weft_count(); _++) {
       if (invalid_match_->GetBit(_)) continue;
       weft_root_buf[count++] = *(matches_data_.GetPtr() +
                                  _ * n_vertices_ * 2 * max_n_local_weft_ + 1);
@@ -265,7 +265,7 @@ class Matches {
     uint64_t* weft_root_buf = new uint64_t[file_size / sizeof(uint64_t)]();
     data_file.read(reinterpret_cast<char*>(weft_root_buf), file_size);
     data_file.close();
-    for (auto _ = 0; _ < get_weft_count(); _++) {
+    for (VertexID _ = 0; _ < get_weft_count(); _++) {
       std::cout << "weft_root_buf: " << weft_root_buf[_] << std::endl;
     }
 

@@ -391,7 +391,7 @@ uint64_t LFTJSubIsoGpu::EnumerateOnHost() const {
     if (canonical_ && depth > 0 && v <= emb[depth - 1]) continue;
     emb[depth] = v;
     visited[v] = true;
-    if (depth == pn - 1) {
+    if (depth == static_cast<int32_t>(pn) - 1) {
       ++total;
       visited[v] = false;
       continue;

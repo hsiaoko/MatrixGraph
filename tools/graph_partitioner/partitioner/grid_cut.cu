@@ -172,7 +172,7 @@ void GridCutPartitioner::RunPartitioner() {
 
   std::cout << "[GridCutPartitioner] Constructing Edgelist of blocks...\n"
             << std::endl;
-  for (auto _ = 0; _ < n_partitions_ * n_partitions_; _++) {
+  for (unsigned _ = 0; _ < n_partitions_ * n_partitions_; _++) {
     EdgelistMetadata meta{.num_vertices =
                               static_cast<uint32_t>(
                                   vertices_bm_for_each_block[_].Count()),
@@ -182,7 +182,7 @@ void GridCutPartitioner::RunPartitioner() {
     edge_blocks.emplace_back(Edges(meta, edge_blocks_buf[_]));
   }
 
-  for (auto _ = 0; _ < n_partitions_ * n_partitions_; _++) {
+  for (unsigned _ = 0; _ < n_partitions_ * n_partitions_; _++) {
     if (edge_blocks[_].get_metadata().num_vertices == 0) continue;
     std::cout << "[GridCutPartitioner] Reassigning vertex ids for block: "
               << " x: " << _ / n_partitions_ << " y: " << _ % n_partitions_

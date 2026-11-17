@@ -35,7 +35,7 @@ class BFS : public TaskBase {
 
  public:
   BFS(const std::string& data_graph_path, VertexID src)
-      : data_graph_path_(data_graph_path), src_(src) {}
+      : src_(src), data_graph_path_(data_graph_path) {}
 
   __host__ void Run();
 

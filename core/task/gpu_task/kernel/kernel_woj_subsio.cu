@@ -1541,7 +1541,7 @@ void SortWojJoinInputs(const std::vector<WOJMatches*>& input_woj_matches_vec) {
 
   BitmapOwnership header_visited(32);
   auto header_ptr0 = input_woj_matches_vec[0]->get_header_ptr();
-  for (auto _ = 0; _ < input_woj_matches_vec[0]->get_x_offset(); _++) {
+  for (VertexID _ = 0; _ < input_woj_matches_vec[0]->get_x_offset(); _++) {
     header_visited.SetBit(header_ptr0[_]);
   }
 

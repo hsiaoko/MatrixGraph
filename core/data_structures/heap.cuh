@@ -71,11 +71,11 @@ class MinHeap {
   }
 
  private:
-  __host__ __device__ __forceinline__ void heapify(int i) {
-    int largest = i;
+  __host__ __device__ __forceinline__ void heapify(uint32_t i) {
+    uint32_t largest = i;
     while (1) {
-      int left = 2 * i + 1;
-      int right = 2 * i + 2;
+      uint32_t left = 2 * i + 1;
+      uint32_t right = 2 * i + 2;
 
       if (left < offset_ && data_[left] > data_[largest]) {
         largest = left;

@@ -433,8 +433,8 @@ __host__ void GEMM::InitC() {
             auto* csr_tiled_matrix_ptr = C_->GetTiledMatrixPtrByIdx(i * N + j);
             auto tile_offset_row = csr_tiled_matrix_ptr->GetTileOffsetRowPtr();
 
-            for (int t = 0; t < csr_tiled_matrix_ptr->GetMetadata().n_strips;
-                 t++) {
+            for (VertexID t = 0;
+                 t < csr_tiled_matrix_ptr->GetMetadata().n_strips; t++) {
               tile_offset_row[t + 1] =
                   tile_offset_row[t] + tile_count_row[i * N + j].GetPtr()[t];
             }
@@ -880,7 +880,7 @@ __host__ std::vector<Edges>* GEMM::GridPartitioning(const Edges& edges,
   edges_blocks->reserve(n_partitions * n_partitions);
 
   // std::cout << "[GridCut] Constructing Edgelist of blocks...\n" << std::endl;
-  for (auto _ = 0; _ < n_partitions * n_partitions; _++) {
+  for (GraphID _ = 0; _ < n_partitions * n_partitions; _++) {
     EdgelistMetadata meta{.num_vertices =
                               static_cast<VertexID>(
                                   vertices_bm_for_each_block[_].Count()),
@@ -890,7 +890,7 @@ __host__ std::vector<Edges>* GEMM::GridPartitioning(const Edges& edges,
     edges_blocks->emplace_back(Edges(meta, edge_blocks_buf[_]));
   }
 
-  for (auto _ = 0; _ < n_partitions * n_partitions; _++) {
+  for (GraphID _ = 0; _ < n_partitions * n_partitions; _++) {
     if (edges_blocks->at(_).get_metadata().num_vertices == 0) continue;
     edges_blocks->at(_).GenerateLocalID2GlobalID();
   }

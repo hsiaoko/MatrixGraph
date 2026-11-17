@@ -1137,7 +1137,7 @@ static void DFSExtend(
   VertexID matched_pattern_vertex = kMaxVertexID;
 
   // 遍历执行计划中的边约束
-  for (auto i = 0; i < exec_plan.get_n_edges(); i++) {
+  for (VertexID i = 0; i < exec_plan.get_n_edges(); i++) {
     auto u_src =
         exec_plan.get_sequential_exec_path_in_edges_ptr()->GetPtr()[2 * i];
     auto u_dst =
@@ -1247,7 +1247,7 @@ static inline void Enumerating(
             rejected_pairs_vec.empty() ? nullptr : &rejected_pairs_vec[w];
 
         for (VertexID v_idx = w; v_idx < g.get_num_vertices(); v_idx += step) {
-          for (auto _ = 0; _ < exec_plan.get_n_edges(); _++) {
+          for (VertexID _ = 0; _ < exec_plan.get_n_edges(); _++) {
             matches_visited_pairs[_].clear();
           }
 
@@ -1258,7 +1258,7 @@ static inline void Enumerating(
 
           {
             bool is_match = true;
-            for (int _ = 0; _ < exec_plan.get_n_edges(); _++) {
+            for (VertexID _ = 0; _ < exec_plan.get_n_edges(); _++) {
               if (local_matches.size[_] == 0) {
                 is_match = false;
               }
@@ -1274,7 +1274,7 @@ static inline void Enumerating(
                 return;
               }
               int weft_size = 0;
-              for (int _ = 0; _ < exec_plan.get_n_edges(); _++) {
+              for (VertexID _ = 0; _ < exec_plan.get_n_edges(); _++) {
                 weft_size += local_matches.size[_];
                 matches->GetVCandidateOffsetPtr()[weft_idx *
                                                       (exec_plan.get_n_edges() + 1) +
@@ -1619,7 +1619,8 @@ static void ValidateMatching(const ImmutableCSR& p, const ImmutableCSR& g,
     }
     auto elapsed_sec = std::chrono::duration_cast<std::chrono::seconds>(
         std::chrono::steady_clock::now() - global_start).count();
-    if (elapsed_sec > kSubIsoValidateMatchingTimeoutSec) {
+    if (elapsed_sec >
+        static_cast<decltype(elapsed_sec)>(kSubIsoValidateMatchingTimeoutSec)) {
       std::cout << "\tValidateMatching timed out after "
                 << kSubIsoValidateMatchingTimeoutSec << " sec at weft "
                 << weft_id << "." << std::endl;
@@ -1660,7 +1661,7 @@ static void Checking(const ImmutableCSR& p, const ImmutableCSR& /*g*/,
     VertexID delete_count = 0;
     bool fix_point = false;
     while (!fix_point) {
-      for (auto i = 0; i < matches->get_n_vertices(); i++) {
+      for (VertexID i = 0; i < matches->get_n_vertices(); i++) {
         auto v_candidate_offset =
             matches->GetVCandidateOffsetPtr()
                 [weft_id * (matches->get_n_vertices() + 1) + i];
@@ -1682,7 +1683,7 @@ static void Checking(const ImmutableCSR& p, const ImmutableCSR& /*g*/,
                     matches->get_max_n_local_weft() +
                 i * 2 * matches->get_max_n_local_weft() + 2 * candidate_id +
                 1) != kMaxVertexID) {
-            for (auto j = 1; j < matches->get_n_vertices(); j++) {
+            for (VertexID j = 1; j < matches->get_n_vertices(); j++) {
               if (i == j) continue;
               if (!matches->IsValidCandidate(
                       weft_id, j, matches->get_header_first_by_idx(i),
@@ -1763,7 +1764,7 @@ void SubIsoCPU::RecursiveMatching(
                   g.get_num_vertices());
 
   // Set header of matches
-  for (auto _ = 0; _ < exec_plan.get_n_edges(); _++) {
+  for (VertexID _ = 0; _ < exec_plan.get_n_edges(); _++) {
     auto src =
         exec_plan.get_sequential_exec_path_in_edges_ptr()->GetPtr()[_ * 2];
     auto dst =

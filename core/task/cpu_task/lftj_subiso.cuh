@@ -40,23 +40,23 @@ class LFTJSubIso : public CPUTaskBase {
              bool enable_bloom_filter = true,
              bool enable_min_wise_bloom_filter = true,
              const std::string& reject_output_path = "")
-      : pattern_path_(pattern_path),
-        data_graph_path_(data_graph_path),
-        output_path_(output_path),
-        reject_output_path_(reject_output_path),
-        num_threads_(num_threads),
-        output_limit_(output_limit),
+      : output_limit_(output_limit),
         canonical_(canonical),
         enable_min_wise_filter_(enable_min_wise_filter),
-        filter_hop_(filter_hop),
-        filter_k_(filter_k),
-        disable_matching_order_(disable_matching_order),
-        enable_ldf_filter_(enable_ldf_filter),
         enable_nlc_filter_(enable_nlc_filter),
         enable_lpf_filter_(enable_lpf_filter),
         enable_lcf_filter_(enable_lcf_filter),
         enable_bloom_filter_(enable_bloom_filter),
-        enable_min_wise_bloom_filter_(enable_min_wise_bloom_filter) {}
+        enable_min_wise_bloom_filter_(enable_min_wise_bloom_filter),
+        filter_hop_(filter_hop),
+        filter_k_(filter_k),
+        disable_matching_order_(disable_matching_order),
+        enable_ldf_filter_(enable_ldf_filter),
+        pattern_path_(pattern_path),
+        data_graph_path_(data_graph_path),
+        output_path_(output_path),
+        reject_output_path_(reject_output_path),
+        num_threads_(num_threads) {}
 
   void Run();
 

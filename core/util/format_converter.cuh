@@ -503,7 +503,7 @@ inline CSRTiledMatrix* Edgelist2CSRTiledMatrix(
         for (auto tile_id = w; tile_id < n_csr; tile_id += step) {
           if (!graph_visited.GetBit(tile_id)) continue;
 
-          for (auto i = 0; i < tile_size; i++) {
+          for (size_t i = 0; i < tile_size; i++) {
             if (!visited_vec[tile_id].GetBit(i)) continue;
             // buffer_csr_vertices_vec[tile_id][i].vid =
             //     (tile_id / n_strips) * tile_size + i;
@@ -751,7 +751,7 @@ inline CSRTiledMatrix* Edgelist2CSRTiledMatrix(
       });
 
   auto* tile_offset_row_ptr = csr_tiled_matrix->GetTileOffsetRowPtr();
-  for (int i = 0; i < n_strips; i++)
+  for (VertexID i = 0; i < n_strips; i++)
     tile_offset_row_ptr[i + 1] = tile_offset_row_ptr[i] + n_nz_tile_per_row[i];
 
   return csr_tiled_matrix;
