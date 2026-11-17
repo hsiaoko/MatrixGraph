@@ -28,10 +28,6 @@ class BFSKernelWrapper {
   using Edges = sics::matrixgraph::core::data_structures::Edges;
 
  public:
-  BFSKernelWrapper(const BFSKernelWrapper& obj) = delete;
-  void operator=(const BFSKernelWrapper&) = delete;
-
-  static BFSKernelWrapper* GetInstance();
 
   static void BFS(
       const cudaStream_t& stream, VertexID n_vertices_g, EdgeIndex n_edges_g,
@@ -39,9 +35,6 @@ class BFSKernelWrapper {
       const data_structures::UnifiedOwnedBuffer<uint8_t>& data_g,
       const data_structures::UnifiedOwnedBuffer<VertexLabel>& v_level_g);
 
- private:
-  BFSKernelWrapper() = default;
-  inline static BFSKernelWrapper* ptr_ = nullptr;
 };
 
 }  // namespace kernel

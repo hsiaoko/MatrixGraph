@@ -1,5 +1,6 @@
 #include <chrono>
 #include <ctime>
+#include <iostream>
 
 #include "core/matrixgraph.cuh"
 #include "core/task/cpu_task/subiso_cpu.cuh"
@@ -21,16 +22,10 @@ namespace sics {
 namespace matrixgraph {
 namespace core {
 
-MatrixGraph::MatrixGraph(SchedulerType scheduler_type) {
-  CUDA_CHECK(cudaGetDeviceCount(&n_device_));
-
-  switch (scheduler_type) {
-    case components::scheduler::kCHBL:
-      scheduler_ = new components::scheduler::CHBLScheduler(n_device_);
-      break;
-    default:
-      break;
-  }
+MatrixGraph::MatrixGraph(SchedulerType /*scheduler_type*/) {
+  // The facade used to build a CHBLScheduler here and never consult it; the
+  // parameter survives only because apps still pass -scheduler. The engine
+  // redesign (M3) replaces this constructor with MakeEngine(Backend).
 }
 
 void MatrixGraph::Run(TaskType task_type, TaskBase* task_ptr) {

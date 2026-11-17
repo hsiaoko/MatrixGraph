@@ -60,9 +60,7 @@ class GEMM : public TaskBase {
       const std::vector<Edges>& edges_blocks,
       const GridGraphMetadata& grid_graph_metadata, VertexID tile_size);
 
-  __host__ void FillTiles();
 
-  __host__ void Count(const GridCSRTiledMatrix& G);
 
   GridCSRTiledMatrix* A_;
   GridCSRTiledMatrix* B_;

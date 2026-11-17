@@ -50,8 +50,6 @@ class WOJExecutionPlan {
     n_vertices_g_ = g.get_num_vertices();
   }
 
-  void GenerateJoinPlan(const ExecutionPlan& exec_plan) {}
-
   inline void SetNDevices(VertexID n_devices) { n_devices_ = n_devices; }
 
   // Maps logical GPU index 0..n-1 to physical cuda device ids (for multi-GPU).

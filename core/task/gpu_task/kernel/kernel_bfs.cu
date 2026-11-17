@@ -42,13 +42,6 @@ struct ParametersBFS {
   VertexLabel current_level;
 };
 
-BFSKernelWrapper* BFSKernelWrapper::GetInstance() {
-  if (ptr_ == nullptr) {
-    ptr_ = new BFSKernelWrapper();
-  }
-  return ptr_;
-}
-
 static __global__ void InitKernel(ParametersBFS params,
                                   VertexID source_vertex) {
   const unsigned int tid = blockIdx.x * blockDim.x + threadIdx.x;

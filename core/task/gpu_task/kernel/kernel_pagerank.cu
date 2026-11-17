@@ -158,13 +158,6 @@ static __global__ void SwapAndCheckConvergenceKernel(ParametersPageRank params,
   }
 }
 
-PageRankKernelWrapper* PageRankKernelWrapper::GetInstance() {
-  if (ptr_ == nullptr) {
-    ptr_ = new PageRankKernelWrapper();
-  }
-  return ptr_;
-}
-
 void PageRankKernelWrapper::PageRank(
     const cudaStream_t& stream, VertexID n_vertices_g, EdgeIndex n_edges_g,
     const data_structures::UnifiedOwnedBuffer<uint8_t>& data_g,

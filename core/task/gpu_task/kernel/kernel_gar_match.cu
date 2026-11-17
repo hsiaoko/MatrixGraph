@@ -39,13 +39,6 @@ using sics::matrixgraph::core::common::kDefaultHeapCapacity;
 using sics::matrixgraph::core::common::kGridDim;
 using sics::matrixgraph::core::common::kMaxVertexID;
 
-GARMatchKernelWrapper* GARMatchKernelWrapper::GetInstance() {
-  if (ptr_ == nullptr) {
-    ptr_ = new GARMatchKernelWrapper();
-  }
-  return ptr_;
-}
-
 static __forceinline__ __device__ bool LabelDegreeFilter(
     const GARPatternArrays& p, const GARGraphArrays& g, int u_idx,
     uint32_t v_idx) {

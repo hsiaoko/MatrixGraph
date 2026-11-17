@@ -15,17 +15,6 @@ class MatrixOperationsKernelWrapper {
   using EdgeIndex = sics::matrixgraph::core::common::EdgeIndex;
 
 public:
-  // deleting copy constructor
-  MatrixOperationsKernelWrapper(const MatrixOperationsKernelWrapper &obj) =
-      delete;
-
-  void operator=(const MatrixOperationsKernelWrapper &) = delete;
-
-  // @Description: GetInstance() is a method that returns an instance
-  // when it is invoked. It returns the same instance if it is invoked more
-  // than once as an instance of Singleton class is already created.
-  static MatrixOperationsKernelWrapper *GetInstance();
-
   static void
   MatrixBitAnd(const cudaStream_t &stream,
                const data_structures::DeviceOwnedBuffer<uint64_t> &matrix_a_buf,
@@ -116,11 +105,6 @@ public:
                     size_t n_strips, size_t n_nz_tile,
                     const data_structures::UnifiedOwnedBuffer<uint64_t> &data,
                     data_structures::UnifiedOwnedBuffer<uint64_t> *count);
-
-private:
-  MatrixOperationsKernelWrapper() = default;
-
-  inline static MatrixOperationsKernelWrapper *ptr_ = nullptr;
 };
 
 } // namespace kernel

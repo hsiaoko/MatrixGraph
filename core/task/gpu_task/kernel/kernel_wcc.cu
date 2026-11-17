@@ -48,13 +48,6 @@ struct ParametersWCC {
 /**
  * @brief Get the singleton instance of WCCKernelWrapper
  */
-WCCKernelWrapper* WCCKernelWrapper::GetInstance() {
-  if (ptr_ == nullptr) {
-    ptr_ = new WCCKernelWrapper();
-  }
-  return ptr_;
-}
-
 /**
  * @brief Initialize vertex labels and active vertices
  * @param params WCC kernel parameters

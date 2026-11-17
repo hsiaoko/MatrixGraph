@@ -27,10 +27,6 @@ class PageRankKernelWrapper {
 
  public:
   // deleting copy constructor
-  PageRankKernelWrapper(const PageRankKernelWrapper& obj) = delete;
-  void operator=(const PageRankKernelWrapper&) = delete;
-
-  static PageRankKernelWrapper* GetInstance();
 
   static void PageRank(
       const cudaStream_t& stream, VertexID n_vertices_g, EdgeIndex n_edges_g,
@@ -39,9 +35,6 @@ class PageRankKernelWrapper {
       float damping_factor = 0.85f, float epsilon = 1e-6f,
       int max_iterations = 10);
 
- private:
-  PageRankKernelWrapper() = default;
-  inline static PageRankKernelWrapper* ptr_ = nullptr;
 };
 
 }  // namespace kernel

@@ -19,19 +19,12 @@ using GARMatchArrays = sics::matrixgraph::core::data_structures::GARMatchArrays;
 
 class GARMatchKernelWrapper {
  public:
-  GARMatchKernelWrapper(const GARMatchKernelWrapper& obj) = delete;
-  void operator=(const GARMatchKernelWrapper&) = delete;
-
-  static GARMatchKernelWrapper* GetInstance();
 
 
   // Placeholder: returns 0 and writes empty output.
   static int GARMatch(const GARGraphArrays& g, const GARPatternArrays& p,
                       GARMatchArrays* out);
 
- private:
-  GARMatchKernelWrapper() = default;
-  inline static GARMatchKernelWrapper* ptr_ = nullptr;
 };
 
 }  // namespace kernel

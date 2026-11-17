@@ -40,19 +40,15 @@ class WCCKernelWrapper {
   /**
    * @brief Delete copy constructor to enforce singleton pattern
    */
-  WCCKernelWrapper(const WCCKernelWrapper& obj) = delete;
 
   /**
    * @brief Delete assignment operator to enforce singleton pattern
    */
-  void operator=(const WCCKernelWrapper&) = delete;
 
   /**
    * @brief Get the singleton instance of WCCKernelWrapper
    * @return Pointer to the singleton instance
    */
-  static WCCKernelWrapper* GetInstance();
-
   /**
    * @brief Execute WCC computation on GPU using HashMin algorithm
    * @param stream CUDA stream for asynchronous execution
@@ -70,12 +66,10 @@ class WCCKernelWrapper {
   /**
    * @brief Private constructor for singleton pattern
    */
-  WCCKernelWrapper() = default;
 
   /**
    * @brief Singleton instance pointer
    */
-  inline static WCCKernelWrapper* ptr_ = nullptr;
 };
 
 }  // namespace kernel

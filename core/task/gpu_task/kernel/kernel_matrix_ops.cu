@@ -40,13 +40,6 @@ struct ParametersMatrix {
   int n;
 };
 
-MatrixOpsKernelWrapper* MatrixOpsKernelWrapper::GetInstance() {
-  if (ptr_ == nullptr) {
-    ptr_ = new MatrixOpsKernelWrapper();
-  }
-  return ptr_;
-}
-
 #if defined(USE_AVX2) && !defined(__CUDACC__)
 inline __m256 fast_exp_avx(__m256 x) {
   const __m256 max_x = _mm256_set1_ps(10.0f);

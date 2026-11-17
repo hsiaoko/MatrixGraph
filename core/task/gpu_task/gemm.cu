@@ -914,9 +914,7 @@ __host__ GridCSRTiledMatrix* GEMM::ConvertGridEdgelist2GridTiledMatrix(
   return grid_tiled_matrix;
 }
 
-__host__ void GEMM::FillTiles() {}
 
-__host__ void GEMM::Count(const GridCSRTiledMatrix& G) {}
 
 __host__ void GEMM::Run() {
   auto start_time_0 = std::chrono::system_clock::now();

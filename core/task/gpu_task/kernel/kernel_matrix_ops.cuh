@@ -28,10 +28,6 @@ class MatrixOpsKernelWrapper {
   using Edges = sics::matrixgraph::core::data_structures::Edges;
 
  public:
-  MatrixOpsKernelWrapper(const MatrixOpsKernelWrapper& obj) = delete;
-  void operator=(const MatrixOpsKernelWrapper&) = delete;
-
-  static MatrixOpsKernelWrapper* GetInstance();
 
   static void MatMult(const cudaStream_t& stream, float* A, float* B, float* C,
                       int m, int k, int n, bool transposed_a = false,
@@ -68,9 +64,6 @@ class MatrixOpsKernelWrapper {
   static void CPUSimdSquaredDifference(const float* v_a, const float* v_b,
                                        float* v_c, size_t n);
 
- private:
-  MatrixOpsKernelWrapper() = default;
-  inline static MatrixOpsKernelWrapper* ptr_ = nullptr;
 };
 
 }  // namespace kernel

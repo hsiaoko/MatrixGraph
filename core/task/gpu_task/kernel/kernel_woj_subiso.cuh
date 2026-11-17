@@ -33,15 +33,11 @@ class WOJSubIsoKernelWrapper {
 
  public:
   // deleting copy constructor
-  WOJSubIsoKernelWrapper(const WOJSubIsoKernelWrapper& obj) = delete;
 
-  void operator=(const WOJSubIsoKernelWrapper&) = delete;
 
   // @Description: GetInstance() is a method that returns an instance
   // when it is invoked. It returns the same instance if it is invoked more
   // than once as an instance of Singleton class is already created.
-  static WOJSubIsoKernelWrapper* GetInstance();
-
   static std::vector<WOJMatches*> Filter(
       const WOJExecutionPlan& exec_plan, const ImmutableCSR& p,
       const ImmutableCSR& g, bool enable_min_wise_filter = true,
@@ -54,10 +50,6 @@ class WOJSubIsoKernelWrapper {
       const WOJExecutionPlan& exec_plan,
       const std::vector<WOJMatches*>& input_woj_matches);
 
- private:
-  WOJSubIsoKernelWrapper() = default;
-
-  inline static WOJSubIsoKernelWrapper* ptr_ = nullptr;
 };
 
 }  // namespace kernel
