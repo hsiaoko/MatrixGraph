@@ -26,6 +26,13 @@ class MatrixGraph {
 
   ~MatrixGraph() = default;
 
+  // Sanctioned path: virtual dispatch, timed.
+  void Run(TaskBase* task_ptr);
+
+  void Run(CPUTaskBase* task_ptr);
+
+  // Deprecated shims kept so apps build until they migrate to -backend (M4);
+  // the TaskType argument is ignored and the enum retires with them.
   void Run(TaskType task_type, TaskBase* task_ptr);
 
   void Run(TaskType task_type, CPUTaskBase* task_ptr);

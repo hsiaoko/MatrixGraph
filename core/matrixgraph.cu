@@ -1,21 +1,8 @@
 #include <chrono>
-#include <ctime>
 #include <iostream>
 
 #include "core/matrixgraph.cuh"
-#include "core/task/cpu_task/subiso_cpu.cuh"
-#include "core/task/cpu_task/lftj_subiso.cuh"
-#include "core/task/gpu_task/bfs.cuh"
-#include "core/task/gpu_task/gemm.cuh"
-#include "core/task/gpu_task/pagerank.cuh"
-#include "core/task/gpu_task/gar_match.cuh"
-#include "core/task/gpu_task/subiso.cuh"
-#include "core/task/gpu_task/lftj_subiso_gpu.cuh"
-#include "core/task/gpu_task/wcc.cuh"
-#include "core/task/gpu_task/graph_aggregate.cuh"
-#include "core/task/gpu_task/compute_features.cuh"
-#include "core/task/cpu_task/diameter.h"
-#include "core/task/cpu_task/skew.h"
+#include "core/util/error.h"
 
 namespace sics {
 namespace matrixgraph {
@@ -27,121 +14,47 @@ MatrixGraph::MatrixGraph(SchedulerType /*scheduler_type*/) {
   // redesign (M3) replaces this constructor with MakeEngine(Backend).
 }
 
-void MatrixGraph::Run(TaskType task_type, TaskBase* task_ptr) {
-  // PrintDeviceInfo();
-  auto start_time = std::chrono::system_clock::now();
-
-  auto prepare_end_time = std::chrono::system_clock::now();
-  switch (task_type) {
-    case common::kGEMM: {
-      auto task = reinterpret_cast<task::GEMM*>(task_ptr);
-      task->Run();
-      break;
-    }
-    case common::kSubIso: {
-      std::cout << "SubIso Query" << std::endl;
-      auto task = reinterpret_cast<task::SubIso*>(task_ptr);
-      task->Run();
-      break;
-    }
-    case common::kGARMatch: {
-      std::cout << "GARMatch Query" << std::endl;
-      auto task = reinterpret_cast<task::GARMatch*>(task_ptr);
-      task->Run();
-      break;
-    }
-    case common::kWCC: {
-      std::cout << "[WCC Query]" << std::endl;
-      auto task = reinterpret_cast<task::WCC*>(task_ptr);
-      task->Run();
-      break;
-    }
-    case common::kPageRank: {
-      std::cout << "[PageRank Query]" << std::endl;
-      auto task = reinterpret_cast<task::PageRank*>(task_ptr);
-      task->Run();
-      break;
-    }
-    case common::kBFS: {
-      std::cout << "[BFS Traverse]" << std::endl;
-      auto task = reinterpret_cast<task::BFS*>(task_ptr);
-      task->Run();
-      break;
-    }
-    case common::kDiameter: {
-      std::cout << "[Diameter]" << std::endl;
-      auto task = reinterpret_cast<task::Diameter*>(task_ptr);
-      task->Run();
-      break;
-    }
-    case common::kSkew: {
-      std::cout << "[Skew]" << std::endl;
-      auto task = reinterpret_cast<task::Skew*>(task_ptr);
-      task->Run();
-      break;
-    }
-    case common::kGraphAggregate: {
-      std::cout << "[GraphAggregate]" << std::endl;
-      auto task = reinterpret_cast<task::GraphAggregate*>(task_ptr);
-      task->Run();
-      break;
-    }
-    case common::kComputeFeatures: {
-      std::cout << "[ComputeFeatures]" << std::endl;
-      auto task = reinterpret_cast<task::ComputeFeaturesTask*>(task_ptr);
-      task->Run();
-      break;
-    }
-    case common::kLFTJSubIsoGpu: {
-      std::cout << "[LFTJ SubIso GPU Query]" << std::endl;
-      auto task = reinterpret_cast<task::LFTJSubIsoGpu*>(task_ptr);
-      task->Run();
-      break;
-    }
-    default:
-      break;
+void MatrixGraph::Run(TaskBase* task_ptr) {
+  if (task_ptr == nullptr) {
+    throw util::Error(util::ErrorCode::kInvalidArgument,
+                      "MatrixGraph::Run: null task");
   }
-
+  auto start_time = std::chrono::system_clock::now();
+  task_ptr->Run();
   auto end_time = std::chrono::system_clock::now();
-
   std::cout << "MatrixGraph GPU Run elapsed: "
-            << std::chrono::duration_cast<std::chrono::microseconds>(end_time -
-                                                                     start_time)
+            << std::chrono::duration_cast<std::chrono::microseconds>(
+                   end_time - start_time)
                        .count() /
-                   (double)CLOCKS_PER_SEC
-            << std::endl;
+                   1e6
+            << " s" << std::endl;
 }
 
-void MatrixGraph::Run(TaskType task_type, CPUTaskBase* task_ptr) {
-  // PrintDeviceInfo();
-  auto start_time = std::chrono::system_clock::now();
-
-  auto prepare_end_time = std::chrono::system_clock::now();
-  switch (task_type) {
-    case common::kSubIsoCPU: {
-      std::cout << "[SubIso Query]" << std::endl;
-      auto task = reinterpret_cast<task::SubIsoCPU*>(task_ptr);
-      task->Run();
-      break;
-    }
-    case common::kLFTJSubIso: {
-      std::cout << "[LFTJ SubIso Query]" << std::endl;
-      auto task = reinterpret_cast<task::LFTJSubIso*>(task_ptr);
-      task->Run();
-      break;
-    }
-    default:
-      break;
+void MatrixGraph::Run(CPUTaskBase* task_ptr) {
+  if (task_ptr == nullptr) {
+    throw util::Error(util::ErrorCode::kInvalidArgument,
+                      "MatrixGraph::Run: null task");
   }
-
+  auto start_time = std::chrono::system_clock::now();
+  task_ptr->Run();
   auto end_time = std::chrono::system_clock::now();
-
-  std::cout << "MatrixGraph CPU Run() elapsed: "
-            << std::chrono::duration_cast<std::chrono::microseconds>(end_time -
-                                                                     start_time)
+  std::cout << "MatrixGraph CPU Run elapsed: "
+            << std::chrono::duration_cast<std::chrono::microseconds>(
+                   end_time - start_time)
                        .count() /
-                   (double)CLOCKS_PER_SEC
-            << std::endl;
+                   1e6
+            << " s" << std::endl;
+}
+
+// Deprecated shims: apps still pass TaskType and -scheduler. The type was
+// only ever a manual substitute for virtual dispatch; M4 migrates the apps
+// to Run(task) plus -backend and removes these overloads and TaskType.
+void MatrixGraph::Run(TaskType /*task_type*/, TaskBase* task_ptr) {
+  Run(task_ptr);
+}
+
+void MatrixGraph::Run(TaskType /*task_type*/, CPUTaskBase* task_ptr) {
+  Run(task_ptr);
 }
 
 void MatrixGraph::PrintDeviceInfo() const {

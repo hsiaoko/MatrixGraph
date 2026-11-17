@@ -16,6 +16,10 @@ class TaskBase {
  public:
   virtual ~TaskBase() { DestroyStreams(); }
 
+  // Job entry point. Every job task overrides it; service-style tasks that
+  // expose typed query APIs keep the empty default rather than faking a Run.
+  virtual void Run() {}
+
  protected:
   // (Re)create n_streams_ CUDA streams. Safe to call after changing
   // n_streams_; destroys and recreates existing streams when the count differs.

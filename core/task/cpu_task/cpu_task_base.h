@@ -1,19 +1,19 @@
 #ifndef MATRIXGRAPH_CORE_TASK_CPU_TASK_CPU_TASK_BASE_H_
 #define MATRIXGRAPH_CORE_TASK_CPU_TASK_CPU_TASK_BASE_H_
 
-#include <future>
-#include <mutex>
-#include <thread>
-#include <unordered_map>
-
 namespace sics {
 namespace matrixgraph {
 namespace core {
 namespace task {
 
+// Base for CPU tasks. The contract is deliberately minimal: one virtual
+// entry point so the facade can run any task without a type switch. Resource
+// ownership for CPU work (TBB arena) moves in with the engine layer.
 class CPUTaskBase {
  public:
-  ~CPUTaskBase() = default;
+  virtual ~CPUTaskBase() = default;
+
+  virtual void Run() {}
 };
 
 }  // namespace task
