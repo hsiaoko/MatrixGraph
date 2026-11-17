@@ -3,6 +3,7 @@
 
 #include "core/common/types.h"
 #include "core/components/scheduler/scheduler.h"
+#include "core/engine/engine.h"
 #include "core/task/cpu_task/cpu_task_base.h"
 #include "core/task/gpu_task/task_base.cuh"
 #include "core/util/cuda_check.cuh"
@@ -38,6 +39,12 @@ class MatrixGraph {
   void Run(TaskType task_type, CPUTaskBase* task_ptr);
 
   void PrintDeviceInfo() const;
+
+ private:
+  // One engine per kind; each owns its backend's execution resources and
+  // outlives every task it runs.
+  std::unique_ptr<engine::Engine> gpu_engine_;
+  std::unique_ptr<engine::Engine> cpu_engine_;
 };
 
 }  // namespace core

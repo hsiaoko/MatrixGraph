@@ -39,6 +39,7 @@ set(CORE_SOURCE_DIRS
         "${CMAKE_CURRENT_SOURCE_DIR}/components"
         "${CMAKE_CURRENT_SOURCE_DIR}/io"
         "${CMAKE_CURRENT_SOURCE_DIR}/data_structures"
+        "${CMAKE_CURRENT_SOURCE_DIR}/engine"
         "${CMAKE_CURRENT_SOURCE_DIR}/util"
         "${CMAKE_CURRENT_SOURCE_DIR}/task"
         "${CMAKE_CURRENT_SOURCE_DIR}/task/cpu_task"

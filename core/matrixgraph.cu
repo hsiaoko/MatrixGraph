@@ -9,9 +9,11 @@ namespace matrixgraph {
 namespace core {
 
 MatrixGraph::MatrixGraph(SchedulerType /*scheduler_type*/) {
-  // The facade used to build a CHBLScheduler here and never consult it; the
-  // parameter survives only because apps still pass -scheduler. The engine
-  // redesign (M3) replaces this constructor with MakeEngine(Backend).
+  // The scheduler parameter predates the engine layer; apps still pass
+  // -scheduler and M4 migrates them to -backend. Each facade owns one engine
+  // per kind so Run enters the right execution context.
+  gpu_engine_ = engine::MakeEngine(engine::Backend::kGpu);
+  cpu_engine_ = engine::MakeEngine(engine::Backend::kCpuParallel);
 }
 
 void MatrixGraph::Run(TaskBase* task_ptr) {
@@ -20,7 +22,7 @@ void MatrixGraph::Run(TaskBase* task_ptr) {
                       "MatrixGraph::Run: null task");
   }
   auto start_time = std::chrono::system_clock::now();
-  task_ptr->Run();
+  gpu_engine_->Run(*task_ptr);
   auto end_time = std::chrono::system_clock::now();
   std::cout << "MatrixGraph GPU Run elapsed: "
             << std::chrono::duration_cast<std::chrono::microseconds>(
@@ -36,7 +38,7 @@ void MatrixGraph::Run(CPUTaskBase* task_ptr) {
                       "MatrixGraph::Run: null task");
   }
   auto start_time = std::chrono::system_clock::now();
-  task_ptr->Run();
+  cpu_engine_->Run(*task_ptr);
   auto end_time = std::chrono::system_clock::now();
   std::cout << "MatrixGraph CPU Run elapsed: "
             << std::chrono::duration_cast<std::chrono::microseconds>(
