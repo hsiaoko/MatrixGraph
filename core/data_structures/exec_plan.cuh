@@ -27,7 +27,7 @@ using sics::matrixgraph::core::common::kMaxVertexID;
 class ExecutionPlan {
  private:
   using BitmapOwnership = sics::matrixgraph::core::util::BitmapOwnership;
-  using BitmapNoOwnerShip = sics::matrixgraph::core::util::BitmapNoOwnerShip;
+  using BitmapNoOwnership = sics::matrixgraph::core::util::BitmapNoOwnership;
   using VertexID = sics::matrixgraph::core::common::VertexID;
   using EdgeIndex = sics::matrixgraph::core::common::EdgeIndex;
   using VertexLabel = sics::matrixgraph::core::common::VertexLabel;
@@ -49,7 +49,7 @@ class ExecutionPlan {
     delete[] exec_path_in_edges_;
   };
 
-  void DFSTraverse(VertexID vid, BitmapNoOwnerShip& visited_src,
+  void DFSTraverse(VertexID vid, BitmapNoOwnership& visited_src,
                    const ImmutableCSR& g, std::vector<VertexID>& output,
                    std::vector<VertexID>& output_in_edges, VertexID depth,
                    VertexID& max_depth,
@@ -141,7 +141,7 @@ class ExecutionPlan {
     }
 
     uint64_t* visited_data = new uint64_t[WORD_OFFSET(p.get_max_vid())]();
-    BitmapNoOwnerShip visited(p.get_max_vid(), visited_data);
+    BitmapNoOwnership visited(p.get_max_vid(), visited_data);
     visited.Clear();
 
     std::vector<VertexID> output;

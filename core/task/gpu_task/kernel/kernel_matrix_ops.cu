@@ -27,7 +27,7 @@ using sics::matrixgraph::core::common::kBlockDim;
 using sics::matrixgraph::core::common::kGridDim;
 using sics::matrixgraph::core::common::kMaxVertexID;
 using sics::matrixgraph::core::task::kernel::KernelBitmapNoOwnership;
-using BitmapNoOwnerShip = sics::matrixgraph::core::util::BitmapNoOwnerShip;
+using BitmapNoOwnership = sics::matrixgraph::core::util::BitmapNoOwnership;
 
 template <typename T>
 struct ParametersMatrix {

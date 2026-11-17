@@ -69,7 +69,7 @@ using DeviceOwnedBufferUint64 =
 using WOJSubIsoKernelWrapper =
     sics::matrixgraph::core::task::kernel::WOJSubIsoKernelWrapper;
 using GPUBitmap = sics::matrixgraph::core::util::GPUBitmap;
-using BitmapNoOwnerShip = sics::matrixgraph::core::util::BitmapNoOwnerShip;
+using BitmapNoOwnership = sics::matrixgraph::core::util::BitmapNoOwnership;
 using sics::matrixgraph::core::util::atomic::WriteAdd;
 using TiledMatrixMetadata =
     sics::matrixgraph::core::data_structures::TiledMatrixMetadata;

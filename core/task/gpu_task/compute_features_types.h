@@ -220,9 +220,9 @@ struct ComputeFeaturesAttributeColumn {
 };
 
 /* Shorter aliases for internal C++ code. */
-typedef struct MatrixGraphPlanNode MGPlanNode;
-typedef struct MatrixGraphFeatureValue MGFeatureValue;
-typedef struct MatrixGraphCondNode MGCondNode;
+using MGPlanNode = MatrixGraphPlanNode;
+using MGFeatureValue = MatrixGraphFeatureValue;
+using MGCondNode = MatrixGraphCondNode;
 
 #ifdef __cplusplus
 }

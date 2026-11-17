@@ -85,7 +85,7 @@ void Edges::Init(EdgeIndex n_edges, VertexID* edges_buf,
   BitmapOwnership bm(n_edges);
   edges_ptr_ = new Edge[n_edges]();
   VertexID max_vid = 0;
-  VertexID min_vid = MAX_VERTEX_ID;
+  VertexID min_vid = sics::matrixgraph::core::common::kMaxVertexID;
 
   // Get Min Max vertex ID.
   ParallelFor(worker.begin(), worker.end(),

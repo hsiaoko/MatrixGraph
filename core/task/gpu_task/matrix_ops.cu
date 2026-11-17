@@ -42,7 +42,7 @@ using BufferUint32 = sics::matrixgraph::core::data_structures::Buffer<uint32_t>;
 using DeviceOwnedBufferUint64 =
     sics::matrixgraph::core::data_structures::DeviceOwnedBuffer<uint64_t>;
 using BitmapOwnership = sics::matrixgraph::core::util::BitmapOwnership;
-using BitmapNoOwnerShip = sics::matrixgraph::core::util::BitmapNoOwnerShip;
+using BitmapNoOwnership = sics::matrixgraph::core::util::BitmapNoOwnership;
 using sics::matrixgraph::core::util::atomic::WriteAdd;
 using Edges = sics::matrixgraph::core::data_structures::Edges;
 using sics::matrixgraph::core::util::atomic::WriteAdd;
@@ -54,8 +54,8 @@ using EdgelistMetadata =
     sics::matrixgraph::core::data_structures::EdgelistMetadata;
 using GridGraphMetadata =
     sics::matrixgraph::core::data_structures::GridGraphMetadata;
-using sics::matrixgraph::core::common::kDefalutNumEdgesPerBlock;
-using sics::matrixgraph::core::common::kDefalutNumEdgesPerTile;
+using sics::matrixgraph::core::common::kDefaultNumEdgesPerBlock;
+using sics::matrixgraph::core::common::kDefaultNumEdgesPerTile;
 using sics::matrixgraph::core::common::kMaxNumEdges;
 using sics::matrixgraph::core::common::kMaxNumEdgesPerBlock;
 

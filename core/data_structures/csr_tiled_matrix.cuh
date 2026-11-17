@@ -22,7 +22,7 @@ class CSRTiledMatrix {
   using VertexID = sics::matrixgraph::core::common::VertexID;
   using Bitmap = sics::matrixgraph::core::util::Bitmap;
   using GPUBitmap = sics::matrixgraph::core::util::GPUBitmap;
-  using BitmapNoOwnerShip = sics::matrixgraph::core::util::BitmapNoOwnerShip;
+  using BitmapNoOwnership = sics::matrixgraph::core::util::BitmapNoOwnership;
 
  public:
   CSRTiledMatrix() = default;

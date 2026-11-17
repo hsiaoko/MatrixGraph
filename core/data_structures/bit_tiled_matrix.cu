@@ -16,7 +16,7 @@ namespace core {
 namespace data_structures {
 
 using VertexID = sics::matrixgraph::core::common::VertexID;
-using BitmapNoOwnerShip = sics::matrixgraph::core::util::BitmapNoOwnerShip;
+using BitmapNoOwnership = sics::matrixgraph::core::util::BitmapNoOwnership;
 
 #ifndef WORD_OFFSET
 #define WORD_OFFSET(i) ((i) >> 6)

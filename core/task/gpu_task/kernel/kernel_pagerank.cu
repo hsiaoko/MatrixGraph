@@ -22,7 +22,7 @@ using sics::matrixgraph::core::common::kBlockDim;
 using sics::matrixgraph::core::common::kGridDim;
 using KernelBitmapNoOwnership =
     sics::matrixgraph::core::task::kernel::KernelBitmapNoOwnership;
-using BitmapNoOwnerShip = sics::matrixgraph::core::util::BitmapNoOwnerShip;
+using BitmapNoOwnership = sics::matrixgraph::core::util::BitmapNoOwnership;
 
 struct ParametersPageRank {
   VertexID n_vertices_g;
@@ -169,7 +169,7 @@ void PageRankKernelWrapper::PageRank(
   CUDA_CHECK(cudaMallocManaged(
       &visited_bitmap_data,
       sizeof(uint64_t) * (KERNEL_WORD_OFFSET(n_vertices_g) + 1)));
-  BitmapNoOwnerShip visited(n_vertices_g, visited_bitmap_data);
+  BitmapNoOwnership visited(n_vertices_g, visited_bitmap_data);
   visited.Clear();
 
   // Allocate device memory for next_page_ranks and max_diff

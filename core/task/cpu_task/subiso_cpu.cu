@@ -72,7 +72,7 @@ using sics::matrixgraph::core::common::kSubIsoMaxMsPerWeft;
 using sics::matrixgraph::core::common::kSubIsoMaxValidateWefts;
 using sics::matrixgraph::core::common::kSubIsoProgressPrintInterval;
 using sics::matrixgraph::core::common::kSubIsoValidateMatchingTimeoutSec;
-using BitmapNoOwnerShip = sics::matrixgraph::core::util::BitmapNoOwnerShip;
+using BitmapNoOwnership = sics::matrixgraph::core::util::BitmapNoOwnership;
 using sics::matrixgraph::core::common::kDefaultHeapCapacity;
 
 static int64_t filter_count = 0;

@@ -8,15 +8,15 @@ namespace matrixgraph {
 namespace core {
 namespace util {
 
-class BitmapNoOwnerShip : public Bitmap {
+class BitmapNoOwnership : public Bitmap {
  public:
-  BitmapNoOwnerShip() = default;
+  BitmapNoOwnership() = default;
 
-  BitmapNoOwnerShip(size_t size) { size_ = size; }
+  BitmapNoOwnership(size_t size) { size_ = size; }
 
-  BitmapNoOwnerShip(size_t size, uint64_t* data) { Init(size, data); }
+  BitmapNoOwnership(size_t size, uint64_t* data) { Init(size, data); }
 
-  ~BitmapNoOwnerShip() {
+  ~BitmapNoOwnership() {
     data_ = nullptr;
     size_ = 0;
   };

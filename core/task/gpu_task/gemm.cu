@@ -56,7 +56,7 @@ using MatrixOperationsKernelWrapper =
     sics::matrixgraph::core::task::kernel::MatrixOperationsKernelWrapper;
 using BitmapOwnership = sics::matrixgraph::core::util::BitmapOwnership;
 using GPUBitmap = sics::matrixgraph::core::util::GPUBitmap;
-using BitmapNoOwnerShip = sics::matrixgraph::core::util::BitmapNoOwnerShip;
+using BitmapNoOwnership = sics::matrixgraph::core::util::BitmapNoOwnership;
 using sics::matrixgraph::core::util::atomic::WriteAdd;
 using TiledMatrixMetadata =
     sics::matrixgraph::core::data_structures::TiledMatrixMetadata;
@@ -71,8 +71,8 @@ using EdgelistMetadata =
     sics::matrixgraph::core::data_structures::EdgelistMetadata;
 using GridGraphMetadata =
     sics::matrixgraph::core::data_structures::GridGraphMetadata;
-using sics::matrixgraph::core::common::kDefalutNumEdgesPerBlock;
-using sics::matrixgraph::core::common::kDefalutNumEdgesPerTile;
+using sics::matrixgraph::core::common::kDefaultNumEdgesPerBlock;
+using sics::matrixgraph::core::common::kDefaultNumEdgesPerTile;
 using sics::matrixgraph::core::common::kMaxNumEdges;
 using sics::matrixgraph::core::common::kMaxNumEdgesPerBlock;
 
@@ -81,16 +81,16 @@ __host__ void GEMM::LoadData() {
   std::cout << "[GEMM] LoadData()" << std::endl;
   GridCSRTiledMatrixIO grid_csr_tiled_matrix_io;
 
-  grid_csr_tiled_matrix_io.Read(input_path_, &A_);
-  grid_csr_tiled_matrix_io.Read(input_path_transposed_, &B_);
+  grid_csr_tiled_matrix_io.Read(input_path_, &matrix_a_);
+  grid_csr_tiled_matrix_io.Read(input_path_transposed_, &matrix_b_);
 
   // std::cout << "######################## A #######################"
   //           << std::endl;
-  // A_->Print(999);
+  // matrix_a_->Print(999);
   // std::cout << "######################## B #######################"
   //           << std::endl;
-  // B_->Print(999);
-  //  C_ = new GridCSRTiledMatrix(A_->get_metadata());
+  // matrix_b_->Print(999);
+  //  matrix_c_ = new GridCSRTiledMatrix(matrix_a_->get_metadata());
 }
 
 __host__ void GEMM::InitC() {
@@ -100,7 +100,7 @@ __host__ void GEMM::InitC() {
   std::iota(worker.begin(), worker.end(), 0);
   auto step = worker.size();
 
-  auto block_a = A_->GetTiledMatrixPtrByIdx(0);
+  auto block_a = matrix_a_->GetTiledMatrixPtrByIdx(0);
   VertexID n_strips = block_a->GetMetadata().n_strips;
   VertexID tile_size = block_a->GetMetadata().tile_size;
 
@@ -108,11 +108,11 @@ __host__ void GEMM::InitC() {
             << " Start - n_strips: " << n_strips << ", tile_size: " << tile_size
             << std::endl;
 
-  VertexID M = A_->get_metadata().n_chunks;
-  VertexID K = A_->get_metadata().n_chunks;
-  VertexID N = B_->get_metadata().n_chunks;
+  VertexID M = matrix_a_->get_metadata().n_chunks;
+  VertexID K = matrix_a_->get_metadata().n_chunks;
+  VertexID N = matrix_b_->get_metadata().n_chunks;
 
-  VertexID n_chunks = A_->get_metadata().n_chunks;
+  VertexID n_chunks = matrix_a_->get_metadata().n_chunks;
 
   std::vector<BufferUint64> buffers_matrix_a;
   std::vector<BufferUint64> buffers_matrix_b;
@@ -180,8 +180,8 @@ __host__ void GEMM::InitC() {
                 for (VertexID k = w; k < K; k += step) {
                   for (VertexID i = 0; i < M; i++) {
                     for (VertexID j = 0; j < N; j++) {
-                      auto block_a = A_->GetTiledMatrixPtrByIdx(i * K + k);
-                      auto block_b = B_->GetTiledMatrixPtrByIdx(j * K + k);
+                      auto block_a = matrix_a_->GetTiledMatrixPtrByIdx(i * K + k);
+                      auto block_b = matrix_b_->GetTiledMatrixPtrByIdx(j * K + k);
 
                       if (block_a->GetMetadata().n_nz_tile == 0) continue;
                       if (block_b->GetMetadata().n_nz_tile == 0) continue;
@@ -312,7 +312,7 @@ __host__ void GEMM::InitC() {
             cudaSetDevice(common::hash_function(i * N + j) % 4);
             cudaStream_t& p_stream = p_streams_vec[i * N + j];
 
-            auto* csr_tiled_matrix_ptr = C_->GetTiledMatrixPtrByIdx(i * N + j);
+            auto* csr_tiled_matrix_ptr = matrix_c_->GetTiledMatrixPtrByIdx(i * N + j);
 
             TiledMatrixMetadata metadata{.n_strips = n_strips,
                                          .n_nz_tile = n_nz_tile,
@@ -346,7 +346,7 @@ __host__ void GEMM::InitC() {
 
             cudaSetDevice(common::hash_function(i * N + j) % 4);
             cudaStream_t& p_stream = p_streams_vec[i * N + j];
-            auto* bit_tiled_matrix_ptr = C_->GetTiledMatrixPtrByIdx(i * N + j);
+            auto* bit_tiled_matrix_ptr = matrix_c_->GetTiledMatrixPtrByIdx(i * N + j);
 
             tile_col_idx[i * N + j].data =
                 bit_tiled_matrix_ptr->GetTileColIdxPtr();
@@ -436,7 +436,7 @@ __host__ void GEMM::InitC() {
             VertexID n_nz_tile = *buffers_matrix_c_count[i * N + j].GetPtr();
             if (n_nz_tile == 0) continue;
 
-            auto* csr_tiled_matrix_ptr = C_->GetTiledMatrixPtrByIdx(i * N + j);
+            auto* csr_tiled_matrix_ptr = matrix_c_->GetTiledMatrixPtrByIdx(i * N + j);
             auto tile_offset_row = csr_tiled_matrix_ptr->GetTileOffsetRowPtr();
 
             for (VertexID t = 0;
@@ -758,7 +758,7 @@ __host__ Edges* GEMM::Walks(const GridCSRTiledMatrix& A,
   ParallelFor(worker.begin(), worker.end(), walk_fn);
 
   VertexID* output_edges_buf =
-      new VertexID[kDefalutNumEdgesPerTile * 2 * M * N]();
+      new VertexID[kDefaultNumEdgesPerTile * 2 * M * N]();
   VertexID output_offset = 0;
 
   cudaDeviceSynchronize();
@@ -791,7 +791,7 @@ __host__ Edges* GEMM::Walks(const GridCSRTiledMatrix& A,
   cudaDeviceSynchronize();
 
   std::cout << "n_edges of new graph: " << output_offset << "/"
-            << kDefalutNumEdgesPerTile * 2 * M * N << std::endl;
+            << kDefaultNumEdgesPerTile * 2 * M * N << std::endl;
   Edges* output_edges = new Edges(output_offset, output_edges_buf);
 
   delete[] output_edges_buf;
@@ -928,14 +928,14 @@ __host__ GridCSRTiledMatrix* GEMM::ConvertGridEdgelist2GridTiledMatrix(
 __host__ void GEMM::Run() {
   auto start_time_0 = std::chrono::system_clock::now();
 
-  auto block_a = A_->GetTiledMatrixPtrByIdx(0);
+  auto block_a = matrix_a_->GetTiledMatrixPtrByIdx(0);
   VertexID tile_size = block_a->GetMetadata().tile_size;
   VertexID n_strips = block_a->GetMetadata().n_strips;
-  VertexID M = A_->get_metadata().n_chunks;
-  VertexID K = A_->get_metadata().n_chunks;
-  VertexID N = B_->get_metadata().n_chunks;
+  VertexID M = matrix_a_->get_metadata().n_chunks;
+  VertexID K = matrix_a_->get_metadata().n_chunks;
+  VertexID N = matrix_b_->get_metadata().n_chunks;
 
-  auto* edges = Walks(*A_, *B_, tile_size, n_strips);
+  auto* edges = Walks(*matrix_a_, *matrix_b_, tile_size, n_strips);
   auto start_time_1 = std::chrono::system_clock::now();
 
   std::cout << "[GEMM] Run Step1 Walks() elapsed: "
@@ -960,16 +960,16 @@ __host__ void GEMM::Run() {
       .n_chunks = M,
       .n_vertices = edges->get_metadata().num_vertices,
       .n_edges = edges->get_metadata().num_edges,
-      .max_vid = A_->get_metadata().max_vid};
+      .max_vid = matrix_a_->get_metadata().max_vid};
 
-  C_ = ConvertGridEdgelist2GridTiledMatrix(*edges_blocks, grid_graph_metadata,
+  matrix_c_ = ConvertGridEdgelist2GridTiledMatrix(*edges_blocks, grid_graph_metadata,
                                            tile_size);
 
   auto start_time_3 = std::chrono::system_clock::now();
 
   GridCSRTiledMatrixIO graph_csr_tiled_matrix_io;
 
-  graph_csr_tiled_matrix_io.Write(output_path_, *C_);
+  graph_csr_tiled_matrix_io.Write(output_path_, *matrix_c_);
 
   std::cout << "[GEMM] Run Step3 ConvertGridEdgelist2GridTiledMatrix() elapsed:"
             << std::chrono::duration_cast<std::chrono::microseconds>(

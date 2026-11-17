@@ -24,7 +24,7 @@ using sics::matrixgraph::core::common::kBlockDim;
 using sics::matrixgraph::core::common::kGridDim;
 using sics::matrixgraph::core::common::kMaxVertexID;
 using sics::matrixgraph::core::task::kernel::KernelBitmapNoOwnership;
-using BitmapNoOwnerShip = sics::matrixgraph::core::util::BitmapNoOwnerShip;
+using BitmapNoOwnership = sics::matrixgraph::core::util::BitmapNoOwnership;
 
 struct ParametersBFS {
   VertexID n_vertices_g;
@@ -134,9 +134,9 @@ void BFSKernelWrapper::BFS(
   *in_active_vertices_offset = 0;  // Will be set to 1 in InitKernel
   *out_active_vertices_offset = 0;
 
-  BitmapNoOwnerShip out_visited(n_vertices_g, out_visited_bitmap_data);
-  BitmapNoOwnerShip in_visited(n_vertices_g, in_visited_bitmap_data);
-  BitmapNoOwnerShip visited(n_vertices_g, visited_bitmap_data);
+  BitmapNoOwnership out_visited(n_vertices_g, out_visited_bitmap_data);
+  BitmapNoOwnership in_visited(n_vertices_g, in_visited_bitmap_data);
+  BitmapNoOwnership visited(n_vertices_g, visited_bitmap_data);
 
   ParametersBFS params{.n_vertices_g = n_vertices_g,
                        .n_edges_g = n_edges_g,

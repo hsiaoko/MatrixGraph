@@ -15,8 +15,8 @@ namespace kernel {
 
 using sics::matrixgraph::core::common::EdgeIndex;
 using sics::matrixgraph::core::common::GraphID;
-using sics::matrixgraph::core::common::kDefalutNumEdgesPerBlock;
-using sics::matrixgraph::core::common::kDefalutOutputBufferSize;
+using sics::matrixgraph::core::common::kDefaultNumEdgesPerBlock;
+using sics::matrixgraph::core::common::kDefaultOutputBufferSize;
 using sics::matrixgraph::core::common::kMaxNumEdges;
 using sics::matrixgraph::core::common::kMaxVertexID;
 using sics::matrixgraph::core::common::VertexID;
@@ -536,9 +536,9 @@ static __global__ void walk_kernel(const ParametersWalk params) {
       VertexID global_src = globalid_a[v_idx_a];
 
       EdgeIndex local_offset = 0;
-      EdgeIndex max_local_offset = kDefalutOutputBufferSize;
+      EdgeIndex max_local_offset = kDefaultOutputBufferSize;
       //    VertexID *local_buf = new VertexID[max_local_offset * 2]();
-      VertexID local_buf[kDefalutOutputBufferSize * 2];
+      VertexID local_buf[kDefaultOutputBufferSize * 2];
 
       kbm.Clear();
       EdgeIndex* out_offset_base = out_offset_a;
@@ -599,7 +599,7 @@ static __global__ void walk_kernel(const ParametersWalk params) {
             //   return;
             // }
 
-            if (local_offset > kDefalutOutputBufferSize) {
+            if (local_offset > kDefaultOutputBufferSize) {
               EdgeIndex global_offset =
                   atomicAdd(params.output_offset, local_offset);
               // memcpy(params.edgelist_c + 2 * global_offset, local_buf,
