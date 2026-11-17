@@ -62,8 +62,8 @@ using sics::matrixgraph::core::common::kMaxNumEdgesPerBlock;
 
 __host__ void MatrixOps::Run() {}
 
-void MatrixOps::cuBLASMatmult(float* A, float* B, float* C, int m, int k, int n,
-                              bool transa_tag, bool transb_tag) {
+void MatrixOps::cuBLASMatmult(float* A, float* B, float* C, int m, int /*k*/,
+                              int n, bool transa_tag, bool transb_tag) {
   cublasHandle_t handle;
   cublasCreate(&handle);
   cublasOperation_t transa = transa_tag ? CUBLAS_OP_N : CUBLAS_OP_T;

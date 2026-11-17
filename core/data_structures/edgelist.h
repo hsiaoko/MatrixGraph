@@ -137,20 +137,20 @@ class Edges {
   }
 
   Edges(const EdgelistMetadata& edgelist_metadata, Edge* edges_ptr)
-      : edgelist_metadata_(edgelist_metadata), edges_ptr_(edges_ptr) {}
+      : edges_ptr_(edges_ptr), edgelist_metadata_(edgelist_metadata) {}
 
   Edges(const EdgelistMetadata& edgelist_metadata, Edge* edges_ptr,
         VertexID* localid_to_globalid)
-      : edgelist_metadata_(edgelist_metadata),
+      : localid_to_globalid_(localid_to_globalid),
         edges_ptr_(edges_ptr),
-        localid_to_globalid_(localid_to_globalid) {}
+        edgelist_metadata_(edgelist_metadata) {}
 
   Edges(const EdgelistMetadata& edgelist_metadata, Edge* edges_ptr,
         VertexID* localid_to_globalid, VertexLabel* vertex_label_base_pointer)
-      : edgelist_metadata_(edgelist_metadata),
+      : localid_to_globalid_(localid_to_globalid),
+        vertex_label_base_pointer_(vertex_label_base_pointer),
         edges_ptr_(edges_ptr),
-        localid_to_globalid_(localid_to_globalid),
-        vertex_label_base_pointer_(vertex_label_base_pointer) {}
+        edgelist_metadata_(edgelist_metadata) {}
 
   Edges(EdgeIndex n_edges, VertexID* edges_buf,
         VertexID* localid2globalid = nullptr);

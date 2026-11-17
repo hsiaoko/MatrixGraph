@@ -240,7 +240,7 @@ static inline uint64_t PatternVertexNeighborLabelMask(VertexID u_idx,
 
 static inline bool BloomLabelSetFilter(VertexID u_idx, VertexID v_idx,
                                        const ImmutableCSR& p,
-                                       const ImmutableCSR& g) {
+                                       const ImmutableCSR& /*g*/) {
   uint64_t u_mask = PatternVertexNeighborLabelMask(u_idx, p);
   return (g_bloom_signature[v_idx] & u_mask) == u_mask;
 }
@@ -419,8 +419,8 @@ static inline bool LabelDegreeFilter(VertexID u_idx, VertexID v_idx,
 
 
 static bool NeighborLabelCounterFilter(VertexID u_idx, VertexID v_idx,
-                                       const ImmutableCSR& p,
-                                       const ImmutableCSR& g) {
+                                       const ImmutableCSR& /*p*/,
+                                       const ImmutableCSR& /*g*/) {
   return g_filter_cache[v_idx].out_neighbor_label_count >=
              p_filter_cache[u_idx].out_neighbor_label_count &&
          g_filter_cache[v_idx].in_neighbor_label_count >=
@@ -746,9 +746,9 @@ static bool LabelCountFilter(const ImmutableCSR& p, const ImmutableCSR& g) {
 }
 
 static bool MatrixFilter(
-    VertexID u_idx, VertexID v_idx, const ImmutableCSR& p,
+    VertexID u_idx, VertexID v_idx, const ImmutableCSR& /*p*/,
     const ImmutableCSR& g, const std::vector<Matrix>& m_vec,
-    const std::vector<UnifiedOwnedBufferFloat*>& m_unified_buffer_vec,
+    const std::vector<UnifiedOwnedBufferFloat*>& /*m_unified_buffer_vec*/,
     std::vector<uint64_t>* rejected_pairs = nullptr) {
   if (0 == m_vec.size()) return true;
   auto vec_len = m_vec[0].get_y();
@@ -794,8 +794,8 @@ static bool MatrixFilter(
 }
 
 static bool GPUMatrixFilter(
-    VertexID u_idx, VertexID v_idx, const ImmutableCSR& p,
-    const ImmutableCSR& g, const std::vector<Matrix>& m_vec,
+    VertexID u_idx, VertexID v_idx, const ImmutableCSR& /*p*/,
+    const ImmutableCSR& /*g*/, const std::vector<Matrix>& m_vec,
     const std::vector<UnifiedOwnedBufferFloat*>& m_unified_buffer_vec) {
   return true;
   BufferFloat buffer_m1;
@@ -906,12 +906,12 @@ static std::vector<WOJMatches*> WOJFilter(
   return woj_matches_vec;
 }
 
-static inline void Join(VertexID n_vertices_g,
+static inline void Join(VertexID /*n_vertices_g*/,
                         const WOJMatches& left_woj_matches,
                         const WOJMatches& right_woj_matches,
                         WOJMatches* output_woj_matches, VertexID left_hash_idx,
-                        VertexID right_hash_idx, BitmapOwnership& right_visited,
-                        BitmapOwnership& jump_visited) {
+                        VertexID right_hash_idx, BitmapOwnership& /*right_visited*/,
+                        BitmapOwnership& /*jump_visited*/) {
   auto parallelism = std::thread::hardware_concurrency();
   std::vector<size_t> worker(parallelism);
   std::iota(worker.begin(), worker.end(), 0);
@@ -1070,10 +1070,11 @@ static WOJMatches* WOJEnumerating(
 
 static bool IsFeasible(
     const ImmutableCSR& p, const ImmutableCSR& g,
-    const std::vector<Matrix>& m_vec,
-    const std::vector<UnifiedOwnedBufferFloat*>& m_unified_buffer_vec,
+    const std::vector<Matrix>& /*m_vec*/,
+    const std::vector<UnifiedOwnedBufferFloat*>& /*m_unified_buffer_vec*/,
     VertexID u_src, VertexID u_dst, VertexID v_src, VertexID v_dst,
-    LocalMatches* local_matches, std::vector<uint64_t>* rejected_pairs = nullptr) {
+    LocalMatches* /*local_matches*/,
+    std::vector<uint64_t>* rejected_pairs = nullptr) {
   if (u_src == kMaxVertexID && v_src == kMaxVertexID) {
     return true;
   }
@@ -1310,7 +1311,7 @@ static inline void Enumerating(
 }
 
 static bool ValidateWeft(const ImmutableCSR& p, const ImmutableCSR& g,
-                         const ExecutionPlan& exec_plan, Matches* matches,
+                         const ExecutionPlan& /*exec_plan*/, Matches* matches,
                          VertexID weft_id,
                          size_t max_nodes = kSubIsoMaxBacktrackNodes,
                          size_t max_ms_per_weft = kSubIsoMaxMsPerWeft,
@@ -1635,8 +1636,8 @@ static void ValidateMatching(const ImmutableCSR& p, const ImmutableCSR& g,
             << " wefts, invalidated " << invalid_count << "." << std::endl;
 }
 
-static void Checking(const ImmutableCSR& p, const ImmutableCSR& g,
-                     const ExecutionPlan& exec_plan, Matches* matches) {
+static void Checking(const ImmutableCSR& p, const ImmutableCSR& /*g*/,
+                     const ExecutionPlan& /*exec_plan*/, Matches* matches) {
   return;
   std::cout << "\tChecking ..." << std::endl;
   auto parallelism = std::thread::hardware_concurrency();

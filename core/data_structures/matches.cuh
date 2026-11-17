@@ -58,7 +58,7 @@ class Matches {
           VertexID max_n_weft = sics::matrixgraph::core::common::kMaxNumWeft,
           VertexID max_n_local_weft =
               sics::matrixgraph::core::common::kMaxNumLocalWeft,
-          VertexID g_n_vertices = 65536)
+          VertexID /*g_n_vertices*/ = 65536)
       : n_vertices_(n_vertices),
         max_n_weft_(max_n_weft),
         max_n_local_weft_(max_n_local_weft) {

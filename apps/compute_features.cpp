@@ -213,7 +213,7 @@ ComputeFeaturesAttributeColumn MakeColumn(const char* key,
  *
  * Phase 0/1/2 expressions are checked against hand-computed expected values.
  */
-int main(int argc, char** argv) {
+int main() {
   const std::string graph_path = "/tmp/matrixgraph_compute_features_app_ring";
   auto graph = BuildRingCSR(kNVertices);
   graph->Write(graph_path, 0);

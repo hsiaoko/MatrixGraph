@@ -78,7 +78,7 @@ static void ConvertEdgelistBin2CSRBin(const std::string& input_path,
 static void ConvertEdgelistCSV2CGGraphCSR(const std::string& input_path,
                                           const std::string& output_path,
                                           const std::string& sep,
-                                          unsigned label_range = 1) {
+                                          unsigned /*label_range*/ = 1) {
   if (!std::filesystem::exists(output_path))
     std::filesystem::create_directory(output_path);
 
