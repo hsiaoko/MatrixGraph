@@ -13,7 +13,7 @@ Executables are built as `<name>_exec` from `apps/<name>.{cpp,cu}` (see `apps/CM
 | `subiso_exec` | [SubIso (GPU)](subiso_gpu.md) | Subgraph isomorphism (GPU) |
 | `subiso_cpu_exec` | [SubIso (CPU)](subiso_cpu.md) | Subgraph isomorphism (CPU, VF3 / ML filter) |
 | `lftj_subiso_cpu_exec` | [LFTJ SubIso](lftj_subiso.md) | Subgraph isomorphism (CPU, LFTJ exact enumeration) |
-| `lftj_subiso_exec` | [LFTJ SubIso](lftj_subiso.md) | Same, through MatrixGraph scheduler |
+| `lftj_subiso_exec` | [LFTJ SubIso](lftj_subiso.md) | Same, through the shared `-backend` flag |
 | `gar_match_exec` | [GARMatch](gar_match.md) | Graph association rule matching (GPU, ArangoDB) |
 | `graph_aggregate_exec` | [GraphAggregate](graph_aggregate.md) | Per-vertex feature aggregation demo (GPU, synthetic) |
 | `execute_agg_prim_exec` | [ExecuteAggPrim](execute_agg_prim.md) | Standalone aggregation primitive harness (GPU, value lists) |

@@ -12,7 +12,7 @@
 | `-g` | **Required.** Data graph path (CSR dataset). |
 | `-e` | Data graph edge-list path (required by task constructor; see implementation for expected format). |
 | `-o` | **Required.** Output directory / path for results. |
-| `-scheduler` | `CHBL` (default), `EvenSplit`, or `RoundRobin`. |
+| `-backend` | `gpu` (default), or `cpu`, `cpu_serial`. |
 
 ## Environment variables
 

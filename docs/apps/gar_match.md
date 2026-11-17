@@ -16,7 +16,7 @@ GPU-accelerated Graph Association Rule (GAR) matching application. Queries graph
 |-----------|-------------|
 | `-config` | Path to GARMatch YAML config file (required) |
 | `-o` | Path for output results (required) |
-| `-scheduler` | Scheduler type: `CHBL`, `EvenSplit`, `RoundRobin` (default: `CHBL`) |
+| `-backend` | `gpu` (default), or `cpu`, `cpu_serial`. |
 | `-device` | CUDA device ID to use (default: 2) |
 
 ## Input Format
@@ -69,13 +69,13 @@ GAR match results written to the specified output path. The output contains:
 ./bin/gar_match_exec -config configs/gar_match.yaml -o results/gar_output.txt
 ```
 
-**With custom scheduler and device:**
+**With explicit backend and device:**
 
 ```bash
 ./bin/gar_match_exec \
   -config configs/gar_match.yaml \
   -o results/gar_output.txt \
-  -scheduler EvenSplit \
+  -backend gpu \
   -device 0
 ```
 

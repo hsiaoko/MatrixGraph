@@ -27,7 +27,7 @@ DFS over the matching order) to a CUDA kernel.
 
 | Binary | Description |
 |--------|-------------|
-| `lftj_subiso_exec` | CPU LFTJ through the MatrixGraph scheduler |
+| `lftj_subiso_exec` | CPU LFTJ through the shared engine |
 | `lftj_subiso_gpu_exec` | Single-GPU LFTJ counter through the MatrixGraph scheduler |
 
 The old stand-alone `lftj_subiso_cpu_exec` has been removed; its functionality

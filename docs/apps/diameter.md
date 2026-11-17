@@ -14,7 +14,7 @@
 | `-diameter_samples` | Number of random BFS sources (default **50**). **`0` = exact** (all vertices). |
 | `-diameter_seed` | RNG seed for sampling (default **42**). |
 | `-cpu_parallel` | Max oneTBB workers for the parallel loop over sources (**`0` = default / unlimited**). |
-| `-scheduler` | Passed through `MatrixGraph` like other apps (`CHBL` default). |
+| `-backend` | `cpu` (default), or `cpu_serial`, `gpu`. |
 
 ## Example
 

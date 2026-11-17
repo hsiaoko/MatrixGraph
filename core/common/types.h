@@ -41,24 +41,6 @@ enum StoreStrategy {
   kUndefinedStrategy
 };
 
-// Enum defining different GPU task types
-enum TaskType {
-  kGEMM,  // Default task type
-  kSubIso,
-  kGARMatch,
-  kSubIsoCPU,
-  kLFTJSubIso,
-  kWCC,
-  kBFS,
-  kDiameter,
-  kSkew,
-  kPageRank,
-  kGraphAggregate,
-  kComputeFeatures,
-  kLFTJSubIsoGpu,
-  // Other types.
-};
-
 }  // namespace common
 }  // namespace core
 }  // namespace matrixgraph

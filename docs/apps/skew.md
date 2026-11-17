@@ -21,7 +21,7 @@ CPU-only: parallel loop over BFS sources uses **`std::execution::par`** (oneTBB-
 | `-skew_samples` | Random BFS sources for \(\hat{d}\) (default **50**). **`0` = exact** \(\hat{d}\). |
 | `-skew_seed` | RNG seed (default **42**). |
 | `-cpu_parallel` | Max oneTBB workers for the parallel loop over sources (**`0` = default / unlimited**). |
-| `-scheduler` | `CHBL` (default), `EvenSplit`, or `RoundRobin`. |
+| `-backend` | `cpu` (default), or `cpu_serial`, `gpu`. |
 
 ## Example
 

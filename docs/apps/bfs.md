@@ -10,7 +10,7 @@ GPU **breadth-first search** from a single source on a CSR graph (`core/task/gpu
 |------|-------------|
 | `-g` | **Required.** Input graph directory (CSR). |
 | `-src` | Source vertex **local ID** (default `0`). |
-| `-scheduler` | `CHBL` (default), `EvenSplit`, or `RoundRobin`. |
+| `-backend` | `gpu` (default), or `cpu`, `cpu_serial`. |
 
 ## Example
 

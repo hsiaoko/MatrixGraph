@@ -12,7 +12,7 @@ GPU workload built around **grid / tiled CSR matrices** (`core/task/gpu_task/gem
 | `-it` | Input directory for the **transposed** graph layout. |
 | `-o` | Output path. |
 | `-count` | Integer repeat / count parameter (default `1`). |
-| `-scheduler` | `CHBL` (default), `EvenSplit`, or `RoundRobin`. |
+| `-backend` | `gpu` (default), or `cpu`, `cpu_serial`. |
 
 ## Typical workflow
 
