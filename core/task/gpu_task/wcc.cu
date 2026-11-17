@@ -136,14 +136,9 @@ __host__ void WCC::HashMin(const ImmutableCSR& g) {
        {reinterpret_cast<void*>(unified_v_label_g.GetPtr()),
         unified_v_label_g.GetSize()}});
 
-  cudaStream_t stream;
-  CUDA_CHECK(cudaStreamCreate(&stream));
-
-  WCCKernelWrapper::WCC(stream, g.get_num_vertices(),
+  WCCKernelWrapper::WCC(PrimaryStream(), g.get_num_vertices(),
                         g.get_num_outgoing_edges(), unified_data_g,
                         unified_v_label_g);
-
-  CUDA_CHECK(cudaStreamDestroy(stream));
 }
 
 __host__ void WCC::Run() {

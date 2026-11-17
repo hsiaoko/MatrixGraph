@@ -92,14 +92,9 @@ __host__ void BFS::ExecuteBFS(const ImmutableCSR& g, VertexID src) {
        {reinterpret_cast<void*>(unified_v_label_g.GetPtr()),
         unified_v_label_g.GetSize()}});
 
-  cudaStream_t stream;
-  CUDA_CHECK(cudaStreamCreate(&stream));
-
-  BFSKernelWrapper::BFS(stream, g.get_num_vertices(),
+  BFSKernelWrapper::BFS(PrimaryStream(), g.get_num_vertices(),
                         g.get_num_outgoing_edges(), src, unified_data_g,
                         unified_v_label_g);
-
-  CUDA_CHECK(cudaStreamDestroy(stream));
 }
 
 __host__ void BFS::Run() {

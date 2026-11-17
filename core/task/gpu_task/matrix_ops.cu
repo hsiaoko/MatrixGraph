@@ -77,18 +77,15 @@ void MatrixOps::cuBLASMatmult(float* A, float* B, float* C, int m, int k, int n,
 
 void MatrixOps::MatMult(float* A, float* B, float* C, int m, int k, int n,
                         bool transposed_a, bool transposed_b) {
-  cudaStream_t stream;
-  cudaStreamCreate(&stream);
+  cudaStream_t stream = PrimaryStream();
   kernel::MatrixOpsKernelWrapper::MatMult(stream, A, B, C, m, k, n,
                                           transposed_a, transposed_b);
 
   cudaStreamSynchronize(stream);
-  cudaStreamDestroy(stream);
 }
 
 void MatrixOps::Activate(float* A, int m, int n, char active_type) {
-  cudaStream_t stream;
-  cudaStreamCreate(&stream);
+  cudaStream_t stream = PrimaryStream();
 
   switch (active_type) {
     case 'r':
@@ -102,26 +99,21 @@ void MatrixOps::Activate(float* A, int m, int n, char active_type) {
   }
 
   cudaStreamSynchronize(stream);
-  cudaStreamDestroy(stream);
 }
 
 void MatrixOps::MatAdd(float* A, float* B, int m, int n) {
-  cudaStream_t stream;
-  cudaStreamCreate(&stream);
+  cudaStream_t stream = PrimaryStream();
 
   kernel::MatrixOpsKernelWrapper::MatAdd(stream, A, B, m, n);
   cudaStreamSynchronize(stream);
-  cudaStreamDestroy(stream);
 }
 
 void MatrixOps::Transpose(float* A, float* B, int m, int n) {
-  cudaStream_t stream;
-  cudaStreamCreate(&stream);
+  cudaStream_t stream = PrimaryStream();
 
   kernel::MatrixOpsKernelWrapper::Transpose(stream, A, B, m, n);
 
   cudaStreamSynchronize(stream);
-  cudaStreamDestroy(stream);
 }
 
 }  // namespace task

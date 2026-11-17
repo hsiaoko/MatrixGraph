@@ -110,14 +110,10 @@ __host__ void PageRank::ComputePageRank(const ImmutableCSR& g) {
        {reinterpret_cast<void*>(unified_page_ranks.GetPtr()),
         unified_page_ranks.GetSize()}});
 
-  cudaStream_t stream;
-  CUDA_CHECK(cudaStreamCreate(&stream));
-
   PageRankKernelWrapper::PageRank(
-      stream, g.get_num_vertices(), g.get_num_outgoing_edges(), unified_data_g,
-      unified_page_ranks, damping_factor_, epsilon_, max_iterations_);
-
-  CUDA_CHECK(cudaStreamDestroy(stream));
+      PrimaryStream(), g.get_num_vertices(), g.get_num_outgoing_edges(),
+      unified_data_g, unified_page_ranks, damping_factor_, epsilon_,
+      max_iterations_);
 }
 
 __host__ void PageRank::Run() {
