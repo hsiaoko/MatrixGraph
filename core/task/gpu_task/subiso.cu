@@ -170,7 +170,6 @@ __host__ void SubIso::Run() {
               enable_bloom_filter_, enable_min_wise_bloom_filter_);
 
   auto start_time_2 = std::chrono::system_clock::now();
-  auto start_time_3 = std::chrono::system_clock::now();
 
   std::cout << "[SubIso] LoadData() elapsed: "
             << std::chrono::duration_cast<std::chrono::microseconds>(

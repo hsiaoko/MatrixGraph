@@ -32,8 +32,8 @@ public:
   VertexID tile_size = 0;
 
   // tmp here
-  VertexID n_cols;
-  VertexID n_rows;
+  VertexID n_cols = 0;
+  VertexID n_rows = 0;
 };
 
 struct SubGraphMetadata {

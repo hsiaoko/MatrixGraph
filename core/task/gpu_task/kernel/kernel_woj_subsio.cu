@@ -189,14 +189,14 @@ struct LocalMatches {
 };
 
 struct ParametersFilter {
-  VertexID u_eid;
+  VertexID u_eid = 0;
   VertexID* exec_path_in_edges = nullptr;
-  VertexID n_vertices_p;
-  EdgeIndex n_edges_p;
-  uint8_t* data_p;
+  VertexID n_vertices_p = 0;
+  EdgeIndex n_edges_p = 0;
+  uint8_t* data_p = nullptr;
   VertexLabel* v_label_p = nullptr;
-  VertexID n_vertices_g;
-  EdgeIndex n_edges_g;
+  VertexID n_vertices_g = 0;
+  EdgeIndex n_edges_g = 0;
   uint8_t* data_g = nullptr;
   VertexID* edgelist_g = nullptr;
   VertexLabel* v_label_g = nullptr;
@@ -210,7 +210,7 @@ struct ParametersFilter {
   bool enable_lpf_filter = false;
   int filter_order = 0;
   WOJMatches woj_matches;
-  uint64_t* test;
+  uint64_t* test = nullptr;
 };
 
 struct ParametersWedgeFilter {

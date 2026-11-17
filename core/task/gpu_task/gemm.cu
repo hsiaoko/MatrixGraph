@@ -688,7 +688,6 @@ __host__ Edges* GEMM::Walks(const GridCSRTiledMatrix& A,
   std::vector<int> work_load;
   work_load.resize(4);
   std::cout << "[Walks] Walks ..." << std::endl;
-  auto start_time_1 = std::chrono::system_clock::now();
 
   auto walk_fn = [this, M, N, K, step, &A, &B, &p_streams_vec, tile_size,
                   tile_buffer_size, n_strips, &mtx, &unified_csr_n_vertices_a,

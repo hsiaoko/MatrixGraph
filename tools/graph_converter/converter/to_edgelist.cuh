@@ -41,12 +41,6 @@ static void ConvertImmutableCSR2EdgelistBin(const std::string& input_path,
   csr.SortByDegree();
   std::cout << "[ConvertImmutableCSR2EdgelistBin]" << std::endl;
 
-  EdgelistMetadata edgelist_metadata = {
-      .num_vertices = csr.get_num_vertices(),
-      .num_edges = csr.get_num_outgoing_edges(),
-      .max_vid = csr.get_max_vid(),
-      .min_vid = 0};
-
   auto* edges_ptr =
       sics::matrixgraph::core::util::format_converter::ImmutableCSR2Edgelist(
           csr);
@@ -95,7 +89,6 @@ static void ConvertEGSMGraph2EdgelistBin(const std::string& input_path,
   auto parallelism = std::thread::hardware_concurrency();
   std::vector<size_t> worker(parallelism);
   std::iota(worker.begin(), worker.end(), 0);
-  auto step = worker.size();
 
   std::ifstream ifs(input_path);
   if (ifs.fail()) {
@@ -107,9 +100,6 @@ static void ConvertEGSMGraph2EdgelistBin(const std::string& input_path,
   // true for the query graph, false for the data graph
 
   sics::matrixgraph::core::data_structures::EdgelistMetadata edgelist_metadata;
-
-  edgelist_metadata.num_edges;
-  edgelist_metadata.num_vertices;
 
   char type;
   ifs >> type >> edgelist_metadata.num_vertices >> edgelist_metadata.num_edges;
@@ -139,7 +129,6 @@ static void ConvertEGSMGraph2EdgelistBin(const std::string& input_path,
       v_label[vid] = label;
       localid2globalid[vid] = vid;
     } else {
-      VertexID src, dst;
       ifs >> buffer_edges[eid].src >> buffer_edges[eid].dst;
       eid++;
     }

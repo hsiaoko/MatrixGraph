@@ -206,17 +206,6 @@ ComputeFeaturesAttributeColumn MakeColumn(const char* key,
   return col;
 }
 
-/** @brief Build an int32 attribute column descriptor. */
-ComputeFeaturesAttributeColumn MakeColumn(const char* key,
-                                          const std::vector<int32_t>& values) {
-  ComputeFeaturesAttributeColumn col{};
-  std::strncpy(col.key, key, sizeof(col.key) - 1);
-  col.value_type = MG_VALUE_INT;
-  col.n_values = static_cast<uint32_t>(values.size());
-  col.values = const_cast<void*>(static_cast<const void*>(values.data()));
-  return col;
-}
-
 }  // namespace
 
 /**

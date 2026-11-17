@@ -158,7 +158,6 @@ static void ConvertEGSMGraph2CSRBin(const std::string& input_path,
   auto parallelism = std::thread::hardware_concurrency();
   std::vector<size_t> worker(parallelism);
   std::iota(worker.begin(), worker.end(), 0);
-  auto step = worker.size();
 
   std::ifstream ifs(input_path);
   if (ifs.fail()) {
@@ -170,9 +169,6 @@ static void ConvertEGSMGraph2CSRBin(const std::string& input_path,
   // true for the query graph, false for the data graph
 
   sics::matrixgraph::core::data_structures::EdgelistMetadata edgelist_metadata;
-
-  edgelist_metadata.num_edges;
-  edgelist_metadata.num_vertices;
 
   char type;
   ifs >> type >> edgelist_metadata.num_vertices >> edgelist_metadata.num_edges;
@@ -202,7 +198,6 @@ static void ConvertEGSMGraph2CSRBin(const std::string& input_path,
       v_label[vid] = label;
       localid2globalid[vid] = vid;
     } else {
-      VertexID src, dst;
       ifs >> buffer_edges[eid].src >> buffer_edges[eid].dst;
       eid++;
     }

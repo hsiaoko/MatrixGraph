@@ -52,7 +52,7 @@ using TiledMatrixMetadata =
 using SubGraphMetadata =
     sics::matrixgraph::core::data_structures::SubGraphMetadata;
 
-static Edges* ImmutableCSR2Edgelist(const ImmutableCSR& immutable_csr) {
+inline Edges* ImmutableCSR2Edgelist(const ImmutableCSR& immutable_csr) {
   auto parallelism = std::thread::hardware_concurrency();
   std::vector<size_t> worker(parallelism);
   std::iota(worker.begin(), worker.end(), 0);
@@ -91,7 +91,7 @@ static Edges* ImmutableCSR2Edgelist(const ImmutableCSR& immutable_csr) {
   return edges;
 }
 
-static ImmutableCSR* Edgelist2ImmutableCSR(const Edges& edgelist) {
+inline ImmutableCSR* Edgelist2ImmutableCSR(const Edges& edgelist) {
   auto parallelism = std::thread::hardware_concurrency();
   std::vector<size_t> worker(parallelism);
   std::iota(worker.begin(), worker.end(), 0);
@@ -99,7 +99,6 @@ static ImmutableCSR* Edgelist2ImmutableCSR(const Edges& edgelist) {
 
   auto immutable_csr = new ImmutableCSR();
 
-  auto edgelist_metadata = edgelist.get_metadata();
   auto aligned_max_vid =
       (((edgelist.get_metadata().max_vid + 1) >> 6) << 6) + 64;
   VertexID min_vid = edgelist.get_metadata().min_vid;
@@ -291,7 +290,7 @@ static ImmutableCSR* Edgelist2ImmutableCSR(const Edges& edgelist) {
   return immutable_csr;
 }
 
-static BitTiledMatrix* Edgelist2BitTiledMatrix(const Edges& edges,
+inline BitTiledMatrix* Edgelist2BitTiledMatrix(const Edges& edges,
                                                size_t tile_size,
                                                size_t block_scope) {
   auto parallelism = std::thread::hardware_concurrency();
@@ -416,7 +415,7 @@ static BitTiledMatrix* Edgelist2BitTiledMatrix(const Edges& edges,
   return bit_tiled_matrix;
 }
 
-static CSRTiledMatrix* Edgelist2CSRTiledMatrix(
+inline CSRTiledMatrix* Edgelist2CSRTiledMatrix(
     const Edges& edges, size_t tile_size, size_t block_scope,
     CSRTiledMatrix* output = nullptr) {
   // std::cout << "Edgelist2CSRTiledMatrix" << std::endl;
@@ -487,7 +486,6 @@ static CSRTiledMatrix* Edgelist2CSRTiledMatrix(
           auto tile_y = (e.dst % block_scope) / tile_size;
 
           auto x_within_tile = (e.src % block_scope) % tile_size;
-          auto y_within_tile = (e.dst % block_scope) % tile_size;
 
           WriteAdd(&(num_out_edges_by_vid_vec[tile_x * n_strips + tile_y]
                                              [x_within_tile]),
@@ -741,7 +739,6 @@ static CSRTiledMatrix* Edgelist2CSRTiledMatrix(
        &num_out_edges_by_vid_vec, &count_out_edges_vec, &y_vid_map_vec,
        &csr_tiled_matrix](auto& w) {
         for (auto i = w; i < n_nz_tile; i += step) {
-          auto* csr_base_ptr = csr_tiled_matrix->GetCSRBasePtrByIdx(i);
           auto* tile_row_idx_ptr = csr_tiled_matrix->GetTileRowIdxPtr();
           auto* tile_col_idx_ptr = csr_tiled_matrix->GetTileColIdxPtr();
           tile_row_idx_ptr[i] =

@@ -97,7 +97,6 @@ static void ConvertCSRBin2VF3Graph(const std::string& input_path,
     file << u.outdegree << std::endl;
 
     for (EdgeIndex e_idx = 0; e_idx < u.outdegree; e_idx++) {
-      auto v_label = 0;
       file << u.vid << " " << u.outgoing_edges[e_idx] << std::endl;
     }
   }

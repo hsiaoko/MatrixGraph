@@ -41,7 +41,7 @@ static bool test_single_primitives() {
   auto sum = task.Compute(AggPrim::kSum, nums.data(), nums.size());
   auto mean = task.Compute(AggPrim::kMean, nums.data(), nums.size());
   auto median = task.Compute(AggPrim::kMedian, nums.data(), nums.size());
-  auto mode = task.Compute(AggPrim::kMode, nums.data(), nums.size());
+  (void)task.Compute(AggPrim::kMode, nums.data(), nums.size());
   auto minv = task.Compute(AggPrim::kMin, nums.data(), nums.size());
   auto maxv = task.Compute(AggPrim::kMax, nums.data(), nums.size());
   auto var = task.Compute(AggPrim::kVariance, nums.data(), nums.size());
