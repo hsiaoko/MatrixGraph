@@ -1018,6 +1018,7 @@ __host__ std::vector<kernel::FeatureValue> GraphAggregate::ComputeFeatures(
           n_requests,
           max_neighbors,
           sb.d_outputs);
+      CUDA_CHECK(cudaGetLastError());
 
       CUDA_CHECK(cudaMemcpyAsync(
           pinned_results + global_begin * n_requests,

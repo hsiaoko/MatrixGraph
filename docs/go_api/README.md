@@ -184,7 +184,7 @@ typedef struct {
   union {
     int64_t i64;
     double  f64;
-    uint8_t b;
+    int32_t b;
   };
 } MatrixGraphFeatureValue;
 ```
@@ -397,6 +397,7 @@ type AllFeatures struct {
     Entropy              FeatureValue
     PercentTrue          FeatureValue
     Skew                 FeatureValue
+    DFeat                FeatureValue
 }
 
 func GraphAggregateComputeAll(

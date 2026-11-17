@@ -288,6 +288,76 @@ int matrixgraph_graph_aggregate_set_num_streams(void* handle,
   return 0;
 }
 
+namespace {
+
+using CppValueType = sics::matrixgraph::core::data_structures::ValueType;
+
+inline int32_t ToMgValueType(CppValueType cpp_type) {
+  switch (cpp_type) {
+    case CppValueType::kInt:
+      return MG_VALUE_INT;
+    case CppValueType::kFloat64:
+      return MG_VALUE_FLOAT64;
+    case CppValueType::kBool:
+      return MG_VALUE_BOOL;
+    case CppValueType::kTime:
+      return MG_VALUE_TIME;
+    case CppValueType::kFloat32:
+      return MG_VALUE_FLOAT32;
+    case CppValueType::kInvalid:
+    default:
+      return MG_VALUE_INVALID;
+  }
+}
+
+// Write only the union member matching the type tag. Sequential i64/f64/b
+// writes clobber the value (MatrixGraphFeatureValue shares one 8-byte slot),
+// and the internal ValueType numbering differs from MG_VALUE_*, so the tag
+// must go through ToMgValueType rather than a static_cast.
+inline void CopyFeatureValueToC(const FeatureValue& src,
+                                MatrixGraphFeatureValue* dst) {
+  dst->type = ToMgValueType(src.type);
+  switch (src.type) {
+    case CppValueType::kInt:
+    case CppValueType::kTime:
+      dst->i64 = src.i64;
+      break;
+    case CppValueType::kFloat64:
+    case CppValueType::kFloat32:
+      dst->f64 = src.f64;
+      break;
+    case CppValueType::kBool:
+      dst->b = src.b ? 1 : 0;
+      break;
+    default:
+      dst->i64 = 0;
+      break;
+  }
+}
+
+inline void CopyAllFeaturesToC(const AllFeatures& src,
+                               MatrixGraphAllFeatures* dst) {
+  CopyFeatureValueToC(src.count, &dst->count);
+  CopyFeatureValueToC(src.count_greater_than_mean, &dst->count_greater_than_mean);
+  CopyFeatureValueToC(src.num_unique, &dst->num_unique);
+  CopyFeatureValueToC(src.sum, &dst->sum);
+  CopyFeatureValueToC(src.mean, &dst->mean);
+  CopyFeatureValueToC(src.variance, &dst->variance);
+  CopyFeatureValueToC(src.std, &dst->std);
+  CopyFeatureValueToC(src.mode, &dst->mode);
+  CopyFeatureValueToC(src.min, &dst->min);
+  CopyFeatureValueToC(src.max, &dst->max);
+  CopyFeatureValueToC(src.median, &dst->median);
+  CopyFeatureValueToC(src.quarter, &dst->quarter);
+  CopyFeatureValueToC(src.quartile3, &dst->quartile3);
+  CopyFeatureValueToC(src.entropy, &dst->entropy);
+  CopyFeatureValueToC(src.percent_true, &dst->percent_true);
+  CopyFeatureValueToC(src.skew, &dst->skew);
+  CopyFeatureValueToC(src.dfeat, &dst->dfeat);
+}
+
+}  // namespace
+
 int matrixgraph_graph_aggregate_compute_features(
     void* handle, const uint32_t* pivot_vertex_ids, uint32_t n_pivots,
     const MatrixGraphFeatureRequest* requests, uint32_t n_requests,
@@ -324,46 +394,10 @@ int matrixgraph_graph_aggregate_compute_features(
   }
 
   for (size_t i = 0; i < cpp_out.size(); ++i) {
-    out_values[i].type = static_cast<int32_t>(cpp_out[i].type);
-    out_values[i].i64 = cpp_out[i].i64;
-    out_values[i].f64 = cpp_out[i].f64;
-    out_values[i].b = cpp_out[i].b ? 1 : 0;
+    CopyFeatureValueToC(cpp_out[i], &out_values[i]);
   }
   return 0;
 }
-
-namespace {
-
-inline void CopyFeatureValueToC(const FeatureValue& src,
-                                MatrixGraphFeatureValue* dst) {
-  dst->type = static_cast<int32_t>(src.type);
-  dst->i64 = src.i64;
-  dst->f64 = src.f64;
-  dst->b = src.b ? 1 : 0;
-}
-
-inline void CopyAllFeaturesToC(const AllFeatures& src,
-                               MatrixGraphAllFeatures* dst) {
-  CopyFeatureValueToC(src.count, &dst->count);
-  CopyFeatureValueToC(src.count_greater_than_mean, &dst->count_greater_than_mean);
-  CopyFeatureValueToC(src.num_unique, &dst->num_unique);
-  CopyFeatureValueToC(src.sum, &dst->sum);
-  CopyFeatureValueToC(src.mean, &dst->mean);
-  CopyFeatureValueToC(src.variance, &dst->variance);
-  CopyFeatureValueToC(src.std, &dst->std);
-  CopyFeatureValueToC(src.mode, &dst->mode);
-  CopyFeatureValueToC(src.min, &dst->min);
-  CopyFeatureValueToC(src.max, &dst->max);
-  CopyFeatureValueToC(src.median, &dst->median);
-  CopyFeatureValueToC(src.quarter, &dst->quarter);
-  CopyFeatureValueToC(src.quartile3, &dst->quartile3);
-  CopyFeatureValueToC(src.entropy, &dst->entropy);
-  CopyFeatureValueToC(src.percent_true, &dst->percent_true);
-  CopyFeatureValueToC(src.skew, &dst->skew);
-  CopyFeatureValueToC(src.dfeat, &dst->dfeat);
-}
-
-}  // namespace
 
 int matrixgraph_graph_aggregate_compute_all(
     void* handle, const uint32_t* pivot_vertex_ids, uint32_t n_pivots,
@@ -401,8 +435,6 @@ int matrixgraph_graph_aggregate_compute_all(
 
 namespace {
 
-using CppValueType = sics::matrixgraph::core::data_structures::ValueType;
-
 inline CppValueType ToCppValueType(int32_t mg_type) {
   switch (mg_type) {
     case MG_VALUE_INT:
@@ -418,24 +450,6 @@ inline CppValueType ToCppValueType(int32_t mg_type) {
     case MG_VALUE_INVALID:
     default:
       return CppValueType::kInvalid;
-  }
-}
-
-inline int32_t ToMgValueType(CppValueType cpp_type) {
-  switch (cpp_type) {
-    case CppValueType::kInt:
-      return MG_VALUE_INT;
-    case CppValueType::kFloat64:
-      return MG_VALUE_FLOAT64;
-    case CppValueType::kBool:
-      return MG_VALUE_BOOL;
-    case CppValueType::kTime:
-      return MG_VALUE_TIME;
-    case CppValueType::kFloat32:
-      return MG_VALUE_FLOAT32;
-    case CppValueType::kInvalid:
-    default:
-      return MG_VALUE_INVALID;
   }
 }
 
