@@ -14,6 +14,17 @@ file(GLOB testfiles
         "${PROJECT_ROOT_DIR}/core/task/gpu_task/*_test.cu"
 )
 
+# Tests with their own main() are built as standalone targets in
+# core/CMakeLists.txt and registered with ctest there. Keep them out of
+# the gtest loop: same-name targets would collide, and gtest_main would
+# clash with their own main.
+list(REMOVE_ITEM testfiles
+        "${PROJECT_ROOT_DIR}/core/data_structures/hash_map_test.cu"
+        "${PROJECT_ROOT_DIR}/core/data_structures/attributes_hashmap_test.cu"
+        "${PROJECT_ROOT_DIR}/core/task/gpu_task/graph_aggregate_test.cu"
+        "${PROJECT_ROOT_DIR}/core/task/gpu_task/execute_agg_prim_test.cu"
+)
+
 #find_package(LibLZMA REQUIRED)
 
 foreach (testfile ${testfiles})

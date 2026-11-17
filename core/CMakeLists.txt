@@ -201,3 +201,47 @@ set_target_properties(execute_agg_prim_test PROPERTIES
 target_compile_options(execute_agg_prim_test PRIVATE
         $<$<COMPILE_LANGUAGE:CUDA>:-UUSE_AVX2>
 )
+
+#######################
+# Standalone data-structure tests (own main, no gtest dependency)
+#######################
+add_executable(hash_map_test data_structures/hash_map_test.cu)
+target_link_libraries(hash_map_test PRIVATE matrixgraph_core cudart)
+target_include_directories(hash_map_test PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}
+        ${PROJECT_ROOT_DIR}
+        ${CMAKE_CUDA_TOOLKIT_INCLUDE_DIRECTORIES}
+)
+set_target_properties(hash_map_test PROPERTIES
+        RUNTIME_OUTPUT_DIRECTORY ${PROJECT_ROOT_DIR}/bin
+        CUDA_SEPARABLE_COMPILATION ON
+        POSITION_INDEPENDENT_CODE ON
+)
+target_compile_options(hash_map_test PRIVATE
+        $<$<COMPILE_LANGUAGE:CUDA>:-UUSE_AVX2>
+)
+
+add_executable(attributes_hashmap_test data_structures/attributes_hashmap_test.cu)
+target_link_libraries(attributes_hashmap_test PRIVATE matrixgraph_core cudart)
+target_include_directories(attributes_hashmap_test PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}
+        ${PROJECT_ROOT_DIR}
+        ${CMAKE_CUDA_TOOLKIT_INCLUDE_DIRECTORIES}
+)
+set_target_properties(attributes_hashmap_test PROPERTIES
+        RUNTIME_OUTPUT_DIRECTORY ${PROJECT_ROOT_DIR}/bin
+        CUDA_SEPARABLE_COMPILATION ON
+        POSITION_INDEPENDENT_CODE ON
+)
+target_compile_options(attributes_hashmap_test PRIVATE
+        $<$<COMPILE_LANGUAGE:CUDA>:-UUSE_AVX2>
+)
+
+# Register the standalone (own-main) tests with ctest so `ctest` is the
+# single entry point; the gtest loop in core/tests/ covers the rest.
+if (TEST)
+    add_test(NAME HashMapStandalone COMMAND hash_map_test)
+    add_test(NAME AttributesHashmapStandalone COMMAND attributes_hashmap_test)
+    add_test(NAME GraphAggregateStandalone COMMAND graph_aggregate_test)
+    add_test(NAME ExecuteAggPrimStandalone COMMAND execute_agg_prim_test)
+endif ()

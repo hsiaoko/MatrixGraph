@@ -8,7 +8,9 @@
 
 #include <gtest/gtest.h>
 
+#include <cstring>
 #include <memory>
+#include <string>
 #include <vector>
 
 #include "core/data_structures/immutable_csr.cuh"
@@ -22,8 +24,7 @@ namespace task {
 
 using VertexID = sics::matrixgraph::core::common::VertexID;
 using EdgeIndex = sics::matrixgraph::core::common::EdgeIndex;
-using kernel::kAggMean;
-using kernel::kAggSum;
+using data_structures::ImmutableCSR;
 
 namespace {
 
