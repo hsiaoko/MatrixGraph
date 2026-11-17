@@ -37,15 +37,26 @@ class GpuEngine : public Engine {
     num_streams_ = options.num_streams > 0
                        ? options.num_streams
                        : util::MatrixGraphCudaStreamsPerGpu();
+    // Stream pool for the primary device; tasks borrow one stream for their
+    // launch sequence instead of creating throwaways per run.
+    CUDA_CHECK(cudaSetDevice(devices_.front()));
+    streams_.resize(num_streams_);
+    for (cudaStream_t& stream : streams_) CUDA_CHECK(cudaStreamCreate(&stream));
+  }
+
+  ~GpuEngine() override {
+    for (cudaStream_t stream : streams_) {
+      if (stream) cudaStreamDestroy(stream);
+    }
   }
 
   Backend backend() const override { return Backend::kGpu; }
 
   void Run(task::TaskBase& task) override {
-    // Tasks drive their own per-GPU stream matrices for now; the engine
-    // guarantees the primary device context and grows the stream pool when
-    // tasks start borrowing it (M4).
+    // Multi-stream tasks (GraphAggregate per-GPU, gemm/WOJ per-stripe) manage
+    // their own stream matrices; single-stream tasks borrow the pool stream.
     CUDA_CHECK(cudaSetDevice(devices_.front()));
+    task.AttachPrimaryStream(streams_.front());
     task.Run();
   }
 
@@ -57,6 +68,7 @@ class GpuEngine : public Engine {
  private:
   std::vector<int> devices_;
   uint32_t num_streams_ = 2;
+  std::vector<cudaStream_t> streams_;
 };
 
 }  // namespace

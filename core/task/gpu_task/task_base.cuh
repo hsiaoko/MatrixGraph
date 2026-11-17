@@ -10,8 +10,10 @@ namespace matrixgraph {
 namespace core {
 namespace task {
 
-// Base class for GPU tasks. Owns the CUDA streams used for per-stream
-// parallelism; derived tasks own their own device/pinned scratch buffers.
+// Base class for GPU tasks. Streams have one owner per run: an engine
+// attaches its pool stream before calling Run, and a task used directly
+// (tests, tools) falls back to a stream it creates itself and destroys with
+// the task. Derived tasks own their device/pinned scratch buffers.
 class TaskBase {
  public:
   virtual ~TaskBase() { DestroyStreams(); }
@@ -19,6 +21,12 @@ class TaskBase {
   // Job entry point. Every job task overrides it; service-style tasks that
   // expose typed query APIs keep the empty default rather than faking a Run.
   virtual void Run() {}
+
+  // Engine-side handoff: the stream this task should launch on. Only valid
+  // until Run returns; the engine keeps ownership and destruction.
+  __host__ void AttachPrimaryStream(cudaStream_t stream) {
+    borrowed_stream_ = stream;
+  }
 
  protected:
   // (Re)create n_streams_ CUDA streams. Safe to call after changing
@@ -31,12 +39,14 @@ class TaskBase {
   // Stream for tasks that run one launch sequence at a time (the common
   // case); multi-stream tasks index streams_ directly.
   __host__ cudaStream_t PrimaryStream() {
+    if (borrowed_stream_ != nullptr) return borrowed_stream_;
     EnsureStreams();
     return streams_.empty() ? nullptr : streams_[0];
   }
 
   uint32_t n_streams_ = 1;
   std::vector<cudaStream_t> streams_;
+  cudaStream_t borrowed_stream_ = nullptr;
 };
 
 }  // namespace task
