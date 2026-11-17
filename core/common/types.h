@@ -23,7 +23,7 @@ using EdgeIndex = uint32_t;
 
 
 
-enum StoreStrategy {
+enum class StoreStrategy {
   kUnconstrained,  // default
   kIncomingOnly,
   kOutgoingOnly,

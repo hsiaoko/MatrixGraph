@@ -537,8 +537,8 @@ __host__ void GraphAggregate::LoadGraph(const std::string& graph_path) {
   graph_ = std::make_unique<ImmutableCSR>();
   graph_->Read(graph_path);
   max_degree_ = ComputeMaxDegree();
-  std::cout << "[GraphAggregate] Loaded graph: " << graph_->get_num_vertices()
-            << " vertices, " << graph_->get_num_outgoing_edges()
+  std::cout << "[GraphAggregate] Loaded graph: " << graph_->GetNumVertices()
+            << " vertices, " << graph_->GetNumOutgoingEdges()
             << " outgoing edges, "
             << "max degree=" << max_degree_ << std::endl;
   TransferGraphToAllGpus();
@@ -571,7 +571,7 @@ __host__ size_t GraphAggregate::ValueTypeSize(int32_t value_type) {
 
 __host__ uint32_t GraphAggregate::ComputeMaxDegree() const {
   if (!graph_) return 0;
-  const uint32_t n = graph_->get_num_vertices();
+  const uint32_t n = graph_->GetNumVertices();
   const VertexID* indegree = graph_->GetInDegreeBasePointer();
   const VertexID* outdegree = graph_->GetOutDegreeBasePointer();
   if (!indegree || !outdegree) return 0;
@@ -623,7 +623,7 @@ __host__ void GraphAggregate::LoadAttributes(
   }
   if (n_columns == 0 || columns == nullptr) return;
 
-  const uint32_t n_vertices = graph_->get_num_vertices();
+  const uint32_t n_vertices = graph_->GetNumVertices();
 
   // Validate columns.
   for (uint32_t c = 0; c < n_columns; ++c) {
@@ -755,8 +755,8 @@ __host__ void GraphAggregate::LoadEdgeAttributes(
     return;
   }
 
-  const uint32_t n_edges = is_outgoing ? graph_->get_num_outgoing_edges()
-                                       : graph_->get_num_incoming_edges();
+  const uint32_t n_edges = is_outgoing ? graph_->GetNumOutgoingEdges()
+                                       : graph_->GetNumIncomingEdges();
 
   // Validate columns.
   for (uint32_t c = 0; c < n_columns; ++c) {
@@ -899,7 +899,7 @@ __host__ std::vector<kernel::FeatureValue> GraphAggregate::ComputeFeatures(
 
   if (per_gpu_states_.empty() ||
       per_gpu_states_[0].vertex_attrs.GetNumVertices() !=
-          graph_->get_num_vertices()) {
+          graph_->GetNumVertices()) {
     std::cerr << "[GraphAggregate::ComputeFeatures] Vertex attributes not set"
               << std::endl;
     return host_results;
@@ -993,8 +993,8 @@ __host__ std::vector<kernel::FeatureValue> GraphAggregate::ComputeFeatures(
       const uint32_t grid_size = sub_chunk_n;
       ComputeFeaturesKernel<<<grid_size, common::kFeatureRequestBlockDim,
                               shared_mem_size, gpu_state.streams[s]>>>(
-          gpu_state.d_graph_data, graph_->get_num_vertices(),
-          graph_->get_num_incoming_edges(), graph_->get_num_outgoing_edges(),
+          gpu_state.d_graph_data, graph_->GetNumVertices(),
+          graph_->GetNumIncomingEdges(), graph_->GetNumOutgoingEdges(),
           gpu_state.vertex_attrs.GetDevicePtr(),
           gpu_state.edge_attrs_out_.GetDevicePtr(),
           gpu_state.edge_attrs_in_.GetDevicePtr(), sb.d_pivot_vids, sub_chunk_n,
@@ -1052,7 +1052,7 @@ __host__ std::vector<kernel::AllFeatures> GraphAggregate::ComputeAll(
 
   if (per_gpu_states_.empty() ||
       per_gpu_states_[0].vertex_attrs.GetNumVertices() !=
-          graph_->get_num_vertices()) {
+          graph_->GetNumVertices()) {
     std::cerr << "[GraphAggregate::ComputeAll] Vertex attributes not set"
               << std::endl;
     return host_results;
@@ -1133,8 +1133,8 @@ __host__ std::vector<kernel::AllFeatures> GraphAggregate::ComputeAll(
       const uint32_t grid_size = sub_chunk_n;
       ComputeAllFeaturesKernel<<<grid_size, common::kAllFeaturesBlockDim,
                                  shared_mem_size, gpu_state.streams[s]>>>(
-          gpu_state.d_graph_data, graph_->get_num_vertices(),
-          graph_->get_num_incoming_edges(), graph_->get_num_outgoing_edges(),
+          gpu_state.d_graph_data, graph_->GetNumVertices(),
+          graph_->GetNumIncomingEdges(), graph_->GetNumOutgoingEdges(),
           gpu_state.vertex_attrs.GetDevicePtr(),
           gpu_state.edge_attrs_out_.GetDevicePtr(),
           gpu_state.edge_attrs_in_.GetDevicePtr(), sb.d_pivot_vids, sub_chunk_n,
@@ -1267,7 +1267,7 @@ __host__ void GraphAggregate::GenerateSyntheticAttributes() {
     return;
   }
 
-  const uint32_t n_vertices = graph_->get_num_vertices();
+  const uint32_t n_vertices = graph_->GetNumVertices();
   std::vector<double> h_scores(n_vertices);
   std::vector<uint8_t> h_flags(n_vertices);
   for (uint32_t v = 0; v < n_vertices; ++v) {

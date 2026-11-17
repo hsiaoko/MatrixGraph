@@ -87,8 +87,8 @@ __host__ void ComputeFeaturesTask::LoadGraph(const std::string& graph_path) {
   graph_ = std::make_unique<ImmutableCSR>();
   graph_->Read(graph_path);
   std::cout << "[ComputeFeaturesTask] Loaded graph: "
-            << graph_->get_num_vertices() << " vertices, "
-            << graph_->get_num_outgoing_edges() << " outgoing edges"
+            << graph_->GetNumVertices() << " vertices, "
+            << graph_->GetNumOutgoingEdges() << " outgoing edges"
             << std::endl;
   TransferGraphDataToDevice();
 }
@@ -130,7 +130,7 @@ __host__ void ComputeFeaturesTask::LoadAttributes(
     return;
   }
 
-  const uint32_t n_vertices = graph_->get_num_vertices();
+  const uint32_t n_vertices = graph_->GetNumVertices();
 
   // Upload each new column to the device and append to the existing column set.
   size_t prev_n_columns = d_columns_.size();
@@ -225,9 +225,9 @@ __host__ void ComputeFeaturesTask::LoadLabels(const uint32_t* labels,
               << std::endl;
     return;
   }
-  if (n != graph_->get_num_vertices()) {
+  if (n != graph_->GetNumVertices()) {
     std::cerr << "[ComputeFeaturesTask::LoadLabels] Label count " << n
-              << " != vertex count " << graph_->get_num_vertices() << std::endl;
+              << " != vertex count " << graph_->GetNumVertices() << std::endl;
     return;
   }
   if (d_labels_) cudaFree(d_labels_);
@@ -446,8 +446,8 @@ __host__ std::vector<MatrixGraphFeatureValue> ComputeFeaturesTask::Compute(
 
   // Launch one block per pivot.
   kernel::ComputeFeaturesKernel<<<n_pivots, kWorkspaceCapacity>>>(
-      d_graph_data_, graph_->get_num_vertices(),
-      graph_->get_num_incoming_edges(), graph_->get_num_outgoing_edges(),
+      d_graph_data_, graph_->GetNumVertices(),
+      graph_->GetNumIncomingEdges(), graph_->GetNumOutgoingEdges(),
       d_labels_, d_per_vertex_attrs_, d_pivot_vertex_ids, n_pivots, d_plan,
       static_cast<uint32_t>(plan.size()), d_navs,
       static_cast<uint32_t>(navs.size()), d_conds,

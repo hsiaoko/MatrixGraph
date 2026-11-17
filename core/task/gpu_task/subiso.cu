@@ -111,11 +111,11 @@ __host__ void SubIso::WOJMatching(
   exec_plan.SetCudaDeviceIds(cuda_devices);
 
   std::cout << "[SubIso] WOJMatching: execution plan |V_p|="
-            << exec_plan.get_n_vertices_p()
-            << " |E_p|=" << exec_plan.get_n_edges_p()
-            << " |V_g|=" << exec_plan.get_n_vertices_g()
-            << " |E_g|=" << exec_plan.get_n_edges_g() << std::endl;
-  std::cout << "[SubIso] WOJMatching: plan uses " << exec_plan.get_n_devices()
+            << exec_plan.GetNVerticesP()
+            << " |E_p|=" << exec_plan.GetNEdgesP()
+            << " |V_g|=" << exec_plan.GetNVerticesG()
+            << " |E_g|=" << exec_plan.GetNEdgesG() << std::endl;
+  std::cout << "[SubIso] WOJMatching: plan uses " << exec_plan.GetNDevices()
             << " logical GPU(s), device id(s): ";
   for (size_t i = 0; i < cuda_devices.size(); ++i) {
     if (i) {
@@ -258,8 +258,8 @@ __host__ int SubIso::Run(
 
   for (int t = 0; t < n_tables; ++t) {
     WOJMatches* m = results[t];
-    uint32_t cols = m->get_x_offset();
-    uint32_t rows = m->get_y_offset();
+    uint32_t cols = m->GetXOffset();
+    uint32_t rows = m->GetYOffset();
     out_table_cols[t] = cols;
     out_table_rows[t] = rows;
 
@@ -269,7 +269,7 @@ __host__ int SubIso::Run(
                                : cols;
     if (header_copy > 0 && out_headers_flat) {
       uint32_t* dst_header = out_headers_flat + t * max_result_cols;
-      std::memcpy(dst_header, m->get_header_ptr(),
+      std::memcpy(dst_header, m->GetHeaderPtr(),
                   sizeof(uint32_t) * header_copy);
     }
 
@@ -280,12 +280,12 @@ __host__ int SubIso::Run(
     if (row_copy > 0 && cols > 0 && out_data_flat) {
       uint32_t* dst_data =
           out_data_flat + t * max_result_rows * max_result_cols;
-      const uint32_t* src_data = m->get_data_ptr();
+      const uint32_t* src_data = m->GetDataPtr();
       for (uint32_t r = 0; r < row_copy; ++r) {
         uint32_t col_copy = cols > static_cast<uint32_t>(max_result_cols)
                                 ? static_cast<uint32_t>(max_result_cols)
                                 : cols;
-        std::memcpy(dst_data + r * max_result_cols, src_data + r * m->get_x(),
+        std::memcpy(dst_data + r * max_result_cols, src_data + r * m->GetX(),
                     sizeof(uint32_t) * col_copy);
       }
     }

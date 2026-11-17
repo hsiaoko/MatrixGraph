@@ -234,13 +234,13 @@ class Matches {
   }
 
   void Write(const std::string& path) const {
-    std::cout << "[Matches::Write]" << get_weft_count() << " save at" << path
+    std::cout << "[Matches::Write]" << GetWeftCount() << " save at" << path
               << std::endl;
 
     uint64_t* weft_root_buf =
-        new uint64_t[get_weft_count() - GetInvalidMatchesCount()]();
+        new uint64_t[GetWeftCount() - GetInvalidMatchesCount()]();
     auto count = 0;
-    for (VertexID _ = 0; _ < get_weft_count(); _++) {
+    for (VertexID _ = 0; _ < GetWeftCount(); _++) {
       if (invalid_match_->GetBit(_)) continue;
       weft_root_buf[count++] = *(matches_data_.GetPtr() +
                                  _ * n_vertices_ * 2 * max_n_local_weft_ + 1);
@@ -248,7 +248,7 @@ class Matches {
     std::ofstream out_file(path);
     out_file.write(
         reinterpret_cast<char*>(weft_root_buf),
-        sizeof(uint64_t) * (get_weft_count() - GetInvalidMatchesCount()));
+        sizeof(uint64_t) * (GetWeftCount() - GetInvalidMatchesCount()));
     out_file.close();
 
     delete[] weft_root_buf;
@@ -265,7 +265,7 @@ class Matches {
     uint64_t* weft_root_buf = new uint64_t[file_size / sizeof(uint64_t)]();
     data_file.read(reinterpret_cast<char*>(weft_root_buf), file_size);
     data_file.close();
-    for (VertexID _ = 0; _ < get_weft_count(); _++) {
+    for (VertexID _ = 0; _ < GetWeftCount(); _++) {
       std::cout << "weft_root_buf: " << weft_root_buf[_] << std::endl;
     }
 
@@ -298,24 +298,24 @@ class Matches {
     return header_;
   }
 
-  BitmapOwnership* get_invalid_match_ptr() const { return invalid_match_; }
+  BitmapOwnership* GetInvalidMatchPtr() const { return invalid_match_; }
 
-  VertexID get_weft_count() const { return *weft_count_.GetPtr(); }
+  VertexID GetWeftCount() const { return *weft_count_.GetPtr(); }
 
-  VertexID get_n_vertices() const { return n_vertices_; }
+  VertexID GetNVertices() const { return n_vertices_; }
 
-  VertexID get_max_n_weft() const { return max_n_weft_; }
+  VertexID GetMaxNWeft() const { return max_n_weft_; }
 
-  VertexID get_max_n_local_weft() const { return max_n_local_weft_; }
+  VertexID GetMaxNLocalWeft() const { return max_n_local_weft_; }
 
-  VertexID* get_matches_data_ptr() const { return matches_data_.GetPtr(); }
+  VertexID* GetMatchesDataPtr() const { return matches_data_.GetPtr(); }
 
-  VertexID get_header_first_by_idx(VertexID idx) {
+  VertexID GetHeaderFirstByIdx(VertexID idx) {
     assert((idx < header_.size()));
     return header_[idx].first;
   }
 
-  VertexID get_header_second_by_idx(VertexID idx) {
+  VertexID GetHeaderSecondByIdx(VertexID idx) {
     assert((idx < header_.size()));
     return header_[idx].second;
   }

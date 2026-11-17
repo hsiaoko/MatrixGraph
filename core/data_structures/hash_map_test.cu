@@ -19,7 +19,7 @@ using sics::matrixgraph::core::data_structures::HostHashMap;
 // Device kernel: every thread looks up its key and writes the value to out.
 // If the key is not found, write NaN.
 // ---------------------------------------------------------------------------
-__global__ void lookup_kernel(const HashMap<uint32_t, float> map,
+__global__ void LookupKernel(const HashMap<uint32_t, float> map,
                               const uint32_t* keys, float* out, uint32_t n) {
   uint32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
   if (idx >= n) return;
@@ -35,7 +35,7 @@ __global__ void lookup_kernel(const HashMap<uint32_t, float> map,
 // ---------------------------------------------------------------------------
 // Host test helpers
 // ---------------------------------------------------------------------------
-static bool float_eq(float a, float b) {
+static bool FloatEq(float a, float b) {
   if (std::isnan(a) && std::isnan(b)) return true;
   return std::fabs(a - b) < 1e-5f;
 }
@@ -51,7 +51,7 @@ int main() {
     HostHashMap<uint32_t, float> map(keys, values, 5);
     const auto& view = map.View();
 
-    assert(view.get_size() == 5);
+    assert(view.GetSize() == 5);
     assert(view.contains(10));
     assert(view.contains(50));
     assert(!view.contains(99));
@@ -88,7 +88,7 @@ int main() {
     const auto& host_view = host_map.View();
     for (uint32_t i = 0; i < n; ++i) {
       const float* p = host_view.find(keys[i]);
-      if (p == nullptr || !float_eq(*p, values[i])) {
+      if (p == nullptr || !FloatEq(*p, values[i])) {
         std::cerr << "Host lookup failed at i=" << i << " key=" << keys[i]
                   << std::endl;
         return 1;
@@ -108,11 +108,11 @@ int main() {
 
     const uint32_t block_size = 256;
     const uint32_t grid_size = (n + block_size - 1) / block_size;
-    lookup_kernel<<<grid_size, block_size>>>(dev_map.View(), d_keys, d_out, n);
+    LookupKernel<<<grid_size, block_size>>>(dev_map.View(), d_keys, d_out, n);
     cudaDeviceSynchronize();
 
     for (uint32_t i = 0; i < n; ++i) {
-      if (!float_eq(d_out[i], values[i])) {
+      if (!FloatEq(d_out[i], values[i])) {
         std::cerr << "Device lookup mismatch at i=" << i << " key=" << keys[i]
                   << " expected=" << values[i] << " got=" << d_out[i]
                   << std::endl;
@@ -130,15 +130,15 @@ int main() {
   {
     HostHashMap<uint32_t, float> empty_host(nullptr, nullptr, 0);
     const auto& hview = empty_host.View();
-    assert(hview.get_size() == 0);
-    assert(hview.get_capacity() == 0);
+    assert(hview.GetSize() == 0);
+    assert(hview.GetCapacity() == 0);
     assert(!hview.contains(1));
     assert(hview.find(1) == nullptr);
 
     DeviceHashMap<uint32_t, float> empty_dev(nullptr, nullptr, 0);
     const auto& dview = empty_dev.View();
-    assert(dview.get_size() == 0);
-    assert(dview.get_capacity() == 0);
+    assert(dview.GetSize() == 0);
+    assert(dview.GetCapacity() == 0);
     std::cout << "[Empty map test] PASSED" << std::endl;
   }
 

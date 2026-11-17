@@ -23,9 +23,9 @@ class Matrix {
 
   void Print(uint32_t k = 3) const;
 
-  uint32_t get_x() const { return x_; }
+  uint32_t GetX() const { return x_; }
 
-  uint32_t get_y() const { return y_; }
+  uint32_t GetY() const { return y_; }
 
   float* GetPtr() const { return data_; }
 

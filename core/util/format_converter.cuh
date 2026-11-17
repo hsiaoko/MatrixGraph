@@ -58,12 +58,12 @@ inline Edges* ImmutableCSR2Edgelist(const ImmutableCSR& immutable_csr) {
   std::iota(worker.begin(), worker.end(), 0);
   auto step = worker.size();
 
-  EdgeIndex n_edges = immutable_csr.get_num_outgoing_edges();
+  EdgeIndex n_edges = immutable_csr.GetNumOutgoingEdges();
 
   EdgelistMetadata edgelist_metadata{
-      .num_vertices = immutable_csr.get_num_vertices(),
-      .num_edges = immutable_csr.get_num_outgoing_edges(),
-      .max_vid = immutable_csr.get_max_vid(),
+      .num_vertices = immutable_csr.GetNumVertices(),
+      .num_edges = immutable_csr.GetNumOutgoingEdges(),
+      .max_vid = immutable_csr.GetMaxVid(),
       .min_vid = 0};
 
   auto* edge_ptr = new Edge[n_edges]();
@@ -72,7 +72,7 @@ inline Edges* ImmutableCSR2Edgelist(const ImmutableCSR& immutable_csr) {
             << std::endl;
   ParallelFor(
       worker.begin(), worker.end(), [step, &immutable_csr, &edge_ptr](auto w) {
-        for (VertexID vid = w; vid < immutable_csr.get_num_vertices();
+        for (VertexID vid = w; vid < immutable_csr.GetNumVertices();
              vid += step) {
           auto offset = immutable_csr.GetOutOffsetByLocalID(vid);
           auto degree = immutable_csr.GetOutDegreeByLocalID(vid);
@@ -100,9 +100,9 @@ inline ImmutableCSR* Edgelist2ImmutableCSR(const Edges& edgelist) {
   auto immutable_csr = new ImmutableCSR();
 
   auto aligned_max_vid =
-      (((edgelist.get_metadata().max_vid + 1) >> 6) << 6) + 64;
-  VertexID min_vid = edgelist.get_metadata().min_vid;
-  VertexID max_vid = edgelist.get_metadata().max_vid;
+      (((edgelist.GetMetadata().max_vid + 1) >> 6) << 6) + 64;
+  VertexID min_vid = edgelist.GetMetadata().min_vid;
+  VertexID max_vid = edgelist.GetMetadata().max_vid;
   auto visited = BitmapOwnership(max_vid + 1);
   auto* num_in_edges_by_vid = new EdgeIndex[max_vid + 1]();
   auto* num_out_edges_by_vid = new EdgeIndex[max_vid + 1]();
@@ -111,7 +111,7 @@ inline ImmutableCSR* Edgelist2ImmutableCSR(const Edges& edgelist) {
   std::iota(parallel_scope_vertices.begin(), parallel_scope_vertices.end(), 0);
 
   VertexID* buffer_edges_globalid_by_localid =
-      new VertexID[edgelist.get_metadata().max_vid + 1]();
+      new VertexID[edgelist.GetMetadata().max_vid + 1]();
 
   // Compute min_vid and obtain the num of incoming/outgoing edges for each
   // vertex.
@@ -119,11 +119,11 @@ inline ImmutableCSR* Edgelist2ImmutableCSR(const Edges& edgelist) {
       worker.begin(), worker.end(),
       [step, &min_vid, &num_out_edges_by_vid, &num_in_edges_by_vid, &visited,
        &edgelist, &buffer_edges_globalid_by_localid](auto& w) {
-        for (EdgeIndex i = w; i < edgelist.get_metadata().num_edges;
+        for (EdgeIndex i = w; i < edgelist.GetMetadata().num_edges;
              i += step) {
           auto edgelist_localid_2_globalid =
-              edgelist.get_localid_to_globalid_ptr();
-          auto e = edgelist.get_edge_by_index(i);
+              edgelist.GetLocalidToGlobalidPtr();
+          auto e = edgelist.GetEdgeByIndex(i);
           e.src = edgelist_localid_2_globalid[e.src];
           e.dst = edgelist_localid_2_globalid[e.dst];
           visited.SetBit(e.src);
@@ -172,11 +172,11 @@ inline ImmutableCSR* Edgelist2ImmutableCSR(const Edges& edgelist) {
               [step, &min_vid, &num_out_edges_by_vid, &num_in_edges_by_vid,
                &visited, &edgelist, &buffer_csr_vertices, &offset_in_edges,
                &offset_out_edges](auto& w) {
-                for (EdgeIndex i = w; i < edgelist.get_metadata().num_edges;
+                for (EdgeIndex i = w; i < edgelist.GetMetadata().num_edges;
                      i += step) {
                   auto edgelist_localid_2_globalid =
-                      edgelist.get_localid_to_globalid_ptr();
-                  auto e = edgelist.get_edge_by_index(i);
+                      edgelist.GetLocalidToGlobalidPtr();
+                  auto e = edgelist.GetEdgeByIndex(i);
                   e.src = edgelist_localid_2_globalid[e.src];
                   e.dst = edgelist_localid_2_globalid[e.dst];
 
@@ -194,15 +194,15 @@ inline ImmutableCSR* Edgelist2ImmutableCSR(const Edges& edgelist) {
 
   // Construct CSR graph.
   VertexID* buffer_globalid =
-      new VertexID[edgelist.get_metadata().num_vertices]();
+      new VertexID[edgelist.GetMetadata().num_vertices]();
 
-  if (edgelist.get_localid_to_globalid_ptr() != nullptr) {
-    memcpy(buffer_globalid, edgelist.get_localid_to_globalid_ptr(),
-           sizeof(VertexID) * edgelist.get_metadata().num_vertices);
+  if (edgelist.GetLocalidToGlobalidPtr() != nullptr) {
+    memcpy(buffer_globalid, edgelist.GetLocalidToGlobalidPtr(),
+           sizeof(VertexID) * edgelist.GetMetadata().num_vertices);
   }
 
-  auto buffer_indegree = new VertexID[edgelist.get_metadata().num_vertices]();
-  auto buffer_outdegree = new VertexID[edgelist.get_metadata().num_vertices]();
+  auto buffer_indegree = new VertexID[edgelist.GetMetadata().num_vertices]();
+  auto buffer_outdegree = new VertexID[edgelist.GetMetadata().num_vertices]();
 
   VertexID vid = 0;
   auto vid_map = new VertexID[aligned_max_vid]();
@@ -216,12 +216,12 @@ inline ImmutableCSR* Edgelist2ImmutableCSR(const Edges& edgelist) {
   }
 
   auto* buffer_in_offset =
-      new EdgeIndex[edgelist.get_metadata().num_vertices + 1]();
+      new EdgeIndex[edgelist.GetMetadata().num_vertices + 1]();
   auto* buffer_out_offset =
-      new EdgeIndex[edgelist.get_metadata().num_vertices + 1]();
+      new EdgeIndex[edgelist.GetMetadata().num_vertices + 1]();
 
   // Compute offset for each vertex.
-  for (VertexID i = 0; i < edgelist.get_metadata().num_vertices; i++) {
+  for (VertexID i = 0; i < edgelist.GetMetadata().num_vertices; i++) {
     buffer_in_offset[i + 1] = buffer_in_offset[i] + buffer_indegree[i];
     buffer_out_offset[i + 1] = buffer_out_offset[i] + buffer_outdegree[i];
   }
@@ -268,10 +268,10 @@ inline ImmutableCSR* Edgelist2ImmutableCSR(const Edges& edgelist) {
               });
 
   immutable_csr->SetVertexLabelBuffer(
-      new VertexLabel[edgelist.get_metadata().num_vertices]());
+      new VertexLabel[edgelist.GetMetadata().num_vertices]());
 
-  memcpy(immutable_csr->GetVLabelBasePointer(), edgelist.get_vertex_label_ptr(),
-         sizeof(VertexLabel) * edgelist.get_metadata().num_vertices);
+  memcpy(immutable_csr->GetVLabelBasePointer(), edgelist.GetVertexLabelPtr(),
+         sizeof(VertexLabel) * edgelist.GetMetadata().num_vertices);
 
   immutable_csr->SetEdgesGlobalIDBuffer(buffer_edges_globalid_by_localid);
   immutable_csr->SetGlobalIDBuffer(buffer_globalid);
@@ -281,10 +281,10 @@ inline ImmutableCSR* Edgelist2ImmutableCSR(const Edges& edgelist) {
   immutable_csr->SetOutOffsetBuffer(buffer_out_offset);
   immutable_csr->SetIncomingEdgesBuffer(buffer_in_edges);
   immutable_csr->SetOutgoingEdgesBuffer(buffer_out_edges);
-  immutable_csr->SetNumVertices(edgelist.get_metadata().num_vertices);
+  immutable_csr->SetNumVertices(edgelist.GetMetadata().num_vertices);
   immutable_csr->SetNumIncomingEdges(count_in_edges);
   immutable_csr->SetNumOutgoingEdges(count_out_edges);
-  immutable_csr->SetMaxVid(edgelist.get_metadata().max_vid);
+  immutable_csr->SetMaxVid(edgelist.GetMetadata().max_vid);
   immutable_csr->SetMinVid(min_vid);
   immutable_csr->SetLocalIDBuffer(buffer_localid_by_globalid);
 
@@ -310,9 +310,9 @@ inline BitTiledMatrix* Edgelist2BitTiledMatrix(const Edges& edges,
       worker.begin(), worker.end(),
       [step, &edges, block_scope, tile_size, &tile_visited, &n_nz_tile_per_row,
        n_strips](auto w) {
-        for (auto eid = w; eid < edges.get_metadata().num_edges; eid += step) {
-          auto e = edges.get_edge_by_index(eid);
-          auto* localid_to_globalid = edges.get_localid_to_globalid_ptr();
+        for (auto eid = w; eid < edges.GetMetadata().num_edges; eid += step) {
+          auto e = edges.GetEdgeByIndex(eid);
+          auto* localid_to_globalid = edges.GetLocalidToGlobalidPtr();
 
           auto tile_x = (localid_to_globalid[e.src] % block_scope) / tile_size;
           auto tile_y = (localid_to_globalid[e.dst] % block_scope) / tile_size;
@@ -346,10 +346,10 @@ inline BitTiledMatrix* Edgelist2BitTiledMatrix(const Edges& edges,
       worker.begin(), worker.end(),
       [step, &edges, block_scope, tile_size, &tile_visited, &bit_tiled_matrix,
        &n_nz_tile_per_row, n_strips](auto w) {
-        for (auto eid = w; eid < edges.get_metadata().num_edges; eid += step) {
-          auto* localid_to_globalid = edges.get_localid_to_globalid_ptr();
+        for (auto eid = w; eid < edges.GetMetadata().num_edges; eid += step) {
+          auto* localid_to_globalid = edges.GetLocalidToGlobalidPtr();
 
-          auto e = edges.get_edge_by_index(eid);
+          auto e = edges.GetEdgeByIndex(eid);
 
           auto x_within_tile =
               (localid_to_globalid[e.src] % block_scope) % tile_size;
@@ -370,8 +370,8 @@ inline BitTiledMatrix* Edgelist2BitTiledMatrix(const Edges& edges,
             if (eid % 30000 == 0) {
               std::cout
                   << "w: " << w << "|" << std::setprecision(3)
-                  << (float)eid / (float)edges.get_metadata().num_edges << " "
-                  << eid << "/ " << edges.get_metadata().num_edges << " "
+                  << (float)eid / (float)edges.GetMetadata().num_edges << " "
+                  << eid << "/ " << edges.GetMetadata().num_edges << " "
                   << tile_x * n_strips + tile_y << " cpu time"
                   << std::chrono::duration_cast<std::chrono::microseconds>(
                          start_time_1 - start_time_0)
@@ -391,8 +391,8 @@ inline BitTiledMatrix* Edgelist2BitTiledMatrix(const Edges& edges,
             if (eid % 30000 == 0) {
               std::cout
                   << "w: " << w << "|" << std::setprecision(3)
-                  << (float)eid / (float)edges.get_metadata().num_edges << " "
-                  << eid << "/ " << edges.get_metadata().num_edges << " "
+                  << (float)eid / (float)edges.GetMetadata().num_edges << " "
+                  << eid << "/ " << edges.GetMetadata().num_edges << " "
                   << tile_x * n_strips + tile_y << " gpu time"
                   << std::chrono::duration_cast<std::chrono::microseconds>(
                          start_time_1 - start_time_0)
@@ -443,7 +443,7 @@ inline CSRTiledMatrix* Edgelist2CSRTiledMatrix(
     csr_tiled_matrix = output;
   }
 
-  if (edges.get_metadata().num_edges == 0) {
+  if (edges.GetMetadata().num_edges == 0) {
     TiledMatrixMetadata tile_meta_data = {
         .n_strips = static_cast<uint32_t>(n_strips),
         .n_nz_tile = 0,
@@ -479,10 +479,10 @@ inline CSRTiledMatrix* Edgelist2CSRTiledMatrix(
       worker.begin(), worker.end(),
       [&edges, step, block_scope, tile_size, n_strips, &buffer_csr_vertices_vec,
        &num_out_edges_by_vid_vec, &visited_vec, &graph_visited](auto& w) {
-        for (EdgeIndex eid = w; eid < edges.get_metadata().num_edges;
+        for (EdgeIndex eid = w; eid < edges.GetMetadata().num_edges;
              eid += step) {
-          auto e = edges.get_edge_by_index(eid);
-          auto* localid_to_globalid = edges.get_localid_to_globalid_ptr();
+          auto e = edges.GetEdgeByIndex(eid);
+          auto* localid_to_globalid = edges.GetLocalidToGlobalidPtr();
           if (localid_to_globalid != nullptr) {
             e.src = localid_to_globalid[e.src];
             e.dst = localid_to_globalid[e.dst];
@@ -532,10 +532,10 @@ inline CSRTiledMatrix* Edgelist2CSRTiledMatrix(
       worker.begin(), worker.end(),
       [&edges, step, block_scope, tile_size, n_strips, &buffer_csr_vertices_vec,
        &num_out_edges_by_vid_vec, &visited_vec, &graph_visited](auto& w) {
-        for (EdgeIndex eid = w; eid < edges.get_metadata().num_edges;
+        for (EdgeIndex eid = w; eid < edges.GetMetadata().num_edges;
              eid += step) {
-          auto e = edges.get_edge_by_index(eid);
-          auto* localid_to_globalid = edges.get_localid_to_globalid_ptr();
+          auto e = edges.GetEdgeByIndex(eid);
+          auto* localid_to_globalid = edges.GetLocalidToGlobalidPtr();
           if (localid_to_globalid != nullptr) {
             e.src = localid_to_globalid[e.src];
             e.dst = localid_to_globalid[e.dst];
@@ -644,10 +644,10 @@ inline CSRTiledMatrix* Edgelist2CSRTiledMatrix(
       [tile_size, &edges, step, block_scope, n_strips, &buffer_csr_vertices_vec,
        &y_vid_map_vec, &offset_out_edges_vec, &csr_tiled_matrix,
        &gid_map](auto& w) {
-        for (EdgeIndex eid = w; eid < edges.get_metadata().num_edges;
+        for (EdgeIndex eid = w; eid < edges.GetMetadata().num_edges;
              eid += step) {
-          auto e = edges.get_edge_by_index(eid);
-          auto* localid_to_globalid = edges.get_localid_to_globalid_ptr();
+          auto e = edges.GetEdgeByIndex(eid);
+          auto* localid_to_globalid = edges.GetLocalidToGlobalidPtr();
           if (localid_to_globalid != nullptr) {
             e.src = localid_to_globalid[e.src];
             e.dst = localid_to_globalid[e.dst];

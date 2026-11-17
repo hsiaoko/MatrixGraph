@@ -11,7 +11,7 @@ namespace util {
 #define GPU_WORD_OFFSET(i) (i >> 6)
 #define GPU_BIT_OFFSET(i) (i & 0x3f)
 
-static __global__ void matrix_count_kernel(size_t size, uint64_t* data,
+static __global__ void MatrixCountKernel(size_t size, uint64_t* data,
                                            unsigned long long* count) {
   unsigned int tid = blockIdx.x * blockDim.x + threadIdx.x;
   unsigned int step = blockDim.x * gridDim.x;
@@ -76,7 +76,7 @@ size_t GPUBitmap::GPUCount() const {
   cudaMallocManaged(&count_ptr, sizeof(unsigned long long));
   cudaMemset(count_ptr, 0, sizeof(unsigned long long));
 
-  matrix_count_kernel<<<dim_grid, dim_block, 0, stream>>>(size_, data_,
+  MatrixCountKernel<<<dim_grid, dim_block, 0, stream>>>(size_, data_,
                                                           count_ptr);
   cudaStreamSynchronize(stream);
   cudaStreamDestroy(stream);
@@ -102,7 +102,7 @@ size_t GPUBitmap::GPUPreElementCount(size_t idx) const {
   cudaMallocManaged(&count_ptr, sizeof(unsigned long long));
   cudaMemset(count_ptr, 0, sizeof(unsigned long long));
 
-  matrix_count_kernel<<<dim_grid, dim_block, 0, stream>>>(idx, data_,
+  MatrixCountKernel<<<dim_grid, dim_block, 0, stream>>>(idx, data_,
                                                           count_ptr);
   cudaStreamSynchronize(stream);
   cudaStreamDestroy(stream);

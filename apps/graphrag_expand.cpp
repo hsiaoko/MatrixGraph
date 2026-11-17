@@ -81,7 +81,7 @@ void Expand(const ImmutableCSR& g, const std::vector<VertexID>& seeds,
   std::queue<std::pair<VertexID, int>> q;
 
   for (VertexID s : seeds) {
-    if (s < g.get_num_vertices() && visited.insert(s).second) {
+    if (s < g.GetNumVertices() && visited.insert(s).second) {
       q.emplace(s, 0);
     }
   }
@@ -158,7 +158,7 @@ int main(int argc, char* argv[]) {
 
     // Write summary.
     std::ofstream summary_file(FLAGS_o + "/expand_summary.txt");
-    summary_file << "num_vertices " << g.get_num_vertices() << "\n";
+    summary_file << "num_vertices " << g.GetNumVertices() << "\n";
     summary_file << "num_seeds " << seeds.size() << "\n";
     summary_file << "max_hop " << FLAGS_k << "\n";
     summary_file << "max_degree " << FLAGS_max_degree << "\n";

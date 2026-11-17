@@ -92,7 +92,7 @@ static void ConvertEdgelistCSV2CGGraphCSR(const std::string& input_path,
 
   auto* offset = p_immutable_csr->GetOutOffsetBasePointer();
   auto* out_edges = p_immutable_csr->GetOutgoingEdgesBasePointer();
-  VertexID* e_label = new VertexID[p_immutable_csr->get_num_outgoing_edges()]();
+  VertexID* e_label = new VertexID[p_immutable_csr->GetNumOutgoingEdges()]();
 
   std::ofstream offset_file(output_path + "/native_csrOffset_u32.bin");
   std::ofstream out_edges_file(output_path + "/native_csrDest_u32.bin");
@@ -102,13 +102,13 @@ static void ConvertEdgelistCSV2CGGraphCSR(const std::string& input_path,
 
   offset_file.write(
       (char*)offset,
-      sizeof(VertexID) * (p_immutable_csr->get_num_vertices() + 1));
+      sizeof(VertexID) * (p_immutable_csr->GetNumVertices() + 1));
   out_edges_file.write(
       (char*)out_edges,
-      sizeof(VertexID) * p_immutable_csr->get_num_outgoing_edges());
+      sizeof(VertexID) * p_immutable_csr->GetNumOutgoingEdges());
   weight_file.write(
       (char*)e_label,
-      sizeof(VertexID) * p_immutable_csr->get_num_outgoing_edges());
+      sizeof(VertexID) * p_immutable_csr->GetNumOutgoingEdges());
 
   offset_file.close();
   out_edges_file.close();
@@ -129,7 +129,7 @@ static void ConvertEdgelistBin2CGGraphCSR(const std::string& input_path,
 
   auto* offset = p_immutable_csr->GetOutOffsetBasePointer();
   auto* out_edges = p_immutable_csr->GetOutgoingEdgesBasePointer();
-  VertexID* e_label = new VertexID[p_immutable_csr->get_num_outgoing_edges()]();
+  VertexID* e_label = new VertexID[p_immutable_csr->GetNumOutgoingEdges()]();
 
   std::ofstream offset_file(output_path + "/native_csrOffset_u32.bin");
   std::ofstream out_edges_file(output_path + "/native_csrDest_u32.bin");
@@ -139,13 +139,13 @@ static void ConvertEdgelistBin2CGGraphCSR(const std::string& input_path,
 
   offset_file.write(
       (char*)offset,
-      sizeof(VertexID) * (p_immutable_csr->get_num_vertices() + 1));
+      sizeof(VertexID) * (p_immutable_csr->GetNumVertices() + 1));
   out_edges_file.write(
       (char*)out_edges,
-      sizeof(VertexID) * p_immutable_csr->get_num_outgoing_edges());
+      sizeof(VertexID) * p_immutable_csr->GetNumOutgoingEdges());
   weight_file.write(
       (char*)e_label,
-      sizeof(VertexID) * p_immutable_csr->get_num_outgoing_edges());
+      sizeof(VertexID) * p_immutable_csr->GetNumOutgoingEdges());
 
   offset_file.close();
   out_edges_file.close();

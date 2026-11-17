@@ -79,7 +79,7 @@ __host__ void BFS::ExecuteBFS(const ImmutableCSR& g, VertexID src) {
   // Set up vertex label buffer
   BufferVertexLabel v_label_g;
   v_label_g.data = g.GetVLabelBasePointer();
-  v_label_g.size = sizeof(VertexLabel) * g.get_num_vertices();
+  v_label_g.size = sizeof(VertexLabel) * g.GetNumVertices();
   unified_v_label_g.Init(v_label_g);
 
   sics::matrixgraph::core::util::MatrixGraphPrefetchManagedToDevice(
@@ -90,8 +90,8 @@ __host__ void BFS::ExecuteBFS(const ImmutableCSR& g, VertexID src) {
        {reinterpret_cast<void*>(unified_v_label_g.GetPtr()),
         unified_v_label_g.GetSize()}});
 
-  BFSKernelWrapper::BFS(PrimaryStream(), g.get_num_vertices(),
-                        g.get_num_outgoing_edges(), src, unified_data_g,
+  BFSKernelWrapper::BFS(PrimaryStream(), g.GetNumVertices(),
+                        g.GetNumOutgoingEdges(), src, unified_data_g,
                         unified_v_label_g);
 }
 

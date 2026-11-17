@@ -8,7 +8,7 @@ namespace matrixgraph {
 namespace core {
 namespace common {
 
-inline uint32_t hash_function(uint64_t x) {
+inline uint32_t HashFunction(uint64_t x) {
   x ^= x >> 16;
   x *= 0x85ebca6b;
   x ^= x >> 13;

@@ -57,15 +57,15 @@ class MinHeap {
   }
 
   __host__ __device__ __forceinline__ uint32_t
-  get_element_by_idx(uint32_t idx) const {
+  GetElementByIdx(uint32_t idx) const {
     return data_[idx];
   }
 
-  __host__ __device__ __forceinline__ uint32_t get_offset() const {
+  __host__ __device__ __forceinline__ uint32_t GetOffset() const {
     return offset_;
   }
 
-  __host__ __device__ __forceinline__ uint32_t get_min() const {
+  __host__ __device__ __forceinline__ uint32_t GetMin() const {
     return data_[0];
   }
 

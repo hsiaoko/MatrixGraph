@@ -37,7 +37,7 @@ class PatternVertexOrder {
                                             const ImmutableCSR& data_graph) {
     // 1. Bucket data vertices by their one-min hash.
     std::array<uint32_t, 16> buckets{};
-    for (VertexID v = 0; v < data_graph.get_num_vertices(); ++v) {
+    for (VertexID v = 0; v < data_graph.GetNumVertices(); ++v) {
       VertexID h = ComputeOneMinHash(v, data_graph);
       if (h < 16) buckets[h]++;
     }
@@ -51,8 +51,8 @@ class PatternVertexOrder {
     }
 
     // 3. Score pattern vertices.
-    const VertexID n = pattern.get_num_vertices();
-    std::vector<uint32_t> score(n, data_graph.get_num_vertices());
+    const VertexID n = pattern.GetNumVertices();
+    std::vector<uint32_t> score(n, data_graph.GetNumVertices());
     for (VertexID u = 0; u < n; ++u) {
       VertexID h = ComputeOneMinHash(u, pattern);
       if (h < 16) score[u] = prefix[h];
@@ -82,7 +82,7 @@ class PatternVertexOrder {
   // Reorder a pattern CSR in-place. new_to_old[new_local_id] = old_local_id.
   static void Reorder(ImmutableCSR* pattern,
                       const std::vector<VertexID>& new_to_old) {
-    const VertexID n = pattern->get_num_vertices();
+    const VertexID n = pattern->GetNumVertices();
     if (n == 0) return;
     if (new_to_old.size() != n) return;
 
@@ -91,9 +91,9 @@ class PatternVertexOrder {
       old_to_new[new_to_old[i]] = i;
     }
 
-    const EdgeIndex num_in = pattern->get_num_incoming_edges();
-    const EdgeIndex num_out = pattern->get_num_outgoing_edges();
-    const VertexID max_vid = pattern->get_max_vid();
+    const EdgeIndex num_in = pattern->GetNumIncomingEdges();
+    const EdgeIndex num_out = pattern->GetNumOutgoingEdges();
+    const VertexID max_vid = pattern->GetMaxVid();
 
     // Temporary buffers.
     std::vector<VertexID> new_globalid(n);
@@ -190,8 +190,8 @@ class PatternVertexOrder {
   static void PermuteMatrixRows(Matrix* matrix,
                                 const std::vector<VertexID>& new_to_old) {
     if (matrix == nullptr || matrix->GetPtr() == nullptr) return;
-    const uint32_t x = matrix->get_x();
-    const uint32_t y = matrix->get_y();
+    const uint32_t x = matrix->GetX();
+    const uint32_t y = matrix->GetY();
     if (x != new_to_old.size()) return;
 
     const float* old_data = matrix->GetPtr();

@@ -34,10 +34,10 @@ class WOJExecutionPlan {
 
   __host__ void GenerateWOJExecutionPlan(const ImmutableCSR& p,
                                          const ImmutableCSR& g) {
-    exec_path_in_edges_ = new VertexID[p.get_num_outgoing_edges() * 2]();
+    exec_path_in_edges_ = new VertexID[p.GetNumOutgoingEdges() * 2]();
 
     EdgeIndex eid = 0;
-    for (VertexID v_idx = 0; v_idx < p.get_num_vertices(); v_idx++) {
+    for (VertexID v_idx = 0; v_idx < p.GetNumVertices(); v_idx++) {
       auto u = p.GetVertexByLocalID(v_idx);
       for (EdgeIndex v_nbr_idx = 0; v_nbr_idx < u.outdegree; v_nbr_idx++) {
         exec_path_in_edges_[2 * eid] = u.vid;
@@ -45,10 +45,10 @@ class WOJExecutionPlan {
         eid++;
       }
     }
-    n_edges_p_ = p.get_num_outgoing_edges();
-    n_edges_g_ = g.get_num_outgoing_edges();
-    n_vertices_p_ = p.get_num_vertices();
-    n_vertices_g_ = g.get_num_vertices();
+    n_edges_p_ = p.GetNumOutgoingEdges();
+    n_edges_g_ = g.GetNumOutgoingEdges();
+    n_vertices_p_ = p.GetNumVertices();
+    n_vertices_g_ = g.GetNumVertices();
   }
 
   inline void SetNDevices(VertexID n_devices) { n_devices_ = n_devices; }
@@ -71,19 +71,19 @@ class WOJExecutionPlan {
     return lid;
   }
 
-  inline VertexID* get_exec_path_in_edges_ptr() const {
+  inline VertexID* GetExecPathInEdgesPtr() const {
     return exec_path_in_edges_;
   }
 
-  inline VertexID get_n_edges_p() const { return n_edges_p_; }
+  inline VertexID GetNEdgesP() const { return n_edges_p_; }
 
-  inline VertexID get_n_vertices_p() const { return n_vertices_p_; }
+  inline VertexID GetNVerticesP() const { return n_vertices_p_; }
 
-  inline VertexID get_n_vertices_g() const { return n_vertices_g_; }
+  inline VertexID GetNVerticesG() const { return n_vertices_g_; }
 
-  inline VertexID get_n_edges_g() const { return n_edges_g_; }
+  inline VertexID GetNEdgesG() const { return n_edges_g_; }
 
-  inline VertexID get_n_devices() const { return n_devices_; }
+  inline VertexID GetNDevices() const { return n_devices_; }
 
  private:
   VertexID* exec_path_in_edges_ = nullptr;

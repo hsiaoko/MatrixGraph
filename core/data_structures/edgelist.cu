@@ -30,12 +30,12 @@ using std::filesystem::create_directory;
 using std::filesystem::exists;
 
 Edges::Edges(const Edges& edges) {
-  edgelist_metadata_ = edges.get_metadata();
+  edgelist_metadata_ = edges.GetMetadata();
   edges_ptr_ = new Edge[edgelist_metadata_.num_edges]();
-  memcpy(edges_ptr_, edges.get_base_ptr(),
+  memcpy(edges_ptr_, edges.GetBasePtr(),
          sizeof(Edge) * edgelist_metadata_.num_edges);
-  if (edges.get_localid_to_globalid_ptr() != nullptr) {
-    memcpy(localid_to_globalid_, edges.get_localid_to_globalid_ptr(),
+  if (edges.GetLocalidToGlobalidPtr() != nullptr) {
+    memcpy(localid_to_globalid_, edges.GetLocalidToGlobalidPtr(),
            sizeof(Edge) * edgelist_metadata_.num_vertices);
   }
 }
@@ -312,7 +312,7 @@ void Edges::GenerateLocalID2GlobalID() {
   BitmapOwnership bitmap(edgelist_metadata_.max_vid);
 
   for (EdgeIndex index = 0; index < edgelist_metadata_.num_edges; index++) {
-    auto e = get_edge_by_index(index);
+    auto e = GetEdgeByIndex(index);
     if (localid_to_globalid_ != nullptr) {
       e.src = localid_to_globalid_[e.src];
       e.dst = localid_to_globalid_[e.dst];
@@ -331,8 +331,8 @@ void Edges::GenerateLocalID2GlobalID() {
   edgelist_metadata_.num_vertices = bitmap.Count();
   ParallelFor(worker.begin(), worker.end(),
               [this, step, &vid_map, &new_localid_to_globalid](auto w) {
-                for (auto i = w; i < get_metadata().num_edges; i += step) {
-                  auto e = get_edge_by_index(i);
+                for (auto i = w; i < GetMetadata().num_edges; i += step) {
+                  auto e = GetEdgeByIndex(i);
                   if (localid_to_globalid_ != nullptr) {
                     e.src = localid_to_globalid_[e.src];
                     e.dst = localid_to_globalid_[e.dst];
@@ -355,15 +355,15 @@ void Edges::Compacted() {
   auto step = worker.size();
 
   if (localid_to_globalid_ == nullptr) {
-    localid_to_globalid_ = new VertexID[get_metadata().num_vertices]();
+    localid_to_globalid_ = new VertexID[GetMetadata().num_vertices]();
   } else {
     memset(localid_to_globalid_, 0,
-           sizeof(VertexID) * get_metadata().num_vertices);
+           sizeof(VertexID) * GetMetadata().num_vertices);
   }
 
   ParallelFor(worker.begin(), worker.end(), [this, step](auto w) {
-    for (auto i = w; i < get_metadata().num_edges; i += step) {
-      auto e = get_edge_by_index(i);
+    for (auto i = w; i < GetMetadata().num_edges; i += step) {
+      auto e = GetEdgeByIndex(i);
       localid_to_globalid_[e.src] = e.src;
       localid_to_globalid_[e.dst] = e.dst;
     }
@@ -377,7 +377,7 @@ void Edges::Transpose() {
   std::iota(worker.begin(), worker.end(), 0);
   auto step = worker.size();
   ParallelFor(worker.begin(), worker.end(), [this, step](auto w) {
-    for (auto i = w; i < get_metadata().num_edges; i += step) {
+    for (auto i = w; i < GetMetadata().num_edges; i += step) {
       VertexID tmp = edges_ptr_[i].src;
       edges_ptr_[i].src = edges_ptr_[i].dst;  // swap src and dst
       edges_ptr_[i].dst = tmp;
@@ -420,21 +420,21 @@ void Edges::GenerateVLabel(VertexID range, bool random) {
 
     ParallelFor(worker.begin(), worker.end(), [this, step, &dis, &gen](auto w) {
       for (auto vid = w; vid < edgelist_metadata_.num_vertices; vid += step) {
-        auto vlabel_ptr = get_vertex_label_ptr();
+        auto vlabel_ptr = GetVertexLabelPtr();
         vlabel_ptr[vid] = dis(gen);
       }
     });
   } else {
     ParallelFor(worker.begin(), worker.end(), [this, step, range](auto w) {
       for (auto vid = w; vid < edgelist_metadata_.num_vertices; vid += step) {
-        auto vlabel_ptr = get_vertex_label_ptr();
+        auto vlabel_ptr = GetVertexLabelPtr();
         vlabel_ptr[vid] = vid % range;
       }
     });
   }
 }
 
-VertexID Edges::get_globalid_by_localid(VertexID localid) const {
+VertexID Edges::GetGlobalidByLocalid(VertexID localid) const {
   if (localid_to_globalid_ == nullptr) return localid;
   return localid_to_globalid_[localid];
 }

@@ -37,11 +37,11 @@ void LFTJSubIso::Run() {
     std::array<int, kLcfLabelCap> g_freq = {};
     const VertexLabel* plabels = pattern_.GetVLabelBasePointer();
     const VertexLabel* glabels = data_graph_.GetVLabelBasePointer();
-    for (VertexID u = 0; u < pattern_.get_num_vertices(); ++u) {
+    for (VertexID u = 0; u < pattern_.GetNumVertices(); ++u) {
       VertexLabel lbl = plabels[u];
       if (lbl < kLcfLabelCap) ++p_freq[lbl];
     }
-    for (VertexID v = 0; v < data_graph_.get_num_vertices(); ++v) {
+    for (VertexID v = 0; v < data_graph_.GetNumVertices(); ++v) {
       VertexLabel lbl = glabels[v];
       if (lbl < kLcfLabelCap) ++g_freq[lbl];
     }
@@ -103,7 +103,7 @@ void LFTJSubIso::Run() {
             << std::endl;
 
   if (materialize_ && match_count_ > 0) {
-    VertexID pn = pattern_.get_num_vertices();
+    VertexID pn = pattern_.GetNumVertices();
     std::ofstream out(output_path_, std::ios::binary);
     uint64_t n_matches = materialized_matches_.size() / pn;
     out.write(reinterpret_cast<const char*>(&pn), sizeof(pn));
@@ -123,7 +123,7 @@ void LFTJSubIso::LoadData() {
 
 void LFTJSubIso::BuildUndirectedAdjacency() {
   // Pattern graph: vector-of-vectors.
-  VertexID pn = pattern_.get_num_vertices();
+  VertexID pn = pattern_.GetNumVertices();
   pattern_adj_.assign(pn, {});
   for (VertexID u = 0; u < pn; ++u) {
     std::unordered_set<VertexID> nbrs;
@@ -138,7 +138,7 @@ void LFTJSubIso::BuildUndirectedAdjacency() {
   }
 
   // Data graph: CSR.
-  VertexID dn = data_graph_.get_num_vertices();
+  VertexID dn = data_graph_.GetNumVertices();
   data_offsets_.assign(dn + 1, 0);
 
   // First pass: collect and deduplicate neighbors per vertex, count degrees.
@@ -177,7 +177,7 @@ void LFTJSubIso::BuildMinWiseFilterCaches() {
                           filter_k_);
 
   if (enable_bloom_filter_) {
-    auto n_p = pattern_.get_num_vertices();
+    auto n_p = pattern_.GetNumVertices();
     p_bloom_signature_.assign(n_p, 0);
     const VertexLabel* plabels = pattern_.GetVLabelBasePointer();
     for (VertexID u = 0; u < n_p; ++u) {
@@ -189,7 +189,7 @@ void LFTJSubIso::BuildMinWiseFilterCaches() {
       p_bloom_signature_[u] = sig;
     }
 
-    auto n_g = data_graph_.get_num_vertices();
+    auto n_g = data_graph_.GetNumVertices();
     g_bloom_signature_.assign(n_g, 0);
     const VertexLabel* glabels = data_graph_.GetVLabelBasePointer();
     for (VertexID v = 0; v < n_g; ++v) {
@@ -206,8 +206,8 @@ void LFTJSubIso::BuildMinWiseFilterCaches() {
 }
 
 void LFTJSubIso::BuildCandidateSets() {
-  VertexID pn = pattern_.get_num_vertices();
-  VertexID dn = data_graph_.get_num_vertices();
+  VertexID pn = pattern_.GetNumVertices();
+  VertexID dn = data_graph_.GetNumVertices();
   const VertexLabel* plabels = pattern_.GetVLabelBasePointer();
   const VertexLabel* dlabels = data_graph_.GetVLabelBasePointer();
 
@@ -302,8 +302,8 @@ void LFTJSubIso::BuildCandidateSets() {
 }
 
 void LFTJSubIso::WriteRejectedPairs() {
-  VertexID pn = pattern_.get_num_vertices();
-  VertexID dn = data_graph_.get_num_vertices();
+  VertexID pn = pattern_.GetNumVertices();
+  VertexID dn = data_graph_.GetNumVertices();
   const VertexLabel* plabels = pattern_.GetVLabelBasePointer();
   const VertexLabel* dlabels = data_graph_.GetVLabelBasePointer();
 
@@ -346,7 +346,7 @@ void LFTJSubIso::WriteRejectedPairs() {
 }
 
 void LFTJSubIso::ComputeMatchingOrder() {
-  VertexID pn = pattern_.get_num_vertices();
+  VertexID pn = pattern_.GetNumVertices();
   order_.clear();
   order_.reserve(pn);
 
@@ -487,8 +487,8 @@ void LFTJSubIso::ComputeLocalCandidates(uint32_t depth,
 uint64_t LFTJSubIso::EnumerateRange(size_t cand_start, size_t cand_end,
                                     uint64_t thread_limit,
                                     std::vector<VertexID>* thread_matches) {
-  VertexID pn = pattern_.get_num_vertices();
-  VertexID dn = data_graph_.get_num_vertices();
+  VertexID pn = pattern_.GetNumVertices();
+  VertexID dn = data_graph_.GetNumVertices();
 
   // Per-thread DFS state.
   std::vector<VertexID> embedding(pn, std::numeric_limits<VertexID>::max());
@@ -553,7 +553,7 @@ uint64_t LFTJSubIso::EnumerateRange(size_t cand_start, size_t cand_end,
 }
 
 uint64_t LFTJSubIso::Enumerate() {
-  VertexID pn = pattern_.get_num_vertices();
+  VertexID pn = pattern_.GetNumVertices();
   if (pn == 0) return 0;
 
   // Compute root candidates once (they are the same for every thread).

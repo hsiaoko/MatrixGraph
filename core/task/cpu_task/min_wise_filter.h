@@ -136,7 +136,7 @@ inline void CollectEllHopOutLabels(const ImmutableCSR& csr, VertexID src,
                                    uint32_t hash_freq[16], VertexID& min_hash,
                                    std::vector<uint32_t>& visited,
                                    uint32_t& stamp) {
-  auto n = csr.get_num_vertices();
+  auto n = csr.GetNumVertices();
   EnsureVisitedBuffer(n, visited, stamp);
   const uint32_t current_stamp = stamp;
   std::vector<std::pair<VertexID, int>> queue;
@@ -184,7 +184,7 @@ inline void CollectEllHopInLabels(const ImmutableCSR& csr, VertexID src,
                                   uint32_t hash_freq[16], VertexID& min_hash,
                                   std::vector<uint32_t>& visited,
                                   uint32_t& stamp) {
-  auto n = csr.get_num_vertices();
+  auto n = csr.GetNumVertices();
   EnsureVisitedBuffer(n, visited, stamp);
   const uint32_t current_stamp = stamp;
   std::vector<std::pair<VertexID, int>> queue;
@@ -231,7 +231,7 @@ inline void CollectEllHopInLabels(const ImmutableCSR& csr, VertexID src,
 inline void BuildMinWiseFilterCache(const ImmutableCSR& csr,
                                     std::vector<MinWiseFilterCache>& cache,
                                     int hop, int k) {
-  auto n = csr.get_num_vertices();
+  auto n = csr.GetNumVertices();
   cache.resize(n);
 
   auto parallelism = std::thread::hardware_concurrency();

@@ -120,7 +120,7 @@ struct ParametersCount {
   unsigned long long* count = nullptr;
 };
 
-__device__ static inline uint64_t get_bit(uint64_t* data, size_t i,
+__device__ static inline uint64_t GetBit(uint64_t* data, size_t i,
                                           size_t size) {
   if (i > size) return 0;
   return data[WORD_OFFSET(i)] & (1ull << BIT_OFFSET(i));
@@ -128,7 +128,7 @@ __device__ static inline uint64_t get_bit(uint64_t* data, size_t i,
 
 __device__ static inline bool drop() { return false; }
 
-__device__ static inline uint64_t get_aligned_k_bits(uint64_t* data,
+__device__ static inline uint64_t GetAlignedKBits(uint64_t* data,
                                                      uint64_t start,
                                                      uint64_t end) {
   uint64_t start_word = WORD_OFFSET(start);
@@ -144,12 +144,12 @@ __device__ static inline uint64_t get_aligned_k_bits(uint64_t* data,
   return result;
 }
 
-__device__ static inline uint64_t set_bit(unsigned long long* data,
+__device__ static inline uint64_t SetBit(unsigned long long* data,
                                           unsigned long long i) {
   atomicOr(data + WORD_OFFSET(i), (1ull << BIT_OFFSET(i)));
 }
 
-__device__ static inline size_t pre_element_count(const uint64_t* data,
+__device__ static inline size_t PreElementCount(const uint64_t* data,
                                                   uint64_t idx) {
   size_t count = 0;
   size_t bm_size = WORD_OFFSET(idx);
@@ -176,11 +176,11 @@ __device__ static inline size_t pre_element_count(const uint64_t* data,
   return count;
 }
 
-__device__ static inline bool get_bit(uint64_t* data, uint64_t i) {
+__device__ static inline bool GetBit(uint64_t* data, uint64_t i) {
   return data[WORD_OFFSET(i)] & (1ull << BIT_OFFSET(i));
 }
 
-__device__ static inline unsigned long long count_per_uint64_t(
+__device__ static inline unsigned long long CountPerUint64T(
     unsigned long long x) {
   x = (x & (0x5555555555555555)) + ((x >> 1) & (0x5555555555555555));
   x = (x & (0x3333333333333333)) + ((x >> 2) & (0x3333333333333333));
@@ -191,7 +191,7 @@ __device__ static inline unsigned long long count_per_uint64_t(
   return x;
 }
 
-__device__ static inline VertexID binary_search(VertexID* data, VertexID size,
+__device__ static inline VertexID BinarySearch(VertexID* data, VertexID size,
                                                 VertexID target) {
   if (size == 0) return kMaxVertexID;
   VertexID low = 0, high = size - 1;
@@ -212,21 +212,21 @@ __device__ static inline VertexID binary_search(VertexID* data, VertexID size,
   return kMaxVertexID;
 }
 
-__device__ static inline bool single_thread_matrix_bit_and(
+__device__ static inline bool SingleThreadMatrixBitAnd(
     unsigned long tile_size, unsigned long long* matrix_a,
     unsigned long long* matrix_b, unsigned long long* matrix_c) {
   for (unsigned int row_a = 0; row_a < tile_size; ++row_a) {
     for (unsigned int row_b = 0; row_b < tile_size; ++row_b) {
       for (unsigned int k = 0; k < tile_size; k += kProcessorWordSize) {
-        uint64_t processor_word_a = get_aligned_k_bits(
+        uint64_t processor_word_a = GetAlignedKBits(
             (uint64_t*)matrix_a, row_a * tile_size, (row_a + 1) * tile_size);
-        uint64_t processor_word_b = get_aligned_k_bits(
+        uint64_t processor_word_b = GetAlignedKBits(
             (uint64_t*)matrix_b, row_b * tile_size, (row_b + 1) * tile_size);
 
         if ((processor_word_a & processor_word_b) == 0) {
           continue;
         } else {
-          set_bit((unsigned long long*)matrix_c,
+          SetBit((unsigned long long*)matrix_c,
                   (unsigned long long)row_a * tile_size + row_b);
           break;
         }
@@ -235,7 +235,7 @@ __device__ static inline bool single_thread_matrix_bit_and(
   }
 }
 
-__device__ static inline void find_intersection(
+__device__ static inline void FindIntersection(
     unsigned size_l, unsigned size_r, unsigned* data_l, unsigned* data_r,
     unsigned* data_out_l, unsigned* data_out_r, unsigned* n_intersections) {
   unsigned i = 0;
@@ -256,7 +256,7 @@ __device__ static inline void find_intersection(
   }
 }
 
-static __global__ void matrix_and_kernel(ParametersForMatrixBitAnd params) {
+static __global__ void MatrixAndKernel(ParametersForMatrixBitAnd params) {
   unsigned int tid = blockIdx.x * blockDim.x + threadIdx.x;
   unsigned int step = blockDim.x * gridDim.x;
 
@@ -265,15 +265,15 @@ static __global__ void matrix_and_kernel(ParametersForMatrixBitAnd params) {
       for (unsigned int k = 0; k < params.k; k += kProcessorWordSize) {
         unsigned int upper_bound = min(k + kProcessorWordSize, params.k);
 
-        uint64_t processor_word_a = get_aligned_k_bits(
+        uint64_t processor_word_a = GetAlignedKBits(
             params.matrix_a, row_a * params.k, (row_a + 1) * params.k);
-        uint64_t processor_word_b = get_aligned_k_bits(
+        uint64_t processor_word_b = GetAlignedKBits(
             params.matrix_b, row_b * params.k, (row_b + 1) * params.k);
 
         if ((processor_word_a & processor_word_b) == 0) {
           continue;
         } else {
-          set_bit((unsigned long long*)params.matrix_c,
+          SetBit((unsigned long long*)params.matrix_c,
                   (unsigned long long)row_a * params.n + row_b);
           break;
         }
@@ -282,7 +282,7 @@ static __global__ void matrix_and_kernel(ParametersForMatrixBitAnd params) {
   }
 }
 
-static __global__ void matrix_count_kernel(ParametersForMatrixBitCount params) {
+static __global__ void MatrixCountKernel(ParametersForMatrixBitCount params) {
   unsigned int tid = blockIdx.x * blockDim.x + threadIdx.x;
   unsigned int step = blockDim.x * gridDim.x;
 
@@ -298,17 +298,17 @@ static __global__ void matrix_count_kernel(ParametersForMatrixBitCount params) {
   }
 }
 
-static __global__ void init_bit_tiled_matrix_metadata_kernel(
+static __global__ void InitBitTiledMatrixMetadataKernel(
     ParametersInitBitTiledMatrix params) {
   unsigned int tid = blockIdx.x * blockDim.x + threadIdx.x;
   unsigned int step = blockDim.x * gridDim.x;
 
   for (unsigned int i = tid; i < params.tile_size; i += step) {
     for (unsigned int j = 0; j < params.tile_size; j++) {
-      if (get_bit((uint64_t*)params.layout_matrix,
+      if (GetBit((uint64_t*)params.layout_matrix,
                   (uint64_t)(i * params.tile_size + j))) {
         unsigned long long pre_element_count_val =
-            pre_element_count((uint64_t*)params.layout_matrix,
+            PreElementCount((uint64_t*)params.layout_matrix,
                               (uint64_t)i * params.tile_size + j);
         params.tile_row_idx[pre_element_count_val] = i;
         params.tile_col_idx[pre_element_count_val] = j;
@@ -318,7 +318,7 @@ static __global__ void init_bit_tiled_matrix_metadata_kernel(
   }
 }
 
-static __global__ void fill_tiles_kernel(ParametersFillTiles params) {
+static __global__ void FillTilesKernel(ParametersFillTiles params) {
   unsigned int tid = blockIdx.x * blockDim.x + threadIdx.x;
   unsigned int step = blockDim.x * gridDim.x;
 
@@ -358,7 +358,7 @@ static __global__ void fill_tiles_kernel(ParametersFillTiles params) {
             ((unsigned long long*)params.data_b) +
             params.tile_unit * (params.tile_offset_row_b[y] + nz_idx_y);
 
-        single_thread_matrix_bit_and(params.tile_size, matrix_a, matrix_b,
+        SingleThreadMatrixBitAnd(params.tile_size, matrix_a, matrix_b,
                                      matrix_c);
 
         nz_idx_x++;
@@ -368,7 +368,7 @@ static __global__ void fill_tiles_kernel(ParametersFillTiles params) {
   }
 }
 
-static __global__ void fill_csr_tiles_kernel(ParametersFillTiles params) {
+static __global__ void FillCsrTilesKernel(ParametersFillTiles params) {
   unsigned int tid = blockIdx.x * blockDim.x + threadIdx.x;
   unsigned int step = blockDim.x * gridDim.x;
 
@@ -494,18 +494,18 @@ static __global__ void fill_csr_tiles_kernel(ParametersFillTiles params) {
   }
 }
 
-static __global__ void count_kernel(ParametersCount params) {
+static __global__ void CountKernel(ParametersCount params) {
   unsigned int tid = blockIdx.x * blockDim.x + threadIdx.x;
   unsigned int step = blockDim.x * gridDim.x;
 
   unsigned long long local_count = 0;
   for (unsigned i = tid; i < params.n_uint64_t; i += step) {
-    local_count += count_per_uint64_t(params.data[i]);
+    local_count += CountPerUint64T(params.data[i]);
   }
   atomicAdd(params.count, local_count);
 }
 
-static __global__ void walk_kernel(const ParametersWalk params) {
+static __global__ void WalkKernel(const ParametersWalk params) {
   unsigned int tid = blockIdx.x * blockDim.x + threadIdx.x;
   unsigned int step = blockDim.x * gridDim.x;
 
@@ -572,7 +572,7 @@ static __global__ void walk_kernel(const ParametersWalk params) {
           VertexID* edges_globalid_by_localid_b =
               out_edges_b + params.csr_n_edges_b[nz_idx_b];
 
-          auto v_idx_b = binary_search(
+          auto v_idx_b = BinarySearch(
               globalid_b, params.csr_n_vertices_b[nz_idx_b], global_dst);
 
           if (v_idx_b == kMaxVertexID) continue;
@@ -639,7 +639,7 @@ void MatrixOperationsKernelWrapper::MatrixBitAnd(
                                    .k = k,
                                    .n = n};
 
-  matrix_and_kernel<<<dim_block, dim_grid, 0, stream>>>(params);
+  MatrixAndKernel<<<dim_block, dim_grid, 0, stream>>>(params);
   cudaError_t err = cudaGetLastError();
   if (err != cudaSuccess) {
     CUDA_CHECK(err);
@@ -656,7 +656,7 @@ void MatrixOperationsKernelWrapper::MatrixBitCount(
       .data = reinterpret_cast<unsigned long long*>(matrix_buf.GetPtr()),
       .count = reinterpret_cast<unsigned long long*>(count_buf->GetPtr()),
       .size = size};
-  matrix_count_kernel<<<dim_block, dim_grid, 0, stream>>>(params);
+  MatrixCountKernel<<<dim_block, dim_grid, 0, stream>>>(params);
   cudaError_t err = cudaGetLastError();
   if (err != cudaSuccess) {
     CUDA_CHECK(err);
@@ -680,7 +680,7 @@ void MatrixOperationsKernelWrapper::InitBitTiledMatrixMetadataByLayoutMatrix(
       .tile_col_idx = reinterpret_cast<unsigned*>(tile_col_idx->GetPtr()),
       .tile_size = tile_size};
 
-  init_bit_tiled_matrix_metadata_kernel<<<dim_block, dim_grid, 0, stream>>>(
+  InitBitTiledMatrixMetadataKernel<<<dim_block, dim_grid, 0, stream>>>(
       params);
   cudaError_t err = cudaGetLastError();
   if (err != cudaSuccess) {
@@ -733,7 +733,7 @@ void MatrixOperationsKernelWrapper::FillTiles(
       .data_b = (uint8_t*)data_b.GetPtr(),
       .data_c = (uint8_t*)(data_c->GetPtr())};
 
-  fill_tiles_kernel<<<dim_block, dim_grid, 0, stream>>>(params);
+  FillTilesKernel<<<dim_block, dim_grid, 0, stream>>>(params);
   cudaError_t err = cudaGetLastError();
   if (err != cudaSuccess) {
     CUDA_CHECK(err);
@@ -804,7 +804,7 @@ void MatrixOperationsKernelWrapper::FillCSRTiles(
       .csr_offset_c = csr_offset_c.GetPtr(),
   };
 
-  fill_csr_tiles_kernel<<<dim_block, dim_grid, 0, stream>>>(params);
+  FillCsrTilesKernel<<<dim_block, dim_grid, 0, stream>>>(params);
   cudaError_t err = cudaGetLastError();
   if (err != cudaSuccess) {
     CUDA_CHECK(err);
@@ -860,7 +860,7 @@ void MatrixOperationsKernelWrapper::Walk(
                         .edgelist_c = edgelist_c->GetPtr(),
                         .output_offset = output_offset->GetPtr()};
 
-  walk_kernel<<<dim_block, dim_grid, 0>>>(params);
+  WalkKernel<<<dim_block, dim_grid, 0>>>(params);
   cudaError_t err = cudaGetLastError();
   if (err != cudaSuccess) {
     CUDA_CHECK(err);
@@ -880,7 +880,7 @@ void MatrixOperationsKernelWrapper::Count(
                          .data = (unsigned long long*)(data.GetPtr()),
                          .count = (unsigned long long*)(count->GetPtr())};
 
-  count_kernel<<<dim_grid, dim_block, 0, stream>>>(params);
+  CountKernel<<<dim_grid, dim_block, 0, stream>>>(params);
   cudaError_t err = cudaGetLastError();
   if (err != cudaSuccess) {
     CUDA_CHECK(err);

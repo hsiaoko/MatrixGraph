@@ -28,7 +28,7 @@ using ImmutableCSRGraph =
 namespace {
 
 uint32_t BfsMaxDistanceUndirected(const ImmutableCSRGraph& g, VertexID src) {
-  const VertexID n = g.get_num_vertices();
+  const VertexID n = g.GetNumVertices();
   constexpr uint32_t kInf = std::numeric_limits<uint32_t>::max();
   std::vector<uint32_t> dist(n, kInf);
   std::vector<VertexID> q;
@@ -67,15 +67,15 @@ void Skew::LoadData() {
 }
 
 void Skew::ComputeSkew(const ImmutableCSRGraph& g) {
-  const VertexID n = g.get_num_vertices();
+  const VertexID n = g.GetNumVertices();
   if (n == 0) {
     std::cout << "[Skew] empty graph; skew undefined." << std::endl;
     return;
   }
 
   const double n_d = static_cast<double>(n);
-  const double m_out = static_cast<double>(g.get_num_outgoing_edges());
-  const double m_in = static_cast<double>(g.get_num_incoming_edges());
+  const double m_out = static_cast<double>(g.GetNumOutgoingEdges());
+  const double m_in = static_cast<double>(g.GetNumIncomingEdges());
   const double d_bar = (m_out + m_in) / n_d;
 
   const size_t n_sz = static_cast<size_t>(n);

@@ -137,21 +137,21 @@ class ImmutableCSR {
 
   inline SubGraphMetadata GetMetadata() const { return metadata_; }
 
-  inline GraphID get_gid() const { return metadata_.gid; }
+  inline GraphID GetGid() const { return metadata_.gid; }
 
-  inline VertexID get_num_vertices() const { return metadata_.num_vertices; }
+  inline VertexID GetNumVertices() const { return metadata_.num_vertices; }
 
-  inline EdgeIndex get_num_incoming_edges() const {
+  inline EdgeIndex GetNumIncomingEdges() const {
     return metadata_.num_incoming_edges;
   }
 
-  inline EdgeIndex get_num_outgoing_edges() const {
+  inline EdgeIndex GetNumOutgoingEdges() const {
     return metadata_.num_outgoing_edges;
   }
 
-  inline VertexID get_max_vid() const { return metadata_.max_vid; }
+  inline VertexID GetMaxVid() const { return metadata_.max_vid; }
 
-  inline VertexID get_min_vid() const { return metadata_.min_vid; }
+  inline VertexID GetMinVid() const { return metadata_.min_vid; }
 
   inline uint8_t* GetGraphBuffer() const { return graph_base_pointer_.get(); }
 

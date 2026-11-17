@@ -137,7 +137,7 @@ class GraphAggregate : public TaskBase {
 
   // Load columnar per-edge attributes from host memory.
   // is_outgoing=true means the columns describe outgoing edges in CSR order
-  // (n_values must equal graph_->get_num_outgoing_edges()); otherwise they
+  // (n_values must equal graph_->GetNumOutgoingEdges()); otherwise they
   // describe incoming edges.  Calls for the two directions are independent.
   __host__ void LoadEdgeAttributes(
       bool is_outgoing, uint32_t n_columns,

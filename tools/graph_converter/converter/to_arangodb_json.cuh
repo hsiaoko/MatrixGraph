@@ -98,9 +98,9 @@ static bool WriteArangoDBJSON(
   const std::string pivot_graphs_path = out_dir + "/pivot_graphs.jsonl";
   const std::string readme_path = out_dir + "/README_arangodb_import.txt";
 
-  const auto metadata = edgelist.get_metadata();
+  const auto metadata = edgelist.GetMetadata();
   auto to_global = [&edgelist](VertexID local_id) {
-    return edgelist.get_globalid_by_localid(local_id);
+    return edgelist.GetGlobalidByLocalid(local_id);
   };
 
   std::mt19937 rng(42);
@@ -114,7 +114,7 @@ static bool WriteArangoDBJSON(
   if (opt.pivot_mode == "source") {
     std::unordered_map<VertexID, PivotGraphDoc> by_pivot;
     for (size_t i = 0; i < metadata.num_edges; ++i) {
-      auto e = edgelist.get_edge_by_index(i);
+      auto e = edgelist.GetEdgeByIndex(i);
       Edge global_edge(to_global(e.src), to_global(e.dst));
       auto& doc = by_pivot[global_edge.src];
       if (doc.pivot_id.empty()) {
@@ -148,7 +148,7 @@ static bool WriteArangoDBJSON(
 
     for (size_t i = 0; i < subgraphs.size(); ++i) {
       const auto& subgraph = subgraphs[i];
-      const auto& sub_meta = subgraph.get_metadata();
+      const auto& sub_meta = subgraph.GetMetadata();
 
       PivotGraphDoc doc;
       doc.pivot_id = "pg_" + std::to_string(centers[i]);
@@ -156,7 +156,7 @@ static bool WriteArangoDBJSON(
       // Collect vertices from subgraph
       std::unordered_set<VertexID> vertex_set;
       for (size_t j = 0; j < sub_meta.num_edges; ++j) {
-        auto e = subgraph.get_edge_by_index(j);
+        auto e = subgraph.GetEdgeByIndex(j);
         VertexID global_src = to_global(e.src);
         VertexID global_dst = to_global(e.dst);
         vertex_set.insert(global_src);
@@ -186,7 +186,7 @@ static bool WriteArangoDBJSON(
     }
     doc.edges.reserve(metadata.num_edges);
     for (size_t i = 0; i < metadata.num_edges; ++i) {
-      auto e = edgelist.get_edge_by_index(i);
+      auto e = edgelist.GetEdgeByIndex(i);
       doc.edges.emplace_back(to_global(e.src), to_global(e.dst));
     }
     pivots.push_back(std::move(doc));
@@ -197,7 +197,7 @@ static bool WriteArangoDBJSON(
     for (const auto& kv : vlabel) vertex_labels.insert(kv.second);
     std::unordered_set<std::string> edge_triples;
     for (size_t i = 0; i < metadata.num_edges; ++i) {
-      auto e = edgelist.get_edge_by_index(i);
+      auto e = edgelist.GetEdgeByIndex(i);
       auto src = to_global(e.src);
       auto dst = to_global(e.dst);
       edge_triples.insert(vlabel[src] + "|" + opt.default_edge_label + "|" +

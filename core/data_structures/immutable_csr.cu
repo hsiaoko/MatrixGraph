@@ -118,23 +118,23 @@ void ImmutableCSR::Write(const std::string& root_path, GraphID gid) {
 
   // Write topology of graph.
   out_data_file.write(reinterpret_cast<char*>(GetGloablIDBasePointer()),
-                      sizeof(VertexID) * get_num_vertices());
+                      sizeof(VertexID) * GetNumVertices());
   out_data_file.write(reinterpret_cast<char*>(GetInDegreeBasePointer()),
-                      sizeof(VertexID) * get_num_vertices());
+                      sizeof(VertexID) * GetNumVertices());
   out_data_file.write(reinterpret_cast<char*>(GetOutDegreeBasePointer()),
-                      sizeof(VertexID) * get_num_vertices());
+                      sizeof(VertexID) * GetNumVertices());
   out_data_file.write(reinterpret_cast<char*>(GetInOffsetBasePointer()),
-                      sizeof(EdgeIndex) * (get_num_vertices() + 1));
+                      sizeof(EdgeIndex) * (GetNumVertices() + 1));
   out_data_file.write(reinterpret_cast<char*>(GetOutOffsetBasePointer()),
-                      sizeof(EdgeIndex) * (get_num_vertices() + 1));
+                      sizeof(EdgeIndex) * (GetNumVertices() + 1));
   out_data_file.write(reinterpret_cast<char*>(GetIncomingEdgesBasePointer()),
-                      sizeof(VertexID) * get_num_incoming_edges());
+                      sizeof(VertexID) * GetNumIncomingEdges());
   out_data_file.write(reinterpret_cast<char*>(GetOutgoingEdgesBasePointer()),
-                      sizeof(VertexID) * get_num_outgoing_edges());
+                      sizeof(VertexID) * GetNumOutgoingEdges());
   out_data_file.write(reinterpret_cast<char*>(GetEdgesGloablIDBasePointer()),
-                      sizeof(VertexID) * (get_max_vid() + 1));
+                      sizeof(VertexID) * (GetMaxVid() + 1));
   out_data_file.write(reinterpret_cast<char*>(GetLocalIDBasePointer()),
-                      sizeof(VertexID) * (get_max_vid() + 1));
+                      sizeof(VertexID) * (GetMaxVid() + 1));
 
   // PrintGraph(185622);
   //  Write label data with all 0.
@@ -142,7 +142,7 @@ void ImmutableCSR::Write(const std::string& root_path, GraphID gid) {
                                ".bin");
   auto buffer_label = GetVLabelBasePointer();
   out_label_file.write(reinterpret_cast<char*>(buffer_label),
-                       sizeof(VertexLabel) * get_num_vertices());
+                       sizeof(VertexLabel) * GetNumVertices());
 
   out_data_file.close();
   out_label_file.close();
@@ -150,15 +150,15 @@ void ImmutableCSR::Write(const std::string& root_path, GraphID gid) {
   // Write graph metadata.
   std::vector<SubGraphMetadata> subgraph_metadata_vec;
   subgraph_metadata_vec.push_back(
-      {gid, get_num_vertices(), get_num_incoming_edges(),
-       get_num_outgoing_edges(), get_max_vid(), get_min_vid()});
+      {gid, GetNumVertices(), GetNumIncomingEdges(),
+       GetNumOutgoingEdges(), GetMaxVid(), GetMinVid()});
 
   YAML::Node out_node;
-  out_node["GraphMetadata"]["num_vertices"] = get_num_vertices();
+  out_node["GraphMetadata"]["num_vertices"] = GetNumVertices();
   out_node["GraphMetadata"]["num_edges"] =
-      get_num_incoming_edges() + get_num_outgoing_edges();
-  out_node["GraphMetadata"]["max_vid"] = get_max_vid();
-  out_node["GraphMetadata"]["min_vid"] = get_min_vid();
+      GetNumIncomingEdges() + GetNumOutgoingEdges();
+  out_node["GraphMetadata"]["max_vid"] = GetMaxVid();
+  out_node["GraphMetadata"]["min_vid"] = GetMinVid();
   out_node["GraphMetadata"]["count_border_vertices"] = 0;
   out_node["GraphMetadata"]["num_subgraphs"] = 1;
   out_node["GraphMetadata"]["subgraphs"] = subgraph_metadata_vec;
@@ -252,11 +252,11 @@ ImmutableCSRVertex ImmutableCSR::GetVertexByLocalID(VertexID i) const {
   ImmutableCSRVertex v;
   v.vid = globalid_by_localid_base_pointer_[i];
   v.vlabel = vertex_label_base_pointer_[i];
-  if (get_num_incoming_edges() > 0) {
+  if (GetNumIncomingEdges() > 0) {
     v.indegree = GetInDegreeByLocalID(i);
     v.incoming_edges = incoming_edges_base_pointer_ + GetInOffsetByLocalID(i);
   }
-  if (get_num_outgoing_edges() > 0) {
+  if (GetNumOutgoingEdges() > 0) {
     v.outdegree = GetOutDegreeByLocalID(i);
     v.outgoing_edges = outgoing_edges_base_pointer_ + GetOutOffsetByLocalID(i);
   }
@@ -271,7 +271,7 @@ void ImmutableCSR::GenerateVLabel(VertexID range, bool random) {
   auto step = worker.size();
 
   auto vlabel_ptr = GetVLabelBasePointer();
-  memset(vlabel_ptr, 0, sizeof(VertexLabel) * get_num_vertices());
+  memset(vlabel_ptr, 0, sizeof(VertexLabel) * GetNumVertices());
 
   if (random) {
     std::random_device rd;
@@ -282,14 +282,14 @@ void ImmutableCSR::GenerateVLabel(VertexID range, bool random) {
 
     ParallelFor(worker.begin(), worker.end(),
                 [this, step, &dis, &gen, &range, &vlabel_ptr](auto w) {
-                  for (auto vid = w; vid < get_num_vertices(); vid += step) {
+                  for (auto vid = w; vid < GetNumVertices(); vid += step) {
                     vlabel_ptr[vid] = (dis(gen) + vid) % range;
                   }
                 });
   } else {
     ParallelFor(worker.begin(), worker.end(),
                 [this, step, &range, &vlabel_ptr](auto w) {
-                  for (auto vid = w; vid < get_num_vertices(); vid += step) {
+                  for (auto vid = w; vid < GetNumVertices(); vid += step) {
                     vlabel_ptr[vid] = vid % range;
                   }
                 });
@@ -303,7 +303,7 @@ void ImmutableCSR::SortByDegree() {
   std::iota(worker.begin(), worker.end(), 0);
   auto step = worker.size();
 
-  auto n_vertices = get_num_vertices();
+  auto n_vertices = GetNumVertices();
   VidCountPair* vids_and_degrees = new VidCountPair[n_vertices]();
 
   std::cout << "[SortByDegree] Computing degree of each vertex" << std::endl;
@@ -319,14 +319,14 @@ void ImmutableCSR::SortByDegree() {
   std::sort(vids_and_degrees, vids_and_degrees + n_vertices,
             [](const auto a, const auto b) { return a.count > b.count; });
 
-  auto new_buffer_globalid = new VertexID[get_num_vertices()]();
-  auto new_buffer_localid = new VertexID[get_max_vid() + 1]();
-  auto new_buffer_indegree = new VertexID[get_num_vertices()]();
-  auto new_buffer_outdegree = new VertexID[get_num_vertices()]();
-  auto new_buffer_in_offset = new EdgeIndex[get_num_vertices() + 1]();
-  auto new_buffer_out_offset = new EdgeIndex[get_num_vertices() + 1]();
-  auto new_buffer_in_edges = new VertexID[get_num_incoming_edges()]();
-  auto new_buffer_out_edges = new VertexID[get_num_outgoing_edges()]();
+  auto new_buffer_globalid = new VertexID[GetNumVertices()]();
+  auto new_buffer_localid = new VertexID[GetMaxVid() + 1]();
+  auto new_buffer_indegree = new VertexID[GetNumVertices()]();
+  auto new_buffer_outdegree = new VertexID[GetNumVertices()]();
+  auto new_buffer_in_offset = new EdgeIndex[GetNumVertices() + 1]();
+  auto new_buffer_out_offset = new EdgeIndex[GetNumVertices() + 1]();
+  auto new_buffer_in_edges = new VertexID[GetNumIncomingEdges()]();
+  auto new_buffer_out_edges = new VertexID[GetNumOutgoingEdges()]();
 
   std::cout << "[SortByDegree] Computing offset" << std::endl;
   for (VertexID i = 0; i < n_vertices; i++) {
@@ -399,7 +399,7 @@ void ImmutableCSR::SortByDegree() {
 }
 
 bool ImmutableCSR::IsConnected(VertexID src, VertexID dst) const {
-  if (src > get_max_vid() || dst > get_max_vid()) return false;
+  if (src > GetMaxVid() || dst > GetMaxVid()) return false;
   auto u = GetVertexByLocalID(src);
 
   for (VertexID nbr_idx = 0; nbr_idx < u.outdegree; nbr_idx++) {

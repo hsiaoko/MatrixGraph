@@ -86,13 +86,13 @@ __host__ void PageRank::ComputePageRank(const ImmutableCSR& g) {
   unified_data_g.Init(data_g);
 
   v_label_g.data = g.GetVLabelBasePointer();
-  v_label_g.size = sizeof(VertexLabel) * g.get_num_vertices();
+  v_label_g.size = sizeof(VertexLabel) * g.GetNumVertices();
 
   unified_v_label_g.Init(v_label_g);
 
   BufferFloat page_ranks;
-  page_ranks.data = new float[g.get_max_vid()]();
-  page_ranks.size = sizeof(float) * g.get_max_vid();
+  page_ranks.data = new float[g.GetMaxVid()]();
+  page_ranks.size = sizeof(float) * g.GetMaxVid();
 
   UnifiedOwnedBufferFloat unified_page_ranks;
   unified_page_ranks.Init(page_ranks);
@@ -107,8 +107,8 @@ __host__ void PageRank::ComputePageRank(const ImmutableCSR& g) {
        {reinterpret_cast<void*>(unified_page_ranks.GetPtr()),
         unified_page_ranks.GetSize()}});
 
-  PageRankKernelWrapper::PageRank(PrimaryStream(), g.get_num_vertices(),
-                                  g.get_num_outgoing_edges(), unified_data_g,
+  PageRankKernelWrapper::PageRank(PrimaryStream(), g.GetNumVertices(),
+                                  g.GetNumOutgoingEdges(), unified_data_g,
                                   unified_page_ranks, damping_factor_, epsilon_,
                                   max_iterations_);
 }

@@ -23,7 +23,7 @@ using sics::matrixgraph::core::data_structures::ValueType;
 // All threads in a warp share the same Attributes object and look up the
 // SAME attribute name (broadcast).  They then access their own row via tid.
 // ---------------------------------------------------------------------------
-__global__ void simd_lookup_kernel(const Attributes attrs, int64_t* out_age,
+__global__ void SimdLookupKernel(const Attributes attrs, int64_t* out_age,
                                    double* out_score, uint32_t n) {
   uint32_t tid = blockIdx.x * blockDim.x + threadIdx.x;
   if (tid >= n) return;
@@ -97,7 +97,7 @@ int main() {
 
   const uint32_t block_size = 256;
   const uint32_t grid_size = (n_rows + block_size - 1) / block_size;
-  simd_lookup_kernel<<<grid_size, block_size>>>(dev_attrs.View(), d_out_age,
+  SimdLookupKernel<<<grid_size, block_size>>>(dev_attrs.View(), d_out_age,
                                                 d_out_score, n_rows);
   cudaDeviceSynchronize();
 

@@ -48,20 +48,20 @@ void EdgelistSubGraphsIO::Write(const std::string& output_root_path,
                                             std::to_string(gid) + ".bin");
 
     out_data_file.write(
-        reinterpret_cast<char*>(edge_buckets[gid].get_base_ptr()),
-        sizeof(Edge) * edge_buckets[gid].get_metadata().num_edges);
+        reinterpret_cast<char*>(edge_buckets[gid].GetBasePtr()),
+        sizeof(Edge) * edge_buckets[gid].GetMetadata().num_edges);
 
     out_local_id_to_global_id.write(
         reinterpret_cast<char*>(
-            edge_buckets[gid].get_localid_to_globalid_ptr()),
-        sizeof(VertexID) * edge_buckets[gid].get_metadata().num_vertices);
+            edge_buckets[gid].GetLocalidToGlobalidPtr()),
+        sizeof(VertexID) * edge_buckets[gid].GetMetadata().num_vertices);
 
     subgraph_metadata_vec.push_back(
-        {gid, edge_buckets[gid].get_metadata().num_vertices,
-         edge_buckets[gid].get_metadata().num_edges,
-         edge_buckets[gid].get_metadata().num_edges,
-         edge_buckets[gid].get_metadata().max_vid,
-         edge_buckets[gid].get_metadata().min_vid});
+        {gid, edge_buckets[gid].GetMetadata().num_vertices,
+         edge_buckets[gid].GetMetadata().num_edges,
+         edge_buckets[gid].GetMetadata().num_edges,
+         edge_buckets[gid].GetMetadata().max_vid,
+         edge_buckets[gid].GetMetadata().min_vid});
 
     out_data_file.close();
     out_local_id_to_global_id.close();

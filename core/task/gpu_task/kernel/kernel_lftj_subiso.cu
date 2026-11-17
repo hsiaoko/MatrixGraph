@@ -333,8 +333,8 @@ uint64_t LFTJSubIsoKernelWrapper::Enumerate(
   using UnifiedOwnedBufferVertexLabel =
       sics::matrixgraph::core::data_structures::UnifiedOwnedBuffer<VertexLabel>;
 
-  VertexID pn = pattern.get_num_vertices();
-  VertexID dn = data_graph.get_num_vertices();
+  VertexID pn = pattern.GetNumVertices();
+  VertexID dn = data_graph.GetNumVertices();
 
   // Pattern CSR buffers.
   auto pattern_buf_size = sizeof(VertexID) * pn +         // globalid
@@ -342,8 +342,8 @@ uint64_t LFTJSubIsoKernelWrapper::Enumerate(
                           sizeof(VertexID) * pn +         // out_degree
                           sizeof(EdgeIndex) * (pn + 1) +  // in_offset
                           sizeof(EdgeIndex) * (pn + 1) +  // out_offset
-                          sizeof(VertexID) * pattern.get_num_incoming_edges() +
-                          sizeof(VertexID) * pattern.get_num_outgoing_edges();
+                          sizeof(VertexID) * pattern.GetNumIncomingEdges() +
+                          sizeof(VertexID) * pattern.GetNumOutgoingEdges();
   UnifiedOwnedBufferUint8 d_pattern_csr;
   d_pattern_csr.Init(pattern_buf_size);
   std::memcpy(d_pattern_csr.GetPtr(), pattern.GetGraphBuffer(),
@@ -355,7 +355,7 @@ uint64_t LFTJSubIsoKernelWrapper::Enumerate(
   EdgeIndex* d_in_offset_p = reinterpret_cast<EdgeIndex*>(d_out_degree_p + pn);
   EdgeIndex* d_out_offset_p = d_in_offset_p + pn + 1;
   VertexID* d_in_edges_p = reinterpret_cast<VertexID*>(d_out_offset_p + pn + 1);
-  VertexID* d_out_edges_p = d_in_edges_p + pattern.get_num_incoming_edges();
+  VertexID* d_out_edges_p = d_in_edges_p + pattern.GetNumIncomingEdges();
 
   UnifiedOwnedBufferVertexLabel d_v_label_p;
   d_v_label_p.Init(sizeof(VertexLabel) * pn);
@@ -368,8 +368,8 @@ uint64_t LFTJSubIsoKernelWrapper::Enumerate(
                        sizeof(VertexID) * dn +         // out_degree
                        sizeof(EdgeIndex) * (dn + 1) +  // in_offset
                        sizeof(EdgeIndex) * (dn + 1) +  // out_offset
-                       sizeof(VertexID) * data_graph.get_num_incoming_edges() +
-                       sizeof(VertexID) * data_graph.get_num_outgoing_edges();
+                       sizeof(VertexID) * data_graph.GetNumIncomingEdges() +
+                       sizeof(VertexID) * data_graph.GetNumOutgoingEdges();
   UnifiedOwnedBufferUint8 d_data_csr;
   d_data_csr.Init(data_buf_size);
   std::memcpy(d_data_csr.GetPtr(), data_graph.GetGraphBuffer(), data_buf_size);
@@ -380,7 +380,7 @@ uint64_t LFTJSubIsoKernelWrapper::Enumerate(
   EdgeIndex* d_in_offset_g = reinterpret_cast<EdgeIndex*>(d_out_degree_g + dn);
   EdgeIndex* d_out_offset_g = d_in_offset_g + dn + 1;
   VertexID* d_in_edges_g = reinterpret_cast<VertexID*>(d_out_offset_g + dn + 1);
-  VertexID* d_out_edges_g = d_in_edges_g + data_graph.get_num_incoming_edges();
+  VertexID* d_out_edges_g = d_in_edges_g + data_graph.GetNumIncomingEdges();
 
   UnifiedOwnedBufferVertexLabel d_v_label_g;
   d_v_label_g.Init(sizeof(VertexLabel) * dn);
@@ -464,7 +464,7 @@ uint64_t LFTJSubIsoKernelWrapper::Enumerate(
 
   ParametersLFTJ params{
       .n_vertices_p = pn,
-      .n_edges_p = pattern.get_num_outgoing_edges(),
+      .n_edges_p = pattern.GetNumOutgoingEdges(),
       .out_degree_p = d_out_degree_p,
       .in_degree_p = d_in_degree_p,
       .out_offset_p = d_out_offset_p,
@@ -473,7 +473,7 @@ uint64_t LFTJSubIsoKernelWrapper::Enumerate(
       .in_edges_p = d_in_edges_p,
       .v_label_p = d_v_label_p.GetPtr(),
       .n_vertices_g = dn,
-      .n_edges_g = data_graph.get_num_outgoing_edges(),
+      .n_edges_g = data_graph.GetNumOutgoingEdges(),
       .out_degree_g = d_out_degree_g,
       .in_degree_g = d_in_degree_g,
       .out_offset_g = d_out_offset_g,

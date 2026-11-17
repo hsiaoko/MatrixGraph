@@ -92,21 +92,21 @@ class ImmutableCSRGPU {
     metadata_.min_vid = min_vid;
   }
 
-  __host__ __device__ VertexID get_num_vertices() const {
+  __host__ __device__ VertexID GetNumVertices() const {
     return metadata_.num_vertices;
   }
 
-  __host__ __device__ EdgeIndex get_num_incoming_edges() const {
+  __host__ __device__ EdgeIndex GetNumIncomingEdges() const {
     return metadata_.num_incoming_edges;
   }
 
-  __host__ __device__ EdgeIndex get_num_outgoing_edges() const {
+  __host__ __device__ EdgeIndex GetNumOutgoingEdges() const {
     return metadata_.num_outgoing_edges;
   }
 
-  __host__ __device__ VertexID get_max_vid() const { return metadata_.max_vid; }
+  __host__ __device__ VertexID GetMaxVid() const { return metadata_.max_vid; }
 
-  __host__ __device__ VertexID get_min_vid() const { return metadata_.min_vid; }
+  __host__ __device__ VertexID GetMinVid() const { return metadata_.min_vid; }
 
   __host__ __device__ uint8_t* GetGraphBuffer() const {
     return graph_base_pointer_;

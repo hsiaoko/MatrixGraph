@@ -16,7 +16,7 @@ using sics::matrixgraph::core::task::kernel::FeatureRequest;
 using sics::matrixgraph::core::task::kernel::FeatureValue;
 using VertexID = sics::matrixgraph::core::common::VertexID;
 
-static bool float_eq(double a, double b, double eps = 1e-4) {
+static bool FloatEq(double a, double b, double eps = 1e-4) {
   return std::fabs(a - b) < eps;
 }
 
@@ -81,7 +81,7 @@ int main() {
     double expected_pct = static_cast<double>(true_count) / out_deg;
 
     auto check = [&](const char* name, double expected, double actual) {
-      if (!float_eq(expected, actual)) {
+      if (!FloatEq(expected, actual)) {
         std::cerr << "FAIL " << name << " at v=" << v
                   << " expected=" << expected << " got=" << actual << std::endl;
         pass = false;
@@ -135,7 +135,7 @@ int main() {
 
     auto check_all = [&](const char* name, double expected,
                          const FeatureValue& actual) {
-      if (!float_eq(expected, actual.ToDouble())) {
+      if (!FloatEq(expected, actual.ToDouble())) {
         std::cerr << "FAIL compute_all " << name << " at v=" << v
                   << " expected=" << expected << " got=" << actual.ToDouble()
                   << std::endl;
@@ -178,7 +178,7 @@ int main() {
   for (uint32_t v = 0; v + out_deg < n_vertices; ++v) {
     uint32_t base = v * n_req;
     double expected_pct = results[base + 9].ToDouble();
-    if (!float_eq(expected_pct, flag_results[v].percent_true.ToDouble())) {
+    if (!FloatEq(expected_pct, flag_results[v].percent_true.ToDouble())) {
       std::cerr << "FAIL compute_all flag percent_true at v=" << v
                 << " expected=" << expected_pct
                 << " got=" << flag_results[v].percent_true.ToDouble()
@@ -240,26 +240,26 @@ int main() {
       double expected_min = w1;
       double expected_max = w3;
 
-      if (!float_eq(expected_sum, edge_results[base + 0].ToDouble())) {
+      if (!FloatEq(expected_sum, edge_results[base + 0].ToDouble())) {
         std::cerr << "FAIL edge sum at v=" << v << " expected=" << expected_sum
                   << " got=" << edge_results[base + 0].ToDouble() << std::endl;
         edge_pass = false;
         break;
       }
-      if (!float_eq(expected_mean, edge_results[base + 1].ToDouble())) {
+      if (!FloatEq(expected_mean, edge_results[base + 1].ToDouble())) {
         std::cerr << "FAIL edge mean at v=" << v
                   << " expected=" << expected_mean
                   << " got=" << edge_results[base + 1].ToDouble() << std::endl;
         edge_pass = false;
         break;
       }
-      if (!float_eq(expected_min, edge_results[base + 2].ToDouble())) {
+      if (!FloatEq(expected_min, edge_results[base + 2].ToDouble())) {
         std::cerr << "FAIL edge min at v=" << v << " expected=" << expected_min
                   << " got=" << edge_results[base + 2].ToDouble() << std::endl;
         edge_pass = false;
         break;
       }
-      if (!float_eq(expected_max, edge_results[base + 3].ToDouble())) {
+      if (!FloatEq(expected_max, edge_results[base + 3].ToDouble())) {
         std::cerr << "FAIL edge max at v=" << v << " expected=" << expected_max
                   << " got=" << edge_results[base + 3].ToDouble() << std::endl;
         edge_pass = false;

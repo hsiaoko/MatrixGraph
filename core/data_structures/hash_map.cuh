@@ -152,8 +152,8 @@ struct HashMap {
     return find(k) != nullptr;
   }
 
-  __host__ __device__ uint32_t get_size() const { return size; }
-  __host__ __device__ uint32_t get_capacity() const { return capacity; }
+  __host__ __device__ uint32_t GetSize() const { return size; }
+  __host__ __device__ uint32_t GetCapacity() const { return capacity; }
 };
 
 // ---------------------------------------------------------------------------

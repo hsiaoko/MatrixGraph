@@ -90,7 +90,7 @@ __host__ void GEMM::LoadData() {
   // std::cout << "######################## B #######################"
   //           << std::endl;
   // matrix_b_->Print(999);
-  //  matrix_c_ = new GridCSRTiledMatrix(matrix_a_->get_metadata());
+  //  matrix_c_ = new GridCSRTiledMatrix(matrix_a_->GetMetadata());
 }
 
 __host__ void GEMM::InitC() {
@@ -108,11 +108,11 @@ __host__ void GEMM::InitC() {
             << " Start - n_strips: " << n_strips << ", tile_size: " << tile_size
             << std::endl;
 
-  VertexID M = matrix_a_->get_metadata().n_chunks;
-  VertexID K = matrix_a_->get_metadata().n_chunks;
-  VertexID N = matrix_b_->get_metadata().n_chunks;
+  VertexID M = matrix_a_->GetMetadata().n_chunks;
+  VertexID K = matrix_a_->GetMetadata().n_chunks;
+  VertexID N = matrix_b_->GetMetadata().n_chunks;
 
-  VertexID n_chunks = matrix_a_->get_metadata().n_chunks;
+  VertexID n_chunks = matrix_a_->GetMetadata().n_chunks;
 
   std::vector<BufferUint64> buffers_matrix_a;
   std::vector<BufferUint64> buffers_matrix_b;
@@ -163,7 +163,7 @@ __host__ void GEMM::InitC() {
               [this, M, N, K, step, &p_streams_vec, &mtx](auto w) {
                 for (VertexID i = w; i < N; i += step) {
                   for (VertexID j = 0; j < M; j++) {
-                    cudaSetDevice(common::hash_function(i * N + j) % 4);
+                    cudaSetDevice(common::HashFunction(i * N + j) % 4);
                     cudaStreamCreate(&p_streams_vec[i * N + j]);
                   }
                 }
@@ -186,7 +186,7 @@ __host__ void GEMM::InitC() {
                       if (block_a->GetMetadata().n_nz_tile == 0) continue;
                       if (block_b->GetMetadata().n_nz_tile == 0) continue;
 
-                      cudaSetDevice(common::hash_function(i * N + j) % 4);
+                      cudaSetDevice(common::HashFunction(i * N + j) % 4);
                       cudaStream_t& p_stream = p_streams_vec[i * N + j];
 
                       {
@@ -250,7 +250,7 @@ __host__ void GEMM::InitC() {
             if (device_owned_buffers_matrix_c[i * N + j].GetPtr() == nullptr) {
               continue;
             }
-            cudaSetDevice(common::hash_function(i * N + j) % 4);
+            cudaSetDevice(common::HashFunction(i * N + j) % 4);
             cudaStream_t& p_stream = p_streams_vec[i * N + j];
             device_owned_buffers_matrix_c_count[i * N + j].Init(
                 sizeof(uint64_t), p_stream);
@@ -275,7 +275,7 @@ __host__ void GEMM::InitC() {
             if (device_owned_buffers_matrix_c[i * N + j].GetPtr() == nullptr) {
               continue;
             }
-            cudaSetDevice(common::hash_function(i * N + j) % 4);
+            cudaSetDevice(common::HashFunction(i * N + j) % 4);
             cudaStream_t& p_stream = p_streams_vec[i * N + j];
             buffers_matrix_c_count[i * N + j].size = sizeof(uint64_t);
             cudaHostAlloc(&buffers_matrix_c_count[i * N + j].data,
@@ -309,7 +309,7 @@ __host__ void GEMM::InitC() {
             }
             VertexID n_nz_tile = *buffers_matrix_c_count[i * N + j].GetPtr();
             if (n_nz_tile == 0) continue;
-            cudaSetDevice(common::hash_function(i * N + j) % 4);
+            cudaSetDevice(common::HashFunction(i * N + j) % 4);
             cudaStream_t& p_stream = p_streams_vec[i * N + j];
 
             auto* csr_tiled_matrix_ptr = matrix_c_->GetTiledMatrixPtrByIdx(i * N + j);
@@ -344,7 +344,7 @@ __host__ void GEMM::InitC() {
             VertexID n_nz_tile = *buffers_matrix_c_count[i * N + j].GetPtr();
             if (n_nz_tile == 0) continue;
 
-            cudaSetDevice(common::hash_function(i * N + j) % 4);
+            cudaSetDevice(common::HashFunction(i * N + j) % 4);
             cudaStream_t& p_stream = p_streams_vec[i * N + j];
             auto* bit_tiled_matrix_ptr = matrix_c_->GetTiledMatrixPtrByIdx(i * N + j);
 
@@ -395,7 +395,7 @@ __host__ void GEMM::InitC() {
             VertexID n_nz_tile = *buffers_matrix_c_count[i * N + j].GetPtr();
             if (n_nz_tile == 0) continue;
 
-            cudaSetDevice(common::hash_function(i * N + j) % 4);
+            cudaSetDevice(common::HashFunction(i * N + j) % 4);
             cudaStream_t& p_stream = p_streams_vec[i * N + j];
 
             cudaMemcpyAsync(tile_count_row[i * N + j].GetPtr(),
@@ -469,16 +469,16 @@ __host__ Edges* GEMM::Walks(const GridCSRTiledMatrix& A,
   auto tile_buffer_size =
       sizeof(uint64_t) * std::max(1u, WORD_OFFSET(tile_size * tile_size));
 
-  VertexID M = A.get_metadata().n_chunks;
-  VertexID K = A.get_metadata().n_chunks;
-  VertexID N = B.get_metadata().n_chunks;
+  VertexID M = A.GetMetadata().n_chunks;
+  VertexID K = A.GetMetadata().n_chunks;
+  VertexID N = B.GetMetadata().n_chunks;
   std::vector<cudaStream_t> p_streams_vec;
   p_streams_vec.resize(M * N);
   ParallelFor(worker.begin(), worker.end(),
               [this, M, N, K, step, &p_streams_vec, &mtx](auto w) {
                 for (VertexID i = w; i < N; i += step) {
                   for (VertexID j = 0; j < M; j++) {
-                    cudaSetDevice(common::hash_function(i * N + j) % 4);
+                    cudaSetDevice(common::HashFunction(i * N + j) % 4);
                     cudaStreamCreate(&p_streams_vec[i * N + j]);
                   }
                 }
@@ -724,10 +724,10 @@ __host__ Edges* GEMM::Walks(const GridCSRTiledMatrix& A,
                     << "C: (" << i << ", " << j << ")"
                     << "nz A: " << block_a->GetMetadata().n_nz_tile
                     << ", nz B: " << block_b->GetMetadata().n_nz_tile
-                    << " to device: " << common::hash_function(i * N + j) % 4
+                    << " to device: " << common::HashFunction(i * N + j) % 4
                     << std::endl;
 
-          cudaSetDevice(common::hash_function(i * N + j) % 4);
+          cudaSetDevice(common::HashFunction(i * N + j) % 4);
 
           {
             std::lock_guard<std::mutex> lock(mtx);
@@ -774,7 +774,7 @@ __host__ Edges* GEMM::Walks(const GridCSRTiledMatrix& A,
   //      &unified_output_offset, &output_offset, &output_edges_buf](auto w) {
   //       for (VertexID i = w; i < M; i += step) {
   //         for (VertexID j = 0; j < N; j++) {
-  //           cudaSetDevice(common::hash_function(i * N + j) % 4);
+  //           cudaSetDevice(common::HashFunction(i * N + j) % 4);
   //           size_t offset = *unified_output_offset[i * N + j].GetPtr();
   //           std::cout << i << "," << j << "- offset: " << offset <<
   //           std::endl; cudaStream_t &p_stream = p_streams_vec[i * N + j];
@@ -812,7 +812,7 @@ __host__ std::vector<Edges>* GEMM::GridPartitioning(const Edges& edges,
 
   // Precompute the size of each edge bucket.
   VertexID scope_per_chunk =
-      ceil((edges.get_metadata().max_vid + 1) / (float)n_partitions);
+      ceil((edges.GetMetadata().max_vid + 1) / (float)n_partitions);
 
   auto size_per_bucket = new EdgeIndex[n_partitions * n_partitions]();
   auto* n_edges_for_each_block = new EdgeIndex[n_partitions * n_partitions]();
@@ -821,7 +821,7 @@ __host__ std::vector<Edges>* GEMM::GridPartitioning(const Edges& edges,
   BitmapOwnership vertices_bm_for_each_block[n_partitions * n_partitions];
 
   for (GraphID _ = 0; _ < n_partitions * n_partitions; _++) {
-    vertices_bm_for_each_block[_].Init(edges.get_metadata().max_vid);
+    vertices_bm_for_each_block[_].Init(edges.GetMetadata().max_vid);
     min_vid_for_each_block[_] = std::numeric_limits<uint32_t>::max();
   }
 
@@ -833,9 +833,9 @@ __host__ std::vector<Edges>* GEMM::GridPartitioning(const Edges& edges,
       [this, step, &edges, scope_per_chunk, n_partitions,
        &n_edges_for_each_block, &max_vid_for_each_block,
        &min_vid_for_each_block, &vertices_bm_for_each_block](auto w) {
-        for (auto eid = w; eid < edges.get_metadata().num_edges; eid += step) {
-          auto* localid_to_globalid = edges.get_localid_to_globalid_ptr();
-          auto edge = edges.get_edge_by_index(eid);
+        for (auto eid = w; eid < edges.GetMetadata().num_edges; eid += step) {
+          auto* localid_to_globalid = edges.GetLocalidToGlobalidPtr();
+          auto edge = edges.GetEdgeByIndex(eid);
           edge.src = localid_to_globalid[edge.src];
           edge.dst = localid_to_globalid[edge.dst];
 
@@ -872,9 +872,9 @@ __host__ std::vector<Edges>* GEMM::GridPartitioning(const Edges& edges,
       worker.begin(), worker.end(),
       [this, step, &edges, scope_per_chunk, n_partitions, &edge_blocks_buf,
        &n_edges_for_each_block, &offset_for_each_block](auto w) {
-        for (auto eid = w; eid < edges.get_metadata().num_edges; eid += step) {
-          auto* localid_to_globalid = edges.get_localid_to_globalid_ptr();
-          auto edge = edges.get_edge_by_index(eid);
+        for (auto eid = w; eid < edges.GetMetadata().num_edges; eid += step) {
+          auto* localid_to_globalid = edges.GetLocalidToGlobalidPtr();
+          auto edge = edges.GetEdgeByIndex(eid);
           edge.src = localid_to_globalid[edge.src];
           edge.dst = localid_to_globalid[edge.dst];
           auto x = edge.src / scope_per_chunk;
@@ -899,7 +899,7 @@ __host__ std::vector<Edges>* GEMM::GridPartitioning(const Edges& edges,
   }
 
   for (GraphID _ = 0; _ < n_partitions * n_partitions; _++) {
-    if (edges_blocks->at(_).get_metadata().num_vertices == 0) continue;
+    if (edges_blocks->at(_).GetMetadata().num_vertices == 0) continue;
     edges_blocks->at(_).GenerateLocalID2GlobalID();
   }
 
@@ -931,9 +931,9 @@ __host__ void GEMM::Run() {
   auto block_a = matrix_a_->GetTiledMatrixPtrByIdx(0);
   VertexID tile_size = block_a->GetMetadata().tile_size;
   VertexID n_strips = block_a->GetMetadata().n_strips;
-  VertexID M = matrix_a_->get_metadata().n_chunks;
-  VertexID K = matrix_a_->get_metadata().n_chunks;
-  VertexID N = matrix_b_->get_metadata().n_chunks;
+  VertexID M = matrix_a_->GetMetadata().n_chunks;
+  VertexID K = matrix_a_->GetMetadata().n_chunks;
+  VertexID N = matrix_b_->GetMetadata().n_chunks;
 
   auto* edges = Walks(*matrix_a_, *matrix_b_, tile_size, n_strips);
   auto start_time_1 = std::chrono::system_clock::now();
@@ -958,9 +958,9 @@ __host__ void GEMM::Run() {
 
   GridGraphMetadata grid_graph_metadata = {
       .n_chunks = M,
-      .n_vertices = edges->get_metadata().num_vertices,
-      .n_edges = edges->get_metadata().num_edges,
-      .max_vid = matrix_a_->get_metadata().max_vid};
+      .n_vertices = edges->GetMetadata().num_vertices,
+      .n_edges = edges->GetMetadata().num_edges,
+      .max_vid = matrix_a_->GetMetadata().max_vid};
 
   matrix_c_ = ConvertGridEdgelist2GridTiledMatrix(*edges_blocks, grid_graph_metadata,
                                            tile_size);

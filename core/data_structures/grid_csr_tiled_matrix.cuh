@@ -25,7 +25,7 @@ class GridCSRTiledMatrix {
 
   void SetMetadata(const GridGraphMetadata& metadata) { metadata_ = metadata; }
 
-  GridGraphMetadata get_metadata() const { return metadata_; }
+  GridGraphMetadata GetMetadata() const { return metadata_; }
 
   CSRTiledMatrix* GetTiledMatrixPtrByIdx(GraphID idx) const {
     return tiled_matrix_vec_[idx];

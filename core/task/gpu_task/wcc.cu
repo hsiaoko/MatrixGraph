@@ -122,7 +122,7 @@ __host__ void WCC::HashMin(const ImmutableCSR& g) {
 
   v_label_g.data = g.GetVLabelBasePointer();
   // Label file holds one entry per local vertex (num_vertices), not max_vid+1.
-  v_label_g.size = sizeof(VertexLabel) * g.get_num_vertices();
+  v_label_g.size = sizeof(VertexLabel) * g.GetNumVertices();
 
   unified_v_label_g.Init(v_label_g);
 
@@ -134,8 +134,8 @@ __host__ void WCC::HashMin(const ImmutableCSR& g) {
        {reinterpret_cast<void*>(unified_v_label_g.GetPtr()),
         unified_v_label_g.GetSize()}});
 
-  WCCKernelWrapper::WCC(PrimaryStream(), g.get_num_vertices(),
-                        g.get_num_outgoing_edges(), unified_data_g,
+  WCCKernelWrapper::WCC(PrimaryStream(), g.GetNumVertices(),
+                        g.GetNumOutgoingEdges(), unified_data_g,
                         unified_v_label_g);
 }
 

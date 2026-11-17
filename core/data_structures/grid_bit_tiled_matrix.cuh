@@ -24,7 +24,7 @@ class GridBitTiledMatrix {
 
   void SetMetadata(const GridGraphMetadata& metadata) { metadata_ = metadata; }
 
-  GridGraphMetadata get_metadata() const { return metadata_; }
+  GridGraphMetadata GetMetadata() const { return metadata_; }
 
   BitTiledMatrix* GetBitTileMatrixPtrByIdx(GraphID idx) const {
     return tiled_matrix_vec_[idx];

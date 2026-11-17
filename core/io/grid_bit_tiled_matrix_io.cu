@@ -44,7 +44,7 @@ void GridBitTiledMatrixIO::Read(const std::string& input_path,
 
 void GridBitTiledMatrixIO::Write(const std::string& output_path,
                                  const GridBitTiledMatrix& grid_tiled_matrix) {
-  auto meta = grid_tiled_matrix.get_metadata();
+  auto meta = grid_tiled_matrix.GetMetadata();
 
   BitTiledMatrixIO bit_tiled_matrix_io;
   for (size_t _ = 0; _ < pow(meta.n_chunks, 2); _++) {

@@ -176,9 +176,9 @@ static __forceinline__ __device__ bool KMinWiseIPFilter(
 
   u_k_min_heap.CopyData(u_k_min_heap_data);
   v_k_min_heap.CopyData(v_k_min_heap_data);
-  for (uint32_t i = 0; i < v_k_min_heap.get_offset(); ++i) {
+  for (uint32_t i = 0; i < v_k_min_heap.GetOffset(); ++i) {
     const uint32_t v_ip = v_k_min_heap_data[i];
-    for (uint32_t j = 0; j < u_k_min_heap.get_offset(); ++j) {
+    for (uint32_t j = 0; j < u_k_min_heap.GetOffset(); ++j) {
       if (u_k_min_heap_data[j] == v_ip) {
         v_k_min_heap_data[i] = kMaxVertexID;
         u_k_min_heap_data[j] = kMaxVertexID;
@@ -187,10 +187,10 @@ static __forceinline__ __device__ bool KMinWiseIPFilter(
     }
   }
   uint32_t min_v = kMaxVertexID;
-  for (uint32_t i = 0; i < v_k_min_heap.get_offset(); ++i) {
+  for (uint32_t i = 0; i < v_k_min_heap.GetOffset(); ++i) {
     if (v_k_min_heap_data[i] < min_v) min_v = v_k_min_heap_data[i];
   }
-  for (uint32_t i = 0; i < u_k_min_heap.get_offset(); ++i) {
+  for (uint32_t i = 0; i < u_k_min_heap.GetOffset(); ++i) {
     if (u_k_min_heap_data[i] < min_v) return false;
   }
 

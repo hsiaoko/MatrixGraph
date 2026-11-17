@@ -40,7 +40,7 @@ struct ParametersMatrix {
 };
 
 #if defined(USE_AVX2) && !defined(__CUDACC__)
-inline __m256 fast_exp_avx(__m256 x) {
+inline __m256 FastExpAvx(__m256 x) {
   const __m256 max_x = _mm256_set1_ps(10.0f);
   const __m256 min_x = _mm256_set1_ps(-10.0f);
   x = _mm256_min_ps(x, max_x);
@@ -156,7 +156,7 @@ void SigmoidSIMD(float* input, int n) {
   // for (; i + simd_width <= n; i += simd_width) {
   //   __m256 vec = _mm256_loadu_ps(input + i);     // 加载数据
   //   __m256 neg_vec = _mm256_sub_ps(zero, vec);   // -input
-  //   __m256 exp_neg = fast_exp_avx(neg_vec);      // exp(-input)
+  //   __m256 exp_neg = FastExpAvx(neg_vec);      // exp(-input)
   //   __m256 denom = _mm256_add_ps(one, exp_neg);  // 1 + exp(-input)
   //   __m256 result = _mm256_div_ps(one, denom);   // 1 / (1 + exp(-input))
   //   _mm256_storeu_ps(input + i, result);         // 存回内存

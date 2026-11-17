@@ -11,9 +11,9 @@ using GridCutPartitioner =
 using StoreStrategy = sics::matrixgraph::core::common::StoreStrategy;
 
 // using enum sics::matrixgraph::tools::common::StoreStrategy;
-//     using kIncomingOnly = sics::matrixgraph::tools::common::kIncomingOnly;
-//  using kOutgoingOnly = sics::matrixgraph::tools::common::kOutgoingOnly;
-//  using kUnconstrained = sics::matrixgraph::tools::common::kUnconstrained;
+//     using StoreStrategy::kIncomingOnly = sics::matrixgraph::tools::common::kIncomingOnly;
+//  using StoreStrategy::kOutgoingOnly = sics::matrixgraph::tools::common::kOutgoingOnly;
+//  using StoreStrategy::kUnconstrained = sics::matrixgraph::tools::common::kUnconstrained;
 
 DEFINE_string(partitioner, "", "partitioner type.");
 DEFINE_string(i, "", "input path.");
@@ -21,7 +21,7 @@ DEFINE_string(o, "", "output path.");
 DEFINE_uint64(n_partitions, 1, "the number of partitions");
 DEFINE_string(store_strategy, "unconstrained",
               "graph-systems adopted three strategies to store edges: "
-              "kUnconstrained, incoming, and outgoing.");
+              "StoreStrategy::kUnconstrained, incoming, and outgoing.");
 DEFINE_bool(biggraph, false, "for big graphs.");
 
 enum Partitioner {

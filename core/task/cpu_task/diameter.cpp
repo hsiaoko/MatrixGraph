@@ -28,7 +28,7 @@ using ImmutableCSRGraph =
 namespace {
 
 uint32_t BfsMaxDistanceUndirected(const ImmutableCSRGraph& g, VertexID src) {
-  const VertexID n = g.get_num_vertices();
+  const VertexID n = g.GetNumVertices();
   constexpr uint32_t kInf = std::numeric_limits<uint32_t>::max();
   std::vector<uint32_t> dist(n, kInf);
   std::vector<VertexID> q;
@@ -67,7 +67,7 @@ void Diameter::LoadData() {
 }
 
 void Diameter::ComputeUndirectedDiameter(const ImmutableCSRGraph& g) {
-  const VertexID n = g.get_num_vertices();
+  const VertexID n = g.GetNumVertices();
   if (n == 0) {
     std::cout << "[Diameter] undirected diameter: 0 (empty graph)" << std::endl;
     return;

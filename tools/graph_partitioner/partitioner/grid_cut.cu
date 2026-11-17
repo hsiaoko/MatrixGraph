@@ -88,7 +88,7 @@ void GridCutPartitioner::RunPartitioner() {
 
   // Precompute the size of each edge bucket.
   VertexID scope_per_chunk =
-      ceil((edges.get_metadata().max_vid + 1) / (float)n_partitions_);
+      ceil((edges.GetMetadata().max_vid + 1) / (float)n_partitions_);
 
   auto size_per_bucket = new EdgeIndex[n_partitions_ * n_partitions_]();
   auto* n_edges_for_each_block = new EdgeIndex[n_partitions_ * n_partitions_]();
@@ -97,7 +97,7 @@ void GridCutPartitioner::RunPartitioner() {
   BitmapOwnership vertices_bm_for_each_block[n_partitions_ * n_partitions_];
 
   for (GraphID _ = 0; _ < n_partitions_ * n_partitions_; _++) {
-    vertices_bm_for_each_block[_].Init(edges.get_metadata().max_vid);
+    vertices_bm_for_each_block[_].Init(edges.GetMetadata().max_vid);
     min_vid_for_each_block[_] = std::numeric_limits<uint32_t>::max();
   }
 
@@ -110,9 +110,9 @@ void GridCutPartitioner::RunPartitioner() {
       [this, step, &edges, scope_per_chunk, &n_edges_for_each_block,
        &max_vid_for_each_block, &min_vid_for_each_block,
        &vertices_bm_for_each_block](auto w) {
-        for (auto eid = w; eid < edges.get_metadata().num_edges; eid += step) {
-          auto edge = edges.get_edge_by_index(eid);
-          auto* localid_to_globalid = edges.get_localid_to_globalid_ptr();
+        for (auto eid = w; eid < edges.GetMetadata().num_edges; eid += step) {
+          auto edge = edges.GetEdgeByIndex(eid);
+          auto* localid_to_globalid = edges.GetLocalidToGlobalidPtr();
           if (localid_to_globalid != nullptr) {
             edge.src = localid_to_globalid[edge.src];
             edge.dst = localid_to_globalid[edge.dst];
@@ -153,9 +153,9 @@ void GridCutPartitioner::RunPartitioner() {
       worker.begin(), worker.end(),
       [this, step, &edges, scope_per_chunk, &edge_blocks_buf,
        &n_edges_for_each_block, &offset_for_each_block](auto w) {
-        for (auto eid = w; eid < edges.get_metadata().num_edges; eid += step) {
-          auto edge = edges.get_edge_by_index(eid);
-          auto* localid_to_globalid = edges.get_localid_to_globalid_ptr();
+        for (auto eid = w; eid < edges.GetMetadata().num_edges; eid += step) {
+          auto edge = edges.GetEdgeByIndex(eid);
+          auto* localid_to_globalid = edges.GetLocalidToGlobalidPtr();
           if (localid_to_globalid != nullptr) {
             edge.src = localid_to_globalid[edge.src];
             edge.dst = localid_to_globalid[edge.dst];
@@ -184,7 +184,7 @@ void GridCutPartitioner::RunPartitioner() {
   }
 
   for (unsigned _ = 0; _ < n_partitions_ * n_partitions_; _++) {
-    if (edge_blocks[_].get_metadata().num_vertices == 0) continue;
+    if (edge_blocks[_].GetMetadata().num_vertices == 0) continue;
     std::cout << "[GridCutPartitioner] Reassigning vertex ids for block: "
               << " x: " << _ / n_partitions_ << " y: " << _ % n_partitions_
               << " ...\n"
@@ -194,10 +194,10 @@ void GridCutPartitioner::RunPartitioner() {
 
   std::cout << "[GridCutPartitioner] Writing to disk!" << std::endl;
   GraphMetadata graph_metadata;
-  graph_metadata.num_vertices = edges.get_metadata().num_vertices;
-  graph_metadata.num_edges = edges.get_metadata().num_edges;
+  graph_metadata.num_vertices = edges.GetMetadata().num_vertices;
+  graph_metadata.num_edges = edges.GetMetadata().num_edges;
   graph_metadata.num_subgraphs = n_partitions_ * n_partitions_;
-  graph_metadata.max_vid = edges.get_metadata().max_vid;
+  graph_metadata.max_vid = edges.GetMetadata().max_vid;
   graph_metadata.min_vid = 0;
 
   EdgelistSubGraphsIO::Write(output_path_, edge_blocks, graph_metadata);

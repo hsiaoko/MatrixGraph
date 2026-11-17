@@ -68,7 +68,7 @@ int main(int argc, char* argv[]) {
 
     sics::matrixgraph::core::data_structures::Buffer<VertexLabel> v_label_g;
     v_label_g.data = g.GetVLabelBasePointer();
-    v_label_g.size = sizeof(VertexLabel) * g.get_num_vertices();
+    v_label_g.size = sizeof(VertexLabel) * g.GetNumVertices();
 
     UnifiedOwnedBuffer<VertexLabel> unified_v_label_g;
     unified_v_label_g.Init(v_label_g);
@@ -91,8 +91,8 @@ int main(int argc, char* argv[]) {
     cudaStream_t stream;
     CUDA_CHECK(cudaStreamCreate(&stream));
 
-    WCCKernelWrapper::WCC(stream, g.get_num_vertices(),
-                          g.get_num_outgoing_edges(), unified_data_g,
+    WCCKernelWrapper::WCC(stream, g.GetNumVertices(),
+                          g.GetNumOutgoingEdges(), unified_data_g,
                           unified_v_label_g);
 
     CUDA_CHECK(cudaStreamDestroy(stream));
@@ -100,28 +100,28 @@ int main(int argc, char* argv[]) {
 
     // Copy results from managed memory back to the host label buffer.
     CUDA_CHECK(cudaMemcpy(g.GetVLabelBasePointer(), unified_v_label_g.GetPtr(),
-                          sizeof(VertexLabel) * g.get_num_vertices(),
+                          sizeof(VertexLabel) * g.GetNumVertices(),
                           cudaMemcpyDefault));
 
     // Write per-vertex WCC labels.
     std::filesystem::create_directories(FLAGS_o);
     std::ofstream label_file(FLAGS_o + "/wcc_labels.bin", std::ios::binary);
     label_file.write(reinterpret_cast<const char*>(g.GetVLabelBasePointer()),
-                     sizeof(VertexLabel) * g.get_num_vertices());
+                     sizeof(VertexLabel) * g.GetNumVertices());
     label_file.close();
 
     // Count components.
     std::unordered_set<VertexLabel> comp_ids;
-    for (VertexID i = 0; i < g.get_num_vertices(); i++) {
+    for (VertexID i = 0; i < g.GetNumVertices(); i++) {
       comp_ids.insert(g.GetVLabelBasePointer()[i]);
     }
 
     std::ofstream summary_file(FLAGS_o + "/wcc_summary.txt");
-    summary_file << "num_vertices " << g.get_num_vertices() << "\n";
+    summary_file << "num_vertices " << g.GetNumVertices() << "\n";
     summary_file << "num_components " << comp_ids.size() << "\n";
     summary_file.close();
 
-    std::cout << "[GraphRAG WCC] Wrote " << g.get_num_vertices()
+    std::cout << "[GraphRAG WCC] Wrote " << g.GetNumVertices()
               << " labels to " << FLAGS_o << "/wcc_labels.bin"
               << ", components=" << comp_ids.size() << std::endl;
 

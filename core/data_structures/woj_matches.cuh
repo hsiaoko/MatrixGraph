@@ -53,31 +53,31 @@ class WOJMatches {
   __host__ void CopyDataAsync(const WOJMatches& other,
                               const cudaStream_t& stream);
 
-  __inline__ __host__ __device__ VertexID get_y_offset() const {
+  __inline__ __host__ __device__ VertexID GetYOffset() const {
     return *y_offset_;
   }
 
-  __inline__ __host__ __device__ VertexID get_x_offset() const {
+  __inline__ __host__ __device__ VertexID GetXOffset() const {
     return *x_offset_;
   }
 
-  __inline__ __host__ __device__ VertexID get_x() const { return x_; }
+  __inline__ __host__ __device__ VertexID GetX() const { return x_; }
 
-  __inline__ __host__ __device__ VertexID get_y() const { return y_; }
+  __inline__ __host__ __device__ VertexID GetY() const { return y_; }
 
-  __inline__ __host__ __device__ VertexID* get_y_offset_ptr() const {
+  __inline__ __host__ __device__ VertexID* GetYOffsetPtr() const {
     return y_offset_;
   }
 
-  __inline__ __host__ __device__ VertexID* get_x_offset_ptr() const {
+  __inline__ __host__ __device__ VertexID* GetXOffsetPtr() const {
     return x_offset_;
   }
 
-  __inline__ __host__ __device__ VertexID* get_data_ptr() const {
+  __inline__ __host__ __device__ VertexID* GetDataPtr() const {
     return data_;
   }
 
-  __inline__ __host__ __device__ VertexID* get_header_ptr() const {
+  __inline__ __host__ __device__ VertexID* GetHeaderPtr() const {
     return header_ptr_;
   }
 

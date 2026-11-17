@@ -24,16 +24,16 @@ static void ConvertCSRBin2EGSMGraph(const std::string& input_path,
     return;
   }
 
-  file << "t " << csr.get_num_vertices() << " " << csr.get_num_outgoing_edges()
+  file << "t " << csr.GetNumVertices() << " " << csr.GetNumOutgoingEdges()
        << std::endl;
 
-  for (VertexID v_idx = 0; v_idx < csr.get_num_vertices(); v_idx++) {
+  for (VertexID v_idx = 0; v_idx < csr.GetNumVertices(); v_idx++) {
     auto u = csr.GetVertexByLocalID(v_idx);
     file << "v " << u.vid << " " << u.vlabel << " " << u.outdegree + u.indegree
          << std::endl;
   }
 
-  for (VertexID v_idx = 0; v_idx < csr.get_num_vertices(); v_idx++) {
+  for (VertexID v_idx = 0; v_idx < csr.GetNumVertices(); v_idx++) {
     auto u = csr.GetVertexByLocalID(v_idx);
 
     for (EdgeIndex e_idx = 0; e_idx < u.outdegree; e_idx++) {
@@ -55,13 +55,13 @@ static void ConvertCSRBin2GNNPEGraph(const std::string& input_path,
     return;
   }
 
-  for (VertexID v_idx = 0; v_idx < csr.get_num_vertices(); v_idx++) {
+  for (VertexID v_idx = 0; v_idx < csr.GetNumVertices(); v_idx++) {
     auto u = csr.GetVertexByLocalID(v_idx);
     file << "v " << u.vid << " " << u.vlabel << " " << u.outdegree + u.indegree
          << std::endl;
   }
 
-  for (VertexID v_idx = 0; v_idx < csr.get_num_vertices(); v_idx++) {
+  for (VertexID v_idx = 0; v_idx < csr.GetNumVertices(); v_idx++) {
     auto u = csr.GetVertexByLocalID(v_idx);
 
     for (EdgeIndex e_idx = 0; e_idx < u.outdegree; e_idx++) {
@@ -85,14 +85,14 @@ static void ConvertCSRBin2VF3Graph(const std::string& input_path,
     return;
   }
 
-  file << csr.get_num_vertices() << std::endl;
+  file << csr.GetNumVertices() << std::endl;
 
-  for (VertexID v_idx = 0; v_idx < csr.get_num_vertices(); v_idx++) {
+  for (VertexID v_idx = 0; v_idx < csr.GetNumVertices(); v_idx++) {
     auto u = csr.GetVertexByLocalID(v_idx);
     file << u.vid << " " << u.vlabel << std::endl;
   }
 
-  for (VertexID v_idx = 0; v_idx < csr.get_num_vertices(); v_idx++) {
+  for (VertexID v_idx = 0; v_idx < csr.GetNumVertices(); v_idx++) {
     auto u = csr.GetVertexByLocalID(v_idx);
     file << u.outdegree << std::endl;
 
@@ -115,13 +115,13 @@ static void ConvertCSRBin2CECIGraph(const std::string& input_path,
     return;
   }
   file << "t # 0" << std::endl;
-  for (VertexID v_idx = 0; v_idx < csr.get_num_vertices(); v_idx++) {
+  for (VertexID v_idx = 0; v_idx < csr.GetNumVertices(); v_idx++) {
     auto u = csr.GetVertexByLocalID(v_idx);
     file << "v " << u.vid << " " << u.vlabel << " " << u.outdegree + u.indegree
          << std::endl;
   }
 
-  for (VertexID v_idx = 0; v_idx < csr.get_num_vertices(); v_idx++) {
+  for (VertexID v_idx = 0; v_idx < csr.GetNumVertices(); v_idx++) {
     auto u = csr.GetVertexByLocalID(v_idx);
 
     for (EdgeIndex e_idx = 0; e_idx < u.outdegree; e_idx++) {

@@ -14,12 +14,12 @@ using sics::matrixgraph::core::task::MakeBoolValue;
 using sics::matrixgraph::core::task::MakeFloat64Value;
 using sics::matrixgraph::core::task::MakeIntValue;
 
-static bool float_eq(double a, double b, double eps = 1e-4) {
+static bool FloatEq(double a, double b, double eps = 1e-4) {
   return std::fabs(a - b) < eps;
 }
 
 static bool check(const char* name, double expected, double actual) {
-  if (!float_eq(expected, actual)) {
+  if (!FloatEq(expected, actual)) {
     std::cerr << "FAIL " << name << " expected=" << expected
               << " got=" << actual << std::endl;
     return false;
@@ -27,7 +27,7 @@ static bool check(const char* name, double expected, double actual) {
   return true;
 }
 
-static bool test_single_primitives() {
+static bool TestSinglePrimitives() {
   std::cout << "[ExecuteAggPrim Test] Single primitives..." << std::endl;
 
   ExecuteAggPrim task;
@@ -116,7 +116,7 @@ static bool test_single_primitives() {
   return pass;
 }
 
-static bool test_batch() {
+static bool TestBatch() {
   std::cout << "[ExecuteAggPrim Test] Batch Sum..." << std::endl;
 
   ExecuteAggPrim task;
@@ -135,7 +135,7 @@ static bool test_batch() {
   return pass;
 }
 
-static bool test_compute_all() {
+static bool TestComputeAll() {
   std::cout << "[ExecuteAggPrim Test] ComputeAll..." << std::endl;
 
   ExecuteAggPrim task;
@@ -168,7 +168,7 @@ static bool test_compute_all() {
   return pass;
 }
 
-static bool test_batch_multi_prim() {
+static bool TestBatchMultiPrim() {
   std::cout << "[ExecuteAggPrim Test] ComputeBatchMultiPrim..." << std::endl;
 
   ExecuteAggPrim task;
@@ -203,10 +203,10 @@ static bool test_batch_multi_prim() {
 
 int main() {
   bool pass = true;
-  pass &= test_single_primitives();
-  pass &= test_batch();
-  pass &= test_compute_all();
-  pass &= test_batch_multi_prim();
+  pass &= TestSinglePrimitives();
+  pass &= TestBatch();
+  pass &= TestComputeAll();
+  pass &= TestBatchMultiPrim();
 
   if (pass) {
     std::cout << "[ExecuteAggPrim Test] ALL PASSED" << std::endl;

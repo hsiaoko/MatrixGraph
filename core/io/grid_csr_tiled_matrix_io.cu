@@ -64,7 +64,7 @@ void GridCSRTiledMatrixIO::Write(const std::string& output_path,
   if (!std::filesystem::exists(output_path))
     std::filesystem::create_directory(output_path);
 
-  auto meta = grid_tiled_matrix.get_metadata();
+  auto meta = grid_tiled_matrix.GetMetadata();
 
   CSRTiledMatrixIO csr_tiled_matrix_io;
   for (size_t _ = 0; _ < pow(meta.n_chunks, 2); _++) {

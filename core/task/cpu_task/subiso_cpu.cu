@@ -190,7 +190,7 @@ static std::vector<uint64_t> g_bloom_signature;
 
 static void BuildBloomSignatures(const ImmutableCSR& csr,
                                  std::vector<uint64_t>& signatures) {
-  auto n = csr.get_num_vertices();
+  auto n = csr.GetNumVertices();
   signatures.assign(n, 0);
   const VertexLabel* labels = csr.GetVLabelBasePointer();
   auto parallelism = std::thread::hardware_concurrency();
@@ -253,7 +253,7 @@ static thread_local uint32_t tl_filter_stamp = 0;
 static void BuildFilterCache(const ImmutableCSR& csr,
                              std::vector<VertexFilterCache>& cache, int hop,
                              int k) {
-  auto n = csr.get_num_vertices();
+  auto n = csr.GetNumVertices();
   cache.resize(n);
 
   auto parallelism = std::thread::hardware_concurrency();
@@ -731,8 +731,8 @@ static bool Filter(VertexID u_idx, VertexID v_idx, const ImmutableCSR& p,
 static bool LabelCountFilter(const ImmutableCSR& p, const ImmutableCSR& g) {
   std::array<int, 32> p_freq = {};
   std::array<int, 32> g_freq = {};
-  auto pn = p.get_num_vertices();
-  auto gn = g.get_num_vertices();
+  auto pn = p.GetNumVertices();
+  auto gn = g.GetNumVertices();
   const VertexLabel* plabels = p.GetVLabelBasePointer();
   const VertexLabel* glabels = g.GetVLabelBasePointer();
   for (VertexID u = 0; u < pn; ++u) {
@@ -755,7 +755,7 @@ static bool MatrixFilter(
     const std::vector<UnifiedOwnedBufferFloat*>& /*m_unified_buffer_vec*/,
     std::vector<uint64_t>* rejected_pairs = nullptr) {
   if (0 == m_vec.size()) return true;
-  auto vec_len = m_vec[0].get_y();
+  auto vec_len = m_vec[0].GetY();
 
   /// Init similarity vector.
 
@@ -768,20 +768,20 @@ static bool MatrixFilter(
   float z2[1] = {0};
 
   MatrixOpsKernelWrapper::CPUOnlyMatMult(sim_vec, m_vec[2].GetPtr(), z1, 1,
-                                         m_vec[2].get_y(), m_vec[2].get_x(),
+                                         m_vec[2].GetY(), m_vec[2].GetX(),
                                          false, true);
 
-  MatrixOpsKernelWrapper::CPUOnlyMatAdd(z1, m_vec[3].GetPtr(), m_vec[3].get_x(),
-                                        m_vec[3].get_y());
+  MatrixOpsKernelWrapper::CPUOnlyMatAdd(z1, m_vec[3].GetPtr(), m_vec[3].GetX(),
+                                        m_vec[3].GetY());
 
-  MatrixOpsKernelWrapper::CPURelu(z1, m_vec[3].get_x(), m_vec[3].get_y());
+  MatrixOpsKernelWrapper::CPURelu(z1, m_vec[3].GetX(), m_vec[3].GetY());
 
   MatrixOpsKernelWrapper::CPUOnlyMatMult(z1, m_vec[4].GetPtr(), z2, 1,
-                                         m_vec[4].get_x(), m_vec[4].get_y(),
+                                         m_vec[4].GetX(), m_vec[4].GetY(),
                                          false, true);
 
-  MatrixOpsKernelWrapper::CPUOnlyMatAdd(z2, m_vec[5].GetPtr(), m_vec[5].get_x(),
-                                        m_vec[5].get_y());
+  MatrixOpsKernelWrapper::CPUOnlyMatAdd(z2, m_vec[5].GetPtr(), m_vec[5].GetX(),
+                                        m_vec[5].GetY());
 
   MatrixOpsKernelWrapper::CPUSigmoid(z2, 1, 1);
 
@@ -805,7 +805,7 @@ static bool GPUMatrixFilter(
   BufferFloat buffer_m1;
   BufferFloat buffer_m2;
 
-  auto vec_len = m_vec[0].get_y();
+  auto vec_len = m_vec[0].GetY();
 
   buffer_m1.data = m_vec[0].GetPtr() + u_idx * vec_len;
   buffer_m2.data = m_vec[1].GetPtr() + v_idx * vec_len;
@@ -859,22 +859,22 @@ static std::vector<WOJMatches*> WOJFilter(
 
   // Init output vector.
   std::vector<WOJMatches*> woj_matches_vec;
-  woj_matches_vec.resize(exec_plan.get_n_edges_p());
+  woj_matches_vec.resize(exec_plan.GetNEdgesP());
 
-  for (VertexID _ = 0; _ < exec_plan.get_n_edges_p(); _++) {
+  for (VertexID _ = 0; _ < exec_plan.GetNEdgesP(); _++) {
     woj_matches_vec[_] = new WOJMatches();
-    woj_matches_vec[_]->Init(exec_plan.get_n_edges_p(), kMaxMatchTableRows);
+    woj_matches_vec[_]->Init(exec_plan.GetNEdgesP(), kMaxMatchTableRows);
     woj_matches_vec[_]->SetXOffset(2);
     woj_matches_vec[_]->SetYOffset(0);
     woj_matches_vec[_]->SetHeader(
-        0, exec_plan.get_exec_path_in_edges_ptr()[_ * 2]);
+        0, exec_plan.GetExecPathInEdgesPtr()[_ * 2]);
     woj_matches_vec[_]->SetHeader(
-        1, exec_plan.get_exec_path_in_edges_ptr()[_ * 2 + 1]);
+        1, exec_plan.GetExecPathInEdgesPtr()[_ * 2 + 1]);
   }
 
-  for (VertexID eid = 0; eid < exec_plan.get_n_edges_p(); eid++) {
-    VertexID u_src = exec_plan.get_exec_path_in_edges_ptr()[2 * eid];
-    VertexID u_dst = exec_plan.get_exec_path_in_edges_ptr()[2 * eid + 1];
+  for (VertexID eid = 0; eid < exec_plan.GetNEdgesP(); eid++) {
+    VertexID u_src = exec_plan.GetExecPathInEdgesPtr()[2 * eid];
+    VertexID u_dst = exec_plan.GetExecPathInEdgesPtr()[2 * eid + 1];
     VertexID src_idx = p.GetLocalIDByGlobalID(u_src);
     VertexID dst_idx = p.GetLocalIDByGlobalID(u_dst);
 
@@ -882,7 +882,7 @@ static std::vector<WOJMatches*> WOJFilter(
         worker.begin(), worker.end(),
         [step, &p, &g, eid, u_src, u_dst, src_idx, dst_idx, &exec_plan,
          &woj_matches_vec, &m_vec, &m_unified_buffer_vec](auto w) {
-          for (VertexID v_idx = w; v_idx < g.get_num_vertices();
+          for (VertexID v_idx = w; v_idx < g.GetNumVertices();
                v_idx += step) {
             auto offset = g.GetOutOffsetByLocalID(v_idx);
             auto degree = g.GetOutDegreeByLocalID(v_idx);
@@ -896,10 +896,10 @@ static std::vector<WOJMatches*> WOJFilter(
                 if (MatrixFilter(dst_idx, nbr_localid, p, g, m_vec,
                                  m_unified_buffer_vec)) {
                   auto local_offset = __sync_fetch_and_add(
-                      woj_matches_vec[eid]->get_y_offset_ptr(), 1);
-                  woj_matches_vec[eid]->get_data_ptr()[local_offset * 2] =
+                      woj_matches_vec[eid]->GetYOffsetPtr(), 1);
+                  woj_matches_vec[eid]->GetDataPtr()[local_offset * 2] =
                       global_id;
-                  woj_matches_vec[eid]->get_data_ptr()[local_offset * 2 + 1] =
+                  woj_matches_vec[eid]->GetDataPtr()[local_offset * 2 + 1] =
                       nbr_v;
                 }
               }
@@ -923,17 +923,17 @@ static inline void Join(VertexID /*n_vertices_g*/,
   std::iota(worker.begin(), worker.end(), 0);
   auto step = worker.size();
 
-  VertexID* global_offset_ptr = output_woj_matches->get_y_offset_ptr();
+  VertexID* global_offset_ptr = output_woj_matches->GetYOffsetPtr();
 
-  VertexID* left_data = left_woj_matches.get_data_ptr();
-  VertexID* right_data = right_woj_matches.get_data_ptr();
-  VertexID* output_data = output_woj_matches->get_data_ptr();
-  VertexID left_x_offset = left_woj_matches.get_x_offset();
-  VertexID right_x_offset = right_woj_matches.get_x_offset();
-  VertexID output_x_offset = output_woj_matches->get_x_offset();
-  VertexID left_y_offset = left_woj_matches.get_y_offset();
-  VertexID right_y_offset = right_woj_matches.get_y_offset();
-  VertexID* output_y_offset_ptr = output_woj_matches->get_y_offset_ptr();
+  VertexID* left_data = left_woj_matches.GetDataPtr();
+  VertexID* right_data = right_woj_matches.GetDataPtr();
+  VertexID* output_data = output_woj_matches->GetDataPtr();
+  VertexID left_x_offset = left_woj_matches.GetXOffset();
+  VertexID right_x_offset = right_woj_matches.GetXOffset();
+  VertexID output_x_offset = output_woj_matches->GetXOffset();
+  VertexID left_y_offset = left_woj_matches.GetYOffset();
+  VertexID right_y_offset = right_woj_matches.GetYOffset();
+  VertexID* output_y_offset_ptr = output_woj_matches->GetYOffsetPtr();
 
   ParallelFor(
       worker.begin(), worker.end(),
@@ -942,7 +942,7 @@ static inline void Join(VertexID /*n_vertices_g*/,
        left_y_offset, right_y_offset, left_hash_idx, right_hash_idx,
        &output_y_offset_ptr](auto w) {
         for (VertexID left_data_offset = w;
-             left_data_offset < left_woj_matches.get_y_offset();
+             left_data_offset < left_woj_matches.GetYOffset();
              left_data_offset += step) {
           VertexID target =
               left_data[left_x_offset * left_data_offset + left_hash_idx];
@@ -950,7 +950,7 @@ static inline void Join(VertexID /*n_vertices_g*/,
           VertexID right_data_offset =
               right_woj_matches.BinarySearch(right_hash_idx, target);
           if (right_data_offset != kMaxVertexID &&
-              right_data_offset < right_woj_matches.get_y_offset()) {
+              right_data_offset < right_woj_matches.GetYOffset()) {
             VertexID left_walker = right_data_offset - 1;
             VertexID right_walker = right_data_offset;
 
@@ -1017,20 +1017,20 @@ static WOJMatches* WOJEnumerating(
   auto step = worker.size();
 
   WOJMatches* output_woj_matches = new WOJMatches();
-  output_woj_matches->Init(exec_plan.get_n_edges_p(), kMaxMatchTableRows);
+  output_woj_matches->Init(exec_plan.GetNEdgesP(), kMaxMatchTableRows);
 
   // Sort candidate
   BitmapOwnership header_visited(32);
   for (VertexID _ = 1; _ < input_woj_matches_vec.size(); _++) {
     bool sort_tag = false;
-    auto header_ptr = input_woj_matches_vec[_]->get_header_ptr();
-    for (VertexID __ = 0; __ < input_woj_matches_vec[_]->get_x_offset(); __++) {
+    auto header_ptr = input_woj_matches_vec[_]->GetHeaderPtr();
+    for (VertexID __ = 0; __ < input_woj_matches_vec[_]->GetXOffset(); __++) {
       if (header_visited.GetBit(header_ptr[__]) && sort_tag == false) {
-        kernel::MergeSort(0, input_woj_matches_vec[_]->get_data_ptr(), __,
-                          input_woj_matches_vec[_]->get_x_offset(),
-                          input_woj_matches_vec[_]->get_y_offset(),
-                          sizeof(VertexID) * input_woj_matches_vec[_]->get_y() *
-                              input_woj_matches_vec[_]->get_x());
+        kernel::MergeSort(0, input_woj_matches_vec[_]->GetDataPtr(), __,
+                          input_woj_matches_vec[_]->GetXOffset(),
+                          input_woj_matches_vec[_]->GetYOffset(),
+                          sizeof(VertexID) * input_woj_matches_vec[_]->GetY() *
+                              input_woj_matches_vec[_]->GetX());
         sort_tag = true;
       }
       header_visited.SetBit(header_ptr[__]);
@@ -1049,18 +1049,18 @@ static WOJMatches* WOJEnumerating(
     if (join_keys.first == kMaxVertexID || join_keys.second == kMaxVertexID)
       continue;
 
-    output_woj_matches->SetHeader(left_woj_matches->get_header_ptr(),
-                                  left_woj_matches->get_x_offset(),
-                                  right_woj_matches->get_header_ptr(),
-                                  right_woj_matches->get_x_offset(), join_keys);
+    output_woj_matches->SetHeader(left_woj_matches->GetHeaderPtr(),
+                                  left_woj_matches->GetXOffset(),
+                                  right_woj_matches->GetHeaderPtr(),
+                                  right_woj_matches->GetXOffset(), join_keys);
 
-    Join(exec_plan.get_n_vertices_g(), *left_woj_matches, *right_woj_matches,
+    Join(exec_plan.GetNVerticesG(), *left_woj_matches, *right_woj_matches,
          output_woj_matches, join_keys.first, join_keys.second, visited,
          jump_visited);
-    if (output_woj_matches->get_y_offset() == 0) {
+    if (output_woj_matches->GetYOffset() == 0) {
       break;
     }
-    if (output_woj_matches->get_x_offset() == output_woj_matches->get_x()) {
+    if (output_woj_matches->GetXOffset() == output_woj_matches->GetX()) {
       break;
     } else {
       std::swap(left_woj_matches, output_woj_matches);
@@ -1136,7 +1136,7 @@ static void DFSExtend(
     LocalMatches* local_matches, bool match,
     std::vector<uint64_t>* rejected_pairs = nullptr) {
   // 基础检查
-  if (level > exec_plan.get_depth()) {
+  if (level > exec_plan.GetDepth()) {
     return;
   }
 
@@ -1144,11 +1144,11 @@ static void DFSExtend(
   VertexID matched_pattern_vertex = kMaxVertexID;
 
   // 遍历执行计划中的边约束
-  for (VertexID i = 0; i < exec_plan.get_n_edges(); i++) {
+  for (VertexID i = 0; i < exec_plan.GetNEdges(); i++) {
     auto u_src =
-        exec_plan.get_sequential_exec_path_in_edges_ptr()->GetPtr()[2 * i];
+        exec_plan.GetSequentialExecPathInEdgesPtr()->GetPtr()[2 * i];
     auto u_dst =
-        exec_plan.get_sequential_exec_path_in_edges_ptr()->GetPtr()[2 * i + 1];
+        exec_plan.GetSequentialExecPathInEdgesPtr()->GetPtr()[2 * i + 1];
 
     if ((pre_v_idx == kMaxVertexID) ^ (u_src == kMaxVertexID)) continue;
 
@@ -1190,7 +1190,7 @@ static void DFSExtend(
     }
   }
 
-  if (extend_tag && level < exec_plan.get_depth()) {
+  if (extend_tag && level < exec_plan.GetDepth()) {
     auto v = g.GetVertexByLocalID(v_idx);
 
     for (VertexID nbr_idx = 0; nbr_idx < v.outdegree; nbr_idx++) {
@@ -1222,8 +1222,8 @@ static inline void Enumerating(
       local_matches_vec.begin(), local_matches_vec.end(), [&p, &exec_plan]() {
         LocalMatches local_matches;
         local_matches.data =
-            new VertexID[exec_plan.get_n_edges() * 2 * kMaxNumLocalWeft]();
-        local_matches.size = new VertexID[exec_plan.get_n_edges() +
+            new VertexID[exec_plan.GetNEdges() * 2 * kMaxNumLocalWeft]();
+        local_matches.size = new VertexID[exec_plan.GetNEdges() +
                                           kSubIsoLocalMatchesSizeBuffer]();
         return local_matches;
       });
@@ -1234,7 +1234,7 @@ static inline void Enumerating(
   std::generate(matches_visited_pairs_vec.begin(),
                 matches_visited_pairs_vec.end(), [&exec_plan]() {
                   return std::vector<std::unordered_set<uint64_t>>(
-                      exec_plan.get_n_edges());
+                      exec_plan.GetNEdges());
                 });
 
   std::vector<std::vector<uint64_t>> rejected_pairs_vec;
@@ -1254,8 +1254,8 @@ static inline void Enumerating(
         std::vector<uint64_t>* thread_rejected_pairs =
             rejected_pairs_vec.empty() ? nullptr : &rejected_pairs_vec[w];
 
-        for (VertexID v_idx = w; v_idx < g.get_num_vertices(); v_idx += step) {
-          for (VertexID _ = 0; _ < exec_plan.get_n_edges(); _++) {
+        for (VertexID v_idx = w; v_idx < g.GetNumVertices(); v_idx += step) {
+          for (VertexID _ = 0; _ < exec_plan.GetNEdges(); _++) {
             matches_visited_pairs[_].clear();
           }
 
@@ -1266,7 +1266,7 @@ static inline void Enumerating(
 
           {
             bool is_match = true;
-            for (VertexID _ = 0; _ < exec_plan.get_n_edges(); _++) {
+            for (VertexID _ = 0; _ < exec_plan.GetNEdges(); _++) {
               if (local_matches.size[_] == 0) {
                 is_match = false;
               }
@@ -1282,27 +1282,27 @@ static inline void Enumerating(
                 return;
               }
               int weft_size = 0;
-              for (VertexID _ = 0; _ < exec_plan.get_n_edges(); _++) {
+              for (VertexID _ = 0; _ < exec_plan.GetNEdges(); _++) {
                 weft_size += local_matches.size[_];
                 matches->GetVCandidateOffsetPtr()
-                    [weft_idx * (exec_plan.get_n_edges() + 1) + _ + 1] =
+                    [weft_idx * (exec_plan.GetNEdges() + 1) + _ + 1] =
                     matches->GetVCandidateOffsetPtr()
-                        [weft_idx * (exec_plan.get_n_edges() + 1) + _] +
+                        [weft_idx * (exec_plan.GetNEdges() + 1) + _] +
                     local_matches.size[_];
 
                 memcpy(matches->GetDataPtr() + weft_idx *
-                                                   exec_plan.get_n_edges() * 2 *
+                                                   exec_plan.GetNEdges() * 2 *
                                                    kMaxNumLocalWeft,
                        local_matches.data,
-                       exec_plan.get_n_edges() * 2 * kMaxNumLocalWeft *
+                       exec_plan.GetNEdges() * 2 * kMaxNumLocalWeft *
                            sizeof(VertexID));
               }
             }
             memset(local_matches.data, 0,
-                   sizeof(VertexID) * exec_plan.get_n_edges() * 2 *
+                   sizeof(VertexID) * exec_plan.GetNEdges() * 2 *
                        kMaxNumLocalWeft);
             memset(local_matches.size, 0,
-                   sizeof(VertexID) * exec_plan.get_n_edges());
+                   sizeof(VertexID) * exec_plan.GetNEdges());
           }
         }
       });
@@ -1323,8 +1323,8 @@ static bool ValidateWeft(const ImmutableCSR& p, const ImmutableCSR& g,
                          size_t max_nodes = kSubIsoMaxBacktrackNodes,
                          size_t max_ms_per_weft = kSubIsoMaxMsPerWeft,
                          std::vector<VertexID>* out_mapping = nullptr) {
-  auto n_pattern_vertices = p.get_num_vertices();
-  auto n_edges = matches->get_n_vertices();
+  auto n_pattern_vertices = p.GetNumVertices();
+  auto n_edges = matches->GetNVertices();
 
   // Step 1: Copy valid edge candidates into local structure.
   std::vector<std::vector<std::pair<VertexID, VertexID>>> edge_cands(n_edges);
@@ -1336,12 +1336,12 @@ static bool ValidateWeft(const ImmutableCSR& p, const ImmutableCSR& g,
         offset;
     edge_cands[e].reserve(size);
     for (VertexID c = 0; c < size; ++c) {
-      auto idx = weft_id * n_edges * 2 * matches->get_max_n_local_weft() +
-                 e * 2 * matches->get_max_n_local_weft() + 2 * c;
-      auto src = matches->get_matches_data_ptr()[idx];
-      auto dst = matches->get_matches_data_ptr()[idx + 1];
+      auto idx = weft_id * n_edges * 2 * matches->GetMaxNLocalWeft() +
+                 e * 2 * matches->GetMaxNLocalWeft() + 2 * c;
+      auto src = matches->GetMatchesDataPtr()[idx];
+      auto dst = matches->GetMatchesDataPtr()[idx + 1];
       if (src != kMaxVertexID && dst != kMaxVertexID &&
-          src <= g.get_max_vid() && dst <= g.get_max_vid()) {
+          src <= g.GetMaxVid() && dst <= g.GetMaxVid()) {
         edge_cands[e].emplace_back(src, dst);
       }
     }
@@ -1464,7 +1464,7 @@ static bool ValidateWeft(const ImmutableCSR& p, const ImmutableCSR& g,
             });
 
   std::vector<VertexID> mapping(n_pattern_vertices, kMaxVertexID);
-  std::vector<bool> used(g.get_num_vertices(), false);
+  std::vector<bool> used(g.GetNumVertices(), false);
 
   // Convert to sorted vectors for iteration.
   std::vector<std::vector<VertexID>> cand_vec(n_pattern_vertices);
@@ -1489,8 +1489,8 @@ static bool ValidateWeft(const ImmutableCSR& p, const ImmutableCSR& g,
           if (u_local >= nbr_local) continue;
           VertexID v_u_local = g.GetLocalIDByGlobalID(mapping[u_local]);
           VertexID v_nbr_local = g.GetLocalIDByGlobalID(mapping[nbr_local]);
-          if (v_u_local >= g.get_num_vertices() ||
-              v_nbr_local >= g.get_num_vertices()) {
+          if (v_u_local >= g.GetNumVertices() ||
+              v_nbr_local >= g.GetNumVertices()) {
             ok = false;
             break;
           }
@@ -1510,7 +1510,7 @@ static bool ValidateWeft(const ImmutableCSR& p, const ImmutableCSR& g,
     for (VertexID v_global : cand_vec[u_local]) {
       if (v_global == kMaxVertexID) continue;
       VertexID v_local = g.GetLocalIDByGlobalID(v_global);
-      if (v_local >= g.get_num_vertices()) {
+      if (v_local >= g.GetNumVertices()) {
         RecordRejectedPair(u_global, v_global);
         continue;
       }
@@ -1533,7 +1533,7 @@ static bool ValidateWeft(const ImmutableCSR& p, const ImmutableCSR& g,
           }
         }
         if (!nbr_mapped) continue;
-        if (v_nbr_local >= g.get_num_vertices()) {
+        if (v_nbr_local >= g.GetNumVertices()) {
           valid = false;
           break;
         }
@@ -1565,9 +1565,9 @@ static bool ValidateWeft(const ImmutableCSR& p, const ImmutableCSR& g,
 static void RewriteWeftWithMapping(const ImmutableCSR& p, Matches* matches,
                                    VertexID weft_id,
                                    const std::vector<VertexID>& mapping) {
-  auto n_edges = matches->get_n_vertices();
-  auto max_n_local_weft = matches->get_max_n_local_weft();
-  auto data_ptr = matches->get_matches_data_ptr();
+  auto n_edges = matches->GetNVertices();
+  auto max_n_local_weft = matches->GetMaxNLocalWeft();
+  auto data_ptr = matches->GetMatchesDataPtr();
   auto offset_ptr = matches->GetVCandidateOffsetPtr();
   auto header = matches->GetHeader();
 
@@ -1616,17 +1616,17 @@ static void ValidateMatching(
             << std::endl;
   VertexID invalid_count = 0;
   VertexID checked_count = 0;
-  VertexID total = matches->get_weft_count();
+  VertexID total = matches->GetWeftCount();
   VertexID limit = std::min(total, max_wefts);
   auto global_start = std::chrono::steady_clock::now();
   for (VertexID weft_id = 0; weft_id < limit; weft_id++) {
-    if (matches->get_invalid_match_ptr()->GetBit(weft_id)) continue;
+    if (matches->GetInvalidMatchPtr()->GetBit(weft_id)) continue;
     checked_count++;
     std::vector<VertexID> mapping;
     if (!ValidateWeft(p, g, exec_plan, matches, weft_id,
                       kSubIsoMaxBacktrackNodes, kSubIsoMaxMsPerWeft,
                       &mapping)) {
-      matches->get_invalid_match_ptr()->SetBit(weft_id);
+      matches->GetInvalidMatchPtr()->SetBit(weft_id);
       invalid_count++;
     } else {
       RewriteWeftWithMapping(p, matches, weft_id, mapping);
@@ -1666,80 +1666,80 @@ static void Checking(const ImmutableCSR& p, const ImmutableCSR& /*g*/,
   std::queue<VertexID> frontier;
   auto root = p.GetVertexByLocalID(0);
   frontier.push(root.vid);
-  BitmapOwnership edges_visited(p.get_num_vertices() * p.get_num_vertices());
+  BitmapOwnership edges_visited(p.GetNumVertices() * p.GetNumVertices());
 
   auto header = matches->GetHeader();
 
-  for (VertexID weft_id = 0; weft_id < matches->get_weft_count(); weft_id++) {
-    if (matches->get_invalid_match_ptr()->GetBit(weft_id)) continue;
+  for (VertexID weft_id = 0; weft_id < matches->GetWeftCount(); weft_id++) {
+    if (matches->GetInvalidMatchPtr()->GetBit(weft_id)) continue;
 
     VertexID delete_count = 0;
     bool fix_point = false;
     while (!fix_point) {
-      for (VertexID i = 0; i < matches->get_n_vertices(); i++) {
+      for (VertexID i = 0; i < matches->GetNVertices(); i++) {
         auto v_candidate_offset =
             matches->GetVCandidateOffsetPtr()
-                [weft_id * (matches->get_n_vertices() + 1) + i];
+                [weft_id * (matches->GetNVertices() + 1) + i];
         auto v_candidate_size =
             matches->GetVCandidateOffsetPtr()
-                [weft_id * (matches->get_n_vertices() + 1) + i + 1] -
+                [weft_id * (matches->GetNVertices() + 1) + i + 1] -
             matches->GetVCandidateOffsetPtr()
-                [weft_id * (matches->get_n_vertices() + 1) + i];
+                [weft_id * (matches->GetNVertices() + 1) + i];
 
         for (VertexID candidate_id = 0; candidate_id < v_candidate_size;
              candidate_id++) {
-          if (*(matches->get_matches_data_ptr() +
-                weft_id * matches->get_n_vertices() * 2 *
-                    matches->get_max_n_local_weft() +
-                i * 2 * matches->get_max_n_local_weft() + 2 * candidate_id) !=
+          if (*(matches->GetMatchesDataPtr() +
+                weft_id * matches->GetNVertices() * 2 *
+                    matches->GetMaxNLocalWeft() +
+                i * 2 * matches->GetMaxNLocalWeft() + 2 * candidate_id) !=
                   kMaxVertexID &&
-              *(matches->get_matches_data_ptr() +
-                weft_id * matches->get_n_vertices() * 2 *
-                    matches->get_max_n_local_weft() +
-                i * 2 * matches->get_max_n_local_weft() + 2 * candidate_id +
+              *(matches->GetMatchesDataPtr() +
+                weft_id * matches->GetNVertices() * 2 *
+                    matches->GetMaxNLocalWeft() +
+                i * 2 * matches->GetMaxNLocalWeft() + 2 * candidate_id +
                 1) != kMaxVertexID) {
-            for (VertexID j = 1; j < matches->get_n_vertices(); j++) {
+            for (VertexID j = 1; j < matches->GetNVertices(); j++) {
               if (i == j) continue;
               if (!matches->IsValidCandidate(
-                      weft_id, j, matches->get_header_first_by_idx(i),
-                      *(matches->get_matches_data_ptr() +
-                        weft_id * matches->get_n_vertices() * 2 *
-                            matches->get_max_n_local_weft() +
-                        i * 2 * matches->get_max_n_local_weft() +
+                      weft_id, j, matches->GetHeaderFirstByIdx(i),
+                      *(matches->GetMatchesDataPtr() +
+                        weft_id * matches->GetNVertices() * 2 *
+                            matches->GetMaxNLocalWeft() +
+                        i * 2 * matches->GetMaxNLocalWeft() +
                         2 * candidate_id))) {
-                *(matches->get_matches_data_ptr() +
-                  weft_id * matches->get_n_vertices() * 2 *
-                      matches->get_max_n_local_weft() +
-                  i * 2 * matches->get_max_n_local_weft() + 2 * candidate_id) =
+                *(matches->GetMatchesDataPtr() +
+                  weft_id * matches->GetNVertices() * 2 *
+                      matches->GetMaxNLocalWeft() +
+                  i * 2 * matches->GetMaxNLocalWeft() + 2 * candidate_id) =
                     kMaxVertexID;
-                *(matches->get_matches_data_ptr() +
-                  weft_id * matches->get_n_vertices() * 2 *
-                      matches->get_max_n_local_weft() +
-                  i * 2 * matches->get_max_n_local_weft() + 2 * candidate_id +
+                *(matches->GetMatchesDataPtr() +
+                  weft_id * matches->GetNVertices() * 2 *
+                      matches->GetMaxNLocalWeft() +
+                  i * 2 * matches->GetMaxNLocalWeft() + 2 * candidate_id +
                   1) = kMaxVertexID;
                 matches->GetVDeletedCandidatesCountPtr()
-                    [weft_id * (matches->get_n_vertices() + 1) + i]++;
+                    [weft_id * (matches->GetNVertices() + 1) + i]++;
                 delete_count++;
               }
               if (!matches->IsValidCandidate(
-                      weft_id, j, matches->get_header_second_by_idx(i),
-                      *(matches->get_matches_data_ptr() +
-                        weft_id * matches->get_n_vertices() * 2 *
-                            matches->get_max_n_local_weft() +
-                        i * 2 * matches->get_max_n_local_weft() +
+                      weft_id, j, matches->GetHeaderSecondByIdx(i),
+                      *(matches->GetMatchesDataPtr() +
+                        weft_id * matches->GetNVertices() * 2 *
+                            matches->GetMaxNLocalWeft() +
+                        i * 2 * matches->GetMaxNLocalWeft() +
                         2 * candidate_id + 1))) {
-                *(matches->get_matches_data_ptr() +
-                  weft_id * matches->get_n_vertices() * 2 *
-                      matches->get_max_n_local_weft() +
-                  i * 2 * matches->get_max_n_local_weft() + 2 * candidate_id +
+                *(matches->GetMatchesDataPtr() +
+                  weft_id * matches->GetNVertices() * 2 *
+                      matches->GetMaxNLocalWeft() +
+                  i * 2 * matches->GetMaxNLocalWeft() + 2 * candidate_id +
                   1) = kMaxVertexID;
-                *(matches->get_matches_data_ptr() +
-                  weft_id * matches->get_n_vertices() * 2 *
-                      matches->get_max_n_local_weft() +
-                  i * 2 * matches->get_max_n_local_weft() + 2 * candidate_id) =
+                *(matches->GetMatchesDataPtr() +
+                  weft_id * matches->GetNVertices() * 2 *
+                      matches->GetMaxNLocalWeft() +
+                  i * 2 * matches->GetMaxNLocalWeft() + 2 * candidate_id) =
                     kMaxVertexID;
                 matches->GetVDeletedCandidatesCountPtr()
-                    [weft_id * (matches->get_n_vertices() + 1) + i]++;
+                    [weft_id * (matches->GetNVertices() + 1) + i]++;
                 delete_count++;
               }
             }
@@ -1775,15 +1775,15 @@ void SubIsoCPU::RecursiveMatching(
 
   exec_plan.Print();
 
-  Matches matches(exec_plan.get_n_edges(), kMaxNumWeft, kMaxNumLocalWeft,
-                  g.get_num_vertices());
+  Matches matches(exec_plan.GetNEdges(), kMaxNumWeft, kMaxNumLocalWeft,
+                  g.GetNumVertices());
 
   // Set header of matches
-  for (VertexID _ = 0; _ < exec_plan.get_n_edges(); _++) {
+  for (VertexID _ = 0; _ < exec_plan.GetNEdges(); _++) {
     auto src =
-        exec_plan.get_sequential_exec_path_in_edges_ptr()->GetPtr()[_ * 2];
+        exec_plan.GetSequentialExecPathInEdgesPtr()->GetPtr()[_ * 2];
     auto dst =
-        exec_plan.get_sequential_exec_path_in_edges_ptr()->GetPtr()[_ * 2 + 1];
+        exec_plan.GetSequentialExecPathInEdgesPtr()->GetPtr()[_ * 2 + 1];
     matches.SetHeader(_, std::make_pair(src, dst));
   }
 
@@ -1935,12 +1935,12 @@ void SubIsoCPU::LoadData() {
     buffer_m4.data = m_vec_[3].GetPtr();
     buffer_m5.data = m_vec_[4].GetPtr();
     buffer_m6.data = m_vec_[5].GetPtr();
-    buffer_m1.size = sizeof(float) * m_vec_[0].get_x() * m_vec_[0].get_y();
-    buffer_m2.size = sizeof(float) * m_vec_[1].get_x() * m_vec_[1].get_y();
-    buffer_m3.size = sizeof(float) * m_vec_[2].get_x() * m_vec_[2].get_y();
-    buffer_m4.size = sizeof(float) * m_vec_[3].get_x() * m_vec_[3].get_y();
-    buffer_m5.size = sizeof(float) * m_vec_[4].get_x() * m_vec_[4].get_y();
-    buffer_m6.size = sizeof(float) * m_vec_[5].get_x() * m_vec_[5].get_y();
+    buffer_m1.size = sizeof(float) * m_vec_[0].GetX() * m_vec_[0].GetY();
+    buffer_m2.size = sizeof(float) * m_vec_[1].GetX() * m_vec_[1].GetY();
+    buffer_m3.size = sizeof(float) * m_vec_[2].GetX() * m_vec_[2].GetY();
+    buffer_m4.size = sizeof(float) * m_vec_[3].GetX() * m_vec_[3].GetY();
+    buffer_m5.size = sizeof(float) * m_vec_[4].GetX() * m_vec_[4].GetY();
+    buffer_m6.size = sizeof(float) * m_vec_[5].GetX() * m_vec_[5].GetY();
 
     m_unified_buffer_vec_[0]->Init(buffer_m1);
     m_unified_buffer_vec_[1]->Init(buffer_m2);

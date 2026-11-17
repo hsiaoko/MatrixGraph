@@ -70,7 +70,7 @@ int main(int argc, char* argv[]) {
 
     sics::matrixgraph::core::data_structures::Buffer<VertexLabel> v_label_g;
     v_label_g.data = g.GetVLabelBasePointer();
-    v_label_g.size = sizeof(VertexLabel) * g.get_num_vertices();
+    v_label_g.size = sizeof(VertexLabel) * g.GetNumVertices();
 
     UnifiedOwnedBuffer<VertexLabel> unified_v_label_g;
     unified_v_label_g.Init(v_label_g);
@@ -93,8 +93,8 @@ int main(int argc, char* argv[]) {
     cudaStream_t stream;
     CUDA_CHECK(cudaStreamCreate(&stream));
 
-    BFSKernelWrapper::BFS(stream, g.get_num_vertices(),
-                          g.get_num_outgoing_edges(), FLAGS_src, unified_data_g,
+    BFSKernelWrapper::BFS(stream, g.GetNumVertices(),
+                          g.GetNumOutgoingEdges(), FLAGS_src, unified_data_g,
                           unified_v_label_g);
 
     CUDA_CHECK(cudaStreamDestroy(stream));
@@ -102,19 +102,19 @@ int main(int argc, char* argv[]) {
 
     // Copy results from managed memory back to the host label buffer.
     CUDA_CHECK(cudaMemcpy(g.GetVLabelBasePointer(), unified_v_label_g.GetPtr(),
-                          sizeof(VertexLabel) * g.get_num_vertices(),
+                          sizeof(VertexLabel) * g.GetNumVertices(),
                           cudaMemcpyDefault));
 
     std::filesystem::create_directories(FLAGS_o);
     std::ofstream level_file(FLAGS_o + "/bfs_levels.bin", std::ios::binary);
     level_file.write(reinterpret_cast<const char*>(g.GetVLabelBasePointer()),
-                     sizeof(VertexLabel) * g.get_num_vertices());
+                     sizeof(VertexLabel) * g.GetNumVertices());
     level_file.close();
 
     VertexLabel max_level = 0;
     VertexLabel unreachable = std::numeric_limits<VertexLabel>::max();
     VertexID reached = 0;
-    for (VertexID i = 0; i < g.get_num_vertices(); i++) {
+    for (VertexID i = 0; i < g.GetNumVertices(); i++) {
       VertexLabel lvl = g.GetVLabelBasePointer()[i];
       if (lvl != unreachable) {
         reached++;
@@ -123,13 +123,13 @@ int main(int argc, char* argv[]) {
     }
 
     std::ofstream summary_file(FLAGS_o + "/bfs_summary.txt");
-    summary_file << "num_vertices " << g.get_num_vertices() << "\n";
+    summary_file << "num_vertices " << g.GetNumVertices() << "\n";
     summary_file << "source " << FLAGS_src << "\n";
     summary_file << "reached " << reached << "\n";
     summary_file << "max_level " << max_level << "\n";
     summary_file.close();
 
-    std::cout << "[GraphRAG BFS] Wrote " << g.get_num_vertices()
+    std::cout << "[GraphRAG BFS] Wrote " << g.GetNumVertices()
               << " levels to " << FLAGS_o << "/bfs_levels.bin"
               << ", reached=" << reached << ", max_level=" << max_level
               << std::endl;

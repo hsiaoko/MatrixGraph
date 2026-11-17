@@ -120,7 +120,7 @@ class Edges {
       return a.base_ptr_ != b.base_ptr_;
     };
 
-    pointer get_base_ptr() const { return base_ptr_; };
+    pointer GetBasePtr() const { return base_ptr_; };
 
    private:
     pointer base_ptr_;
@@ -191,27 +191,27 @@ class Edges {
 
   void GenerateVLabel(VertexID range = 5, bool random = false);
 
-  Edge* get_base_ptr() const { return edges_ptr_; }
+  Edge* GetBasePtr() const { return edges_ptr_; }
 
-  VertexID* get_localid_to_globalid_ptr() const { return localid_to_globalid_; }
+  VertexID* GetLocalidToGlobalidPtr() const { return localid_to_globalid_; }
 
-  VertexLabel* get_vertex_label_ptr() const {
+  VertexLabel* GetVertexLabelPtr() const {
     return vertex_label_base_pointer_;
   }
 
-  EdgelistMetadata get_metadata() const { return edgelist_metadata_; }
+  EdgelistMetadata GetMetadata() const { return edgelist_metadata_; }
 
-  VertexID get_src_by_index(size_t i) const { return edges_ptr_[i].src; }
+  VertexID GetSrcByIndex(size_t i) const { return edges_ptr_[i].src; }
 
-  VertexID get_dst_by_index(size_t i) const { return edges_ptr_[i].dst; }
+  VertexID GetDstByIndex(size_t i) const { return edges_ptr_[i].dst; }
 
-  Edge get_edge_by_index(size_t i) const { return edges_ptr_[i]; }
+  Edge GetEdgeByIndex(size_t i) const { return edges_ptr_[i]; }
 
-  size_t get_index_by_iter(const Iterator& iter) {
-    return (iter.get_base_ptr() - begin().get_base_ptr());
+  size_t GetIndexByIter(const Iterator& iter) {
+    return (iter.GetBasePtr() - begin().GetBasePtr());
   };
 
-  VertexID get_globalid_by_localid(VertexID localid) const;
+  VertexID GetGlobalidByLocalid(VertexID localid) const;
 
   void SetLocalIDToGlobalID(VertexID* localid_to_globalid);
 
