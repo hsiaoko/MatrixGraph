@@ -11,6 +11,7 @@
 #include <numeric>
 #include <random>
 #include <thread>
+#include "core/util/error.h"
 
 namespace sics {
 
@@ -166,18 +167,16 @@ void Edges::ReadFromBin(const std::string& input_path) {
 
   std::ifstream in_file(input_path + "edgelist.bin");
   if (!in_file) {
-    std::cout << "Open file failed: " + input_path + "edgelist.bin"
-              << std::endl;
-    exit(EXIT_FAILURE);
+    throw util::Error(util::ErrorCode::kIo,
+                      "Open file failed: " + input_path + "edgelist.bin");
   }
   in_file.read(reinterpret_cast<char*>(edges_ptr_),
                sizeof(Edge) * edgelist_metadata_.num_edges);
 
   std::ifstream in_localid2globalid_file(input_path + "localid2globalid.bin");
   if (!in_localid2globalid_file) {
-    std::cout << "Open file failed: " + input_path + "localid2globalid.bin"
-              << std::endl;
-    exit(EXIT_FAILURE);
+    throw util::Error(util::ErrorCode::kIo, "Open file failed: " +
+                      input_path + "localid2globalid.bin");
   }
 
   // Read local id to global id.
@@ -189,8 +188,8 @@ void Edges::ReadFromBin(const std::string& input_path) {
   // Read vertex label.
   std::ifstream in_vlabel_file(input_path + "vlabel.bin");
   if (!in_vlabel_file) {
-    std::cout << "Open file failed: " + input_path + "vlabel.bin" << std::endl;
-    exit(EXIT_FAILURE);
+    throw util::Error(util::ErrorCode::kIo,
+                      "Open file failed: " + input_path + "vlabel.bin");
   }
 
   vertex_label_base_pointer_ =
