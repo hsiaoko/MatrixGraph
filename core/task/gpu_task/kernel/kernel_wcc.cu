@@ -217,9 +217,6 @@ static __global__ void HashMinRangeKernel(ParametersWCC params) {
       }
     }
   }
-  // for (int v_idx = params.n_vertices_g - tid; v_idx > 1024; v_idx -= step) {
-  //   if (!in_visited.GetBit(v_idx)) continue;
-  //   if (visited.GetBit(v_idx)) continue;
 
   //  visited.SetBit(v_idx);
   //  EdgeIndex v_offset_base = out_offset_g[v_idx];
@@ -231,12 +228,6 @@ static __global__ void HashMinRangeKernel(ParametersWCC params) {
 
   //    VertexLabel label_nbr_v = *(params.v_label_g + nbr_v);
 
-  //    if (label_nbr_v > v_label) {
-  //      atomicMin(params.v_label_g + nbr_v, v_label);
-  //      out_visited.SetBit(nbr_v);
-  //    }
-  //  }
-  //}
 }
 
 /**

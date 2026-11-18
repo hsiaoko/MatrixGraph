@@ -94,8 +94,6 @@ __host__ void SubIso::LoadData() {
 
   g_.Read(data_graph_path_);
 
-  // p_.PrintGraph(10);
-  // g_.PrintGraph(1);
 }
 
 __host__ void SubIso::WOJMatching(

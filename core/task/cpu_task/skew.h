@@ -13,10 +13,6 @@ namespace matrixgraph {
 namespace core {
 namespace task {
 
-// skew(G) ≈ d_hat(G) / d_bar, with the same undirected BFS setup as Diameter:
-// d_hat = max eccentricity over sampled (or all) sources; edges treated as
-// undirected via out- + in-adjacency.
-// d_bar = mean total degree per vertex: (|E_out| + |E_in|) / n in the CSR.
 class Skew : public TaskBase {
  public:
   Skew(std::string data_graph_path, size_t sample_sources = 50,

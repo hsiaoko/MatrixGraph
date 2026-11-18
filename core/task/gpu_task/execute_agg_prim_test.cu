@@ -52,12 +52,6 @@ static bool TestSinglePrimitives() {
       task.Compute(AggPrim::kCountGreaterThanMean, nums.data(), nums.size());
   auto nu = task.Compute(AggPrim::kNumUnique, nums.data(), nums.size());
 
-  // Expected values for [1,2,3,4,5]:
-  // count=5, sum=15, mean=3, median=3 (upper median), min=1, max=5
-  // variance = ((1-3)^2 + ... + (5-3)^2) / 5 = 10/5 = 2
-  // std = sqrt(2), q1 = 2 (pos=1), q3 = 4 (pos=3)
-  // count_greater_than_mean: values > 3 are {4,5} -> 2
-  // num_unique = 5
   if (count.i64 != 5) pass = false;
   pass &= check("sum", 15.0, sum.ToDouble());
   pass &= check("mean", 3.0, mean.ToDouble());

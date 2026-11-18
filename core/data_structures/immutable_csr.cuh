@@ -205,7 +205,6 @@ class ImmutableCSR {
   }
 
   inline VertexLabel* GetVLabelBasePointer() const {
-    // return vertex_label_base_pointer_.get();
     return vertex_label_base_pointer_;
   }
 

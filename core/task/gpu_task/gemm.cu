@@ -764,7 +764,6 @@ __host__ Edges* GEMM::Walks(const GridCSRTiledMatrix& A,
   cudaDeviceSynchronize();
   std::cout << "Global Offset: " << *global_output_offset.GetPtr() << std::endl;
   for (size_t _ = 0; _ < 10; _++) {
-    // for (size_t _ = 0; _ < *global_output_offset.GetPtr(); _++) {
     std::cout << global_output_edgelist.GetPtr()[_ * 2] << "->"
               << global_output_edgelist.GetPtr()[_ * 2 + 1] << std::endl;
   }

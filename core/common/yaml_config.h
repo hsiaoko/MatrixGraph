@@ -84,10 +84,6 @@ struct convert<sics::matrixgraph::core::data_structures::GraphMetadata> {
     node["count_border_vertices"] = metadata.count_border_vertices;
     node["num_subgraphs"] = metadata.num_subgraphs;
     std::vector<sics::matrixgraph::core::data_structures::SubGraphMetadata> tmp;
-    // for (size_t i = 0; i < metadata.num_subgraphs; i++) {
-    //   tmp.push_back(metadata.GetSubGraphMetadata(i));
-    // }
-    // node["subgraphs"] = tmp;
 
     return node;
   }

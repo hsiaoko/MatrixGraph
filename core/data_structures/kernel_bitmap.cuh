@@ -36,10 +36,6 @@ class KernelBitmap {
            (KERNEL_WORD_OFFSET(size_) + 1) * sizeof(uint64_t));
   }
 
-  //__device__ ~KernelBitmap() {
-  // free(data_);
-  //  data_ = nullptr;
-  //}
 
   __device__ void Init(uint64_t size, uint64_t* data) {
     if (data_ != nullptr) free(data_);

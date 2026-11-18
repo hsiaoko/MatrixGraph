@@ -1152,10 +1152,6 @@ static void DFSExtend(
 
     if ((pre_v_idx == kMaxVertexID) ^ (u_src == kMaxVertexID)) continue;
 
-    // if (!LabelFilter(u_dst, v_idx, p, g)) {
-    //   __sync_fetch_and_add(&label_filter_count, 1);
-    //   continue;
-    // }
 
     if (level == 1) {
       if (!MatrixFilter(u_src, pre_v_idx, p, g, m_vec, m_unified_buffer_vec,
@@ -1841,9 +1837,6 @@ void SubIsoCPU::WOJMatching(
   auto start_time_0 = std::chrono::system_clock::now();
   auto woj_matches = WOJFilter(exec_plan, p, g, m_vec, m_unified_buffer_vec);
 
-  // for (auto iter : woj_matches) {
-  //   iter->Print();
-  // }
   auto start_time_1 = std::chrono::system_clock::now();
 
   auto output = WOJEnumerating(exec_plan, woj_matches);
@@ -1902,8 +1895,6 @@ void SubIsoCPU::LoadData() {
   auto* g_vlabel = g_.GetVLabelBasePointer();
   auto* p_vlabel = p_.GetVLabelBasePointer();
 
-  // p_.PrintGraph(100);
-  // g_.PrintGraph(100);
 
   if (matrix_path1_ != "" && matrix_path2_ != "" && matrix_path3_ != "" &&
       matrix_path4_ != "" && matrix_path5_ != "" && matrix_path6_ != "") {
@@ -1960,7 +1951,6 @@ void SubIsoCPU::Run() {
   g_rejected_pairs.clear();
 
   if (load_data_ok_) {
-    // WOJMatching(p_, g_, m_vec_);
     RecursiveMatching(p_, g_, m_vec_, m_unified_buffer_vec_);
   }
 

@@ -86,12 +86,6 @@ void CSRTiledMatrixIO::Write(const std::string& output_path,
     out_data.write(reinterpret_cast<char*>(csr_tiled_matrix.GetDataPtr()),
                    csr_tiled_matrix.GetDataBufferSize());
 
-    // for (int i = 0; i < csr_tiled_matrix.GetMetadata().n_nz_tile; i++) {
-    //   auto data = csr_tiled_matrix.GetCSRBasePtrByIdx(i);
-    //   ImmutableCSR csr(csr_tiled_matrix.GetCSRMetadataByIdx(i));
-    //   csr.ParseBasePtr(data);
-    //   csr.PrintGraph();
-    // }
     auto data_buf = (VertexID*)csr_tiled_matrix.GetDataPtr();
 
     out_row_idx_file.close();

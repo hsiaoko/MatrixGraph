@@ -77,8 +77,6 @@ class Matches {
     invalid_match_ = new BitmapOwnership(max_n_weft);
     header_.resize(n_vertices_);
 
-    // src_visited_vec_.resize(n_vertices, g_n_vertices);
-    // dst_visited_vec_.resize(n_vertices, g_n_vertices);
   }
 
   void Print(VertexID n_matches = 3) const {

@@ -90,7 +90,6 @@ __host__ void WCC::LoadData() {
   std::cout << "[WCC] LoadData()" << std::endl;
 
   g_.Read(data_graph_path_);
-  // g_.PrintGraph();
 }
 
 __host__ void WCC::HashMin(const ImmutableCSR& g) {

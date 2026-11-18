@@ -46,7 +46,6 @@ static void ConvertEdgelistBin2TiledMatrix(const std::string& input_path,
       sics::matrixgraph::tools::format_converter::Edgelist2ImmutableCSR(
           edgelist);
   p_immutable_csr->PrintGraph(100);
-  // p_immutable_csr->SortByDistance(tile_size);
   p_immutable_csr->SortByDegree();
   p_immutable_csr->PrintGraph(100);
 

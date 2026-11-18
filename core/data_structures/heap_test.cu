@@ -11,11 +11,7 @@ class MiniHeapTest : public ::testing::Test {
   MiniHeapTest() = default;
   ~MiniHeapTest() override = default;
 
-  // MiniHeapTest() {
-  //::testing::FLAGS_gtest_death_test_style = "threadsafe";
-  //}
 
-  // TEST_F(MiniHeapTest, DefaultConstructor) {}
 };
 
 }  // namespace kernel

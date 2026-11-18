@@ -405,36 +405,9 @@ static __forceinline__ __device__ bool KMinWiseIPFilter(
     }
   }
 
-  // Filter by in edges.
-  // max_v_ip_val = 0;
-  // min_v_ip_val = kMaxVertexID;
-  // max_u_ip_val = 0;
-  // min_u_ip_val = kMaxVertexID;
-  // // u_label_visited.Clear();
-  // // v_label_visited.Clear();
-  // u_k_min_heap.Clear();
-  // v_k_min_heap.Clear();
 
-  // u_offset_base = in_offset_p[u_idx];
-  // for (VertexID nbr_u_idx = 0; nbr_u_idx < in_degree_p[u_idx]; nbr_u_idx++) {
-  //   VertexID nbr_u = in_edges_p[u_offset_base + nbr_u_idx];
-  //   VertexLabel u_label = params.v_label_p[nbr_u];
-  //   VertexID u_ip_val = HashTable(u_label);
-  //   u_label_visited.SetBit(u_label);
-  //   u_k_min_heap.Insert(u_ip_val);
-  // }
 
-  // v_offset_base = in_offset_g[v_idx];
-  // for (VertexID nbr_v_idx = 0; nbr_v_idx < in_degree_g[v_idx]; nbr_v_idx++) {
-  //   VertexID nbr_v = in_edges_g[v_offset_base + nbr_v_idx];
-  //   VertexLabel v_label = params.v_label_g[nbr_v];
-  //   VertexID v_ip_val = HashTable(v_label);
-  //   v_label_visited.SetBit(v_label);
-  //   v_k_min_heap.Insert(v_ip_val);
-  // }
 
-  // u_k_min_heap.CopyData(u_k_min_heap_data);
-  // v_k_min_heap.CopyData(v_k_min_heap_data);
 
   // for (VertexID _ = 0; _ < v_k_min_heap.GetOffset(); _++) {
   //   auto v_ip_val = v_k_min_heap_data[_];
@@ -448,24 +421,9 @@ static __forceinline__ __device__ bool KMinWiseIPFilter(
   //   }
   // }
 
-  // for (VertexID _ = 0; _ < v_k_min_heap.GetOffset(); _++) {
-  //   auto v_ip_val = v_k_min_heap_data[_];
-  //   min_v_ip_val = min_v_ip_val < v_ip_val ? min_v_ip_val : v_ip_val;
-  // }
 
-  // for (VertexID _ = 0; _ < u_k_min_heap.GetOffset(); _++) {
-  //   auto u_ip_val = u_k_min_heap_data[_];
-  //   min_u_ip_val = min_u_ip_val < u_ip_val ? min_u_ip_val : u_ip_val;
-  // }
 
-  // if (min_v_ip_val == kMaxVertexID && min_u_ip_val != kMaxVertexID)
-  //   return false;
 
-  // for (VertexID _ = 0; _ < u_k_min_heap.GetOffset(); _++) {
-  //   if (u_k_min_heap_data[_] < min_v_ip_val) {
-  //     return false;
-  //   }
-  // }
 
   return v_label_visited.Count() >= u_label_visited.Count() &&
          out_degree_g[v_idx] >= out_degree_p[u_idx] &&
@@ -653,9 +611,6 @@ static __forceinline__ __device__ bool SteadyFilter(
     if (matches == 0) return false;
   }
 
-  // for (VertexID nbr_u_idx = 0; nbr_u_idx < out_degree_p[u_idx]; nbr_u_idx++)
-  // {
-  //   VertexID nbr_u = out_edges_p[out_offset_base_u + nbr_u_idx];
 
   //  int matches = 0;
   //  for (VertexID nbr_v_idx = 0; nbr_v_idx < out_degree_g[v_idx]; nbr_v_idx++)
@@ -993,11 +948,6 @@ static __noinline__ __global__ void WOJJoinKernel(ParametersJoin params) {
     VertexID target =
         left_data[left_x * left_data_offset + params.left_hash_idx];
 
-    // if (visited.GetBit(target) == 0) {
-    //   atomicAdd(params.jump_count, 1);
-    //   jump_visited.SetBit(target);
-    //   continue;
-    // }
 
     VertexID right_data_offset =
         params.right_woj_matches.BinarySearch(params.right_hash_idx, target);
@@ -1054,12 +1004,6 @@ static __noinline__ __global__ void WOJJoinKernel(ParametersJoin params) {
     }
   }
 
-  // __syncthreads();
-  // if (threadIdx.x == 0) {
-  //   auto offset = atomicAdd(global_offset_ptr, local_matches_offset);
-  //   memcpy(output_data + output_x_offset * offset, local_matches_data,
-  //          sizeof(VertexID) * output_x_offset * local_matches_offset);
-  // }
 }
 
 // ---------------------------------------------------------------------------

@@ -360,7 +360,6 @@ inline BitTiledMatrix* Edgelist2BitTiledMatrix(const Edges& edges,
           auto tile_y = (localid_to_globalid[e.dst] % block_scope) / tile_size;
 
           size_t tile_row_offset = 0;
-          // if (tile_x * n_strips + tile_y < 33554432) {
           if (1) {
             auto start_time_0 = std::chrono::system_clock::now();
             tile_row_offset =

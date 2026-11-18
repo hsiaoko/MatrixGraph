@@ -372,7 +372,6 @@ static __global__ void FillCsrTilesKernel(ParametersFillTiles params) {
   unsigned int tid = blockIdx.x * blockDim.x + threadIdx.x;
   unsigned int step = blockDim.x * gridDim.x;
 
-  // printf("tid: %d\n", tid);
   for (unsigned int i = tid; i < params.n_nz_tile_c; i += step) {
     unsigned int x = params.tile_row_idx_c[i];
     unsigned int y = params.tile_col_idx_c[i];
@@ -385,7 +384,6 @@ static __global__ void FillCsrTilesKernel(ParametersFillTiles params) {
 
     unsigned nz_idx_x = 0;
     unsigned nz_idx_y = 0;
-    // printf("C (%d, %d)\n", nz_idx_x, nz_idx_y);
     while (nz_idx_x < nz_tile_line_x && nz_idx_y < nz_tile_line_y) {
       if (*(params.tile_col_idx_a + params.tile_offset_row_a[x] + nz_idx_x) <
           *(params.tile_col_idx_b + params.tile_offset_row_a[y] + nz_idx_y)) {
@@ -398,8 +396,6 @@ static __global__ void FillCsrTilesKernel(ParametersFillTiles params) {
         uint32_t tile_id_a = params.tile_offset_row_a[x] + nz_idx_x;
         uint32_t tile_id_b = params.tile_offset_row_b[y] + nz_idx_y;
 
-        // printf("a(%d, %d) X b(%d, %d)\n", x, nz_idx_x, y, nz_idx_y);
-        // printf(" offset \t a: %d, b: %d\n", tile_id_a, tile_id_b);
         size_t csr_offset_a =
             params.csr_offset_a[params.tile_offset_row_a[x] + nz_idx_x];
         size_t csr_offset_b =
@@ -439,9 +435,7 @@ static __global__ void FillCsrTilesKernel(ParametersFillTiles params) {
           // Step 1. traversal edges of tile_a
           for (VertexID v_idx_a = 0;
                v_idx_a < params.csr_n_vertices_a[tile_id_a]; v_idx_a++) {
-            // printf("vid %d\n", globalid_a[v_idx_a]);
             EdgeIndex offset_base_a = out_offset_a[v_idx_a];
-            // printf("\t edges: ");
             for (VertexID nbr_a = 0; nbr_a < out_degree_a[v_idx_a]; nbr_a++) {
               VertexID global_vid_b =
                   edges_globalid_by_localid_a[out_edges_a[offset_base_a +
@@ -459,17 +453,8 @@ static __global__ void FillCsrTilesKernel(ParametersFillTiles params) {
               //                                                nbr_a]],
               //        local_vid_b);
 
-              // for (VertexID _ = 0; _ < params.csr_n_vertices_b[tile_id_b];
-              //      _++) {
-              //   // printf("check %d\n", globalid_b[v_idx_b]);
-              //   if (globalid_b[_] == global_vid_b) {
-              //     v_idx_b = _;
-              //     break;
-              //   }
-              // }
 
               if (v_idx_b == kMaxVertexID) continue;
-              // printf("found: %d\n", v_idx_b);
 
               // Generate Output a 2-hop edge from src of A to dst of B.
               EdgeIndex offset_base_b = out_offset_b[v_idx_b];
@@ -481,7 +466,6 @@ static __global__ void FillCsrTilesKernel(ParametersFillTiles params) {
                 //        global_vid_c);
               }
             }
-            // printf("\n");
           }
 
           VertexID local_vid_b;
@@ -595,15 +579,10 @@ static __global__ void WalkKernel(const ParametersWalk params) {
               kbm.SetBit(local_walk_to_dst);
             }
 
-            // if (*params.output_offset > kMaxNumEdges) {
-            //   return;
-            // }
 
             if (local_offset > kDefaultOutputBufferSize) {
               EdgeIndex global_offset =
                   atomicAdd(params.output_offset, local_offset);
-              // memcpy(params.edgelist_c + 2 * global_offset, local_buf,
-              //        sizeof(VertexID) * 2 * local_offset);
               local_offset = 0;
               local_buf[2 * local_offset] = global_src;
               local_buf[2 * local_offset + 1] = walk_to_dst;
@@ -617,8 +596,6 @@ static __global__ void WalkKernel(const ParametersWalk params) {
         }
       }
       EdgeIndex global_offset = atomicAdd(params.output_offset, local_offset);
-      // memcpy(params.edgelist_c + 2 * global_offset, local_buf,
-      //        sizeof(VertexID) * 2 * local_offset);
     }
   }
 }
