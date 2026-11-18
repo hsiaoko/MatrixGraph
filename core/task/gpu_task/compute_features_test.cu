@@ -110,15 +110,15 @@ MatrixGraphPlanNode AttrNode(const char* key) {
 MatrixGraphPlanNode ConstFloatNode(double v) {
   MatrixGraphPlanNode n{};
   n.type = MG_EXPR_CONST;
-  n.const_type = MG_VALUE_FLOAT64;
+  n.const_type = ValueType::kFloat64;
   n.const_f64 = v;
   return n;
 }
 
-MatrixGraphPlanNode AggNode(int32_t op, int32_t src_idx, int32_t nav_idx) {
+MatrixGraphPlanNode AggNode(AggPrim op, int32_t src_idx, int32_t nav_idx) {
   MatrixGraphPlanNode n{};
   n.type = MG_EXPR_AGG;
-  n.op = op;
+  n.agg_op = op;
   n.src_idx = src_idx;
   n.nav_idx = nav_idx;
   return n;
@@ -145,17 +145,17 @@ TEST(ComputeFeaturesTest, SelfAttributeAndConstantAndNeighborAgg) {
   for (uint32_t v = 0; v < kNVertices; ++v) scores[v] = v * 1.5;
   ComputeFeaturesAttributeColumn score_col{};
   std::strncpy(score_col.key, "score", sizeof(score_col.key) - 1);
-  score_col.value_type = MG_VALUE_FLOAT64;
+  score_col.value_type = ValueType::kFloat64;
   score_col.n_values = kNVertices;
   score_col.values = scores.data();
 
   task.LoadAttributes(1, &score_col);
 
   std::vector<MatrixGraphPlanNode> plan;
-  plan.push_back(AttrNode("score"));           // 0
-  plan.push_back(ConstFloatNode(3.14));        // 1
-  plan.push_back(AggNode(MG_AGG_SUM, 0, 0));   // 2
-  plan.push_back(AggNode(MG_AGG_MEAN, 0, 0));  // 3
+  plan.push_back(AttrNode("score"));              // 0
+  plan.push_back(ConstFloatNode(3.14));           // 1
+  plan.push_back(AggNode(AggPrim::kSum, 0, 0));   // 2
+  plan.push_back(AggNode(AggPrim::kMean, 0, 0));  // 3
 
   std::vector<MatrixGraphPlanNode> navs;
   navs.push_back(OutNeighborNav());
@@ -171,16 +171,16 @@ TEST(ComputeFeaturesTest, SelfAttributeAndConstantAndNeighborAgg) {
     uint32_t v = pivots[i];
     uint32_t neighbor = (v + 1) % kNVertices;
 
-    EXPECT_EQ(result[i * 4 + 0].type, MG_VALUE_FLOAT64);
+    EXPECT_EQ(result[i * 4 + 0].type, ValueType::kFloat64);
     EXPECT_DOUBLE_EQ(result[i * 4 + 0].f64, scores[v]);
 
-    EXPECT_EQ(result[i * 4 + 1].type, MG_VALUE_FLOAT64);
+    EXPECT_EQ(result[i * 4 + 1].type, ValueType::kFloat64);
     EXPECT_DOUBLE_EQ(result[i * 4 + 1].f64, 3.14);
 
-    EXPECT_EQ(result[i * 4 + 2].type, MG_VALUE_FLOAT64);
+    EXPECT_EQ(result[i * 4 + 2].type, ValueType::kFloat64);
     EXPECT_DOUBLE_EQ(result[i * 4 + 2].f64, scores[neighbor]);
 
-    EXPECT_EQ(result[i * 4 + 3].type, MG_VALUE_FLOAT64);
+    EXPECT_EQ(result[i * 4 + 3].type, ValueType::kFloat64);
     EXPECT_DOUBLE_EQ(result[i * 4 + 3].f64, scores[neighbor]);
   }
 }

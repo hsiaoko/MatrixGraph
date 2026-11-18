@@ -25,7 +25,24 @@
 using sics::matrixgraph::core::common::EdgeIndex;
 using sics::matrixgraph::core::common::VertexID;
 using sics::matrixgraph::core::data_structures::ImmutableCSR;
+using sics::matrixgraph::core::task::AggPrim;
+using sics::matrixgraph::core::task::ComputeFeaturesAttributeColumn;
 using sics::matrixgraph::core::task::ComputeFeaturesTask;
+using sics::matrixgraph::core::task::FeatureValue;
+using sics::matrixgraph::core::task::MatrixGraphCondNode;
+using sics::matrixgraph::core::task::MatrixGraphCondType;
+using sics::matrixgraph::core::task::MatrixGraphPlanNode;
+using sics::matrixgraph::core::task::MatrixGraphTransOp;
+using sics::matrixgraph::core::task::MG_COND_EQ;
+using sics::matrixgraph::core::task::MG_EXPR_AGG;
+using sics::matrixgraph::core::task::MG_EXPR_ATTR;
+using sics::matrixgraph::core::task::MG_EXPR_CONST;
+using sics::matrixgraph::core::task::MG_EXPR_TRANS;
+using sics::matrixgraph::core::task::MG_NAV_FILTER;
+using sics::matrixgraph::core::task::MG_NAV_NEIGHBOR;
+using sics::matrixgraph::core::task::MG_NAV_SELF;
+using sics::matrixgraph::core::task::MG_TRANS_ADD;
+using sics::matrixgraph::core::task::ValueType;
 
 namespace {
 
@@ -123,7 +140,7 @@ MatrixGraphPlanNode AttrNode(const char* key) {
 MatrixGraphPlanNode ConstFloatNode(double v) {
   MatrixGraphPlanNode n{};
   n.type = MG_EXPR_CONST;
-  n.const_type = MG_VALUE_FLOAT64;
+  n.const_type = ValueType::kFloat64;
   n.const_f64 = v;
   return n;
 }
@@ -132,26 +149,27 @@ MatrixGraphPlanNode ConstFloatNode(double v) {
 MatrixGraphPlanNode ConstIntNode(int64_t v) {
   MatrixGraphPlanNode n{};
   n.type = MG_EXPR_CONST;
-  n.const_type = MG_VALUE_INT;
+  n.const_type = ValueType::kInt;
   n.const_i64 = v;
   return n;
 }
 
 /** @brief Build an aggregation expression node. */
-MatrixGraphPlanNode AggNode(int32_t op, int32_t src_idx, int32_t nav_idx) {
+MatrixGraphPlanNode AggNode(AggPrim op, int32_t src_idx, int32_t nav_idx) {
   MatrixGraphPlanNode n{};
   n.type = MG_EXPR_AGG;
-  n.op = op;
+  n.agg_op = op;
   n.src_idx = src_idx;
   n.nav_idx = nav_idx;
   return n;
 }
 
 /** @brief Build a transformation (arithmetic) expression node. */
-MatrixGraphPlanNode TransNode(int32_t op, int32_t child_a, int32_t child_b) {
+MatrixGraphPlanNode TransNode(MatrixGraphTransOp op, int32_t child_a,
+                              int32_t child_b) {
   MatrixGraphPlanNode n{};
   n.type = MG_EXPR_TRANS;
-  n.op = op;
+  n.trans_op = op;
   n.child_a = child_a;
   n.child_b = child_b;
   return n;
@@ -175,7 +193,8 @@ MatrixGraphPlanNode FilterNavNode(int32_t inner_nav_idx, int32_t cond_idx) {
 }
 
 /** @brief Build a binary condition node. */
-MatrixGraphCondNode CondNode(int32_t op, int32_t left, int32_t right) {
+MatrixGraphCondNode CondNode(MatrixGraphCondType op, int32_t left,
+                             int32_t right) {
   MatrixGraphCondNode n{};
   n.op = op;
   n.left_expr = left;
@@ -188,7 +207,7 @@ ComputeFeaturesAttributeColumn MakeColumn(const char* key,
                                           const std::vector<double>& values) {
   ComputeFeaturesAttributeColumn col{};
   std::strncpy(col.key, key, sizeof(col.key) - 1);
-  col.value_type = MG_VALUE_FLOAT64;
+  col.value_type = ValueType::kFloat64;
   col.n_values = static_cast<uint32_t>(values.size());
   col.values = const_cast<void*>(static_cast<const void*>(values.data()));
   return col;
@@ -199,7 +218,7 @@ ComputeFeaturesAttributeColumn MakeColumn(const char* key,
                                           const std::vector<int64_t>& values) {
   ComputeFeaturesAttributeColumn col{};
   std::strncpy(col.key, key, sizeof(col.key) - 1);
-  col.value_type = MG_VALUE_INT;
+  col.value_type = ValueType::kInt;
   col.n_values = static_cast<uint32_t>(values.size());
   col.values = const_cast<void*>(static_cast<const void*>(values.data()));
   return col;
@@ -229,11 +248,11 @@ int main() {
   plan.push_back(AttrNode("score"));              // 0
   plan.push_back(ConstFloatNode(3.14));           // 1
   plan.push_back(ConstFloatNode(10.0));           // 2
-  plan.push_back(AggNode(MG_AGG_SUM, 0, 0));      // 3
-  plan.push_back(AggNode(MG_AGG_MEAN, 0, 0));     // 4
+  plan.push_back(AggNode(AggPrim::kSum, 0, 0));   // 3
+  plan.push_back(AggNode(AggPrim::kMean, 0, 0));  // 4
   plan.push_back(TransNode(MG_TRANS_ADD, 0, 2));  // 5: score + 10
-  plan.push_back(AggNode(MG_AGG_SUM, 0, 0));      // 6: inner sum over neighbors
-  plan.push_back(AggNode(MG_AGG_MEAN, 6, 0));     // 7: mean of neighbor sums
+  plan.push_back(AggNode(AggPrim::kSum, 0, 0));   // 6: inner sum over neighbors
+  plan.push_back(AggNode(AggPrim::kMean, 6, 0));  // 7: mean of neighbor sums
 
   std::vector<MatrixGraphPlanNode> navs;
   navs.push_back(OutNeighborNav());
@@ -298,7 +317,7 @@ int main() {
   plan2.push_back(AttrNode("flag"));   // 1
   plan2.push_back(ConstIntNode(1));    // 2
   plan2.push_back(
-      AggNode(MG_AGG_SUM, 0, 1));  // 3: sum score of filtered neighbors
+      AggNode(AggPrim::kSum, 0, 1));  // 3: sum score of filtered neighbors
 
   std::vector<MatrixGraphPlanNode> navs2;
   navs2.push_back(OutNeighborNav());     // 0: out neighbor

@@ -36,7 +36,8 @@ constexpr uint32_t kOutDegree = 3;
 
 std::vector<VertexID> Neighbors(uint32_t v) {
   std::vector<VertexID> out;
-  for (uint32_t e = 1; e <= kOutDegree; ++e) out.push_back((v + e) % kNVertices);
+  for (uint32_t e = 1; e <= kOutDegree; ++e)
+    out.push_back((v + e) % kNVertices);
   return out;
 }
 
@@ -102,10 +103,10 @@ MatrixGraphPlanNode AttrNode(const char* key) {
   return n;
 }
 
-MatrixGraphPlanNode AggNode(int32_t op, int32_t src_idx, int32_t nav_idx) {
+MatrixGraphPlanNode AggNode(AggPrim op, int32_t src_idx, int32_t nav_idx) {
   MatrixGraphPlanNode n{};
   n.type = MG_EXPR_AGG;
-  n.op = op;
+  n.agg_op = op;
   n.src_idx = src_idx;
   n.nav_idx = nav_idx;
   return n;
@@ -124,7 +125,7 @@ MatrixGraphPlanNode SelfNav() {
   return n;
 }
 
-ComputeFeaturesAttributeColumn MakeColumn(const char* key, int32_t type,
+ComputeFeaturesAttributeColumn MakeColumn(const char* key, ValueType type,
                                           uint32_t n_values, void* values) {
   ComputeFeaturesAttributeColumn col{};
   std::strncpy(col.key, key, sizeof(col.key) - 1);
@@ -196,47 +197,51 @@ TEST(ComputeFeaturesParity, AllPrimitivesMatchHostReference) {
     flag[v] = (v % 2) ? 1 : 0;
   }
   std::vector<ComputeFeaturesAttributeColumn> cols;
-  cols.push_back(MakeColumn("score", MG_VALUE_FLOAT64, kNVertices, score.data()));
-  cols.push_back(MakeColumn("rank", MG_VALUE_INT, kNVertices, rank.data()));
-  cols.push_back(MakeColumn("flag", MG_VALUE_BOOL, kNVertices, flag.data()));
+  cols.push_back(
+      MakeColumn("score", ValueType::kFloat64, kNVertices, score.data()));
+  cols.push_back(MakeColumn("rank", ValueType::kInt, kNVertices, rank.data()));
+  cols.push_back(MakeColumn("flag", ValueType::kBool, kNVertices, flag.data()));
   task.LoadAttributes(static_cast<uint32_t>(cols.size()), cols.data());
 
   // Plan holds expressions only; navigators travel separately and are
   // referenced by nav_idx. 0=score attr, 1=rank attr, 2=flag attr.
   std::vector<MatrixGraphPlanNode> plan;
-  plan.push_back(AttrNode("score"));   // 0
-  plan.push_back(AttrNode("rank"));    // 1
-  plan.push_back(AttrNode("flag"));    // 2
+  plan.push_back(AttrNode("score"));  // 0
+  plan.push_back(AttrNode("rank"));   // 1
+  plan.push_back(AttrNode("flag"));   // 2
 
   std::vector<MatrixGraphPlanNode> navs;
   navs.push_back(NeighborNav());  // 0
   navs.push_back(SelfNav());      // 1
 
   struct PrimCase {
-    int32_t op;
+    AggPrim op;
     int32_t src_idx;
     int32_t nav_idx;
     const char* name;
   };
   const std::vector<PrimCase> cases = {
-      {MG_AGG_COUNT, 0, 0, "count"},
-      {MG_AGG_SUM, 0, 0, "sum"},
-      {MG_AGG_MEAN, 0, 0, "mean"},
-      {MG_AGG_MEDIAN, 0, 0, "median"},
-      {MG_AGG_MODE, 0, 0, "mode"},
-      {MG_AGG_MIN, 0, 0, "min"},
-      {MG_AGG_MAX, 0, 0, "max"},
-      {MG_AGG_VARIANCE, 0, 0, "variance"},
-      {MG_AGG_STD, 0, 0, "std"},
-      {MG_AGG_SKEW, 0, 0, "skew"},
-      {MG_AGG_ENTROPY, 0, 0, "entropy"},
-      {MG_AGG_NUM_UNIQUE, 0, 0, "num_unique"},
-      {MG_AGG_PERCENT_TRUE, 2, 0, "percent_true"},
-      {MG_AGG_QUARTER, 0, 0, "quarter"},
-      {MG_AGG_QUARTILE3, 0, 0, "quartile3"},
-      {MG_AGG_COUNT_GREATER_THAN_MEAN, 0, 0, "count_gt_mean"},
-      {MG_AGG_SUM, 1, 0, "sum_int"},
-      {MG_AGG_MEAN, 1, 0, "mean_int"},
+      {AggPrim::kCount, 0, 0, "count"},
+      {AggPrim::kSum, 0, 0, "sum"},
+      {AggPrim::kMean, 0, 0, "mean"},
+      {AggPrim::kMedian, 0, 0, "median"},
+      {AggPrim::kMode, 0, 0, "mode"},
+      {AggPrim::kMin, 0, 0, "min"},
+      {AggPrim::kMax, 0, 0, "max"},
+      {AggPrim::kVariance, 0, 0, "variance"},
+      {AggPrim::kStd, 0, 0, "std"},
+      {AggPrim::kSkew, 0, 0, "skew"},
+      {AggPrim::kEntropy, 0, 0, "entropy"},
+      {AggPrim::kNumUnique, 0, 0, "num_unique"},
+      {AggPrim::kPercentTrue, 2, 0, "percent_true"},
+      {AggPrim::kQuarter, 0, 0, "quarter"},
+      {AggPrim::kQuartile3, 0, 0, "quartile3"},
+      {AggPrim::kCountGreaterThanMean, 0, 0, "count_gt_mean"},
+      {AggPrim::kSum, 1, 0, "sum_int"},
+      {AggPrim::kMean, 1, 0, "mean_int"},
+      // dfeat is only expressible now that the plan carries AggPrim: the MG
+      // enum stopped at skew.  SelfNav gives n == 1, as dfeat requires.
+      {AggPrim::kDFeat, 1, 1, "dfeat"},
   };
 
   std::vector<int32_t> outputs;
@@ -286,7 +291,7 @@ TEST(ComputeFeaturesParity, AllPrimitivesMatchHostReference) {
 
     auto expect_near = [&](size_t idx, double want, const char* name) {
       SCOPED_TRACE(testing::Message() << "pivot=" << v << " prim=" << name);
-      EXPECT_EQ(result[idx].type, MG_VALUE_FLOAT64);
+      EXPECT_EQ(result[idx].type, ValueType::kFloat64);
       EXPECT_NEAR(result[idx].f64, want, 1e-9);
     };
 
@@ -306,15 +311,19 @@ TEST(ComputeFeaturesParity, AllPrimitivesMatchHostReference) {
     expect_near(base + 16, ranks[0] + ranks[1] + ranks[2], "sum_int");
     expect_near(base + 17, (ranks[0] + ranks[1] + ranks[2]) / 3.0, "mean_int");
 
-    EXPECT_EQ(result[base + 0].type, MG_VALUE_INT);
+    EXPECT_EQ(result[base + 0].type, ValueType::kInt);
     EXPECT_EQ(result[base + 0].i64, 3);
-    EXPECT_EQ(result[base + 11].type, MG_VALUE_INT);
+    EXPECT_EQ(result[base + 11].type, ValueType::kInt);
     EXPECT_EQ(result[base + 11].i64, num_unique);
-    expect_near(base + 12,
-                static_cast<double>(true_count) / static_cast<double>(kOutDegree),
-                "percent_true");
-    EXPECT_EQ(result[base + 15].type, MG_VALUE_INT);
+    expect_near(
+        base + 12,
+        static_cast<double>(true_count) / static_cast<double>(kOutDegree),
+        "percent_true");
+    EXPECT_EQ(result[base + 15].type, ValueType::kInt);
     EXPECT_EQ(result[base + 15].i64, count_gt_mean);
+    // kDFeat passes the single binding's value through with its own tag.
+    EXPECT_EQ(result[base + 18].type, ValueType::kInt);
+    EXPECT_EQ(result[base + 18].i64, rank[v]);
   }
 }
 

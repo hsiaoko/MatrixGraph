@@ -1,5 +1,4 @@
 #include "core/task/gpu_task/compute_features.cuh"
-#include "core/task/gpu_task/compute_features_value.h"
 #include "core/util/cuda_check.cuh"
 
 #include <cstdio>
@@ -118,7 +117,7 @@ __host__ void ComputeFeaturesTask::LoadAttributes(
                 << n_vertices << std::endl;
       return;
     }
-    ValueType type = ToValueType(col.value_type);
+    ValueType type = col.value_type;
     size_t elem_size = ValueTypeSize(type);
     if (elem_size == 0 || col.values == nullptr) {
       std::cerr << "[ComputeFeaturesTask::LoadAttributes] Unsupported or empty"
@@ -336,13 +335,13 @@ static uint32_t ComputePlanMaxWorkspaceDepth(
  * buffers for this launch and freed before returning.  The graph, attributes
  * and labels loaded earlier are reused across Compute() calls.
  */
-__host__ std::vector<MatrixGraphFeatureValue> ComputeFeaturesTask::Compute(
+__host__ std::vector<FeatureValue> ComputeFeaturesTask::Compute(
     const std::vector<uint32_t>& pivot_vertex_ids,
     const std::vector<MatrixGraphPlanNode>& plan,
     const std::vector<MatrixGraphPlanNode>& navs,
     const std::vector<MatrixGraphCondNode>& conds,
     const std::vector<int32_t>& output_expr_indices) {
-  std::vector<MatrixGraphFeatureValue> result;
+  std::vector<FeatureValue> result;
   if (graph_ == nullptr || d_graph_data_ == nullptr) {
     std::cerr << "[ComputeFeaturesTask::Compute] Graph not loaded" << std::endl;
     return result;
@@ -399,7 +398,8 @@ __host__ std::vector<MatrixGraphFeatureValue> ComputeFeaturesTask::Compute(
       sics::matrixgraph::core::task::kernel::kComputeFeaturesMaxNeighbors;
   const uint32_t per_pivot_workspace =
       kWorkspaceCapacity *
-      ComputePlanMaxWorkspaceDepth(plan, navs, output_expr_indices);
+          ComputePlanMaxWorkspaceDepth(plan, navs, output_expr_indices) +
+      kernel::kPrimsWorkspaceValues;
   FeatureValue* d_workspace = nullptr;
   FeatureValue* d_outputs = nullptr;
   CUDA_CHECK(cudaMalloc(&d_workspace,
@@ -407,18 +407,17 @@ __host__ std::vector<MatrixGraphFeatureValue> ComputeFeaturesTask::Compute(
   CUDA_CHECK(
       cudaMalloc(&d_outputs, sizeof(FeatureValue) * n_pivots * n_outputs));
 
-#ifndef NDEBUG
-  // -G device-debug instrumentation inflates the plan interpreter's stack
-  // frames past the default 1 KB per-thread device stack (compute-sanitizer
-  // reports "Stack overflow", surfacing as error 719 at the post-launch
-  // sync). Raise the limit once per process; release builds are unaffected.
-  // The M3 engine layer will own this as GpuEngine configuration.
+  // EvalExpr recurses through the expression plan, and each frame carries the
+  // workspace pointers plus (in debug) -G instrumentation, so the default 1 KB
+  // per-thread device stack overflows (compute-sanitizer reports "Stack
+  // overflow", surfacing as a launch failure at the post-launch sync). Raise
+  // the limit once per process. The M3 engine layer will own this as
+  // GpuEngine configuration.
   static const bool kStackLimitRaised = [] {
     CUDA_CHECK(cudaDeviceSetLimit(cudaLimitStackSize, 32 * 1024));
     return true;
   }();
   (void)kStackLimitRaised;
-#endif
 
   // Launch one block per pivot.
   kernel::ComputeFeaturesKernel<<<n_pivots, kWorkspaceCapacity>>>(
@@ -430,16 +429,10 @@ __host__ std::vector<MatrixGraphFeatureValue> ComputeFeaturesTask::Compute(
       d_workspace, kWorkspaceCapacity, per_pivot_workspace, d_outputs);
   CUDA_CHECK(cudaDeviceSynchronize());
 
-  // The device computes on FeatureValue; the wire struct only exists at the
-  // C-facing API boundary.
-  std::vector<FeatureValue> raw(n_pivots * n_outputs);
-  CUDA_CHECK(cudaMemcpy(raw.data(), d_outputs,
+  result.resize(n_pivots * n_outputs);
+  CUDA_CHECK(cudaMemcpy(result.data(), d_outputs,
                         sizeof(FeatureValue) * n_pivots * n_outputs,
                         cudaMemcpyDeviceToHost));
-  result.resize(n_pivots * n_outputs);
-  for (size_t i = 0; i < raw.size(); ++i) {
-    result[i] = ToWireValue(raw[i]);
-  }
 
   cudaFree(d_plan);
   cudaFree(d_navs);

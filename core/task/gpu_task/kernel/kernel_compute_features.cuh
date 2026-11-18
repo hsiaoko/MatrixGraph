@@ -1,9 +1,11 @@
 #ifndef MATRIXGRAPH_CORE_TASK_GPU_TASK_KERNEL_KERNEL_COMPUTE_FEATURES_CUH_
 #define MATRIXGRAPH_CORE_TASK_GPU_TASK_KERNEL_KERNEL_COMPUTE_FEATURES_CUH_
 
+#include "core/common/consts.h"
 #include "core/common/types.h"
 #include "core/data_structures/attributes.h"
-#include "core/task/gpu_task/compute_features_types.h"
+#include "core/task/gpu_task/block_agg_prims.cuh"
+#include "core/task/gpu_task/compute_features/plan_types.h"
 #include "core/task/gpu_task/execute_agg_prim.cuh"
 
 #include <cstdint>
@@ -44,6 +46,21 @@ using MGCondNode = MatrixGraphCondNode;
 constexpr uint32_t kComputeFeaturesMaxNeighbors = 256;
 
 /**
+ * @brief FeatureValue slots per pivot reserved for the block workspace.
+ *
+ * The aggregation primitives take their reduction/scan buffers from a
+ * BlockWorkspace laid out after a kComputeFeaturesMaxNeighbors value array
+ * and sized by common::kBlockDim (not by this kernel's block size), so each
+ * pivot's workspace slice ends with a reservation of that total size.
+ */
+constexpr uint32_t kPrimsWorkspaceValues =
+    (kComputeFeaturesMaxNeighbors * sizeof(FeatureValue) +
+     common::kBlockDim *
+         (sizeof(double) + sizeof(FeatureValue) + sizeof(uint32_t)) +
+     sizeof(FeatureValue) - 1) /
+    sizeof(FeatureValue);
+
+/**
  * @brief Recursively evaluate expression @p expr_idx for @p pivot_vid.
  *
  * @param plan               Flat expression plan (device memory).
@@ -60,6 +77,7 @@ constexpr uint32_t kComputeFeaturesMaxNeighbors = 256;
  * @param workspace          Per-thread scratch workspace.
  * @param workspace_capacity Number of FeatureValue slots in one workspace
  *                           slice (equal to blockDim.x).
+ * @param ws                 Block reduction/scan workspace (shared memory).
  * @return The typed feature value produced by the expression.
  */
 __device__ FeatureValue EvalExpr(const MGPlanNode* plan, const MGPlanNode* navs,
@@ -69,7 +87,8 @@ __device__ FeatureValue EvalExpr(const MGPlanNode* plan, const MGPlanNode* navs,
                                  uint32_t n_in_edges, uint32_t n_out_edges,
                                  const uint32_t* labels, uint32_t pivot_vid,
                                  int32_t expr_idx, FeatureValue* workspace,
-                                 uint32_t workspace_capacity);
+                                 uint32_t workspace_capacity,
+                                 const BlockWorkspace& ws);
 
 /**
  * @brief Main kernel: one CUDA block per pivot, one thread per slot.

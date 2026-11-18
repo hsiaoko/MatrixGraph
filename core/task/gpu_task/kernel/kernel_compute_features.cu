@@ -1,7 +1,6 @@
 #include "core/data_structures/attributes.h"
-#include "core/task/gpu_task/compute_features_value.h"
+#include "core/task/gpu_task/block_agg_prims.cuh"
 #include "core/task/gpu_task/kernel/kernel_compute_features.cuh"
-#include "core/task/gpu_task/kernel/kernel_compute_features_primitives.cuh"
 
 #include <cfloat>
 #include <cmath>
@@ -172,6 +171,52 @@ __device__ inline void ResolveNeighborNav(const MGPlanNode* navs,
 }
 
 // ---------------------------------------------------------------------------
+// Aggregation dispatch.
+// ---------------------------------------------------------------------------
+
+/**
+ * @brief Apply an aggregation primitive to the collected binding values.
+ *
+ * percent_true and count_gt_mean are computed here from per-thread predicates
+ * summed with BlockSum.  The canonical implementations use a block-wide
+ * exclusive scan whose buffers are sized for a common::kBlockDim (1024) thread
+ * block; this interpreter runs one 256-thread block per pivot, and under that
+ * block size the scan's total came back 0 even though the per-thread count was
+ * correct (measured on the parity ring).  BlockSum needs one double per thread
+ * and has no such block-size contract.  Everything else dispatches to
+ * block_agg_prims unchanged.
+ */
+__device__ inline FeatureValue ApplyAggPrim(AggPrim prim, FeatureValue* values,
+                                            uint32_t n,
+                                            const BlockWorkspace& ws) {
+  if (prim == AggPrim::kPercentTrue) {
+    if (n == 0) return MakeInvalidValue();
+    double local = 0.0;
+    for (uint32_t i = threadIdx.x; i < n; i += blockDim.x) {
+      if (values[i].type == ValueType::kBool && values[i].b) local += 1.0;
+    }
+    return MakeFloat64Value(BlockSum(local, ws.sum_buf) /
+                            static_cast<double>(n));
+  }
+
+  if (prim == AggPrim::kCountGreaterThanMean) {
+    if (n == 0) return MakeInvalidValue();
+    double sum = 0.0;
+    for (uint32_t i = threadIdx.x; i < n; i += blockDim.x) {
+      sum += values[i].ToDouble();
+    }
+    const double mean = BlockSum(sum, ws.sum_buf) / static_cast<double>(n);
+    double local = 0.0;
+    for (uint32_t i = threadIdx.x; i < n; i += blockDim.x) {
+      if (values[i].ToDouble() > mean) local += 1.0;
+    }
+    return MakeIntValue(static_cast<int64_t>(BlockSum(local, ws.sum_buf)));
+  }
+
+  return BlockApplyAggPrim(prim, values, n, ws);
+}
+
+// ---------------------------------------------------------------------------
 // Forward declarations.
 // ---------------------------------------------------------------------------
 
@@ -183,7 +228,8 @@ __device__ FeatureValue EvalExpr(const MGPlanNode* plan, const MGPlanNode* navs,
                                  uint32_t n_in_edges, uint32_t n_out_edges,
                                  const uint32_t* labels, uint32_t pivot_vid,
                                  int32_t expr_idx, FeatureValue* workspace,
-                                 uint32_t workspace_capacity);
+                                 uint32_t workspace_capacity,
+                                 const BlockWorkspace& ws);
 
 // ---------------------------------------------------------------------------
 // Condition evaluation for FilterNav.
@@ -202,20 +248,21 @@ __device__ inline bool EvalCond(const MGCondNode* conds, int32_t cond_idx,
                                 uint32_t n_in_edges, uint32_t n_out_edges,
                                 const uint32_t* labels, uint32_t binding_vid,
                                 FeatureValue* workspace,
-                                uint32_t workspace_capacity) {
+                                uint32_t workspace_capacity,
+                                const BlockWorkspace& ws) {
   const MGCondNode& c = conds[cond_idx];
   FeatureValue a =
       EvalExpr(plan, navs, conds, vertex_attrs, graph_data, n_vertices,
                n_in_edges, n_out_edges, labels, binding_vid, c.left_expr,
-               workspace + workspace_capacity, workspace_capacity);
+               workspace + workspace_capacity, workspace_capacity, ws);
   FeatureValue b =
       EvalExpr(plan, navs, conds, vertex_attrs, graph_data, n_vertices,
                n_in_edges, n_out_edges, labels, binding_vid, c.right_expr,
-               workspace + workspace_capacity, workspace_capacity);
+               workspace + workspace_capacity, workspace_capacity, ws);
   double da = a.ToDouble();
   double db = b.ToDouble();
   bool keep;
-  switch (static_cast<MatrixGraphCondType>(c.op)) {
+  switch (c.op) {
     case MG_COND_EQ:
       keep = (da == db);
       break;
@@ -261,7 +308,8 @@ __device__ inline uint32_t CollectBindings(
     const Attributes* vertex_attrs, const uint8_t* graph_data,
     uint32_t n_vertices, uint32_t n_in_edges, uint32_t n_out_edges,
     const uint32_t* labels, uint32_t pivot_vid, int32_t nav_idx,
-    FeatureValue* workspace, uint32_t workspace_capacity) {
+    FeatureValue* workspace, uint32_t workspace_capacity,
+    const BlockWorkspace& ws) {
   const MGPlanNode& nav = navs[nav_idx];
   const MatrixGraphNavType nav_type = static_cast<MatrixGraphNavType>(nav.type);
 
@@ -306,7 +354,7 @@ __device__ inline uint32_t CollectBindings(
     uint32_t inner_count =
         CollectBindings(plan, navs, conds, vertex_attrs, graph_data, n_vertices,
                         n_in_edges, n_out_edges, labels, pivot_vid,
-                        nav.inner_nav_idx, scratch, workspace_capacity);
+                        nav.inner_nav_idx, scratch, workspace_capacity, ws);
 
     __shared__ uint32_t s_broadcast;
     __shared__ uint32_t s_count;
@@ -322,7 +370,7 @@ __device__ inline uint32_t CollectBindings(
 
       bool keep = EvalCond(conds, nav.cond_idx, plan, navs, vertex_attrs,
                            graph_data, n_vertices, n_in_edges, n_out_edges,
-                           labels, binding, scratch, workspace_capacity);
+                           labels, binding, scratch, workspace_capacity, ws);
 
       if (threadIdx.x == 0 && keep) {
         workspace[kept++].i64 = static_cast<int64_t>(binding);
@@ -361,7 +409,8 @@ __device__ FeatureValue EvalExpr(const MGPlanNode* plan, const MGPlanNode* navs,
                                  uint32_t n_in_edges, uint32_t n_out_edges,
                                  const uint32_t* labels, uint32_t pivot_vid,
                                  int32_t expr_idx, FeatureValue* workspace,
-                                 uint32_t workspace_capacity) {
+                                 uint32_t workspace_capacity,
+                                 const BlockWorkspace& ws) {
   const MGPlanNode& node = plan[expr_idx];
   const MatrixGraphExprType type = static_cast<MatrixGraphExprType>(node.type);
 
@@ -371,7 +420,7 @@ __device__ FeatureValue EvalExpr(const MGPlanNode* plan, const MGPlanNode* navs,
 
   if (type == MG_EXPR_CONST) {
     FeatureValue v = MakeInvalidValue();
-    v.type = ToValueType(node.const_type);
+    v.type = node.const_type;
     switch (v.type) {
       case ValueType::kInt:
       case ValueType::kTime:
@@ -395,14 +444,14 @@ __device__ FeatureValue EvalExpr(const MGPlanNode* plan, const MGPlanNode* navs,
   }
 
   if (type == MG_EXPR_TRANS) {
-    const MatrixGraphTransOp op = static_cast<MatrixGraphTransOp>(node.op);
+    const MatrixGraphTransOp op = node.trans_op;
 
     // Unary operators only need child_a.
     if (op == MG_TRANS_NEG || op == MG_TRANS_ABS || op == MG_TRANS_SQRT) {
       FeatureValue a =
           EvalExpr(plan, navs, conds, vertex_attrs, graph_data, n_vertices,
                    n_in_edges, n_out_edges, labels, pivot_vid, node.child_a,
-                   workspace + workspace_capacity, workspace_capacity);
+                   workspace + workspace_capacity, workspace_capacity, ws);
       double da = a.ToDouble();
       switch (op) {
         case MG_TRANS_NEG:
@@ -420,11 +469,11 @@ __device__ FeatureValue EvalExpr(const MGPlanNode* plan, const MGPlanNode* navs,
     FeatureValue a =
         EvalExpr(plan, navs, conds, vertex_attrs, graph_data, n_vertices,
                  n_in_edges, n_out_edges, labels, pivot_vid, node.child_a,
-                 workspace + workspace_capacity, workspace_capacity);
+                 workspace + workspace_capacity, workspace_capacity, ws);
     FeatureValue b =
         EvalExpr(plan, navs, conds, vertex_attrs, graph_data, n_vertices,
                  n_in_edges, n_out_edges, labels, pivot_vid, node.child_b,
-                 workspace + workspace_capacity, workspace_capacity);
+                 workspace + workspace_capacity, workspace_capacity, ws);
     double da = a.ToDouble();
     double db = b.ToDouble();
     switch (op) {
@@ -448,7 +497,7 @@ __device__ FeatureValue EvalExpr(const MGPlanNode* plan, const MGPlanNode* navs,
     uint32_t binding_count =
         CollectBindings(plan, navs, conds, vertex_attrs, graph_data, n_vertices,
                         n_in_edges, n_out_edges, labels, pivot_vid,
-                        node.nav_idx, workspace, workspace_capacity);
+                        node.nav_idx, workspace, workspace_capacity, ws);
 
     // Evaluate the source expression for every binding.  All threads
     // participate so that nested aggregations remain cooperative.
@@ -457,18 +506,12 @@ __device__ FeatureValue EvalExpr(const MGPlanNode* plan, const MGPlanNode* navs,
       FeatureValue v =
           EvalExpr(plan, navs, conds, vertex_attrs, graph_data, n_vertices,
                    n_in_edges, n_out_edges, labels, binding_vid, node.src_idx,
-                   workspace + workspace_capacity, workspace_capacity);
+                   workspace + workspace_capacity, workspace_capacity, ws);
       if (threadIdx.x == 0) workspace[i] = v;
       __syncthreads();
     }
 
-    // Pad unused entries for order-statistic primitives.
-    if (threadIdx.x >= binding_count && threadIdx.x < blockDim.x) {
-      workspace[threadIdx.x] = MakeFloat64Value(DBL_MAX);
-    }
-    __syncthreads();
-
-    return ApplyAggPrim(node.op, workspace, binding_count);
+    return ApplyAggPrim(node.agg_op, workspace, binding_count, ws);
   }
 
   return MakeInvalidValue();
@@ -504,12 +547,18 @@ __global__ void ComputeFeaturesKernel(
   uint32_t pivot_vid = pivot_vertex_ids[pivot_idx];
   FeatureValue* my_workspace = workspace + pivot_idx * per_pivot_workspace;
 
+  // The block workspace (reduction/scan buffers) is the tail of this pivot's
+  // slice, so no dynamic shared memory is needed.
+  const BlockWorkspace ws = GetBlockWorkspace(
+      reinterpret_cast<uint8_t*>(my_workspace + per_pivot_workspace -
+                                 kPrimsWorkspaceValues),
+      kComputeFeaturesMaxNeighbors);
   for (uint32_t o = 0; o < n_outputs; ++o) {
     int32_t expr_idx = output_expr_indices[o];
     FeatureValue v =
         EvalExpr(plan, navs, conds, vertex_attrs, graph_data, n_vertices,
                  n_in_edges, n_out_edges, labels, pivot_vid, expr_idx,
-                 my_workspace, workspace_capacity);
+                 my_workspace, workspace_capacity, ws);
     // Order-statistic primitives compute on thread 0 only and return
     // placeholders elsewhere. With every thread storing, the placeholders
     // raced the real value (num_unique read back as 0). Thread 0 is the

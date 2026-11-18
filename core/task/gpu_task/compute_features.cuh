@@ -3,7 +3,7 @@
 
 #include "core/data_structures/attributes.h"
 #include "core/data_structures/immutable_csr.cuh"
-#include "core/task/gpu_task/compute_features_types.h"
+#include "core/task/gpu_task/compute_features/plan_types.h"
 #include "core/task/gpu_task/kernel/kernel_compute_features.cuh"
 #include "core/task/gpu_task/task_base.cuh"
 
@@ -29,7 +29,7 @@ namespace task {
  *   - One CUDA block is launched per pivot vertex.
  *   - All threads in the block cooperate to collect navigator bindings,
  *     evaluate sub-expressions and run aggregation primitives.
- *   - The result is a row-major array of MatrixGraphFeatureValue:
+ *   - The result is a row-major array of FeatureValue:
  *     result[i * n_outputs + j] is the j-th output feature for the i-th pivot.
  *
  * Thread-safety and lifetime:
@@ -105,7 +105,7 @@ class ComputeFeaturesTask : public TaskBase {
    * @return Row-major vector of size pivot_vertex_ids.size() *
    *         output_expr_indices.size().
    */
-  __host__ std::vector<MatrixGraphFeatureValue> Compute(
+  __host__ std::vector<FeatureValue> Compute(
       const std::vector<uint32_t>& pivot_vertex_ids,
       const std::vector<MatrixGraphPlanNode>& plan,
       const std::vector<MatrixGraphPlanNode>& navs,
