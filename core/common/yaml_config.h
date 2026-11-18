@@ -1,6 +1,8 @@
 #ifndef MATRIXGRAPH_CORE_COMMON_YAML_CONFIG_H_
 #define MATRIXGRAPH_CORE_COMMON_YAML_CONFIG_H_
 
+// yaml-cpp wrappers used by metadata IO. Host-only dependency: allowed on
+// the public surface, which guarantees only CUDA- and TBB-freedom.
 #include "core/data_structures/metadata.h"
 
 #include <iostream>

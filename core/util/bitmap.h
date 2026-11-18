@@ -1,6 +1,8 @@
 #ifndef MATRIXGRAPH_CORE_UTIL_BITMAP_H_
 #define MATRIXGRAPH_CORE_UTIL_BITMAP_H_
 
+// Bitmap: an owned bitset over uint64_t words with Set/Get/Clear.
+// WORD_OFFSET/BIT_OFFSET are the word/bit arithmetic shared by all bitmaps.
 #include <cassert>
 #include <cstdint>
 #include <cstring>

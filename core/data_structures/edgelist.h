@@ -1,6 +1,8 @@
 #ifndef MATRIXGRAPH_CORE_DATA_STRUCTURES_EDGELIST_H_
 #define MATRIXGRAPH_CORE_DATA_STRUCTURES_EDGELIST_H_
 
+// Edges: a flat edge list with per-vertex labels and metadata. The editable
+// 0-based counterpart of ImmutableCSR; binary IO and k-hop helpers live here.
 #include "core/common/consts.h"
 #include "core/common/types.h"
 #include "core/util/atomic.h"
@@ -195,9 +197,7 @@ class Edges {
 
   VertexID* GetLocalidToGlobalidPtr() const { return localid_to_globalid_; }
 
-  VertexLabel* GetVertexLabelPtr() const {
-    return vertex_label_base_pointer_;
-  }
+  VertexLabel* GetVertexLabelPtr() const { return vertex_label_base_pointer_; }
 
   EdgelistMetadata GetMetadata() const { return edgelist_metadata_; }
 

@@ -2,6 +2,9 @@
 #ifndef MATRIXGRAPH_CORE_COMMON_CONSTS_H_
 #define MATRIXGRAPH_CORE_COMMON_CONSTS_H_
 
+// Launch tuning and sentinel constants shared by tasks and kernels.
+// Per-kernel block dimensions live here so a kernel and its launch cannot
+// disagree.
 #include <cstdint>
 #include <limits>
 

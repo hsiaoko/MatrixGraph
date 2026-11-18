@@ -1,6 +1,8 @@
 #ifndef MATRIXGRAPH_CORE_UTIL_ATOMIC_H_
 #define MATRIXGRAPH_CORE_UTIL_ATOMIC_H_
 
+// CAS and the atomic min/max/add helpers built on it. Host-side only;
+// device code uses CUDA atomics.
 #include <bit>
 
 namespace sics {

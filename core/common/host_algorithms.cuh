@@ -1,6 +1,8 @@
 #ifndef MATRIXGRAPH_CORE_COMMON_HOST_ALGORITHMS_CUH_
 #define MATRIXGRAPH_CORE_COMMON_HOST_ALGORITHMS_CUH_
 
+// MurmurHash3 finalizer shared by host-side hash tables; keep it in sync
+// with the device-side variant.
 #include <cstdint>
 
 namespace sics {

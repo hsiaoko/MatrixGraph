@@ -1,9 +1,11 @@
 #ifndef MATRIXGRAPH_CORE_UTIL_GPU_BITMAP_CUH_
 #define MATRIXGRAPH_CORE_UTIL_GPU_BITMAP_CUH_
 
-#include <cuda_runtime.h>
-
+// GPUBitmap: a host Bitmap mirrored into device-visible memory; Init/Sync
+// move the words, construction allocates once.
 #include "core/util/bitmap.h"
+
+#include <cuda_runtime.h>
 
 namespace sics {
 namespace matrixgraph {

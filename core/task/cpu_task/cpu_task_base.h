@@ -1,6 +1,8 @@
 #ifndef MATRIXGRAPH_CORE_TASK_CPU_TASK_CPU_TASK_BASE_H_
 #define MATRIXGRAPH_CORE_TASK_CPU_TASK_CPU_TASK_BASE_H_
 
+// CPUTaskBase: the CPU task contract. One virtual entry point so callers
+// need no type switch.
 namespace sics {
 namespace matrixgraph {
 namespace core {

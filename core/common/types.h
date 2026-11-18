@@ -1,11 +1,9 @@
 #ifndef MATRIXGRAPH_CORE_COMMON_TYPES_H_
 #define MATRIXGRAPH_CORE_COMMON_TYPES_H_
 
+// Core scalar aliases and StoreStrategy. Types only: no behavior, and the
+// sentinel constants live in consts.h.
 #include <cstdint>
-
-
-
-
 
 namespace sics {
 namespace matrixgraph {
@@ -20,8 +18,6 @@ using VertexLabel = uint32_t;
 using VertexDegree = uint32_t;
 using VertexCount = uint32_t;
 using EdgeIndex = uint32_t;
-
-
 
 enum class StoreStrategy {
   kUnconstrained,  // default

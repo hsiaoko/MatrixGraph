@@ -1,6 +1,8 @@
 #ifndef MATRIXGRAPH_CORE_UTIL_CUDA_DEVICE_CUH_
 #define MATRIXGRAPH_CORE_UTIL_CUDA_DEVICE_CUH_
 
+// Device selection helpers implementing the MATRIXGRAPH_CUDA_* env
+// contract (device list, default device, streams per GPU).
 #include <algorithm>
 #include <cstdlib>
 #include <cstring>

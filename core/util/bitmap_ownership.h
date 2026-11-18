@@ -1,6 +1,7 @@
 #ifndef MATRIXGRAPH_CORE_UTIL_BITMAP_OWNERSHIP_H_
 #define MATRIXGRAPH_CORE_UTIL_BITMAP_OWNERSHIP_H_
 
+// BitmapOwnership: a Bitmap that allocates and frees its own words.
 #include "core/util/bitmap.h"
 
 #include <cassert>

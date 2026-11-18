@@ -1,6 +1,7 @@
 #ifndef MATRIXGRAPH_CORE_UTIL_BITMAP_NO_OWNERSHIP_H_
 #define MATRIXGRAPH_CORE_UTIL_BITMAP_NO_OWNERSHIP_H_
 
+// BitmapNoOwnership: a Bitmap view over caller-owned storage; never frees it.
 #include "core/util/bitmap.h"
 
 namespace sics {

@@ -1,6 +1,8 @@
 #ifndef MATRIXGRAPH_CORE_ENGINE_ENGINE_INTERNAL_H_
 #define MATRIXGRAPH_CORE_ENGINE_ENGINE_INTERNAL_H_
 
+// Per-backend engine constructors shared by engine.cpp. TBB stays in
+// engine_cpu.cpp and CUDA in engine_gpu.cu, so nvcc never sees TBB.
 #include "core/engine/engine.h"
 
 #include <memory>

@@ -1,6 +1,8 @@
 #ifndef MATRIXGRAPH_CORE_TASK_GPU_TASK_TASK_BASE_CUH_
 #define MATRIXGRAPH_CORE_TASK_GPU_TASK_TASK_BASE_CUH_
 
+// TaskBase: the GPU task contract. Owns or borrows CUDA streams; service
+// tasks keep typed APIs and leave Run empty rather than faking a job.
 #include <cstdint>
 #include <cuda_runtime.h>
 #include <vector>

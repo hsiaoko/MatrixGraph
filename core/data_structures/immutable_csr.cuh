@@ -1,6 +1,9 @@
 #ifndef MATRIXGRAPH_CORE_DATA_STRUCTURES_IMMUTABLE_CSR_CUH_
 #define MATRIXGRAPH_CORE_DATA_STRUCTURES_IMMUTABLE_CSR_CUH_
 
+// ImmutableCSR: a parsed CSR over one contiguous host buffer, plus device
+// upload and IO. GetGraphBufferSize derives the buffer size from the parsed
+// pointers, so it cannot drift from ParseBasePtr.
 #include "core/common/yaml_config.h"
 #include "core/data_structures/metadata.h"
 

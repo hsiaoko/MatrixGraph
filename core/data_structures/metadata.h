@@ -1,6 +1,9 @@
 #ifndef MATRIXGRAPH_CORE_DATA_STRUCTURES_METADATA_H_
 #define MATRIXGRAPH_CORE_DATA_STRUCTURES_METADATA_H_
 
+// POD metadata for CSR, edgelist, tiled-matrix, and grid structures.
+// Fields are IDs and counts only, never pointers, so the structs cross the
+// host/device boundary unchanged.
 #include "core/common/types.h"
 
 #include <vector>
