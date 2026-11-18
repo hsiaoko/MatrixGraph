@@ -1,6 +1,8 @@
 #ifndef MATRIXGRAPH_CORE_IO_CSR_TILED_MATRIX_IO_CUH_
 #define MATRIXGRAPH_CORE_IO_CSR_TILED_MATRIX_IO_CUH_
 
+// CSRTiledMatrix on disk: meta.yaml plus CSR offsets, tile indices, and
+// data in meta_buf/. Roots are concatenated, so they need a trailing /.
 #include "core/common/types.h"
 #include "core/data_structures/csr_tiled_matrix.cuh"
 #include "core/data_structures/metadata.h"

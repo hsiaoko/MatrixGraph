@@ -82,7 +82,6 @@ static void SimdSquaredDifferenceSIMD(const float* v_a, const float* v_b,
   //  // 计算平方 (a - b)^2
   //  __m256 squared = _mm256_mul_ps(diff, diff);
 
-
   // for (; i < n; ++i) {
   //   float diff = v_a[i] - v_b[i];
   //   v_c[i] = diff * diff;
@@ -120,7 +119,6 @@ void ReluSIMD(float* input, int n) {
   //   _mm256_storeu_ps(input + i, result);
   // }
 
-
   /// CPP
   for (auto i = 0; i < n; ++i) {
     input[i] = input[i] > 0 ? input[i] : 0;
@@ -155,7 +153,6 @@ void SigmoidSIMD(float* input, int n) {
   //   __m256 result = _mm256_div_ps(one, denom);   // 1 / (1 + exp(-input))
   //   _mm256_storeu_ps(input + i, result);         // 存回内存
   // }
-
 
   /// CPP
   for (auto i = 0; i < n; ++i) {

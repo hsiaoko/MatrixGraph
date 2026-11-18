@@ -1,6 +1,8 @@
 #ifndef MATRIXGRAPH_CORE_DATA_STRUCTURES_HOST_BUFFER_CUH_
 #define MATRIXGRAPH_CORE_DATA_STRUCTURES_HOST_BUFFER_CUH_
 
+// Buffer<T>: a non-owning POD view of a raw pointer plus its size in bytes,
+// used to hand host memory to the device copy helpers. Nothing is allocated.
 #include <stdint.h>
 
 namespace sics {

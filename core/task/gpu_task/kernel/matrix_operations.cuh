@@ -1,6 +1,8 @@
 #ifndef MATRIXGRAPH_CORE_TASK_GPU_TASK_KERNEL_MATRIX_OPERATIONS_CUH_
 #define MATRIXGRAPH_CORE_TASK_GPU_TASK_KERNEL_MATRIX_OPERATIONS_CUH_
 
+// Device building blocks of GEMM: bit-matrix AND/popcount, tile metadata
+// init, tile fill, and the walk/count passes. Streams are caller-owned.
 #include "core/common/types.h"
 #include "core/data_structures/device_buffer.cuh"
 #include "core/data_structures/unified_buffer.cuh"

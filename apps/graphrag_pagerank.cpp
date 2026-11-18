@@ -109,8 +109,8 @@ int main(int argc, char* argv[]) {
     CUDA_CHECK(cudaStreamCreate(&stream));
 
     PageRankKernelWrapper::PageRank(
-        stream, g.GetNumVertices(), g.GetNumOutgoingEdges(),
-        unified_data_g, unified_page_ranks, static_cast<float>(FLAGS_damping),
+        stream, g.GetNumVertices(), g.GetNumOutgoingEdges(), unified_data_g,
+        unified_page_ranks, static_cast<float>(FLAGS_damping),
         static_cast<float>(FLAGS_epsilon), FLAGS_max_iter);
 
     CUDA_CHECK(cudaStreamDestroy(stream));

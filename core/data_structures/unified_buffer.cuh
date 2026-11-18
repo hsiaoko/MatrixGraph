@@ -1,6 +1,8 @@
 #ifndef MATRIXGRAPH_CORE_DATA_STRUCTURES_UNIFIED_BUFFER_CUH_
 #define MATRIXGRAPH_CORE_DATA_STRUCTURES_UNIFIED_BUFFER_CUH_
 
+// UnifiedOwnedBuffer: owns one cudaMallocManaged byte range, freed on
+// destruction. Move-only; Init copies from a host Buffer. Sizes are bytes.
 #include "core/data_structures/host_buffer.cuh"
 #include "core/util/cuda_check.cuh"
 

@@ -1,6 +1,8 @@
 #ifndef MATRIXGRAPH_TOOLS_COMMON_EDGELIST_SUBGRAPHS_WRITER_CUH_
 #define MATRIXGRAPH_TOOLS_COMMON_EDGELIST_SUBGRAPHS_WRITER_CUH_
 
+// Bucketed edgelist graph on disk: graphs/<gid> data, per-bucket id maps
+// under local_id_to_global_id/, and a meta.yaml listing the buckets.
 #include "core/common/types.h"
 #include "core/data_structures/edgelist.h"
 #include "core/data_structures/immutable_csr.cuh"

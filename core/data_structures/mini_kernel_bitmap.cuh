@@ -1,6 +1,8 @@
 #ifndef MATRIXGRAPH_CORE_DATA_STRUCTURES_MINI_KERNEL_BITMAP_CUH_
 #define MATRIXGRAPH_CORE_DATA_STRUCTURES_MINI_KERNEL_BITMAP_CUH_
 
+// MiniKernelBitmap / HostMiniKernelBitmap: a bitmap packed into one 32-bit word
+// inline in the object, so it holds at most 32 bits and never allocates.
 #include <cstdint>
 #include <cuda_runtime.h>
 

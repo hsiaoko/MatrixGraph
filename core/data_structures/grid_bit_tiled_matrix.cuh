@@ -1,6 +1,8 @@
 #ifndef MATRIXGRAPH_CORE_DATA_STRUCTURES_GRID_BIT_TILED_MATRIX_CUH_
 #define MATRIXGRAPH_CORE_DATA_STRUCTURES_GRID_BIT_TILED_MATRIX_CUH_
 
+// GridBitTiledMatrix: dense n_chunks x n_chunks grid of BitTiledMatrix cells
+// indexed x * n_chunks + y. Empty cells hold n_nz_tile 0 and are never freed.
 #include "core/common/types.h"
 #include "core/data_structures/bit_tiled_matrix.cuh"
 #include "core/data_structures/metadata.h"

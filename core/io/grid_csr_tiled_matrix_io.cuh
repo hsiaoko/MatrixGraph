@@ -1,6 +1,8 @@
 #ifndef MATRIXGRAPH_CORE_IO_GRID_CSR_TILED_MATRIX_IO_CUH_
 #define MATRIXGRAPH_CORE_IO_GRID_CSR_TILED_MATRIX_IO_CUH_
 
+// GridCSRTiledMatrix on disk: meta.yaml, label.bin, and one
+// CSRTiledMatrixIO block<i>/ per chunk. Read allocates the grid with new.
 #include "core/data_structures/bit_tiled_matrix.cuh"
 #include "core/data_structures/grid_csr_tiled_matrix.cuh"
 #include "core/data_structures/metadata.h"

@@ -1,6 +1,8 @@
 #ifndef MATRIXGRAPH_CORE_TASK_CPU_TASK_LFTJ_SUBISO_CUH_
 #define MATRIXGRAPH_CORE_TASK_CPU_TASK_LFTJ_SUBISO_CUH_
 
+// Host-only LFTJ subgraph isomorphism: std::thread DFS over min-wise-
+// filtered candidate sets. Counts matches, optionally dumps embeddings.
 #include "core/common/types.h"
 #include "core/data_structures/immutable_csr.cuh"
 #include "core/task/cpu_task/cpu_task_base.h"

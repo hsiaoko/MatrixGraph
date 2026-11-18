@@ -1,6 +1,8 @@
 #ifndef MATRIXGRAPH_TOOLS_GRAPH_CONVERTER_CONVERTER_TO_ARANGODB_JSON_CUH_
 #define MATRIXGRAPH_TOOLS_GRAPH_CONVERTER_CONVERTER_TO_ARANGODB_JSON_CUH_
 
+// Exports an edgelist CSV as ArangoDB import files: graph_structure.json
+// and pivot_graphs.jsonl, with vertex ids in global form.
 #include "core/data_structures/edgelist.h"
 
 #include <algorithm>

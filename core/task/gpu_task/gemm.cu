@@ -172,65 +172,65 @@ __host__ void GEMM::InitC() {
   // Step 1 compute layout_matrix for each block of matrix C.
   std::cout << "[InitResultMatrix] Computing layout matrix for each block ..."
             << std::endl;
-  ParallelFor(worker.begin(), worker.end(),
-              [this, M, N, K, step, &device_owned_buffers_matrix_a,
-               &device_owned_buffers_matrix_b, &device_owned_buffers_matrix_c,
-               &p_streams_vec, &buffers_matrix_a, &buffers_matrix_b,
-               &buffers_matrix_c, n_strips, n_chunks, tile_size, &mtx](auto w) {
-                for (VertexID k = w; k < K; k += step) {
-                  for (VertexID i = 0; i < M; i++) {
-                    for (VertexID j = 0; j < N; j++) {
-                      auto block_a = matrix_a_->GetTiledMatrixPtrByIdx(i * K + k);
-                      auto block_b = matrix_b_->GetTiledMatrixPtrByIdx(j * K + k);
+  ParallelFor(
+      worker.begin(), worker.end(),
+      [this, M, N, K, step, &device_owned_buffers_matrix_a,
+       &device_owned_buffers_matrix_b, &device_owned_buffers_matrix_c,
+       &p_streams_vec, &buffers_matrix_a, &buffers_matrix_b, &buffers_matrix_c,
+       n_strips, n_chunks, tile_size, &mtx](auto w) {
+        for (VertexID k = w; k < K; k += step) {
+          for (VertexID i = 0; i < M; i++) {
+            for (VertexID j = 0; j < N; j++) {
+              auto block_a = matrix_a_->GetTiledMatrixPtrByIdx(i * K + k);
+              auto block_b = matrix_b_->GetTiledMatrixPtrByIdx(j * K + k);
 
-                      if (block_a->GetMetadata().n_nz_tile == 0) continue;
-                      if (block_b->GetMetadata().n_nz_tile == 0) continue;
+              if (block_a->GetMetadata().n_nz_tile == 0) continue;
+              if (block_b->GetMetadata().n_nz_tile == 0) continue;
 
-                      cudaSetDevice(common::HashFunction(i * N + j) % 4);
-                      cudaStream_t& p_stream = p_streams_vec[i * N + j];
+              cudaSetDevice(common::HashFunction(i * N + j) % 4);
+              cudaStream_t& p_stream = p_streams_vec[i * N + j];
 
-                      {
-                        std::lock_guard<std::mutex> lock(mtx);
-                        if (device_owned_buffers_matrix_c[i * N + j].GetPtr() ==
-                            nullptr) {
-                          buffers_matrix_c[i * N + j].size =
-                              sizeof(uint64_t) *
-                              (WORD_OFFSET(n_strips * n_strips) + 1);
-                          cudaHostAlloc(&buffers_matrix_c[i * N + j].data,
-                                        buffers_matrix_c[i * N + j].size,
-                                        cudaHostAllocDefault);
+              {
+                std::lock_guard<std::mutex> lock(mtx);
+                if (device_owned_buffers_matrix_c[i * N + j].GetPtr() ==
+                    nullptr) {
+                  buffers_matrix_c[i * N + j].size =
+                      sizeof(uint64_t) * (WORD_OFFSET(n_strips * n_strips) + 1);
+                  cudaHostAlloc(&buffers_matrix_c[i * N + j].data,
+                                buffers_matrix_c[i * N + j].size,
+                                cudaHostAllocDefault);
 
-                          device_owned_buffers_matrix_c[i * N + j].Init(
-                              buffers_matrix_c[i * N + j].GetSize(), p_stream);
-                        }
-                      }
-
-                      auto& matrix_a_buf = buffers_matrix_a[i * K + k];
-                      matrix_a_buf.data =
-                          (uint64_t*)block_a->GetNzTileBitmapPtr()->data();
-                      matrix_a_buf.size =
-                          block_a->GetNzTileBitmapPtr()->GetBufferSize();
-
-                      auto& matrix_b_buf = buffers_matrix_b[j * K + k];
-                      matrix_b_buf.data =
-                          (uint64_t*)block_b->GetNzTileBitmapPtr()->data();
-                      matrix_b_buf.size =
-                          block_b->GetNzTileBitmapPtr()->GetBufferSize();
-
-                      device_owned_buffers_matrix_a[i * K + k].Init(
-                          matrix_a_buf, p_stream);
-                      device_owned_buffers_matrix_b[j * K + k].Init(
-                          matrix_b_buf, p_stream);
-
-                      MatrixOperationsKernelWrapper::MatrixBitAnd(
-                          p_stream, device_owned_buffers_matrix_a[i * K + k],
-                          device_owned_buffers_matrix_b[j * K + k],
-                          &device_owned_buffers_matrix_c[i * N + j], n_strips,
-                          n_strips, n_strips);
-                    }
-                  }
+                  device_owned_buffers_matrix_c[i * N + j].Init(
+                      buffers_matrix_c[i * N + j].GetSize(), p_stream);
                 }
-              });
+              }
+
+              auto& matrix_a_buf = buffers_matrix_a[i * K + k];
+              matrix_a_buf.data =
+                  (uint64_t*)block_a->GetNzTileBitmapPtr()->data();
+              matrix_a_buf.size =
+                  block_a->GetNzTileBitmapPtr()->GetBufferSize();
+
+              auto& matrix_b_buf = buffers_matrix_b[j * K + k];
+              matrix_b_buf.data =
+                  (uint64_t*)block_b->GetNzTileBitmapPtr()->data();
+              matrix_b_buf.size =
+                  block_b->GetNzTileBitmapPtr()->GetBufferSize();
+
+              device_owned_buffers_matrix_a[i * K + k].Init(matrix_a_buf,
+                                                            p_stream);
+              device_owned_buffers_matrix_b[j * K + k].Init(matrix_b_buf,
+                                                            p_stream);
+
+              MatrixOperationsKernelWrapper::MatrixBitAnd(
+                  p_stream, device_owned_buffers_matrix_a[i * K + k],
+                  device_owned_buffers_matrix_b[j * K + k],
+                  &device_owned_buffers_matrix_c[i * N + j], n_strips, n_strips,
+                  n_strips);
+            }
+          }
+        }
+      });
 
   // Step 3 compute Nonzero tile
   std::vector<BufferUint64> buffers_matrix_c_count;
@@ -312,7 +312,8 @@ __host__ void GEMM::InitC() {
             cudaSetDevice(common::HashFunction(i * N + j) % 4);
             cudaStream_t& p_stream = p_streams_vec[i * N + j];
 
-            auto* csr_tiled_matrix_ptr = matrix_c_->GetTiledMatrixPtrByIdx(i * N + j);
+            auto* csr_tiled_matrix_ptr =
+                matrix_c_->GetTiledMatrixPtrByIdx(i * N + j);
 
             TiledMatrixMetadata metadata{.n_strips = n_strips,
                                          .n_nz_tile = n_nz_tile,
@@ -346,7 +347,8 @@ __host__ void GEMM::InitC() {
 
             cudaSetDevice(common::HashFunction(i * N + j) % 4);
             cudaStream_t& p_stream = p_streams_vec[i * N + j];
-            auto* bit_tiled_matrix_ptr = matrix_c_->GetTiledMatrixPtrByIdx(i * N + j);
+            auto* bit_tiled_matrix_ptr =
+                matrix_c_->GetTiledMatrixPtrByIdx(i * N + j);
 
             tile_col_idx[i * N + j].data =
                 bit_tiled_matrix_ptr->GetTileColIdxPtr();
@@ -436,7 +438,8 @@ __host__ void GEMM::InitC() {
             VertexID n_nz_tile = *buffers_matrix_c_count[i * N + j].GetPtr();
             if (n_nz_tile == 0) continue;
 
-            auto* csr_tiled_matrix_ptr = matrix_c_->GetTiledMatrixPtrByIdx(i * N + j);
+            auto* csr_tiled_matrix_ptr =
+                matrix_c_->GetTiledMatrixPtrByIdx(i * N + j);
             auto tile_offset_row = csr_tiled_matrix_ptr->GetTileOffsetRowPtr();
 
             for (VertexID t = 0;
@@ -961,8 +964,8 @@ __host__ void GEMM::Run() {
       .n_edges = edges->GetMetadata().num_edges,
       .max_vid = matrix_a_->GetMetadata().max_vid};
 
-  matrix_c_ = ConvertGridEdgelist2GridTiledMatrix(*edges_blocks, grid_graph_metadata,
-                                           tile_size);
+  matrix_c_ = ConvertGridEdgelist2GridTiledMatrix(
+      *edges_blocks, grid_graph_metadata, tile_size);
 
   auto start_time_3 = std::chrono::system_clock::now();
 

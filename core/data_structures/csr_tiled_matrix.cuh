@@ -1,6 +1,8 @@
 #ifndef MATRIXGRAPH_CORE_DATA_STRUCTURES_CSR_TILED_MATRIX_CUH_
 #define MATRIXGRAPH_CORE_DATA_STRUCTURES_CSR_TILED_MATRIX_CUH_
 
+// CSRTiledMatrix: the graph's non-zero tiles, each holding one sub-CSR inside
+// one pinned host buffer at data_ + csr_offset_[k]. The nz bitmap is borrowed.
 #include "core/common/types.h"
 #include "core/data_structures/metadata.h"
 #include "core/util/bitmap.h"

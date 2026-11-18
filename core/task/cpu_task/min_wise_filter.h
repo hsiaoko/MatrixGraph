@@ -1,6 +1,8 @@
 #ifndef MATRIXGRAPH_CORE_TASK_CPU_TASK_MIN_WISE_FILTER_H_
 #define MATRIXGRAPH_CORE_TASK_CPU_TASK_MIN_WISE_FILTER_H_
 
+// Min-wise label filter shared by the CPU matchers: a 32-bit label
+// bitmap, a 16-bucket hash, and per-vertex ell-hop label summaries.
 #include "core/common/consts.h"
 #include "core/common/types.h"
 #include "core/data_structures/immutable_csr.cuh"

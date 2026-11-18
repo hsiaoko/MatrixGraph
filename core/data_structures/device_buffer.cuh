@@ -1,6 +1,8 @@
 #ifndef MATRIXGRAPH_CORE_DATA_STRUCTURES_DEVICE_BUFFER_CUH_
 #define MATRIXGRAPH_CORE_DATA_STRUCTURES_DEVICE_BUFFER_CUH_
 
+// DeviceOwnedBuffer: owns one cudaMalloc device allocation, freed in the
+// destructor. Move-only; sizes are bytes; stream copies are asynchronous.
 #include "core/data_structures/host_buffer.cuh"
 #include "core/util/cuda_check.cuh"
 

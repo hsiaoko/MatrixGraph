@@ -1,6 +1,8 @@
 #ifndef MATRIXGRAPH_CORE_TASK_GPU_TASK_MATRIX_OPS_CUH_
 #define MATRIXGRAPH_CORE_TASK_GPU_TASK_MATRIX_OPS_CUH_
 
+// Dense float matrix ops on device buffers: GEMM (cuBLAS or tiled
+// kernels), relu, add, and transpose. No graph data, no buffer ownership.
 #include "core/common/types.h"
 #include "core/data_structures/edgelist.h"
 #include "core/data_structures/immutable_csr.cuh"

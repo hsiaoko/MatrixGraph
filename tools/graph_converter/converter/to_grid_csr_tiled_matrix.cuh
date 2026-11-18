@@ -1,6 +1,8 @@
 #ifndef MATRIXGRAPH_TOOLS_GRAPH_CONVERTER_CONVERTER_GRID_EDGELIST_2_GIRD_CSR_TILED_MATRIX_CUH_
 #define MATRIXGRAPH_TOOLS_GRAPH_CONVERTER_CONVERTER_GRID_EDGELIST_2_GIRD_CSR_TILED_MATRIX_CUH_
 
+// Converts a grid-partitioned edgelist on disk into one CSRTiledMatrix
+// block per chunk plus meta.yaml and label.bin. Static helper, no state.
 #include "core/common/types.h"
 #include "core/common/yaml_config.h"
 #include "core/data_structures/bit_tiled_matrix.cuh"

@@ -1,6 +1,8 @@
 #ifndef MATRIXGRAPH_CORE_TASK_GPU_TASK_KERNEL_ALGORITHMS_HASH_CUH_
 #define MATRIXGRAPH_CORE_TASK_GPU_TASK_KERNEL_ALGORITHMS_HASH_CUH_
 
+// Device hash helpers: a bit-mixing Hash, FNV-1a, and the fixed 16-slot
+// HashTable permutation, whose out-of-range keys fold to slot 0.
 #include "core/common/types.h"
 #include "core/util/cuda_check.cuh"
 

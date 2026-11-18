@@ -1,6 +1,8 @@
 #ifndef MATRIXGRAPH_CORE_TASK_GPU_TASK_KERNEL_KERNEL_MATRIX_OPS_CUH_
 #define MATRIXGRAPH_CORE_TASK_GPU_TASK_KERNEL_KERNEL_MATRIX_OPS_CUH_
 
+// Dense float kernels with CPU fallback twins: GEMM, relu, sigmoid,
+// add, and transpose. CUDA entries take the caller's stream.
 #include "core/common/types.h"
 #include "core/data_structures/device_buffer.cuh"
 #include "core/data_structures/edgelist.h"

@@ -1,6 +1,8 @@
 #ifndef MATRIXGRAPH_TOOLS_GRAPH_CONVERTER_CONVERTER_TO_EDGELIST_CUH_
 #define MATRIXGRAPH_TOOLS_GRAPH_CONVERTER_CONVERTER_TO_EDGELIST_CUH_
 
+// Edgelist conversions: CSV, ImmutableCSR, and EGSM input to edgelist.bin,
+// plus the transposed variant. Static helpers over directory roots.
 #include "core/common/types.h"
 #include "core/data_structures/edgelist.h"
 #include "core/data_structures/immutable_csr.cuh"

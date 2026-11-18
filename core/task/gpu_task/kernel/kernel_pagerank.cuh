@@ -1,6 +1,8 @@
 #ifndef MATRIXGRAPH_CORE_TASK_GPU_TASK_KERNEL_KERNEL_PAGERANK_CUH_
 #define MATRIXGRAPH_CORE_TASK_GPU_TASK_KERNEL_KERNEL_PAGERANK_CUH_
 
+// PageRank launch: initializes ranks, iterates to epsilon or
+// max_iterations, and leaves float ranks in page_ranks. Workspaces internal.
 #include "core/common/types.h"
 #include "core/data_structures/device_buffer.cuh"
 #include "core/data_structures/edgelist.h"

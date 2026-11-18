@@ -1,6 +1,8 @@
 #ifndef MATRIXGRAPH_TOOLS_GRAPH_CONVERTER_CONVERTER_TO_TILED_MATRIX_CUH_
 #define MATRIXGRAPH_TOOLS_GRAPH_CONVERTER_CONVERTER_TO_TILED_MATRIX_CUH_
 
+// Builds a TiledMatrix at a fixed tile size from edgelist.bin or CSV and
+// writes it to disk. Static helpers over directory roots.
 #include "core/data_structures/edgelist.h"
 #include "core/data_structures/immutable_csr.cuh"
 #include "core/data_structures/tiled_matrix.cuh"

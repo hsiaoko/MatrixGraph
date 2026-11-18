@@ -93,7 +93,6 @@ __host__ void SubIso::LoadData() {
   p_.Read(pattern_path_);
 
   g_.Read(data_graph_path_);
-
 }
 
 __host__ void SubIso::WOJMatching(
@@ -109,8 +108,7 @@ __host__ void SubIso::WOJMatching(
   exec_plan.SetCudaDeviceIds(cuda_devices);
 
   std::cout << "[SubIso] WOJMatching: execution plan |V_p|="
-            << exec_plan.GetNVerticesP()
-            << " |E_p|=" << exec_plan.GetNEdgesP()
+            << exec_plan.GetNVerticesP() << " |E_p|=" << exec_plan.GetNEdgesP()
             << " |V_g|=" << exec_plan.GetNVerticesG()
             << " |E_g|=" << exec_plan.GetNEdgesG() << std::endl;
   std::cout << "[SubIso] WOJMatching: plan uses " << exec_plan.GetNDevices()

@@ -1,6 +1,8 @@
 #ifndef MATRIXGRAPH_CORE_DATA_STRUCTURES_MATCHES_CUH_
 #define MATRIXGRAPH_CORE_DATA_STRUCTURES_MATCHES_CUH_
 
+// Matches: the weft store for GAR. Each weft's candidate lists live in
+// matches_data_ behind v_candidate_offset; empty slots hold kMaxVertexID.
 #include "core/common/consts.h"
 #include "core/common/types.h"
 #include "core/data_structures/device_buffer.cuh"
@@ -76,7 +78,6 @@ class Matches {
                        max_n_weft);
     invalid_match_ = new BitmapOwnership(max_n_weft);
     header_.resize(n_vertices_);
-
   }
 
   void Print(VertexID n_matches = 3) const {

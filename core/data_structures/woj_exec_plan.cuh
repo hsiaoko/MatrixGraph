@@ -1,6 +1,8 @@
 #ifndef MATRIXGRAPH_CORE_DATA_STRUCTURES_WOJ_EXEC_PLAN_CUH_
 #define MATRIXGRAPH_CORE_DATA_STRUCTURES_WOJ_EXEC_PLAN_CUH_
 
+// WOJExecutionPlan: plan for one pattern-graph join, holding the pattern's
+// edges as a flat (src, dst) array (never freed) plus P/G sizes and GPU ids.
 #include "core/common/consts.h"
 #include "core/common/types.h"
 #include "core/data_structures/device_buffer.cuh"
@@ -71,9 +73,7 @@ class WOJExecutionPlan {
     return lid;
   }
 
-  inline VertexID* GetExecPathInEdgesPtr() const {
-    return exec_path_in_edges_;
-  }
+  inline VertexID* GetExecPathInEdgesPtr() const { return exec_path_in_edges_; }
 
   inline VertexID GetNEdgesP() const { return n_edges_p_; }
 

@@ -1,6 +1,8 @@
 #ifndef MATRIXGRAPH_CORE_TASK_GPU_TASK_PAGERANK_CUH_
 #define MATRIXGRAPH_CORE_TASK_GPU_TASK_PAGERANK_CUH_
 
+// PageRank benchmark task: loads a CSR file, iterates on device, and
+// reports timings only; output_path_ is currently unused.
 #include "core/common/types.h"
 #include "core/data_structures/immutable_csr.cuh"
 #include "core/task/gpu_task/task_base.cuh"

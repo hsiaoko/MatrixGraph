@@ -1,6 +1,8 @@
 #ifndef MATRIXGRAPH_CORE_DATA_STRUCTURES_WOJ_MATCHES_CUH_
 #define MATRIXGRAPH_CORE_DATA_STRUCTURES_WOJ_MATCHES_CUH_
 
+// WOJMatches: one weft match, a managed x_ by y_ vertex-ID table plus a join
+// header row. Free() frees the table but leaves header_ptr_ allocated.
 #include "core/common/types.h"
 #include "core/data_structures/device_buffer.cuh"
 #include "core/data_structures/host_buffer.cuh"
@@ -73,9 +75,7 @@ class WOJMatches {
     return x_offset_;
   }
 
-  __inline__ __host__ __device__ VertexID* GetDataPtr() const {
-    return data_;
-  }
+  __inline__ __host__ __device__ VertexID* GetDataPtr() const { return data_; }
 
   __inline__ __host__ __device__ VertexID* GetHeaderPtr() const {
     return header_ptr_;

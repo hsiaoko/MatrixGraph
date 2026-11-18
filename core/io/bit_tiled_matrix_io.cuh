@@ -1,6 +1,8 @@
 #ifndef MATRIXGRAPH_CORE_IO_BIT_TILED_MATRIX_IO_CUH_
 #define MATRIXGRAPH_CORE_IO_BIT_TILED_MATRIX_IO_CUH_
 
+// BitTiledMatrix on disk: meta.yaml plus raw tile arrays in meta_buf/.
+// Paths are concatenated, so a root must end in a separator.
 #include "core/common/types.h"
 #include "core/data_structures/bit_tiled_matrix.cuh"
 #include "core/data_structures/metadata.h"

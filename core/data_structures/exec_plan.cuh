@@ -1,6 +1,8 @@
 #ifndef MATRIXGRAPH_CORE_DATA_STRUCTURES_EXEC_PLAN_CUH_
 #define MATRIXGRAPH_CORE_DATA_STRUCTURES_EXEC_PLAN_CUH_
 
+// ExecutionPlan: the DFS exec order over a pattern graph as a vertex list plus
+// its (src, dst) edges. Edge 0 is synthetic (kMaxVertexID -> root graph ID).
 #include "core/common/consts.h"
 #include "core/common/types.h"
 #include "core/data_structures/device_buffer.cuh"
@@ -213,8 +215,7 @@ class ExecutionPlan {
     return sequential_exec_path_in_edges_;
   }
 
-  UnifiedOwnedBufferVertexID* GetInvertedIndexOfSequentialExecPathPtr()
-      const {
+  UnifiedOwnedBufferVertexID* GetInvertedIndexOfSequentialExecPathPtr() const {
     return inverted_index_of_sequential_exec_path_;
   }
 

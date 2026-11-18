@@ -1,6 +1,8 @@
 #ifndef MATRIXGRAPH_CORE_DATA_STRUCTURES_BIT_TILED_MATRIX_CUH_
 #define MATRIXGRAPH_CORE_DATA_STRUCTURES_BIT_TILED_MATRIX_CUH_
 
+// BitTiledMatrix: a bit matrix split into tiles, held as CSR-like row/col tile
+// arrays plus packed tile words in pinned host memory. Init adopts the bitmap.
 #include "core/common/types.h"
 #include "core/data_structures/metadata.h"
 #include "core/util/bitmap.h"

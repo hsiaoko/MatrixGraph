@@ -1,6 +1,8 @@
 #ifndef MATRIXGRAPH_TOOLS_GRAPH_CONVERTER_CONVERTER_GRID_EDGELIST_2_BIT_TILED_MATRIX_CUH_
 #define MATRIXGRAPH_TOOLS_GRAPH_CONVERTER_CONVERTER_GRID_EDGELIST_2_BIT_TILED_MATRIX_CUH_
 
+// Converts a grid-partitioned edgelist on disk into one BitTiledMatrix
+// block per chunk plus meta.yaml. Static helper, no state.
 #include "core/common/yaml_config.h"
 #include "core/data_structures/bit_tiled_matrix.cuh"
 #include "core/data_structures/edgelist.h"

@@ -91,9 +91,8 @@ int main(int argc, char* argv[]) {
     cudaStream_t stream;
     CUDA_CHECK(cudaStreamCreate(&stream));
 
-    WCCKernelWrapper::WCC(stream, g.GetNumVertices(),
-                          g.GetNumOutgoingEdges(), unified_data_g,
-                          unified_v_label_g);
+    WCCKernelWrapper::WCC(stream, g.GetNumVertices(), g.GetNumOutgoingEdges(),
+                          unified_data_g, unified_v_label_g);
 
     CUDA_CHECK(cudaStreamDestroy(stream));
     CUDA_CHECK(cudaDeviceSynchronize());
@@ -121,8 +120,8 @@ int main(int argc, char* argv[]) {
     summary_file << "num_components " << comp_ids.size() << "\n";
     summary_file.close();
 
-    std::cout << "[GraphRAG WCC] Wrote " << g.GetNumVertices()
-              << " labels to " << FLAGS_o << "/wcc_labels.bin"
+    std::cout << "[GraphRAG WCC] Wrote " << g.GetNumVertices() << " labels to "
+              << FLAGS_o << "/wcc_labels.bin"
               << ", components=" << comp_ids.size() << std::endl;
 
   } catch (const std::exception& e) {

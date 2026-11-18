@@ -121,7 +121,7 @@ struct ParametersCount {
 };
 
 __device__ static inline uint64_t GetBit(uint64_t* data, size_t i,
-                                          size_t size) {
+                                         size_t size) {
   if (i > size) return 0;
   return data[WORD_OFFSET(i)] & (1ull << BIT_OFFSET(i));
 }
@@ -129,8 +129,8 @@ __device__ static inline uint64_t GetBit(uint64_t* data, size_t i,
 __device__ static inline bool drop() { return false; }
 
 __device__ static inline uint64_t GetAlignedKBits(uint64_t* data,
-                                                     uint64_t start,
-                                                     uint64_t end) {
+                                                  uint64_t start,
+                                                  uint64_t end) {
   uint64_t start_word = WORD_OFFSET(start);
   uint64_t end_word = WORD_OFFSET(end);
 
@@ -145,12 +145,12 @@ __device__ static inline uint64_t GetAlignedKBits(uint64_t* data,
 }
 
 __device__ static inline uint64_t SetBit(unsigned long long* data,
-                                          unsigned long long i) {
+                                         unsigned long long i) {
   atomicOr(data + WORD_OFFSET(i), (1ull << BIT_OFFSET(i)));
 }
 
 __device__ static inline size_t PreElementCount(const uint64_t* data,
-                                                  uint64_t idx) {
+                                                uint64_t idx) {
   size_t count = 0;
   size_t bm_size = WORD_OFFSET(idx);
   size_t idx_offset = WORD_OFFSET(idx);
@@ -192,7 +192,7 @@ __device__ static inline unsigned long long CountPerUint64T(
 }
 
 __device__ static inline VertexID BinarySearch(VertexID* data, VertexID size,
-                                                VertexID target) {
+                                               VertexID target) {
   if (size == 0) return kMaxVertexID;
   VertexID low = 0, high = size - 1;
 
@@ -227,7 +227,7 @@ __device__ static inline bool SingleThreadMatrixBitAnd(
           continue;
         } else {
           SetBit((unsigned long long*)matrix_c,
-                  (unsigned long long)row_a * tile_size + row_b);
+                 (unsigned long long)row_a * tile_size + row_b);
           break;
         }
       }
@@ -274,7 +274,7 @@ static __global__ void MatrixAndKernel(ParametersForMatrixBitAnd params) {
           continue;
         } else {
           SetBit((unsigned long long*)params.matrix_c,
-                  (unsigned long long)row_a * params.n + row_b);
+                 (unsigned long long)row_a * params.n + row_b);
           break;
         }
       }
@@ -306,10 +306,10 @@ static __global__ void InitBitTiledMatrixMetadataKernel(
   for (unsigned int i = tid; i < params.tile_size; i += step) {
     for (unsigned int j = 0; j < params.tile_size; j++) {
       if (GetBit((uint64_t*)params.layout_matrix,
-                  (uint64_t)(i * params.tile_size + j))) {
+                 (uint64_t)(i * params.tile_size + j))) {
         unsigned long long pre_element_count_val =
             PreElementCount((uint64_t*)params.layout_matrix,
-                              (uint64_t)i * params.tile_size + j);
+                            (uint64_t)i * params.tile_size + j);
         params.tile_row_idx[pre_element_count_val] = i;
         params.tile_col_idx[pre_element_count_val] = j;
         atomicAdd(params.tile_offset_row + i, (unsigned)1);
@@ -359,7 +359,7 @@ static __global__ void FillTilesKernel(ParametersFillTiles params) {
             params.tile_unit * (params.tile_offset_row_b[y] + nz_idx_y);
 
         SingleThreadMatrixBitAnd(params.tile_size, matrix_a, matrix_b,
-                                     matrix_c);
+                                 matrix_c);
 
         nz_idx_x++;
         nz_idx_y++;
@@ -452,7 +452,6 @@ static __global__ void FillCsrTilesKernel(ParametersFillTiles params) {
               //        edges_globalid_by_localid_a[out_edges_a[offset_base_a +
               //                                                nbr_a]],
               //        local_vid_b);
-
 
               if (v_idx_b == kMaxVertexID) continue;
 
@@ -579,7 +578,6 @@ static __global__ void WalkKernel(const ParametersWalk params) {
               kbm.SetBit(local_walk_to_dst);
             }
 
-
             if (local_offset > kDefaultOutputBufferSize) {
               EdgeIndex global_offset =
                   atomicAdd(params.output_offset, local_offset);
@@ -657,8 +655,7 @@ void MatrixOperationsKernelWrapper::InitBitTiledMatrixMetadataByLayoutMatrix(
       .tile_col_idx = reinterpret_cast<unsigned*>(tile_col_idx->GetPtr()),
       .tile_size = tile_size};
 
-  InitBitTiledMatrixMetadataKernel<<<dim_block, dim_grid, 0, stream>>>(
-      params);
+  InitBitTiledMatrixMetadataKernel<<<dim_block, dim_grid, 0, stream>>>(params);
   cudaError_t err = cudaGetLastError();
   if (err != cudaSuccess) {
     CUDA_CHECK(err);

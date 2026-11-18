@@ -1,6 +1,8 @@
 #ifndef MATRIXGRAPH_CORE_DATA_STRUCTURES_HEAP_CUH_
 #define MATRIXGRAPH_CORE_DATA_STRUCTURES_HEAP_CUH_
 
+// MinHeap: inlined fixed-capacity uint32 top-k heap for kernels. It keeps the
+// k smallest values, so root data_[0] is the largest retained.
 #include "core/common/consts.h"
 
 #include <cstdint>

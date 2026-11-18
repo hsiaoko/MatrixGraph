@@ -11,9 +11,12 @@ using GridCutPartitioner =
 using StoreStrategy = sics::matrixgraph::core::common::StoreStrategy;
 
 // using enum sics::matrixgraph::tools::common::StoreStrategy;
-//     using StoreStrategy::kIncomingOnly = sics::matrixgraph::tools::common::kIncomingOnly;
-//  using StoreStrategy::kOutgoingOnly = sics::matrixgraph::tools::common::kOutgoingOnly;
-//  using StoreStrategy::kUnconstrained = sics::matrixgraph::tools::common::kUnconstrained;
+//     using StoreStrategy::kIncomingOnly =
+//     sics::matrixgraph::tools::common::kIncomingOnly;
+//  using StoreStrategy::kOutgoingOnly =
+//  sics::matrixgraph::tools::common::kOutgoingOnly; using
+//  StoreStrategy::kUnconstrained =
+//  sics::matrixgraph::tools::common::kUnconstrained;
 
 DEFINE_string(partitioner, "", "partitioner type.");
 DEFINE_string(i, "", "input path.");

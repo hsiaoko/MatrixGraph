@@ -1,6 +1,8 @@
 #ifndef MATRIXGRAPH_TOOLS_GRAPH_CONVERTER_CONVERTER_TO_IMMUTABLE_CSR_CUH_
 #define MATRIXGRAPH_TOOLS_GRAPH_CONVERTER_CONVERTER_TO_IMMUTABLE_CSR_CUH_
 
+// Builds ImmutableCSR binaries from CSV or edgelist.bin, including the
+// CG-graph and EGSM variants, generating labels on the way. Static helpers.
 #include "core/data_structures/edgelist.h"
 #include "core/data_structures/immutable_csr.cuh"
 
@@ -98,15 +100,13 @@ static void ConvertEdgelistCSV2CGGraphCSR(const std::string& input_path,
 
   p_immutable_csr->PrintGraph(10);
 
-  offset_file.write(
-      (char*)offset,
-      sizeof(VertexID) * (p_immutable_csr->GetNumVertices() + 1));
+  offset_file.write((char*)offset,
+                    sizeof(VertexID) * (p_immutable_csr->GetNumVertices() + 1));
   out_edges_file.write(
       (char*)out_edges,
       sizeof(VertexID) * p_immutable_csr->GetNumOutgoingEdges());
-  weight_file.write(
-      (char*)e_label,
-      sizeof(VertexID) * p_immutable_csr->GetNumOutgoingEdges());
+  weight_file.write((char*)e_label,
+                    sizeof(VertexID) * p_immutable_csr->GetNumOutgoingEdges());
 
   offset_file.close();
   out_edges_file.close();
@@ -135,15 +135,13 @@ static void ConvertEdgelistBin2CGGraphCSR(const std::string& input_path,
 
   p_immutable_csr->PrintGraph(3);
 
-  offset_file.write(
-      (char*)offset,
-      sizeof(VertexID) * (p_immutable_csr->GetNumVertices() + 1));
+  offset_file.write((char*)offset,
+                    sizeof(VertexID) * (p_immutable_csr->GetNumVertices() + 1));
   out_edges_file.write(
       (char*)out_edges,
       sizeof(VertexID) * p_immutable_csr->GetNumOutgoingEdges());
-  weight_file.write(
-      (char*)e_label,
-      sizeof(VertexID) * p_immutable_csr->GetNumOutgoingEdges());
+  weight_file.write((char*)e_label,
+                    sizeof(VertexID) * p_immutable_csr->GetNumOutgoingEdges());
 
   offset_file.close();
   out_edges_file.close();

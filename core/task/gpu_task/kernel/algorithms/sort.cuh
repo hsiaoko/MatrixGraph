@@ -1,6 +1,8 @@
 #ifndef MATRIXGRAPH_CORE_TASK_GPU_TASK_KERNEL_ALGORITHMS_SORT_CUH_
 #define MATRIXGRAPH_CORE_TASK_GPU_TASK_KERNEL_ALGORITHMS_SORT_CUH_
 
+// Device sorting: a strided merge sort that moves whole rows, plus a
+// recursive quicksort on int arrays. Callers own both buffers.
 #include "core/common/consts.h"
 #include "core/common/types.h"
 #include "core/util/cuda_check.cuh"

@@ -1,6 +1,8 @@
 #ifndef MATRIXGRAPH_CORE_TASK_GPU_TASK_BFS_CUH_
 #define MATRIXGRAPH_CORE_TASK_GPU_TASK_BFS_CUH_
 
+// Single-source BFS benchmark task: loads a CSR file, runs kernel_bfs on
+// the device, and reports timings only. No levels are returned.
 #include "core/common/types.h"
 #include "core/data_structures/edgelist.h"
 #include "core/data_structures/grid_csr_tiled_matrix.cuh"

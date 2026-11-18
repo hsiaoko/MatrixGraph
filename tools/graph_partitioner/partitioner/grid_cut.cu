@@ -149,25 +149,25 @@ void GridCutPartitioner::RunPartitioner() {
 
   std::cout << "[GridCutPartitioner] Dropping edges into blocks...\n"
             << std::endl;
-  ParallelFor(
-      worker.begin(), worker.end(),
-      [this, step, &edges, scope_per_chunk, &edge_blocks_buf,
-       &n_edges_for_each_block, &offset_for_each_block](auto w) {
-        for (auto eid = w; eid < edges.GetMetadata().num_edges; eid += step) {
-          auto edge = edges.GetEdgeByIndex(eid);
-          auto* localid_to_globalid = edges.GetLocalidToGlobalidPtr();
-          if (localid_to_globalid != nullptr) {
-            edge.src = localid_to_globalid[edge.src];
-            edge.dst = localid_to_globalid[edge.dst];
-          }
+  ParallelFor(worker.begin(), worker.end(),
+              [this, step, &edges, scope_per_chunk, &edge_blocks_buf,
+               &n_edges_for_each_block, &offset_for_each_block](auto w) {
+                for (auto eid = w; eid < edges.GetMetadata().num_edges;
+                     eid += step) {
+                  auto edge = edges.GetEdgeByIndex(eid);
+                  auto* localid_to_globalid = edges.GetLocalidToGlobalidPtr();
+                  if (localid_to_globalid != nullptr) {
+                    edge.src = localid_to_globalid[edge.src];
+                    edge.dst = localid_to_globalid[edge.dst];
+                  }
 
-          auto x = edge.src / scope_per_chunk;
-          auto y = edge.dst / scope_per_chunk;
-          auto block_id = x * n_partitions_ + y;
-          auto offset = offset_for_each_block[block_id].fetch_add(1);
-          edge_blocks_buf[block_id][offset] = edge;
-        }
-      });
+                  auto x = edge.src / scope_per_chunk;
+                  auto y = edge.dst / scope_per_chunk;
+                  auto block_id = x * n_partitions_ + y;
+                  auto offset = offset_for_each_block[block_id].fetch_add(1);
+                  edge_blocks_buf[block_id][offset] = edge;
+                }
+              });
 
   std::vector<Edges> edge_blocks;
   edge_blocks.reserve(n_partitions_ * n_partitions_);

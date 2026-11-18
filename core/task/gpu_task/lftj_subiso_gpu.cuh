@@ -1,6 +1,8 @@
 #ifndef MATRIXGRAPH_CORE_TASK_GPU_TASK_LFTJ_SUBISO_GPU_CUH_
 #define MATRIXGRAPH_CORE_TASK_GPU_TASK_LFTJ_SUBISO_GPU_CUH_
 
+// Device LFTJ subgraph isomorphism; host preprocessing reuses the CPU
+// filters. Reports only the total count, on stdout; output_path_ is unused.
 #include "core/common/types.h"
 #include "core/data_structures/immutable_csr.cuh"
 #include "core/task/cpu_task/min_wise_filter.h"

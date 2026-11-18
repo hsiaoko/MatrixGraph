@@ -1,6 +1,8 @@
 #ifndef MATRIXGRAPH_CORE_TASK_GPU_TASK_KERNEL_KERNEL_WOJ_SUBISO_CUH_
 #define MATRIXGRAPH_CORE_TASK_GPU_TASK_KERNEL_KERNEL_WOJ_SUBISO_CUH_
 
+// WOJ filter and join stages: each returns newly allocated WOJMatches
+// per plan, and the caller deletes them.
 #include "core/common/types.h"
 #include "core/data_structures/device_buffer.cuh"
 #include "core/data_structures/edgelist.h"

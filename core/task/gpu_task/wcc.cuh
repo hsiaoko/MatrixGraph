@@ -1,6 +1,8 @@
 #ifndef MATRIXGRAPH_CORE_TASK_GPU_TASK_WCC_CUH_
 #define MATRIXGRAPH_CORE_TASK_GPU_TASK_WCC_CUH_
 
+// Weakly connected components benchmark task (HashMin on device): loads
+// a CSR file and reports timings only; labels are not returned.
 #include "core/common/types.h"
 #include "core/data_structures/edgelist.h"
 #include "core/data_structures/exec_plan.cuh"

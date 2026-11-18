@@ -93,9 +93,8 @@ int main(int argc, char* argv[]) {
     cudaStream_t stream;
     CUDA_CHECK(cudaStreamCreate(&stream));
 
-    BFSKernelWrapper::BFS(stream, g.GetNumVertices(),
-                          g.GetNumOutgoingEdges(), FLAGS_src, unified_data_g,
-                          unified_v_label_g);
+    BFSKernelWrapper::BFS(stream, g.GetNumVertices(), g.GetNumOutgoingEdges(),
+                          FLAGS_src, unified_data_g, unified_v_label_g);
 
     CUDA_CHECK(cudaStreamDestroy(stream));
     CUDA_CHECK(cudaDeviceSynchronize());
@@ -129,8 +128,8 @@ int main(int argc, char* argv[]) {
     summary_file << "max_level " << max_level << "\n";
     summary_file.close();
 
-    std::cout << "[GraphRAG BFS] Wrote " << g.GetNumVertices()
-              << " levels to " << FLAGS_o << "/bfs_levels.bin"
+    std::cout << "[GraphRAG BFS] Wrote " << g.GetNumVertices() << " levels to "
+              << FLAGS_o << "/bfs_levels.bin"
               << ", reached=" << reached << ", max_level=" << max_level
               << std::endl;
 

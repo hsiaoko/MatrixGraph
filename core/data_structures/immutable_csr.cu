@@ -149,9 +149,9 @@ void ImmutableCSR::Write(const std::string& root_path, GraphID gid) {
 
   // Write graph metadata.
   std::vector<SubGraphMetadata> subgraph_metadata_vec;
-  subgraph_metadata_vec.push_back(
-      {gid, GetNumVertices(), GetNumIncomingEdges(),
-       GetNumOutgoingEdges(), GetMaxVid(), GetMinVid()});
+  subgraph_metadata_vec.push_back({gid, GetNumVertices(), GetNumIncomingEdges(),
+                                   GetNumOutgoingEdges(), GetMaxVid(),
+                                   GetMinVid()});
 
   YAML::Node out_node;
   out_node["GraphMetadata"]["num_vertices"] = GetNumVertices();

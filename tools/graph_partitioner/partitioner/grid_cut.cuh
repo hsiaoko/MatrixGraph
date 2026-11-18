@@ -1,6 +1,8 @@
 #ifndef MATRIXGRAPH_TOOLS_GRAPH_PARTITIONER_PARTITIONER_GRID_CUT_H_
 #define MATRIXGRAPH_TOOLS_GRAPH_PARTITIONER_PARTITIONER_GRID_CUT_H_
 
+// GridCutPartitioner splits edgelist.bin into n_partitions^2 (src, dst)
+// buckets and writes them through EdgelistSubGraphsIO. Host-only.
 #include "core/common/types.h"
 #include "tools/graph_partitioner/partitioner/partitioner_base.h"
 

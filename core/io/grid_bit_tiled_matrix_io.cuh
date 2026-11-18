@@ -1,6 +1,8 @@
 #ifndef MATRIXGRAPH_CORE_IO_GRID_BIT_TILED_MATRIX_IO_CUH_
 #define MATRIXGRAPH_CORE_IO_GRID_BIT_TILED_MATRIX_IO_CUH_
 
+// GridBitTiledMatrix on disk: meta.yaml plus one block<i>/ per chunk,
+// each a BitTiledMatrixIO directory. Read allocates the grid with new.
 #include "core/data_structures/bit_tiled_matrix.cuh"
 #include "core/data_structures/grid_bit_tiled_matrix.cuh"
 #include "core/data_structures/metadata.h"

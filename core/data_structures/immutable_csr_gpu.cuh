@@ -1,6 +1,8 @@
 #ifndef MATRIXGRAPH_CORE_DATA_STRUCTURES_IMMUTABLE_CSR_GPU_CUH_
 #define MATRIXGRAPH_CORE_DATA_STRUCTURES_IMMUTABLE_CSR_GPU_CUH_
 
+// ImmutableCSRGPU: device-side mirror of one ImmutableCSR, split into typed
+// arrays by ParseBasePtr. Trivially copyable; Free() releases Init's buffer.
 #include "core/common/types.h"
 #include "core/data_structures/immutable_csr.cuh"
 #include "core/data_structures/metadata.h"

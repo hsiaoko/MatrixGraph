@@ -1,6 +1,8 @@
 #ifndef MATRIXGRAPH_CORE_TASK_GPU_TASK_GAR_MATCH_CUH_
 #define MATRIXGRAPH_CORE_TASK_GPU_TASK_GAR_MATCH_CUH_
 
+// GARMatch task: applies a rule pattern to a GAR graph and reports matched
+// (pivot, condition, vertex) rows, from a config file or flat arrays.
 #include "core/common/types.h"
 #include "core/data_structures/gar_graph_arrays.h"
 #include "core/data_structures/gar_match_arrays.h"

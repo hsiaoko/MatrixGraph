@@ -1,6 +1,8 @@
 #ifndef MATRIXGRAPH_CORE_DATA_STRUCTURES_KERNEL_BITMAP_NO_OWNERSHIP_CUH_
 #define MATRIXGRAPH_CORE_DATA_STRUCTURES_KERNEL_BITMAP_NO_OWNERSHIP_CUH_
 
+// KernelBitmapNoOwnership: KernelBitmap's accessors over a caller-supplied
+// bitmap. Init(size, data) adopts that pointer and never frees it.
 #include <cstdint>
 #include <cuda_runtime.h>
 

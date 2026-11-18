@@ -52,8 +52,7 @@ void EdgelistSubGraphsIO::Write(const std::string& output_root_path,
         sizeof(Edge) * edge_buckets[gid].GetMetadata().num_edges);
 
     out_local_id_to_global_id.write(
-        reinterpret_cast<char*>(
-            edge_buckets[gid].GetLocalidToGlobalidPtr()),
+        reinterpret_cast<char*>(edge_buckets[gid].GetLocalidToGlobalidPtr()),
         sizeof(VertexID) * edge_buckets[gid].GetMetadata().num_vertices);
 
     subgraph_metadata_vec.push_back(

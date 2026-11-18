@@ -1,6 +1,8 @@
 #ifndef MATRIXGRAPH_CORE_TASK_GPU_TASK_GRAPH_AGGREGATE_CUH_
 #define MATRIXGRAPH_CORE_TASK_GPU_TASK_GRAPH_AGGREGATE_CUH_
 
+// GraphAggregate task: per-vertex aggregation over one CSR graph,
+// replicated to each GPU; PerGpuState owns that device's streams and buffers.
 #include "core/common/types.h"
 #include "core/data_structures/attributes.h"
 #include "core/data_structures/immutable_csr.cuh"

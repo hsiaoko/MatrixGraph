@@ -1,6 +1,8 @@
 #ifndef MATRIXGRAPH_CORE_DATA_STRUCTURES_ATTRIBUTES_H_
 #define MATRIXGRAPH_CORE_DATA_STRUCTURES_ATTRIBUTES_H_
 
+// Attribute column view (name, type, borrowed data/offsets/valid), its scalar
+// and list accessors, and DeviceAttributes, which owns only the hash buckets.
 #include "core/data_structures/hash_map.cuh"
 
 #include <cstdint>

@@ -1,6 +1,8 @@
 #ifndef MATRIXGRAPH_CORE_TASK_GPU_TASK_KERNEL_KERNEL_BFS_CUH_
 #define MATRIXGRAPH_CORE_TASK_GPU_TASK_KERNEL_KERNEL_BFS_CUH_
 
+// Single-source BFS launch over a packed CSR blob; writes one level per
+// vertex (unreached = kMaxVertexID) on the caller's stream.
 #include "core/common/types.h"
 #include "core/data_structures/device_buffer.cuh"
 #include "core/data_structures/edgelist.h"

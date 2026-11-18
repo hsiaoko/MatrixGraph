@@ -1,6 +1,8 @@
 #ifndef MATRIXGRAPH_CORE_DATA_STRUCTURES_KERNEL_BITMAP_CUH_
 #define MATRIXGRAPH_CORE_DATA_STRUCTURES_KERNEL_BITMAP_CUH_
 
+// KernelBitmap: device-only bitmap (device malloc/free, so create and free it
+// inside a kernel). HostKernelBitmap owns the managed buffer kernels borrow.
 #include <cstdint>
 #include <cuda_runtime.h>
 
@@ -35,7 +37,6 @@ class KernelBitmap {
     memcpy(data_, other.GetPtr(),
            (KERNEL_WORD_OFFSET(size_) + 1) * sizeof(uint64_t));
   }
-
 
   __device__ void Init(uint64_t size, uint64_t* data) {
     if (data_ != nullptr) free(data_);

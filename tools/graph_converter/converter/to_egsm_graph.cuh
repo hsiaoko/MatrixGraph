@@ -1,6 +1,8 @@
 #ifndef MATRIXGRAPH_TOOLS_GRAPH_CONVERTER_CONVERTER_TO_EGSM_CUH_
 #define MATRIXGRAPH_TOOLS_GRAPH_CONVERTER_CONVERTER_TO_EGSM_CUH_
 
+// Writes a CSR graph as text for external matchers (EGSM, GNNPE, VF3,
+// CECI). input_path is a CSR directory; output_path is the file to write.
 #include "core/data_structures/edgelist.h"
 #include "core/data_structures/immutable_csr.cuh"
 

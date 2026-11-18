@@ -10,8 +10,6 @@ class MiniHeapTest : public ::testing::Test {
  protected:
   MiniHeapTest() = default;
   ~MiniHeapTest() override = default;
-
-
 };
 
 }  // namespace kernel

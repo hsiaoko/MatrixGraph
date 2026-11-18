@@ -1,6 +1,8 @@
 #ifndef MATRIXGRAPH_CORE_TASK_CPU_TASK_PATTERN_VERTEX_ORDER_CUH_
 #define MATRIXGRAPH_CORE_TASK_CPU_TASK_PATTERN_VERTEX_ORDER_CUH_
 
+// Orders pattern vertices by one-min hash selectivity against the data
+// graph, so matchers expand the most constrained vertex first.
 #include "core/common/consts.h"
 #include "core/common/types.h"
 #include "core/data_structures/immutable_csr.cuh"

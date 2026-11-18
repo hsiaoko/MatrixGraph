@@ -1,6 +1,8 @@
 #ifndef MATRIXGRAPH_CORE_TASK_GPU_TASK_GEMM_CUH_
 #define MATRIXGRAPH_CORE_TASK_GPU_TASK_GEMM_CUH_
 
+// GPU matrix multiply on GridCSRTiledMatrix: the constructor loads both
+// operands from disk, Run writes the product via GridCSRTiledMatrixIO.
 #include "core/common/types.h"
 #include "core/data_structures/edgelist.h"
 #include "core/data_structures/grid_csr_tiled_matrix.cuh"

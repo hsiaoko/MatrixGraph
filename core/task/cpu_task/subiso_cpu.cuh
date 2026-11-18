@@ -1,6 +1,8 @@
 #ifndef MATRIXGRAPH_CORE_TASK_CPU_TASK_SUBISO_CPU_CUH_
 #define MATRIXGRAPH_CORE_TASK_CPU_TASK_SUBISO_CPU_CUH_
 
+// Host-only CPU subgraph isomorphism: per-pair candidate matrices plus
+// min-wise and Bloom filters prune before the WOJ-style matching.
 #include "core/common/types.h"
 #include "core/data_structures/edgelist.h"
 #include "core/data_structures/immutable_csr.cuh"

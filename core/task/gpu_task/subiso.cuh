@@ -1,6 +1,8 @@
 #ifndef MATRIXGRAPH_CORE_TASK_GPU_TASK_SUBISO_CUH_
 #define MATRIXGRAPH_CORE_TASK_GPU_TASK_SUBISO_CUH_
 
+// GPU subgraph isomorphism (WOJ execution plans) over pattern/data CSRs.
+// The static Run is the C API: every output buffer is the caller's.
 #include "core/common/types.h"
 #include "core/data_structures/edgelist.h"
 #include "core/data_structures/exec_plan.cuh"

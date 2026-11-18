@@ -866,10 +866,9 @@ static std::vector<WOJMatches*> WOJFilter(
     woj_matches_vec[_]->Init(exec_plan.GetNEdgesP(), kMaxMatchTableRows);
     woj_matches_vec[_]->SetXOffset(2);
     woj_matches_vec[_]->SetYOffset(0);
-    woj_matches_vec[_]->SetHeader(
-        0, exec_plan.GetExecPathInEdgesPtr()[_ * 2]);
-    woj_matches_vec[_]->SetHeader(
-        1, exec_plan.GetExecPathInEdgesPtr()[_ * 2 + 1]);
+    woj_matches_vec[_]->SetHeader(0, exec_plan.GetExecPathInEdgesPtr()[_ * 2]);
+    woj_matches_vec[_]->SetHeader(1,
+                                  exec_plan.GetExecPathInEdgesPtr()[_ * 2 + 1]);
   }
 
   for (VertexID eid = 0; eid < exec_plan.GetNEdgesP(); eid++) {
@@ -882,8 +881,7 @@ static std::vector<WOJMatches*> WOJFilter(
         worker.begin(), worker.end(),
         [step, &p, &g, eid, u_src, u_dst, src_idx, dst_idx, &exec_plan,
          &woj_matches_vec, &m_vec, &m_unified_buffer_vec](auto w) {
-          for (VertexID v_idx = w; v_idx < g.GetNumVertices();
-               v_idx += step) {
+          for (VertexID v_idx = w; v_idx < g.GetNumVertices(); v_idx += step) {
             auto offset = g.GetOutOffsetByLocalID(v_idx);
             auto degree = g.GetOutDegreeByLocalID(v_idx);
             auto* out_edges = g.GetOutgoingEdgesByLocalID(v_idx);
@@ -1145,13 +1143,11 @@ static void DFSExtend(
 
   // 遍历执行计划中的边约束
   for (VertexID i = 0; i < exec_plan.GetNEdges(); i++) {
-    auto u_src =
-        exec_plan.GetSequentialExecPathInEdgesPtr()->GetPtr()[2 * i];
+    auto u_src = exec_plan.GetSequentialExecPathInEdgesPtr()->GetPtr()[2 * i];
     auto u_dst =
         exec_plan.GetSequentialExecPathInEdgesPtr()->GetPtr()[2 * i + 1];
 
     if ((pre_v_idx == kMaxVertexID) ^ (u_src == kMaxVertexID)) continue;
-
 
     if (level == 1) {
       if (!MatrixFilter(u_src, pre_v_idx, p, g, m_vec, m_unified_buffer_vec,
@@ -1227,11 +1223,11 @@ static inline void Enumerating(
   std::vector<std::vector<std::unordered_set<uint64_t>>>
       matches_visited_pairs_vec;
   matches_visited_pairs_vec.resize(parallelism);
-  std::generate(matches_visited_pairs_vec.begin(),
-                matches_visited_pairs_vec.end(), [&exec_plan]() {
-                  return std::vector<std::unordered_set<uint64_t>>(
-                      exec_plan.GetNEdges());
-                });
+  std::generate(
+      matches_visited_pairs_vec.begin(), matches_visited_pairs_vec.end(),
+      [&exec_plan]() {
+        return std::vector<std::unordered_set<uint64_t>>(exec_plan.GetNEdges());
+      });
 
   std::vector<std::vector<uint64_t>> rejected_pairs_vec;
   if (!g_reject_output_path.empty()) {
@@ -1336,8 +1332,8 @@ static bool ValidateWeft(const ImmutableCSR& p, const ImmutableCSR& g,
                  e * 2 * matches->GetMaxNLocalWeft() + 2 * c;
       auto src = matches->GetMatchesDataPtr()[idx];
       auto dst = matches->GetMatchesDataPtr()[idx + 1];
-      if (src != kMaxVertexID && dst != kMaxVertexID &&
-          src <= g.GetMaxVid() && dst <= g.GetMaxVid()) {
+      if (src != kMaxVertexID && dst != kMaxVertexID && src <= g.GetMaxVid() &&
+          dst <= g.GetMaxVid()) {
         edge_cands[e].emplace_back(src, dst);
       }
     }
@@ -1692,8 +1688,8 @@ static void Checking(const ImmutableCSR& p, const ImmutableCSR& /*g*/,
               *(matches->GetMatchesDataPtr() +
                 weft_id * matches->GetNVertices() * 2 *
                     matches->GetMaxNLocalWeft() +
-                i * 2 * matches->GetMaxNLocalWeft() + 2 * candidate_id +
-                1) != kMaxVertexID) {
+                i * 2 * matches->GetMaxNLocalWeft() + 2 * candidate_id + 1) !=
+                  kMaxVertexID) {
             for (VertexID j = 1; j < matches->GetNVertices(); j++) {
               if (i == j) continue;
               if (!matches->IsValidCandidate(
@@ -1711,8 +1707,8 @@ static void Checking(const ImmutableCSR& p, const ImmutableCSR& /*g*/,
                 *(matches->GetMatchesDataPtr() +
                   weft_id * matches->GetNVertices() * 2 *
                       matches->GetMaxNLocalWeft() +
-                  i * 2 * matches->GetMaxNLocalWeft() + 2 * candidate_id +
-                  1) = kMaxVertexID;
+                  i * 2 * matches->GetMaxNLocalWeft() + 2 * candidate_id + 1) =
+                    kMaxVertexID;
                 matches->GetVDeletedCandidatesCountPtr()
                     [weft_id * (matches->GetNVertices() + 1) + i]++;
                 delete_count++;
@@ -1722,13 +1718,13 @@ static void Checking(const ImmutableCSR& p, const ImmutableCSR& /*g*/,
                       *(matches->GetMatchesDataPtr() +
                         weft_id * matches->GetNVertices() * 2 *
                             matches->GetMaxNLocalWeft() +
-                        i * 2 * matches->GetMaxNLocalWeft() +
-                        2 * candidate_id + 1))) {
+                        i * 2 * matches->GetMaxNLocalWeft() + 2 * candidate_id +
+                        1))) {
                 *(matches->GetMatchesDataPtr() +
                   weft_id * matches->GetNVertices() * 2 *
                       matches->GetMaxNLocalWeft() +
-                  i * 2 * matches->GetMaxNLocalWeft() + 2 * candidate_id +
-                  1) = kMaxVertexID;
+                  i * 2 * matches->GetMaxNLocalWeft() + 2 * candidate_id + 1) =
+                    kMaxVertexID;
                 *(matches->GetMatchesDataPtr() +
                   weft_id * matches->GetNVertices() * 2 *
                       matches->GetMaxNLocalWeft() +
@@ -1776,10 +1772,8 @@ void SubIsoCPU::RecursiveMatching(
 
   // Set header of matches
   for (VertexID _ = 0; _ < exec_plan.GetNEdges(); _++) {
-    auto src =
-        exec_plan.GetSequentialExecPathInEdgesPtr()->GetPtr()[_ * 2];
-    auto dst =
-        exec_plan.GetSequentialExecPathInEdgesPtr()->GetPtr()[_ * 2 + 1];
+    auto src = exec_plan.GetSequentialExecPathInEdgesPtr()->GetPtr()[_ * 2];
+    auto dst = exec_plan.GetSequentialExecPathInEdgesPtr()->GetPtr()[_ * 2 + 1];
     matches.SetHeader(_, std::make_pair(src, dst));
   }
 
@@ -1894,7 +1888,6 @@ void SubIsoCPU::LoadData() {
 
   auto* g_vlabel = g_.GetVLabelBasePointer();
   auto* p_vlabel = p_.GetVLabelBasePointer();
-
 
   if (matrix_path1_ != "" && matrix_path2_ != "" && matrix_path3_ != "" &&
       matrix_path4_ != "" && matrix_path5_ != "" && matrix_path6_ != "") {

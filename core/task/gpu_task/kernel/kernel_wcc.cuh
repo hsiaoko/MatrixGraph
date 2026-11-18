@@ -1,6 +1,8 @@
 #ifndef MATRIXGRAPH_CORE_TASK_GPU_TASK_KERNEL_KERNEL_WCC_CUH_
 #define MATRIXGRAPH_CORE_TASK_GPU_TASK_KERNEL_KERNEL_WCC_CUH_
 
+// HashMin WCC launch on the caller's stream: iterates label propagation
+// and leaves one component label per vertex in v_label_g.
 #include "core/common/types.h"
 #include "core/data_structures/device_buffer.cuh"
 #include "core/data_structures/edgelist.h"

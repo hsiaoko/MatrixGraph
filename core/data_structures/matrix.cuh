@@ -1,6 +1,8 @@
 #ifndef MATRIXGRAPH_CORE_DATA_STRUCTURES_MATRIX_CUH_
 #define MATRIXGRAPH_CORE_DATA_STRUCTURES_MATRIX_CUH_
 
+// Matrix: a dense row-major x_ by y_ float matrix on the host heap, used for
+// embeddings. Read sizes it from meta.yaml and fills it from embedding.bin.
 #include <stdint.h>
 #include <string>
 

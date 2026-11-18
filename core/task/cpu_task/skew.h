@@ -1,6 +1,8 @@
 #ifndef MATRIXGRAPH_CORE_TASK_CPU_TASK_SKEW_H_
 #define MATRIXGRAPH_CORE_TASK_CPU_TASK_SKEW_H_
 
+// Degree-skew task over a CSR data graph file, d_hat / d_bar where d_hat
+// is the sampled undirected diameter. Prints its result; returns nothing.
 #include "core/common/types.h"
 #include "core/data_structures/immutable_csr.cuh"
 #include "core/task/gpu_task/task_base.cuh"

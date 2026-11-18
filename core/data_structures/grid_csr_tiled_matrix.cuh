@@ -1,6 +1,8 @@
 #ifndef MATRIXGRAPH_CORE_DATA_STRUCTURES_GRID_CSR_TILED_MATRIX_CUH_
 #define MATRIXGRAPH_CORE_DATA_STRUCTURES_GRID_CSR_TILED_MATRIX_CUH_
 
+// GridCSRTiledMatrix: dense n_chunks x n_chunks grid of CSRTiledMatrix cells
+// indexed x * n_chunks + y; the vertex-label base is borrowed, not owned.
 #include "core/common/types.h"
 #include "core/data_structures/csr_tiled_matrix.cuh"
 #include "core/data_structures/metadata.h"

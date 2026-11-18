@@ -1,6 +1,8 @@
 #ifndef MATRIXGRAPH_CORE_TASK_CPU_TASK_DIAMETER_H_
 #define MATRIXGRAPH_CORE_TASK_CPU_TASK_DIAMETER_H_
 
+// Undirected diameter of a CSR data graph file. Results go to stdout; the
+// sampled mode is a lower bound on the true diameter.
 #include "core/common/types.h"
 #include "core/data_structures/immutable_csr.cuh"
 #include "core/task/gpu_task/task_base.cuh"

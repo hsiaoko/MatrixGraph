@@ -227,7 +227,6 @@ static __global__ void HashMinRangeKernel(ParametersWCC params) {
   //    VertexID nbr_v = out_edges_g[v_offset_base + nbr_v_idx];
 
   //    VertexLabel label_nbr_v = *(params.v_label_g + nbr_v);
-
 }
 
 /**

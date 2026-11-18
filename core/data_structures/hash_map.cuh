@@ -1,6 +1,8 @@
 #ifndef MATRIXGRAPH_CORE_DATA_STRUCTURES_HASH_MAP_CUH_
 #define MATRIXGRAPH_CORE_DATA_STRUCTURES_HASH_MAP_CUH_
 
+// Open-addressing hash tables with power-of-two capacity and linear probing.
+// HashMap is a borrowed view; Host/DeviceHashMap own the slots.
 #include "core/util/cuda_check.cuh"
 
 #include <cstdint>

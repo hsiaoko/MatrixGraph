@@ -119,10 +119,8 @@ inline ImmutableCSR* Edgelist2ImmutableCSR(const Edges& edgelist) {
       worker.begin(), worker.end(),
       [step, &min_vid, &num_out_edges_by_vid, &num_in_edges_by_vid, &visited,
        &edgelist, &buffer_edges_globalid_by_localid](auto& w) {
-        for (EdgeIndex i = w; i < edgelist.GetMetadata().num_edges;
-             i += step) {
-          auto edgelist_localid_2_globalid =
-              edgelist.GetLocalidToGlobalidPtr();
+        for (EdgeIndex i = w; i < edgelist.GetMetadata().num_edges; i += step) {
+          auto edgelist_localid_2_globalid = edgelist.GetLocalidToGlobalidPtr();
           auto e = edgelist.GetEdgeByIndex(i);
           e.src = edgelist_localid_2_globalid[e.src];
           e.dst = edgelist_localid_2_globalid[e.dst];
@@ -168,26 +166,24 @@ inline ImmutableCSR* Edgelist2ImmutableCSR(const Edges& edgelist) {
   EdgeIndex* offset_out_edges = new EdgeIndex[max_vid + 1]();
 
   // Fill edges in each vertex.
-  ParallelFor(worker.begin(), worker.end(),
-              [step, &min_vid, &num_out_edges_by_vid, &num_in_edges_by_vid,
-               &visited, &edgelist, &buffer_csr_vertices, &offset_in_edges,
-               &offset_out_edges](auto& w) {
-                for (EdgeIndex i = w; i < edgelist.GetMetadata().num_edges;
-                     i += step) {
-                  auto edgelist_localid_2_globalid =
-                      edgelist.GetLocalidToGlobalidPtr();
-                  auto e = edgelist.GetEdgeByIndex(i);
-                  e.src = edgelist_localid_2_globalid[e.src];
-                  e.dst = edgelist_localid_2_globalid[e.dst];
+  ParallelFor(
+      worker.begin(), worker.end(),
+      [step, &min_vid, &num_out_edges_by_vid, &num_in_edges_by_vid, &visited,
+       &edgelist, &buffer_csr_vertices, &offset_in_edges,
+       &offset_out_edges](auto& w) {
+        for (EdgeIndex i = w; i < edgelist.GetMetadata().num_edges; i += step) {
+          auto edgelist_localid_2_globalid = edgelist.GetLocalidToGlobalidPtr();
+          auto e = edgelist.GetEdgeByIndex(i);
+          e.src = edgelist_localid_2_globalid[e.src];
+          e.dst = edgelist_localid_2_globalid[e.dst];
 
-                  EdgeIndex offset_out = 0, offset_in = 0;
-                  offset_out =
-                      __sync_fetch_and_add(offset_out_edges + e.src, 1);
-                  offset_in = __sync_fetch_and_add(offset_in_edges + e.dst, 1);
-                  buffer_csr_vertices[e.src].outgoing_edges[offset_out] = e.dst;
-                  buffer_csr_vertices[e.dst].incoming_edges[offset_in] = e.src;
-                }
-              });
+          EdgeIndex offset_out = 0, offset_in = 0;
+          offset_out = __sync_fetch_and_add(offset_out_edges + e.src, 1);
+          offset_in = __sync_fetch_and_add(offset_in_edges + e.dst, 1);
+          buffer_csr_vertices[e.src].outgoing_edges[offset_out] = e.dst;
+          buffer_csr_vertices[e.dst].incoming_edges[offset_in] = e.src;
+        }
+      });
 
   delete[] offset_in_edges;
   delete[] offset_out_edges;

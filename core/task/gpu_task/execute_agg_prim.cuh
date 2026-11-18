@@ -1,6 +1,8 @@
 #ifndef MATRIXGRAPH_CORE_TASK_GPU_TASK_EXECUTE_AGG_PRIM_CUH_
 #define MATRIXGRAPH_CORE_TASK_GPU_TASK_EXECUTE_AGG_PRIM_CUH_
 
+// Device aggregation primitives (FeatureValue, AggPrim, AllFeatures) and
+// the kernels behind ExecuteAggPrim, which aggregates one list per request.
 #include "core/data_structures/attributes.h"
 #include "core/task/gpu_task/task_base.cuh"
 

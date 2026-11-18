@@ -88,8 +88,7 @@ __host__ void ComputeFeaturesTask::LoadGraph(const std::string& graph_path) {
   graph_->Read(graph_path);
   std::cout << "[ComputeFeaturesTask] Loaded graph: "
             << graph_->GetNumVertices() << " vertices, "
-            << graph_->GetNumOutgoingEdges() << " outgoing edges"
-            << std::endl;
+            << graph_->GetNumOutgoingEdges() << " outgoing edges" << std::endl;
   TransferGraphDataToDevice();
 }
 
@@ -446,11 +445,10 @@ __host__ std::vector<MatrixGraphFeatureValue> ComputeFeaturesTask::Compute(
 
   // Launch one block per pivot.
   kernel::ComputeFeaturesKernel<<<n_pivots, kWorkspaceCapacity>>>(
-      d_graph_data_, graph_->GetNumVertices(),
-      graph_->GetNumIncomingEdges(), graph_->GetNumOutgoingEdges(),
-      d_labels_, d_per_vertex_attrs_, d_pivot_vertex_ids, n_pivots, d_plan,
-      static_cast<uint32_t>(plan.size()), d_navs,
-      static_cast<uint32_t>(navs.size()), d_conds,
+      d_graph_data_, graph_->GetNumVertices(), graph_->GetNumIncomingEdges(),
+      graph_->GetNumOutgoingEdges(), d_labels_, d_per_vertex_attrs_,
+      d_pivot_vertex_ids, n_pivots, d_plan, static_cast<uint32_t>(plan.size()),
+      d_navs, static_cast<uint32_t>(navs.size()), d_conds,
       static_cast<uint32_t>(conds.size()), d_output_expr_indices, n_outputs,
       d_workspace, kWorkspaceCapacity, per_pivot_workspace, d_outputs);
   CUDA_CHECK(cudaDeviceSynchronize());

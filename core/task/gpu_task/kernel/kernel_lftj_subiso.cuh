@@ -1,6 +1,8 @@
 #ifndef MATRIXGRAPH_CORE_TASK_GPU_TASK_KERNEL_KERNEL_LFTJ_SUBISO_CUH_
 #define MATRIXGRAPH_CORE_TASK_GPU_TASK_KERNEL_KERNEL_LFTJ_SUBISO_CUH_
 
+// LFTJ enumeration on one GPU. Uploads the host CSR, candidates, order,
+// and backward-neighbor lists per call, and returns only the match count.
 #include "core/common/types.h"
 #include "core/data_structures/immutable_csr.cuh"
 

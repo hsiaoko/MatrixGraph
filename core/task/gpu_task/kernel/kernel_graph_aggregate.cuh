@@ -1,6 +1,8 @@
 #ifndef MATRIXGRAPH_CORE_TASK_GPU_TASK_KERNEL_KERNEL_GRAPH_AGGREGATE_CUH_
 #define MATRIXGRAPH_CORE_TASK_GPU_TASK_KERNEL_KERNEL_GRAPH_AGGREGATE_CUH_
 
+// GraphAggregate device kernels: feature requests per pivot over one
+// CSR, one prim per request or a fused pass; pointers are device memory.
 #include "core/data_structures/attributes.h"
 #include "core/data_structures/immutable_csr.cuh"
 #include "core/task/gpu_task/block_agg_prims.cuh"
