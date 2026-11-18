@@ -122,12 +122,8 @@ class ComputeFeaturesTask : public TaskBase {
   /** @brief Release all device buffers owned by this task. */
   __host__ void FreeDeviceBuffers();
 
-  /** @brief Size in bytes of one element of the given MatrixGraph value type.
-   */
-  __host__ static size_t ValueTypeSize(MatrixGraphValueType type);
-
-  /** @brief Convert an int32_t value-type code to the typed enum. */
-  __host__ static MatrixGraphValueType ValueTypeFromMG(int32_t type);
+  /** @brief Size in bytes of one element of the given value type. */
+  __host__ static size_t ValueTypeSize(data_structures::ValueType type);
 
   std::string graph_path_;
   std::unique_ptr<ImmutableCSR> graph_;
@@ -150,7 +146,7 @@ class ComputeFeaturesTask : public TaskBase {
   struct DeviceColumnBuffer {
     char key[64];
     void* d_values = nullptr;
-    MatrixGraphValueType type = MG_VALUE_INVALID;
+    data_structures::ValueType type = data_structures::ValueType::kInvalid;
     size_t bytes = 0;
   };
   std::vector<DeviceColumnBuffer> d_columns_;

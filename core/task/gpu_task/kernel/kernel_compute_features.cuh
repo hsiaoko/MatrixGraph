@@ -4,6 +4,7 @@
 #include "core/common/types.h"
 #include "core/data_structures/attributes.h"
 #include "core/task/gpu_task/compute_features_types.h"
+#include "core/task/gpu_task/execute_agg_prim.cuh"
 
 #include <cstdint>
 #include <cuda_runtime.h>
@@ -31,7 +32,6 @@ using MGExprType = MatrixGraphExprType;
 using MGNavType = MatrixGraphNavType;
 using MGCondType = MatrixGraphCondType;
 using MGPlanNode = MatrixGraphPlanNode;
-using MGFeatureValue = MatrixGraphFeatureValue;
 using MGCondNode = MatrixGraphCondNode;
 
 /**
@@ -58,16 +58,18 @@ constexpr uint32_t kComputeFeaturesMaxNeighbors = 256;
  * @param pivot_vid          Vertex id to use as the expression pivot.
  * @param expr_idx           Index into @p plan to evaluate.
  * @param workspace          Per-thread scratch workspace.
- * @param workspace_capacity Number of MGFeatureValue slots in one workspace
+ * @param workspace_capacity Number of FeatureValue slots in one workspace
  *                           slice (equal to blockDim.x).
  * @return The typed feature value produced by the expression.
  */
-__device__ MGFeatureValue EvalExpr(
-    const MGPlanNode* plan, const MGPlanNode* navs, const MGCondNode* conds,
-    const Attributes* vertex_attrs, const uint8_t* graph_data,
-    uint32_t n_vertices, uint32_t n_in_edges, uint32_t n_out_edges,
-    const uint32_t* labels, uint32_t pivot_vid, int32_t expr_idx,
-    MGFeatureValue* workspace, uint32_t workspace_capacity);
+__device__ FeatureValue EvalExpr(const MGPlanNode* plan, const MGPlanNode* navs,
+                                 const MGCondNode* conds,
+                                 const Attributes* vertex_attrs,
+                                 const uint8_t* graph_data, uint32_t n_vertices,
+                                 uint32_t n_in_edges, uint32_t n_out_edges,
+                                 const uint32_t* labels, uint32_t pivot_vid,
+                                 int32_t expr_idx, FeatureValue* workspace,
+                                 uint32_t workspace_capacity);
 
 /**
  * @brief Main kernel: one CUDA block per pivot, one thread per slot.
@@ -75,7 +77,7 @@ __device__ MGFeatureValue EvalExpr(
  * Each block evaluates every expression in @p output_expr_indices for its
  * assigned pivot and writes the results to @p outputs in row-major order.
  *
- * @param per_pivot_workspace Total number of MGFeatureValue slots reserved for
+ * @param per_pivot_workspace Total number of FeatureValue slots reserved for
  *                            each pivot.  Must be at least
  *                            workspace_capacity * max_workspace_depth.
  */
@@ -86,8 +88,8 @@ __global__ void ComputeFeaturesKernel(
     uint32_t n_pivots, const MGPlanNode* plan, uint32_t n_plan_nodes,
     const MGPlanNode* navs, uint32_t n_navs, const MGCondNode* conds,
     uint32_t n_conds, const int32_t* output_expr_indices, uint32_t n_outputs,
-    MGFeatureValue* workspace, uint32_t workspace_capacity,
-    uint32_t per_pivot_workspace, MGFeatureValue* outputs);
+    FeatureValue* workspace, uint32_t workspace_capacity,
+    uint32_t per_pivot_workspace, FeatureValue* outputs);
 
 }  // namespace kernel
 }  // namespace task

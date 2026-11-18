@@ -2,6 +2,7 @@
 #define MATRIXGRAPH_CORE_TASK_GPU_TASK_KERNEL_KERNEL_COMPUTE_FEATURES_PRIMITIVES_CUH_
 
 #include "core/task/gpu_task/compute_features_types.h"
+#include "core/task/gpu_task/execute_agg_prim.cuh"
 
 #include <cfloat>
 #include <cmath>
@@ -16,15 +17,13 @@ namespace kernel {
 
 /**
  * @file kernel_compute_features_primitives.cuh
- * @brief Block-level aggregation primitives and MGFeatureValue helpers.
+ * @brief Block-level aggregation primitives and FeatureValue helpers.
  *
  * All aggregation functions assume that `values` has at least blockDim.x
  * entries and that the valid prefix has length `n`.  Order-statistic
  * primitives (median, mode, quartiles, entropy, num_unique) require the caller
  * to pad unused slots with a value larger than any real value (DBL_MAX).
  */
-
-using MGFeatureValue = MatrixGraphFeatureValue;
 
 // Operator codes (match GraphAggregate AggPrim ordering).
 constexpr int32_t kAggCount = 0;
@@ -43,74 +42,6 @@ constexpr int32_t kAggQuartile3 = 12;
 constexpr int32_t kAggEntropy = 13;
 constexpr int32_t kAggPercentTrue = 14;
 constexpr int32_t kAggSkew = 15;
-
-/** @brief Construct an invalid MGFeatureValue. */
-__device__ __host__ inline MGFeatureValue MakeInvalidValue() {
-  MGFeatureValue r;
-  r.type = MG_VALUE_INVALID;
-  r.i64 = 0;
-  return r;
-}
-
-/** @brief Construct an integer MGFeatureValue. */
-__device__ __host__ inline MGFeatureValue MakeIntValue(int64_t v) {
-  MGFeatureValue r;
-  r.type = MG_VALUE_INT;
-  r.i64 = v;
-  return r;
-}
-
-/** @brief Construct a 64-bit floating point MGFeatureValue. */
-__device__ __host__ inline MGFeatureValue MakeFloatValue(double v) {
-  MGFeatureValue r;
-  r.type = MG_VALUE_FLOAT64;
-  r.f64 = v;
-  return r;
-}
-
-/** @brief Construct a boolean MGFeatureValue. */
-__device__ __host__ inline MGFeatureValue MakeBoolValue(bool v) {
-  MGFeatureValue r;
-  r.type = MG_VALUE_BOOL;
-  r.b = v ? 1 : 0;
-  return r;
-}
-
-/**
- * @brief Convert a typed MGFeatureValue to double for comparison/math.
- *
- * Invalid values are converted to 0.0.  Bool is 1.0 for true and 0.0 for false.
- */
-__device__ __host__ inline double ToDouble(const MGFeatureValue& v) {
-  switch (static_cast<MatrixGraphValueType>(v.type)) {
-    case MG_VALUE_INT:
-    case MG_VALUE_TIME:
-      return static_cast<double>(v.i64);
-    case MG_VALUE_FLOAT64:
-      return v.f64;
-    case MG_VALUE_FLOAT32:
-      return static_cast<double>(v.f64);
-    case MG_VALUE_BOOL:
-      return v.b ? 1.0 : 0.0;
-    default:
-      return 0.0;
-  }
-}
-
-/** @brief Return true if the value is not MG_VALUE_INVALID. */
-__device__ __host__ inline bool IsValid(const MGFeatureValue& v) {
-  return static_cast<MatrixGraphValueType>(v.type) != MG_VALUE_INVALID;
-}
-
-/** @brief Three-way comparison using ToDouble(). */
-__device__ __host__ inline int Compare(const MGFeatureValue& a,
-                                       const MGFeatureValue& b) {
-  double da = ToDouble(a);
-  double db = ToDouble(b);
-  if (da < db) return -1;
-  if (da > db) return 1;
-  return 0;
-}
 
 // ---------------------------------------------------------------------------
 // Block reductions (all threads participate, result broadcast to all threads).
@@ -179,9 +110,9 @@ __device__ inline double BlockMaxVal(double local) {
 // (we use DBL_MAX sentinel) before calling.
 // ---------------------------------------------------------------------------
 
-/** @brief Swap two MGFeatureValue values. */
-__device__ inline void SwapValues(MGFeatureValue& a, MGFeatureValue& b) {
-  MGFeatureValue tmp = a;
+/** @brief Swap two FeatureValue values. */
+__device__ inline void SwapValues(FeatureValue& a, FeatureValue& b) {
+  FeatureValue tmp = a;
   a = b;
   b = tmp;
 }
@@ -191,17 +122,17 @@ __device__ inline void SwapValues(MGFeatureValue& a, MGFeatureValue& b) {
  *
  * All threads participate.  The array must contain at least blockDim.x entries.
  */
-__device__ inline void BlockBitonicSort(MGFeatureValue* arr) {
+__device__ inline void BlockBitonicSort(FeatureValue* arr) {
   for (uint32_t k = 2; k <= blockDim.x; k <<= 1) {
     for (uint32_t j = k >> 1; j > 0; j >>= 1) {
       uint32_t ixj = threadIdx.x ^ j;
       if (ixj > threadIdx.x) {
         if ((threadIdx.x & k) == 0) {
-          if (Compare(arr[threadIdx.x], arr[ixj]) > 0) {
+          if (arr[threadIdx.x].Compare(arr[ixj]) > 0) {
             SwapValues(arr[threadIdx.x], arr[ixj]);
           }
         } else {
-          if (Compare(arr[threadIdx.x], arr[ixj]) < 0) {
+          if (arr[threadIdx.x].Compare(arr[ixj]) < 0) {
             SwapValues(arr[threadIdx.x], arr[ixj]);
           }
         }
@@ -219,97 +150,93 @@ __device__ inline void BlockBitonicSort(MGFeatureValue* arr) {
 // ---------------------------------------------------------------------------
 
 /** @brief Number of bindings. */
-__device__ inline MGFeatureValue AggCount(const MGFeatureValue*, uint32_t n) {
+__device__ inline FeatureValue AggCount(const FeatureValue*, uint32_t n) {
   return MakeIntValue(static_cast<int64_t>(n));
 }
 
 /** @brief Sum of the values. */
-__device__ inline MGFeatureValue AggSum(const MGFeatureValue* values,
-                                        uint32_t n) {
+__device__ inline FeatureValue AggSum(const FeatureValue* values, uint32_t n) {
   if (n == 0) return MakeInvalidValue();
   double local = 0.0;
-  if (threadIdx.x < n) local = ToDouble(values[threadIdx.x]);
+  if (threadIdx.x < n) local = values[threadIdx.x].ToDouble();
   double sum = BlockSum(local);
-  return MakeFloatValue(sum);
+  return MakeFloat64Value(sum);
 }
 
 /** @brief Arithmetic mean. */
-__device__ inline MGFeatureValue AggMean(const MGFeatureValue* values,
-                                         uint32_t n) {
+__device__ inline FeatureValue AggMean(const FeatureValue* values, uint32_t n) {
   if (n == 0) return MakeInvalidValue();
   double local = 0.0;
-  if (threadIdx.x < n) local = ToDouble(values[threadIdx.x]);
+  if (threadIdx.x < n) local = values[threadIdx.x].ToDouble();
   double sum = BlockSum(local);
-  return MakeFloatValue(sum / static_cast<double>(n));
+  return MakeFloat64Value(sum / static_cast<double>(n));
 }
 
 /** @brief Minimum value. */
-__device__ inline MGFeatureValue AggMin(const MGFeatureValue* values,
-                                        uint32_t n) {
+__device__ inline FeatureValue AggMin(const FeatureValue* values, uint32_t n) {
   if (n == 0) return MakeInvalidValue();
   double local = DBL_MAX;
-  if (threadIdx.x < n) local = ToDouble(values[threadIdx.x]);
+  if (threadIdx.x < n) local = values[threadIdx.x].ToDouble();
   double m = BlockMinVal(local);
-  return MakeFloatValue(m);
+  return MakeFloat64Value(m);
 }
 
 /** @brief Maximum value. */
-__device__ inline MGFeatureValue AggMax(const MGFeatureValue* values,
-                                        uint32_t n) {
+__device__ inline FeatureValue AggMax(const FeatureValue* values, uint32_t n) {
   if (n == 0) return MakeInvalidValue();
   double local = -DBL_MAX;
-  if (threadIdx.x < n) local = ToDouble(values[threadIdx.x]);
+  if (threadIdx.x < n) local = values[threadIdx.x].ToDouble();
   double m = BlockMaxVal(local);
-  return MakeFloatValue(m);
+  return MakeFloat64Value(m);
 }
 
 /** @brief Population variance. */
-__device__ inline MGFeatureValue AggVariance(const MGFeatureValue* values,
-                                             uint32_t n) {
+__device__ inline FeatureValue AggVariance(const FeatureValue* values,
+                                           uint32_t n) {
   if (n == 0) return MakeInvalidValue();
   double local = 0.0;
-  if (threadIdx.x < n) local = ToDouble(values[threadIdx.x]);
+  if (threadIdx.x < n) local = values[threadIdx.x].ToDouble();
   double mean = BlockSum(local) / static_cast<double>(n);
   double diff = 0.0;
   if (threadIdx.x < n) {
-    double d = ToDouble(values[threadIdx.x]) - mean;
+    double d = values[threadIdx.x].ToDouble() - mean;
     diff = d * d;
   }
   double sum = BlockSum(diff);
-  return MakeFloatValue(sum / static_cast<double>(n));
+  return MakeFloat64Value(sum / static_cast<double>(n));
 }
 
 /** @brief Population standard deviation. */
-__device__ inline MGFeatureValue AggStd(const MGFeatureValue* values,
-                                        uint32_t n) {
-  MGFeatureValue var = AggVariance(values, n);
-  if (!IsValid(var)) return var;
-  return MakeFloatValue(sqrt(var.f64));
+__device__ inline FeatureValue AggStd(const FeatureValue* values, uint32_t n) {
+  FeatureValue var = AggVariance(values, n);
+  if (!var.IsValid()) return var;
+  return MakeFloat64Value(sqrt(var.f64));
 }
 
 /** @brief Fraction of bindings whose boolean value is true. */
-__device__ inline MGFeatureValue AggPercentTrue(const MGFeatureValue* values,
-                                                uint32_t n) {
+__device__ inline FeatureValue AggPercentTrue(const FeatureValue* values,
+                                              uint32_t n) {
   if (n == 0) return MakeInvalidValue();
   double local = 0.0;
   if (threadIdx.x < n) {
-    local = (values[threadIdx.x].type == MG_VALUE_BOOL && values[threadIdx.x].b)
-                ? 1.0
-                : 0.0;
+    local =
+        (values[threadIdx.x].type == ValueType::kBool && values[threadIdx.x].b)
+            ? 1.0
+            : 0.0;
   }
   double cnt = BlockSum(local);
-  return MakeFloatValue(cnt / static_cast<double>(n));
+  return MakeFloat64Value(cnt / static_cast<double>(n));
 }
 
 /** @brief Count of values strictly greater than the mean. */
-__device__ inline MGFeatureValue AggCountGreaterThanMean(
-    const MGFeatureValue* values, uint32_t n) {
+__device__ inline FeatureValue AggCountGreaterThanMean(
+    const FeatureValue* values, uint32_t n) {
   if (n == 0) return MakeInvalidValue();
   double local = 0.0;
-  if (threadIdx.x < n) local = ToDouble(values[threadIdx.x]);
+  if (threadIdx.x < n) local = values[threadIdx.x].ToDouble();
   double mean = BlockSum(local) / static_cast<double>(n);
   double cnt = 0.0;
-  if (threadIdx.x < n && ToDouble(values[threadIdx.x]) > mean) cnt = 1.0;
+  if (threadIdx.x < n && values[threadIdx.x].ToDouble() > mean) cnt = 1.0;
   cnt = BlockSum(cnt);
   return MakeIntValue(static_cast<int64_t>(cnt));
 }
@@ -319,8 +246,8 @@ __device__ inline MGFeatureValue AggCountGreaterThanMean(
  *
  * The caller must sort @p values before calling this function.
  */
-__device__ inline MGFeatureValue AggMedian(const MGFeatureValue* values,
-                                           uint32_t n) {
+__device__ inline FeatureValue AggMedian(const FeatureValue* values,
+                                         uint32_t n) {
   if (n == 0) return MakeInvalidValue();
   if (threadIdx.x == 0) {
     return values[n / 2];
@@ -333,16 +260,16 @@ __device__ inline MGFeatureValue AggMedian(const MGFeatureValue* values,
  *
  * The caller must sort @p values before calling this function.
  */
-__device__ inline MGFeatureValue AggQuarter(const MGFeatureValue* values,
-                                            uint32_t n) {
+__device__ inline FeatureValue AggQuarter(const FeatureValue* values,
+                                          uint32_t n) {
   if (n == 0) return MakeInvalidValue();
   if (n == 1) return values[0];
   double pos = 0.25 * static_cast<double>(n - 1);
   uint32_t lo = static_cast<uint32_t>(floor(pos));
   uint32_t hi = static_cast<uint32_t>(ceil(pos));
   double w = pos - static_cast<double>(lo);
-  double v = ToDouble(values[lo]) * (1.0 - w) + ToDouble(values[hi]) * w;
-  return MakeFloatValue(v);
+  double v = values[lo].ToDouble() * (1.0 - w) + values[hi].ToDouble() * w;
+  return MakeFloat64Value(v);
 }
 
 /**
@@ -350,16 +277,16 @@ __device__ inline MGFeatureValue AggQuarter(const MGFeatureValue* values,
  *
  * The caller must sort @p values before calling this function.
  */
-__device__ inline MGFeatureValue AggQuartile3(const MGFeatureValue* values,
-                                              uint32_t n) {
+__device__ inline FeatureValue AggQuartile3(const FeatureValue* values,
+                                            uint32_t n) {
   if (n == 0) return MakeInvalidValue();
   if (n == 1) return values[0];
   double pos = 0.75 * static_cast<double>(n - 1);
   uint32_t lo = static_cast<uint32_t>(floor(pos));
   uint32_t hi = static_cast<uint32_t>(ceil(pos));
   double w = pos - static_cast<double>(lo);
-  double v = ToDouble(values[lo]) * (1.0 - w) + ToDouble(values[hi]) * w;
-  return MakeFloatValue(v);
+  double v = values[lo].ToDouble() * (1.0 - w) + values[hi].ToDouble() * w;
+  return MakeFloat64Value(v);
 }
 
 /**
@@ -368,15 +295,14 @@ __device__ inline MGFeatureValue AggQuartile3(const MGFeatureValue* values,
  * The caller must sort @p values before calling this function.  Only thread 0
  * performs the linear scan; other threads return the same value.
  */
-__device__ inline MGFeatureValue AggMode(const MGFeatureValue* values,
-                                         uint32_t n) {
+__device__ inline FeatureValue AggMode(const FeatureValue* values, uint32_t n) {
   if (n == 0) return MakeInvalidValue();
   if (threadIdx.x != 0) return values[0];
   uint32_t max_count = 1;
   uint32_t curr_count = 1;
   uint32_t mode_idx = 0;
   for (uint32_t i = 1; i < n; ++i) {
-    if (Compare(values[i], values[i - 1]) == 0) {
+    if (values[i].Compare(values[i - 1]) == 0) {
       ++curr_count;
     } else {
       curr_count = 1;
@@ -394,13 +320,13 @@ __device__ inline MGFeatureValue AggMode(const MGFeatureValue* values,
  *
  * The caller must sort @p values before calling this function.
  */
-__device__ inline MGFeatureValue AggNumUnique(const MGFeatureValue* values,
-                                              uint32_t n) {
+__device__ inline FeatureValue AggNumUnique(const FeatureValue* values,
+                                            uint32_t n) {
   if (n == 0) return MakeInvalidValue();
   if (threadIdx.x != 0) return MakeIntValue(0);
   uint32_t uniq = 1;
   for (uint32_t i = 1; i < n; ++i) {
-    if (Compare(values[i], values[i - 1]) != 0) ++uniq;
+    if (values[i].Compare(values[i - 1]) != 0) ++uniq;
   }
   return MakeIntValue(static_cast<int64_t>(uniq));
 }
@@ -410,20 +336,20 @@ __device__ inline MGFeatureValue AggNumUnique(const MGFeatureValue* values,
  *
  * The caller must sort @p values before calling this function.
  */
-__device__ inline MGFeatureValue AggEntropy(const MGFeatureValue* values,
-                                            uint32_t n) {
+__device__ inline FeatureValue AggEntropy(const FeatureValue* values,
+                                          uint32_t n) {
   if (n == 0) return MakeInvalidValue();
-  if (threadIdx.x != 0) return MakeFloatValue(0.0);
+  if (threadIdx.x != 0) return MakeFloat64Value(0.0);
   double entropy = 0.0;
   uint32_t i = 0;
   while (i < n) {
     uint32_t j = i + 1;
-    while (j < n && Compare(values[j], values[i]) == 0) ++j;
+    while (j < n && values[j].Compare(values[i]) == 0) ++j;
     double p = static_cast<double>(j - i) / static_cast<double>(n);
     entropy -= p * log2(p);
     i = j;
   }
-  return MakeFloatValue(entropy);
+  return MakeFloat64Value(entropy);
 }
 
 /**
@@ -432,16 +358,15 @@ __device__ inline MGFeatureValue AggEntropy(const MGFeatureValue* values,
  * Computed as the average standardized third moment.  Returns invalid if the
  * standard deviation is zero.
  */
-__device__ inline MGFeatureValue AggSkew(const MGFeatureValue* values,
-                                         uint32_t n) {
+__device__ inline FeatureValue AggSkew(const FeatureValue* values, uint32_t n) {
   if (n == 0) return MakeInvalidValue();
   double local = 0.0;
-  if (threadIdx.x < n) local = ToDouble(values[threadIdx.x]);
+  if (threadIdx.x < n) local = values[threadIdx.x].ToDouble();
   double mean = BlockSum(local) / static_cast<double>(n);
 
   double sq = 0.0;
   if (threadIdx.x < n) {
-    double d = ToDouble(values[threadIdx.x]) - mean;
+    double d = values[threadIdx.x].ToDouble() - mean;
     sq = d * d;
   }
   double variance = BlockSum(sq) / static_cast<double>(n);
@@ -450,11 +375,11 @@ __device__ inline MGFeatureValue AggSkew(const MGFeatureValue* values,
 
   double cube = 0.0;
   if (threadIdx.x < n) {
-    double z = (ToDouble(values[threadIdx.x]) - mean) / stdv;
+    double z = (values[threadIdx.x].ToDouble() - mean) / stdv;
     cube = z * z * z;
   }
   double sum = BlockSum(cube);
-  return MakeFloatValue(sum / static_cast<double>(n));
+  return MakeFloat64Value(sum / static_cast<double>(n));
 }
 
 // ---------------------------------------------------------------------------
@@ -468,9 +393,8 @@ __device__ inline MGFeatureValue AggSkew(const MGFeatureValue* values,
  * Order-statistic primitives trigger an in-place bitonic sort before the
  * primitive is evaluated.
  */
-__device__ inline MGFeatureValue ApplyAggPrim(int32_t prim,
-                                              MGFeatureValue* values,
-                                              uint32_t n) {
+__device__ inline FeatureValue ApplyAggPrim(int32_t prim, FeatureValue* values,
+                                            uint32_t n) {
   // For order-statistic primitives we need a sorted array.
   const bool needs_sort =
       (prim == kAggMedian || prim == kAggMode || prim == kAggNumUnique ||
@@ -479,7 +403,7 @@ __device__ inline MGFeatureValue ApplyAggPrim(int32_t prim,
   if (needs_sort) {
     // Pad unused entries with a value larger than any real value.
     if (threadIdx.x >= n && threadIdx.x < blockDim.x) {
-      values[threadIdx.x] = MakeFloatValue(DBL_MAX);
+      values[threadIdx.x] = MakeFloat64Value(DBL_MAX);
     }
     __syncthreads();
     BlockBitonicSort(values);

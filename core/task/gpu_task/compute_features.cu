@@ -1,4 +1,5 @@
 #include "core/task/gpu_task/compute_features.cuh"
+#include "core/task/gpu_task/compute_features_value.h"
 #include "core/util/cuda_check.cuh"
 
 #include <cstdio>
@@ -31,45 +32,21 @@ using DeviceAttributes =
 // ---------------------------------------------------------------------------
 // Value type helpers.
 // ---------------------------------------------------------------------------
-__host__ ValueType MGToInternalValueType(MatrixGraphValueType type) {
+__host__ size_t ComputeFeaturesTask::ValueTypeSize(ValueType type) {
   switch (type) {
-    case MG_VALUE_INT:
-      return ValueType::kInt;
-    case MG_VALUE_FLOAT64:
-      return ValueType::kFloat64;
-    case MG_VALUE_BOOL:
-      return ValueType::kBool;
-    case MG_VALUE_TIME:
-      return ValueType::kTime;
-    case MG_VALUE_FLOAT32:
-      return ValueType::kFloat32;
-    case MG_VALUE_STRING:
-      return ValueType::kString;
-    default:
-      return ValueType::kInvalid;
-  }
-}
-
-__host__ size_t ComputeFeaturesTask::ValueTypeSize(MatrixGraphValueType type) {
-  switch (type) {
-    case MG_VALUE_INT:
-    case MG_VALUE_FLOAT64:
-    case MG_VALUE_TIME:
+    case ValueType::kInt:
+    case ValueType::kFloat64:
+    case ValueType::kTime:
       return 8;
-    case MG_VALUE_BOOL:
+    case ValueType::kBool:
       return 1;
-    case MG_VALUE_FLOAT32:
+    case ValueType::kFloat32:
       return 4;
-    case MG_VALUE_STRING:
+    case ValueType::kString:
       return sizeof(sics::matrixgraph::core::data_structures::StringView);
     default:
       return 0;
   }
-}
-
-__host__ MatrixGraphValueType
-ComputeFeaturesTask::ValueTypeFromMG(int32_t type) {
-  return static_cast<MatrixGraphValueType>(type);
 }
 
 // ---------------------------------------------------------------------------
@@ -141,8 +118,8 @@ __host__ void ComputeFeaturesTask::LoadAttributes(
                 << n_vertices << std::endl;
       return;
     }
-    MatrixGraphValueType mg_type = ValueTypeFromMG(col.value_type);
-    size_t elem_size = ValueTypeSize(mg_type);
+    ValueType type = ToValueType(col.value_type);
+    size_t elem_size = ValueTypeSize(type);
     if (elem_size == 0 || col.values == nullptr) {
       std::cerr << "[ComputeFeaturesTask::LoadAttributes] Unsupported or empty"
                    " column type for '"
@@ -153,7 +130,7 @@ __host__ void ComputeFeaturesTask::LoadAttributes(
     DeviceColumnBuffer buf;
     std::strncpy(buf.key, col.key, sizeof(buf.key) - 1);
     buf.key[sizeof(buf.key) - 1] = '\0';
-    buf.type = mg_type;
+    buf.type = type;
     buf.bytes = elem_size * col.n_values;
     CUDA_CHECK(cudaMalloc(&buf.d_values, buf.bytes));
     CUDA_CHECK(cudaMemcpy(buf.d_values, col.values, buf.bytes,
@@ -174,13 +151,13 @@ __host__ void ComputeFeaturesTask::LoadAttributes(
 
   for (uint32_t v = 0; v < n_vertices; ++v) {
     for (size_t c = 0; c < total_n_columns; ++c) {
-      MatrixGraphValueType mg_type = d_columns_[c].type;
-      size_t elem_size = ValueTypeSize(mg_type);
+      ValueType type = d_columns_[c].type;
+      size_t elem_size = ValueTypeSize(type);
       attrs[c] = Attribute{};
       std::snprintf(attrs[c].name, sizeof(attrs[c].name), "%.*s",
                     static_cast<int>(sizeof(attrs[c].name) - 1),
                     d_columns_[c].key);
-      attrs[c].type = MGToInternalValueType(mg_type);
+      attrs[c].type = type;
       attrs[c].n_rows = 1;
       attrs[c].n_elements = 1;
       attrs[c].data =
@@ -423,12 +400,12 @@ __host__ std::vector<MatrixGraphFeatureValue> ComputeFeaturesTask::Compute(
   const uint32_t per_pivot_workspace =
       kWorkspaceCapacity *
       ComputePlanMaxWorkspaceDepth(plan, navs, output_expr_indices);
-  MatrixGraphFeatureValue* d_workspace = nullptr;
-  MatrixGraphFeatureValue* d_outputs = nullptr;
-  CUDA_CHECK(cudaMalloc(&d_workspace, sizeof(MatrixGraphFeatureValue) *
-                                          n_pivots * per_pivot_workspace));
-  CUDA_CHECK(cudaMalloc(
-      &d_outputs, sizeof(MatrixGraphFeatureValue) * n_pivots * n_outputs));
+  FeatureValue* d_workspace = nullptr;
+  FeatureValue* d_outputs = nullptr;
+  CUDA_CHECK(cudaMalloc(&d_workspace,
+                        sizeof(FeatureValue) * n_pivots * per_pivot_workspace));
+  CUDA_CHECK(
+      cudaMalloc(&d_outputs, sizeof(FeatureValue) * n_pivots * n_outputs));
 
 #ifndef NDEBUG
   // -G device-debug instrumentation inflates the plan interpreter's stack
@@ -453,10 +430,16 @@ __host__ std::vector<MatrixGraphFeatureValue> ComputeFeaturesTask::Compute(
       d_workspace, kWorkspaceCapacity, per_pivot_workspace, d_outputs);
   CUDA_CHECK(cudaDeviceSynchronize());
 
-  result.resize(n_pivots * n_outputs);
-  CUDA_CHECK(cudaMemcpy(result.data(), d_outputs,
-                        sizeof(MatrixGraphFeatureValue) * n_pivots * n_outputs,
+  // The device computes on FeatureValue; the wire struct only exists at the
+  // C-facing API boundary.
+  std::vector<FeatureValue> raw(n_pivots * n_outputs);
+  CUDA_CHECK(cudaMemcpy(raw.data(), d_outputs,
+                        sizeof(FeatureValue) * n_pivots * n_outputs,
                         cudaMemcpyDeviceToHost));
+  result.resize(n_pivots * n_outputs);
+  for (size_t i = 0; i < raw.size(); ++i) {
+    result[i] = ToWireValue(raw[i]);
+  }
 
   cudaFree(d_plan);
   cudaFree(d_navs);

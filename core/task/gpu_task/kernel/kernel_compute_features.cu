@@ -1,4 +1,5 @@
 #include "core/data_structures/attributes.h"
+#include "core/task/gpu_task/compute_features_value.h"
 #include "core/task/gpu_task/kernel/kernel_compute_features.cuh"
 #include "core/task/gpu_task/kernel/kernel_compute_features_primitives.cuh"
 
@@ -43,35 +44,6 @@ using sics::matrixgraph::core::data_structures::GetInt;
 
 // Sentinel vertex id used to mark filtered-out bindings.
 constexpr uint32_t kInvalidVid = 0xffffffffu;
-
-// ---------------------------------------------------------------------------
-// Value type conversion (internal ValueType -> MG value type).
-// ---------------------------------------------------------------------------
-
-/**
- * @brief Convert an internal Attribute ValueType to the MG public type tag.
- *
- * This is used by ReadAttribute() so that attribute values produced by the
- * existing data_structures layer can be returned as MGFeatureValue.
- */
-__device__ __host__ inline int32_t ValueTypeToMG(ValueType t) {
-  switch (t) {
-    case ValueType::kInt:
-      return MG_VALUE_INT;
-    case ValueType::kFloat64:
-      return MG_VALUE_FLOAT64;
-    case ValueType::kBool:
-      return MG_VALUE_BOOL;
-    case ValueType::kTime:
-      return MG_VALUE_TIME;
-    case ValueType::kFloat32:
-      return MG_VALUE_FLOAT32;
-    case ValueType::kString:
-      return MG_VALUE_STRING;
-    default:
-      return MG_VALUE_INVALID;
-  }
-}
 
 // ---------------------------------------------------------------------------
 // CSR buffer parsing (matches ImmutableCSR layout).
@@ -123,16 +95,18 @@ __device__ inline CSRView ParseCSR(const uint8_t* graph_data,
  * @brief Read a per-vertex attribute by name.
  *
  * Looks up the attribute in the per-vertex map built by LoadAttributes().
- * Returns MG_VALUE_INVALID if the key is missing.
+ * Returns an invalid value if the key is missing.  The attribute's own type
+ * tag is preserved so that a TIME or FLOAT32 column keeps its identity when it
+ * flows straight through to an output slot.
  */
-__device__ inline MGFeatureValue ReadAttribute(const Attributes* attrs,
-                                               uint32_t vid, const char* key) {
+__device__ inline FeatureValue ReadAttribute(const Attributes* attrs,
+                                             uint32_t vid, const char* key) {
   const AttributeName name(key);
   const Attribute* attr = attrs[vid].attr_map.find(name);
   if (attr == nullptr) return MakeInvalidValue();
 
-  MGFeatureValue v;
-  v.type = ValueTypeToMG(attr->type);
+  FeatureValue v = MakeInvalidValue();
+  v.type = attr->type;
   switch (attr->type) {
     case ValueType::kInt:
     case ValueType::kTime:
@@ -143,7 +117,7 @@ __device__ inline MGFeatureValue ReadAttribute(const Attributes* attrs,
       v.f64 = GetFloat64(*attr, 0);
       return v;
     case ValueType::kBool:
-      v.b = GetBool(*attr, 0) ? 1 : 0;
+      v.b = GetBool(*attr, 0);
       return v;
     default:
       return MakeInvalidValue();
@@ -202,12 +176,14 @@ __device__ inline void ResolveNeighborNav(const MGPlanNode* navs,
 // ---------------------------------------------------------------------------
 
 // Forward declaration so EvalCond() can evaluate expression sub-trees.
-__device__ MGFeatureValue EvalExpr(
-    const MGPlanNode* plan, const MGPlanNode* navs, const MGCondNode* conds,
-    const Attributes* vertex_attrs, const uint8_t* graph_data,
-    uint32_t n_vertices, uint32_t n_in_edges, uint32_t n_out_edges,
-    const uint32_t* labels, uint32_t pivot_vid, int32_t expr_idx,
-    MGFeatureValue* workspace, uint32_t workspace_capacity);
+__device__ FeatureValue EvalExpr(const MGPlanNode* plan, const MGPlanNode* navs,
+                                 const MGCondNode* conds,
+                                 const Attributes* vertex_attrs,
+                                 const uint8_t* graph_data, uint32_t n_vertices,
+                                 uint32_t n_in_edges, uint32_t n_out_edges,
+                                 const uint32_t* labels, uint32_t pivot_vid,
+                                 int32_t expr_idx, FeatureValue* workspace,
+                                 uint32_t workspace_capacity);
 
 // ---------------------------------------------------------------------------
 // Condition evaluation for FilterNav.
@@ -225,19 +201,19 @@ __device__ inline bool EvalCond(const MGCondNode* conds, int32_t cond_idx,
                                 const uint8_t* graph_data, uint32_t n_vertices,
                                 uint32_t n_in_edges, uint32_t n_out_edges,
                                 const uint32_t* labels, uint32_t binding_vid,
-                                MGFeatureValue* workspace,
+                                FeatureValue* workspace,
                                 uint32_t workspace_capacity) {
   const MGCondNode& c = conds[cond_idx];
-  MGFeatureValue a =
+  FeatureValue a =
       EvalExpr(plan, navs, conds, vertex_attrs, graph_data, n_vertices,
                n_in_edges, n_out_edges, labels, binding_vid, c.left_expr,
                workspace + workspace_capacity, workspace_capacity);
-  MGFeatureValue b =
+  FeatureValue b =
       EvalExpr(plan, navs, conds, vertex_attrs, graph_data, n_vertices,
                n_in_edges, n_out_edges, labels, binding_vid, c.right_expr,
                workspace + workspace_capacity, workspace_capacity);
-  double da = ToDouble(a);
-  double db = ToDouble(b);
+  double da = a.ToDouble();
+  double db = b.ToDouble();
   bool keep;
   switch (static_cast<MatrixGraphCondType>(c.op)) {
     case MG_COND_EQ:
@@ -285,7 +261,7 @@ __device__ inline uint32_t CollectBindings(
     const Attributes* vertex_attrs, const uint8_t* graph_data,
     uint32_t n_vertices, uint32_t n_in_edges, uint32_t n_out_edges,
     const uint32_t* labels, uint32_t pivot_vid, int32_t nav_idx,
-    MGFeatureValue* workspace, uint32_t workspace_capacity) {
+    FeatureValue* workspace, uint32_t workspace_capacity) {
   const MGPlanNode& nav = navs[nav_idx];
   const MatrixGraphNavType nav_type = static_cast<MatrixGraphNavType>(nav.type);
 
@@ -326,7 +302,7 @@ __device__ inline uint32_t CollectBindings(
 
   if (nav_type == MG_NAV_FILTER) {
     // Collect inner bindings into the scratch area.
-    MGFeatureValue* scratch = workspace + workspace_capacity;
+    FeatureValue* scratch = workspace + workspace_capacity;
     uint32_t inner_count =
         CollectBindings(plan, navs, conds, vertex_attrs, graph_data, n_vertices,
                         n_in_edges, n_out_edges, labels, pivot_vid,
@@ -378,12 +354,14 @@ __device__ inline uint32_t CollectBindings(
  *   - AGG: collect bindings from the referenced navigator, evaluate the source
  *          expression for every binding, and apply an aggregation primitive.
  */
-__device__ MGFeatureValue EvalExpr(
-    const MGPlanNode* plan, const MGPlanNode* navs, const MGCondNode* conds,
-    const Attributes* vertex_attrs, const uint8_t* graph_data,
-    uint32_t n_vertices, uint32_t n_in_edges, uint32_t n_out_edges,
-    const uint32_t* labels, uint32_t pivot_vid, int32_t expr_idx,
-    MGFeatureValue* workspace, uint32_t workspace_capacity) {
+__device__ FeatureValue EvalExpr(const MGPlanNode* plan, const MGPlanNode* navs,
+                                 const MGCondNode* conds,
+                                 const Attributes* vertex_attrs,
+                                 const uint8_t* graph_data, uint32_t n_vertices,
+                                 uint32_t n_in_edges, uint32_t n_out_edges,
+                                 const uint32_t* labels, uint32_t pivot_vid,
+                                 int32_t expr_idx, FeatureValue* workspace,
+                                 uint32_t workspace_capacity) {
   const MGPlanNode& node = plan[expr_idx];
   const MatrixGraphExprType type = static_cast<MatrixGraphExprType>(node.type);
 
@@ -392,23 +370,22 @@ __device__ MGFeatureValue EvalExpr(
   }
 
   if (type == MG_EXPR_CONST) {
-    MGFeatureValue v;
-    v.type = node.const_type;
-    switch (static_cast<MatrixGraphValueType>(v.type)) {
-      case MG_VALUE_INT:
-      case MG_VALUE_TIME:
+    FeatureValue v = MakeInvalidValue();
+    v.type = ToValueType(node.const_type);
+    switch (v.type) {
+      case ValueType::kInt:
+      case ValueType::kTime:
         v.i64 = node.const_i64;
         break;
-      case MG_VALUE_FLOAT64:
-      case MG_VALUE_FLOAT32:
+      case ValueType::kFloat64:
+      case ValueType::kFloat32:
         v.f64 = node.const_f64;
         break;
-      case MG_VALUE_BOOL:
-        v.b = node.const_b;
+      case ValueType::kBool:
+        v.b = node.const_b != 0;
         break;
       default:
-        v.i64 = 0;
-        break;
+        return MakeInvalidValue();
     }
     return v;
   }
@@ -422,45 +399,45 @@ __device__ MGFeatureValue EvalExpr(
 
     // Unary operators only need child_a.
     if (op == MG_TRANS_NEG || op == MG_TRANS_ABS || op == MG_TRANS_SQRT) {
-      MGFeatureValue a =
+      FeatureValue a =
           EvalExpr(plan, navs, conds, vertex_attrs, graph_data, n_vertices,
                    n_in_edges, n_out_edges, labels, pivot_vid, node.child_a,
                    workspace + workspace_capacity, workspace_capacity);
-      double da = ToDouble(a);
+      double da = a.ToDouble();
       switch (op) {
         case MG_TRANS_NEG:
-          return MakeFloatValue(-da);
+          return MakeFloat64Value(-da);
         case MG_TRANS_ABS:
-          return MakeFloatValue(fabs(da));
+          return MakeFloat64Value(fabs(da));
         case MG_TRANS_SQRT:
-          return MakeFloatValue(sqrt(da));
+          return MakeFloat64Value(sqrt(da));
         default:
           return MakeInvalidValue();
       }
     }
 
     // Binary operators.
-    MGFeatureValue a =
+    FeatureValue a =
         EvalExpr(plan, navs, conds, vertex_attrs, graph_data, n_vertices,
                  n_in_edges, n_out_edges, labels, pivot_vid, node.child_a,
                  workspace + workspace_capacity, workspace_capacity);
-    MGFeatureValue b =
+    FeatureValue b =
         EvalExpr(plan, navs, conds, vertex_attrs, graph_data, n_vertices,
                  n_in_edges, n_out_edges, labels, pivot_vid, node.child_b,
                  workspace + workspace_capacity, workspace_capacity);
-    double da = ToDouble(a);
-    double db = ToDouble(b);
+    double da = a.ToDouble();
+    double db = b.ToDouble();
     switch (op) {
       case MG_TRANS_ADD:
-        return MakeFloatValue(da + db);
+        return MakeFloat64Value(da + db);
       case MG_TRANS_SUB:
-        return MakeFloatValue(da - db);
+        return MakeFloat64Value(da - db);
       case MG_TRANS_MUL:
-        return MakeFloatValue(da * db);
+        return MakeFloat64Value(da * db);
       case MG_TRANS_DIV:
-        return (db == 0.0) ? MakeInvalidValue() : MakeFloatValue(da / db);
+        return (db == 0.0) ? MakeInvalidValue() : MakeFloat64Value(da / db);
       case MG_TRANS_POW:
-        return MakeFloatValue(pow(da, db));
+        return MakeFloat64Value(pow(da, db));
       default:
         return MakeInvalidValue();
     }
@@ -477,7 +454,7 @@ __device__ MGFeatureValue EvalExpr(
     // participate so that nested aggregations remain cooperative.
     for (uint32_t i = 0; i < binding_count; ++i) {
       uint32_t binding_vid = static_cast<uint32_t>(workspace[i].i64);
-      MGFeatureValue v =
+      FeatureValue v =
           EvalExpr(plan, navs, conds, vertex_attrs, graph_data, n_vertices,
                    n_in_edges, n_out_edges, labels, binding_vid, node.src_idx,
                    workspace + workspace_capacity, workspace_capacity);
@@ -487,7 +464,7 @@ __device__ MGFeatureValue EvalExpr(
 
     // Pad unused entries for order-statistic primitives.
     if (threadIdx.x >= binding_count && threadIdx.x < blockDim.x) {
-      workspace[threadIdx.x] = MakeFloatValue(DBL_MAX);
+      workspace[threadIdx.x] = MakeFloat64Value(DBL_MAX);
     }
     __syncthreads();
 
@@ -515,8 +492,8 @@ __global__ void ComputeFeaturesKernel(
     uint32_t n_pivots, const MGPlanNode* plan, uint32_t n_plan_nodes,
     const MGPlanNode* navs, uint32_t n_navs, const MGCondNode* conds,
     uint32_t n_conds, const int32_t* output_expr_indices, uint32_t n_outputs,
-    MGFeatureValue* workspace, uint32_t workspace_capacity,
-    uint32_t per_pivot_workspace, MGFeatureValue* outputs) {
+    FeatureValue* workspace, uint32_t workspace_capacity,
+    uint32_t per_pivot_workspace, FeatureValue* outputs) {
   (void)n_plan_nodes;
   (void)n_navs;
   (void)n_conds;
@@ -525,11 +502,11 @@ __global__ void ComputeFeaturesKernel(
   if (pivot_idx >= n_pivots) return;
 
   uint32_t pivot_vid = pivot_vertex_ids[pivot_idx];
-  MGFeatureValue* my_workspace = workspace + pivot_idx * per_pivot_workspace;
+  FeatureValue* my_workspace = workspace + pivot_idx * per_pivot_workspace;
 
   for (uint32_t o = 0; o < n_outputs; ++o) {
     int32_t expr_idx = output_expr_indices[o];
-    MGFeatureValue v =
+    FeatureValue v =
         EvalExpr(plan, navs, conds, vertex_attrs, graph_data, n_vertices,
                  n_in_edges, n_out_edges, labels, pivot_vid, expr_idx,
                  my_workspace, workspace_capacity);

@@ -221,7 +221,6 @@ struct ComputeFeaturesAttributeColumn {
 
 /* Shorter aliases for internal C++ code. */
 using MGPlanNode = MatrixGraphPlanNode;
-using MGFeatureValue = MatrixGraphFeatureValue;
 using MGCondNode = MatrixGraphCondNode;
 
 #ifdef __cplusplus
