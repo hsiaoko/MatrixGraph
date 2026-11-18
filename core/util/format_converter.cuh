@@ -1,6 +1,19 @@
 #ifndef MATRIXGRAPH_CORE_UTIL_FORMAT_CONVERTER_CUH_
 #define MATRIXGRAPH_CORE_UTIL_FORMAT_CONVERTER_CUH_
 
+/**
+ * @file format_converter.cuh
+ * @brief Host-side conversions between the in-memory graph formats.
+ *
+ * Each format suits a different stage: ImmutableCSR for traversal, Edges for
+ * tools and IO, and the tiled matrices for kernels.  The functions here move a
+ * graph from one to another, plus the metadata bookkeeping each layout needs.
+ *
+ * Host code only: no file IO (the caller reads and writes) and no device
+ * allocation.  Every conversion returns a freshly heap-allocated object whose
+ * buffers are owned by the caller, who frees them.
+ */
+
 #include "core/common/types.h"
 #include "core/data_structures/bit_tiled_matrix.cuh"
 #include "core/data_structures/csr_tiled_matrix.cuh"
