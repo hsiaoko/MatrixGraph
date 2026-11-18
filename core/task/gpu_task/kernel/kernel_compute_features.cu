@@ -533,7 +533,13 @@ __global__ void ComputeFeaturesKernel(
         EvalExpr(plan, navs, conds, vertex_attrs, graph_data, n_vertices,
                  n_in_edges, n_out_edges, labels, pivot_vid, expr_idx,
                  my_workspace, workspace_capacity);
-    outputs[pivot_idx * n_outputs + o] = v;
+    // Order-statistic primitives compute on thread 0 only and return
+    // placeholders elsewhere. With every thread storing, the placeholders
+    // raced the real value (num_unique read back as 0). Thread 0 is the
+    // single writer; cooperative primitives already agree across threads.
+    if (threadIdx.x == 0) {
+      outputs[pivot_idx * n_outputs + o] = v;
+    }
   }
 }
 
