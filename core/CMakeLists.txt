@@ -145,6 +145,60 @@ set_target_properties(${PROJECT_NAME} PROPERTIES
 )
 
 #######################
+# Go / foreign-language C ABI
+#######################
+add_library(matrixgraph_goapi SHARED go_api/matrixgraph_go_api.cu)
+target_link_libraries(matrixgraph_goapi PRIVATE ${PROJECT_NAME} cudart)
+target_include_directories(matrixgraph_goapi PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}
+        ${PROJECT_ROOT_DIR}
+        ${THIRD_PARTY_ROOT}/yaml-cpp/include
+        ${CMAKE_CUDA_TOOLKIT_INCLUDE_DIRECTORIES}
+)
+set_target_properties(matrixgraph_goapi PROPERTIES
+        LIBRARY_OUTPUT_DIRECTORY ${PROJECT_ROOT_DIR}/lib
+        CUDA_SEPARABLE_COMPILATION ON
+        POSITION_INDEPENDENT_CODE ON
+)
+target_compile_options(matrixgraph_goapi PRIVATE
+        $<$<COMPILE_LANGUAGE:CUDA>:-UUSE_AVX2>
+)
+
+# Runnable ABI probe: exercises the C API the way a foreign caller would.
+add_executable(matrixgraph_capi_probe go_api/graph_aggregate_capi_probe.cpp)
+target_link_libraries(matrixgraph_capi_probe PRIVATE matrixgraph_goapi)
+target_include_directories(matrixgraph_capi_probe PRIVATE
+        ${PROJECT_ROOT_DIR}
+)
+# matrixgraph_goapi is compiled by nvcc, whose host compiler is GCC 13, so it
+# needs GCC 13's libstdc++ at link and run time; this probe is plain C++ and
+# would otherwise pick up the project compiler's older one.
+target_link_options(matrixgraph_capi_probe PRIVATE
+        "-L/usr/lib/gcc/x86_64-linux-gnu/13"
+        "-Wl,-rpath,/usr/lib/gcc/x86_64-linux-gnu/13"
+)
+set_target_properties(matrixgraph_capi_probe PROPERTIES
+        RUNTIME_OUTPUT_DIRECTORY ${PROJECT_ROOT_DIR}/bin
+)
+add_test(NAME CAPI_PROBE COMMAND matrixgraph_capi_probe)
+
+# Same for the value-list API (ExecuteAggPrim).
+add_executable(matrixgraph_exec_agg_probe
+        go_api/execute_agg_prim_go_api_test.cpp)
+target_link_libraries(matrixgraph_exec_agg_probe PRIVATE matrixgraph_goapi)
+target_include_directories(matrixgraph_exec_agg_probe PRIVATE
+        ${PROJECT_ROOT_DIR}/core/go_api
+)
+target_link_options(matrixgraph_exec_agg_probe PRIVATE
+        "-L/usr/lib/gcc/x86_64-linux-gnu/13"
+        "-Wl,-rpath,/usr/lib/gcc/x86_64-linux-gnu/13"
+)
+set_target_properties(matrixgraph_exec_agg_probe PROPERTIES
+        RUNTIME_OUTPUT_DIRECTORY ${PROJECT_ROOT_DIR}/bin
+)
+add_test(NAME CAPI_EXEC_AGG_PROBE COMMAND matrixgraph_exec_agg_probe)
+
+#######################
 # Standalone GraphAggregate test (no gtest dependency)
 #######################
 add_executable(graph_aggregate_test task/gpu_task/graph_aggregate_test.cu)

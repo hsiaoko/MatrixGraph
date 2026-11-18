@@ -1,0 +1,750 @@
+#include "core/go_api/matrixgraph_go_api.h"
+#include "core/task/gpu_task/execute_agg_prim.cuh"
+#include "core/task/gpu_task/gar_match.cuh"
+#include "core/task/gpu_task/graph_aggregate.cuh"
+#include "core/task/gpu_task/kernel/kernel_matrix_ops.cuh"
+#include "core/task/gpu_task/subiso.cuh"
+
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
+#include <cuda_runtime.h>
+
+namespace kernel = sics::matrixgraph::core::task::kernel;
+namespace task = sics::matrixgraph::core::task;
+using GraphAggregate = sics::matrixgraph::core::task::GraphAggregate;
+using FeatureRequest = sics::matrixgraph::core::task::kernel::FeatureRequest;
+using FeatureValue = sics::matrixgraph::core::task::kernel::FeatureValue;
+using AllFeatures = sics::matrixgraph::core::task::kernel::AllFeatures;
+using AggPrim = sics::matrixgraph::core::task::kernel::AggPrim;
+using AttributeName = sics::matrixgraph::core::data_structures::AttributeName;
+using SubIso = sics::matrixgraph::core::task::SubIso;
+using ExecuteAggPrim = sics::matrixgraph::core::task::ExecuteAggPrim;
+// The value-list API shares the library's single value/primitive vocabulary:
+// there is no second copy to alias to any more.
+using ExecuteFeatureValue = sics::matrixgraph::core::task::kernel::FeatureValue;
+using ExecuteAllFeatures = sics::matrixgraph::core::task::kernel::AllFeatures;
+using ExecuteAggPrimEnum = sics::matrixgraph::core::task::kernel::AggPrim;
+
+namespace {
+
+inline int cuda_err_to_int(cudaError_t e) { return (e == cudaSuccess) ? 0 : 1; }
+
+inline void log_cuda_error(const char* op) {
+  cudaError_t e = cudaGetLastError();
+  if (e != cudaSuccess) {
+    std::fprintf(stderr, "[matrixgraph] %s CUDA error: %s\n", op,
+                 cudaGetErrorString(e));
+  }
+}
+
+// If MATRIXGRAPH_CUDA_DEVICE is set (e.g. to "1"), use that GPU for subsequent
+// CUDA calls.
+inline void set_device_from_env() {
+  const char* s = std::getenv("MATRIXGRAPH_CUDA_DEVICE");
+  if (s == nullptr || s[0] == '\0') return;
+  int device = std::atoi(s);
+  if (device >= 0) {
+    cudaError_t e = cudaSetDevice(device);
+    if (e != cudaSuccess) {
+      std::fprintf(stderr, "[matrixgraph] cudaSetDevice(%d) failed: %s\n",
+                   device, cudaGetErrorString(e));
+    }
+  }
+}
+
+}  // namespace
+
+extern "C" {
+
+int matrixgraph_matmult(const float* A, const float* B, float* C, int m, int k,
+                        int n) {
+  set_device_from_env();
+  size_t sz_a = static_cast<size_t>(m) * k * sizeof(float);
+  size_t sz_b = static_cast<size_t>(k) * n * sizeof(float);
+  size_t sz_c = static_cast<size_t>(m) * n * sizeof(float);
+
+  float* d_A = nullptr;
+  float* d_B = nullptr;
+  float* d_C = nullptr;
+  cudaStream_t stream = nullptr;
+
+  cudaError_t err = cudaMalloc(&d_A, sz_a);
+  if (err != cudaSuccess) {
+    log_cuda_error("MatMult cudaMalloc");
+    return cuda_err_to_int(err);
+  }
+  err = cudaMalloc(&d_B, sz_b);
+  if (err != cudaSuccess) {
+    cudaFree(d_A);
+    log_cuda_error("MatMult cudaMalloc");
+    return cuda_err_to_int(err);
+  }
+  err = cudaMalloc(&d_C, sz_c);
+  if (err != cudaSuccess) {
+    cudaFree(d_A);
+    cudaFree(d_B);
+    log_cuda_error("MatMult cudaMalloc");
+    return cuda_err_to_int(err);
+  }
+
+  err = cudaMemcpy(d_A, A, sz_a, cudaMemcpyHostToDevice);
+  if (err != cudaSuccess) goto matmult_fail;
+  err = cudaMemcpy(d_B, B, sz_b, cudaMemcpyHostToDevice);
+  if (err != cudaSuccess) goto matmult_fail;
+
+  err = cudaStreamCreate(&stream);
+  if (err != cudaSuccess) goto matmult_fail;
+
+  kernel::MatrixOpsKernelWrapper::MatMult(stream, d_A, d_B, d_C, m, k, n, false,
+                                          false);
+
+  err = cudaStreamSynchronize(stream);
+  if (err != cudaSuccess) goto matmult_fail;
+  cudaStreamDestroy(stream);
+  stream = nullptr;
+
+  err = cudaMemcpy(C, d_C, sz_c, cudaMemcpyDeviceToHost);
+  if (err != cudaSuccess) goto matmult_fail;
+
+  cudaFree(d_A);
+  cudaFree(d_B);
+  cudaFree(d_C);
+  return 0;
+
+matmult_fail:
+  log_cuda_error("MatMult");
+  if (stream) cudaStreamDestroy(stream);
+  if (d_A) cudaFree(d_A);
+  if (d_B) cudaFree(d_B);
+  if (d_C) cudaFree(d_C);
+  return 1;
+}
+
+int matrixgraph_relu(float* A, int m, int n) {
+  set_device_from_env();
+  size_t sz = static_cast<size_t>(m) * n * sizeof(float);
+  float* d_A = nullptr;
+
+  cudaError_t err = cudaMalloc(&d_A, sz);
+  if (err != cudaSuccess) return cuda_err_to_int(err);
+
+  err = cudaMemcpy(d_A, A, sz, cudaMemcpyHostToDevice);
+  if (err != cudaSuccess) {
+    cudaFree(d_A);
+    return cuda_err_to_int(err);
+  }
+
+  cudaStream_t stream = nullptr;
+  err = cudaStreamCreate(&stream);
+  if (err != cudaSuccess) {
+    cudaFree(d_A);
+    return cuda_err_to_int(err);
+  }
+
+  kernel::MatrixOpsKernelWrapper::Relu(stream, d_A, m, n);
+  cudaStreamSynchronize(stream);
+  cudaStreamDestroy(stream);
+
+  err = cudaMemcpy(A, d_A, sz, cudaMemcpyDeviceToHost);
+  cudaFree(d_A);
+  return cuda_err_to_int(err);
+}
+
+int matrixgraph_matadd(const float* A, float* B, int m, int n) {
+  set_device_from_env();
+  size_t sz = static_cast<size_t>(m) * n * sizeof(float);
+  float* d_A = nullptr;
+  float* d_B = nullptr;
+  cudaStream_t stream = nullptr;
+
+  cudaError_t err = cudaMalloc(&d_A, sz);
+  if (err != cudaSuccess) return cuda_err_to_int(err);
+  err = cudaMalloc(&d_B, sz);
+  if (err != cudaSuccess) {
+    cudaFree(d_A);
+    return cuda_err_to_int(err);
+  }
+
+  err = cudaMemcpy(d_A, A, sz, cudaMemcpyHostToDevice);
+  if (err != cudaSuccess) goto matadd_fail;
+  err = cudaMemcpy(d_B, B, sz, cudaMemcpyHostToDevice);
+  if (err != cudaSuccess) goto matadd_fail;
+
+  err = cudaStreamCreate(&stream);
+  if (err != cudaSuccess) goto matadd_fail;
+
+  kernel::MatrixOpsKernelWrapper::MatAdd(stream, d_A, d_B, m, n);
+  cudaStreamSynchronize(stream);
+  cudaStreamDestroy(stream);
+  stream = nullptr;
+
+  err = cudaMemcpy(B, d_B, sz, cudaMemcpyDeviceToHost);
+
+matadd_fail:
+  if (stream) cudaStreamDestroy(stream);
+  if (d_A) cudaFree(d_A);
+  if (d_B) cudaFree(d_B);
+  return cuda_err_to_int(err);
+}
+
+int matrixgraph_transpose(const float* A, float* B, int m, int n) {
+  set_device_from_env();
+  size_t sz_a = static_cast<size_t>(m) * n * sizeof(float);
+  size_t sz_b = static_cast<size_t>(n) * m * sizeof(float);
+  float* d_A = nullptr;
+  float* d_B = nullptr;
+  cudaStream_t stream = nullptr;
+
+  cudaError_t err = cudaMalloc(&d_A, sz_a);
+  if (err != cudaSuccess) return cuda_err_to_int(err);
+  err = cudaMalloc(&d_B, sz_b);
+  if (err != cudaSuccess) {
+    cudaFree(d_A);
+    return cuda_err_to_int(err);
+  }
+
+  err = cudaMemcpy(d_A, A, sz_a, cudaMemcpyHostToDevice);
+  if (err != cudaSuccess) goto transpose_fail;
+
+  err = cudaStreamCreate(&stream);
+  if (err != cudaSuccess) goto transpose_fail;
+
+  kernel::MatrixOpsKernelWrapper::Transpose(stream, d_A, d_B, m, n);
+  cudaStreamSynchronize(stream);
+  cudaStreamDestroy(stream);
+  stream = nullptr;
+
+  err = cudaMemcpy(B, d_B, sz_b, cudaMemcpyDeviceToHost);
+
+transpose_fail:
+  if (stream) cudaStreamDestroy(stream);
+  if (d_A) cudaFree(d_A);
+  if (d_B) cudaFree(d_B);
+  return cuda_err_to_int(err);
+}
+
+int matrixgraph_gar_match(
+    const uint32_t* g_v_id, const int32_t* g_v_label_idx, int g_n_vertices,
+    const uint32_t* g_e_src, const uint32_t* g_e_dst, const uint32_t* g_e_id,
+    const int32_t* g_e_label_idx, int g_n_edges,
+    const int32_t* p_node_label_idx, int p_n_nodes, const int32_t* p_edge_src,
+    const int32_t* p_edge_dst, const int32_t* p_edge_label_idx, int p_n_edges,
+    int* out_num_conditions, uint32_t* out_row_pivot_id,
+    int32_t* out_row_cond_j, int32_t* out_row_pos, int32_t* out_row_offset,
+    int32_t* out_row_count, int out_row_capacity, int* out_row_size,
+    uint32_t* out_matched_v_ids, int out_match_capacity, int* out_match_size) {
+  // Route to GARMatch::SubIso.
+  return task::GARMatch::Run(
+      g_v_id, g_v_label_idx, g_n_vertices, g_e_src, g_e_dst, g_e_id,
+      g_e_label_idx, g_n_edges, p_node_label_idx, p_n_nodes, p_edge_src,
+      p_edge_dst, p_edge_label_idx, p_n_edges, out_num_conditions,
+      out_row_pivot_id, out_row_cond_j, out_row_pos, out_row_offset,
+      out_row_count, out_row_capacity, out_row_size, out_matched_v_ids,
+      out_match_capacity, out_match_size);
+}
+
+// ---------------------------------------------------------------------------
+// GraphAggregate C API
+// ---------------------------------------------------------------------------
+
+void* matrixgraph_graph_aggregate_create(void) {
+  set_device_from_env();
+  try {
+    return new GraphAggregate();
+  } catch (...) {
+    return nullptr;
+  }
+}
+
+void matrixgraph_graph_aggregate_destroy(void* handle) {
+  auto* task = static_cast<GraphAggregate*>(handle);
+  delete task;
+}
+
+int matrixgraph_graph_aggregate_load_synthetic(void* handle,
+                                               uint32_t n_vertices,
+                                               uint32_t out_degree) {
+  set_device_from_env();
+  auto* task = static_cast<GraphAggregate*>(handle);
+  if (!task) return 1;
+  try {
+    task->LoadSyntheticData(n_vertices, out_degree);
+  } catch (...) {
+    return 1;
+  }
+  return 0;
+}
+
+int matrixgraph_graph_aggregate_set_num_streams(void* handle,
+                                                uint32_t n_streams) {
+  set_device_from_env();
+  auto* task = static_cast<GraphAggregate*>(handle);
+  if (!task) return 1;
+  try {
+    task->SetNumStreams(n_streams);
+  } catch (...) {
+    return 1;
+  }
+  return 0;
+}
+
+namespace {
+
+using CppValueType = sics::matrixgraph::core::data_structures::ValueType;
+
+inline int32_t ToMgValueType(CppValueType cpp_type) {
+  switch (cpp_type) {
+    case CppValueType::kInt:
+      return MG_VALUE_INT;
+    case CppValueType::kFloat64:
+      return MG_VALUE_FLOAT64;
+    case CppValueType::kBool:
+      return MG_VALUE_BOOL;
+    case CppValueType::kTime:
+      return MG_VALUE_TIME;
+    case CppValueType::kFloat32:
+      return MG_VALUE_FLOAT32;
+    case CppValueType::kInvalid:
+    default:
+      return MG_VALUE_INVALID;
+  }
+}
+
+// Write only the union member matching the type tag. Sequential i64/f64/b
+// writes clobber the value (MatrixGraphFeatureValue shares one 8-byte slot),
+// and the internal ValueType numbering differs from MG_VALUE_*, so the tag
+// must go through ToMgValueType rather than a static_cast.
+inline void CopyFeatureValueToC(const FeatureValue& src,
+                                MatrixGraphFeatureValue* dst) {
+  dst->type = ToMgValueType(src.type);
+  switch (src.type) {
+    case CppValueType::kInt:
+    case CppValueType::kTime:
+      dst->i64 = src.i64;
+      break;
+    case CppValueType::kFloat64:
+    case CppValueType::kFloat32:
+      dst->f64 = src.f64;
+      break;
+    case CppValueType::kBool:
+      dst->b = src.b ? 1 : 0;
+      break;
+    default:
+      dst->i64 = 0;
+      break;
+  }
+}
+
+inline void CopyAllFeaturesToC(const AllFeatures& src,
+                               MatrixGraphAllFeatures* dst) {
+  CopyFeatureValueToC(src.count, &dst->count);
+  CopyFeatureValueToC(src.count_greater_than_mean,
+                      &dst->count_greater_than_mean);
+  CopyFeatureValueToC(src.num_unique, &dst->num_unique);
+  CopyFeatureValueToC(src.sum, &dst->sum);
+  CopyFeatureValueToC(src.mean, &dst->mean);
+  CopyFeatureValueToC(src.variance, &dst->variance);
+  CopyFeatureValueToC(src.std, &dst->std);
+  CopyFeatureValueToC(src.mode, &dst->mode);
+  CopyFeatureValueToC(src.min, &dst->min);
+  CopyFeatureValueToC(src.max, &dst->max);
+  CopyFeatureValueToC(src.median, &dst->median);
+  CopyFeatureValueToC(src.quarter, &dst->quarter);
+  CopyFeatureValueToC(src.quartile3, &dst->quartile3);
+  CopyFeatureValueToC(src.entropy, &dst->entropy);
+  CopyFeatureValueToC(src.percent_true, &dst->percent_true);
+  CopyFeatureValueToC(src.skew, &dst->skew);
+  CopyFeatureValueToC(src.dfeat, &dst->dfeat);
+}
+
+}  // namespace
+
+int matrixgraph_graph_aggregate_compute_features(
+    void* handle, const uint32_t* pivot_vertex_ids, uint32_t n_pivots,
+    const MatrixGraphFeatureRequest* requests, uint32_t n_requests,
+    MatrixGraphFeatureValue* out_values) {
+  set_device_from_env();
+  auto* task = static_cast<GraphAggregate*>(handle);
+  if (!task || !pivot_vertex_ids || !requests || !out_values) {
+    return 1;
+  }
+
+  std::vector<uint32_t> vids(pivot_vertex_ids, pivot_vertex_ids + n_pivots);
+
+  std::vector<FeatureRequest> cpp_reqs;
+  cpp_reqs.reserve(n_requests);
+  for (uint32_t i = 0; i < n_requests; ++i) {
+    FeatureRequest r;
+    std::memcpy(r.attr_name.data, requests[i].attr_name,
+                sizeof(r.attr_name.data));
+    r.neighbor_label = requests[i].neighbor_label;
+    r.use_outgoing = requests[i].use_outgoing != 0;
+    r.prim = static_cast<AggPrim>(requests[i].prim);
+    cpp_reqs.push_back(r);
+  }
+
+  std::vector<FeatureValue> cpp_out;
+  try {
+    cpp_out = task->ComputeFeatures(vids, cpp_reqs);
+  } catch (...) {
+    return 1;
+  }
+
+  if (cpp_out.size() != static_cast<size_t>(n_pivots) * n_requests) {
+    return 1;
+  }
+
+  for (size_t i = 0; i < cpp_out.size(); ++i) {
+    CopyFeatureValueToC(cpp_out[i], &out_values[i]);
+  }
+  return 0;
+}
+
+int matrixgraph_graph_aggregate_compute_all(
+    void* handle, const uint32_t* pivot_vertex_ids, uint32_t n_pivots,
+    const char* attr_name, uint8_t use_outgoing,
+    MatrixGraphAllFeatures* out_values) {
+  set_device_from_env();
+  auto* task = static_cast<GraphAggregate*>(handle);
+  if (!task || !pivot_vertex_ids || !attr_name || !out_values) {
+    return 1;
+  }
+
+  std::vector<uint32_t> vids(pivot_vertex_ids, pivot_vertex_ids + n_pivots);
+
+  std::vector<AllFeatures> cpp_out;
+  try {
+    cpp_out =
+        task->ComputeAll(vids, AttributeName(attr_name), use_outgoing != 0);
+  } catch (...) {
+    return 1;
+  }
+
+  if (cpp_out.size() != n_pivots) {
+    return 1;
+  }
+
+  for (size_t i = 0; i < cpp_out.size(); ++i) {
+    CopyAllFeaturesToC(cpp_out[i], &out_values[i]);
+  }
+  return 0;
+}
+
+// ---------------------------------------------------------------------------
+// ExecuteAggPrim C API
+// ---------------------------------------------------------------------------
+
+namespace {
+
+inline CppValueType ToCppValueType(int32_t mg_type) {
+  switch (mg_type) {
+    case MG_VALUE_INT:
+      return CppValueType::kInt;
+    case MG_VALUE_FLOAT64:
+      return CppValueType::kFloat64;
+    case MG_VALUE_BOOL:
+      return CppValueType::kBool;
+    case MG_VALUE_TIME:
+      return CppValueType::kTime;
+    case MG_VALUE_FLOAT32:
+      return CppValueType::kFloat32;
+    case MG_VALUE_INVALID:
+    default:
+      return CppValueType::kInvalid;
+  }
+}
+
+inline ExecuteFeatureValue ToExecuteFeatureValue(
+    const MatrixGraphFeatureValue& v) {
+  ExecuteFeatureValue r{};
+  r.type = ToCppValueType(v.type);
+  switch (r.type) {
+    case CppValueType::kInt:
+    case CppValueType::kTime:
+      r.i64 = v.i64;
+      break;
+    case CppValueType::kFloat64:
+    case CppValueType::kFloat32:
+      r.f64 = v.f64;
+      break;
+    case CppValueType::kBool:
+      r.b = v.b != 0;
+      break;
+    default:
+      r.i64 = v.i64;
+      break;
+  }
+  return r;
+}
+
+inline MatrixGraphFeatureValue ToMatrixGraphFeatureValue(
+    const ExecuteFeatureValue& v) {
+  MatrixGraphFeatureValue r;
+  r.type = ToMgValueType(v.type);
+  switch (v.type) {
+    case CppValueType::kInt:
+    case CppValueType::kTime:
+      r.i64 = v.i64;
+      break;
+    case CppValueType::kFloat64:
+    case CppValueType::kFloat32:
+      r.f64 = v.f64;
+      break;
+    case CppValueType::kBool:
+      r.b = v.b ? 1 : 0;
+      break;
+    default:
+      r.i64 = v.i64;
+      break;
+  }
+  return r;
+}
+
+inline ExecuteAggPrimEnum ToExecuteAggPrimEnum(int32_t v) {
+  switch (v) {
+    case MG_EXEC_AGG_COUNT:
+      return ExecuteAggPrimEnum::kCount;
+    case MG_EXEC_AGG_SUM:
+      return ExecuteAggPrimEnum::kSum;
+    case MG_EXEC_AGG_MEAN:
+      return ExecuteAggPrimEnum::kMean;
+    case MG_EXEC_AGG_MEDIAN:
+      return ExecuteAggPrimEnum::kMedian;
+    case MG_EXEC_AGG_MODE:
+      return ExecuteAggPrimEnum::kMode;
+    case MG_EXEC_AGG_MAX:
+      return ExecuteAggPrimEnum::kMax;
+    case MG_EXEC_AGG_MIN:
+      return ExecuteAggPrimEnum::kMin;
+    case MG_EXEC_AGG_VARIANCE:
+      return ExecuteAggPrimEnum::kVariance;
+    case MG_EXEC_AGG_STD:
+      return ExecuteAggPrimEnum::kStd;
+    case MG_EXEC_AGG_SKEW:
+      return ExecuteAggPrimEnum::kSkew;
+    case MG_EXEC_AGG_ENTROPY:
+      return ExecuteAggPrimEnum::kEntropy;
+    case MG_EXEC_AGG_NUM_UNIQUE:
+      return ExecuteAggPrimEnum::kNumUnique;
+    case MG_EXEC_AGG_PERCENT_TRUE:
+      return ExecuteAggPrimEnum::kPercentTrue;
+    case MG_EXEC_AGG_QUARTER:
+      return ExecuteAggPrimEnum::kQuarter;
+    case MG_EXEC_AGG_QUARTILE3:
+      return ExecuteAggPrimEnum::kQuartile3;
+    case MG_EXEC_AGG_COUNT_GREATER_THAN_MEAN:
+      return ExecuteAggPrimEnum::kCountGreaterThanMean;
+    case MG_EXEC_AGG_DFEAT:
+      return ExecuteAggPrimEnum::kDFeat;
+  }
+  return ExecuteAggPrimEnum::kCount;
+}
+
+inline void CopyExecuteAllFeaturesToC(const ExecuteAllFeatures& src,
+                                      MatrixGraphExecuteAllFeatures* dst) {
+  dst->count = ToMatrixGraphFeatureValue(src.count);
+  dst->sum = ToMatrixGraphFeatureValue(src.sum);
+  dst->mean = ToMatrixGraphFeatureValue(src.mean);
+  dst->median = ToMatrixGraphFeatureValue(src.median);
+  dst->mode = ToMatrixGraphFeatureValue(src.mode);
+  dst->max = ToMatrixGraphFeatureValue(src.max);
+  dst->min = ToMatrixGraphFeatureValue(src.min);
+  dst->variance = ToMatrixGraphFeatureValue(src.variance);
+  dst->std = ToMatrixGraphFeatureValue(src.std);
+  dst->skew = ToMatrixGraphFeatureValue(src.skew);
+  dst->entropy = ToMatrixGraphFeatureValue(src.entropy);
+  dst->num_unique = ToMatrixGraphFeatureValue(src.num_unique);
+  dst->percent_true = ToMatrixGraphFeatureValue(src.percent_true);
+  dst->quarter = ToMatrixGraphFeatureValue(src.quarter);
+  dst->quartile3 = ToMatrixGraphFeatureValue(src.quartile3);
+  dst->count_greater_than_mean =
+      ToMatrixGraphFeatureValue(src.count_greater_than_mean);
+  dst->dfeat = ToMatrixGraphFeatureValue(src.dfeat);
+}
+
+std::vector<std::vector<ExecuteFeatureValue>> BuildExecuteValueLists(
+    const MatrixGraphFeatureValue* flat_values, const uint32_t* offsets,
+    uint32_t n_lists) {
+  std::vector<std::vector<ExecuteFeatureValue>> lists(n_lists);
+  for (uint32_t i = 0; i < n_lists; ++i) {
+    uint32_t begin = offsets[i];
+    uint32_t end = offsets[i + 1];
+    lists[i].reserve(end - begin);
+    for (uint32_t j = begin; j < end; ++j) {
+      lists[i].push_back(ToExecuteFeatureValue(flat_values[j]));
+    }
+  }
+  return lists;
+}
+
+}  // namespace
+
+void* matrixgraph_execute_agg_prim_create(void) {
+  set_device_from_env();
+  try {
+    return new ExecuteAggPrim();
+  } catch (...) {
+    return nullptr;
+  }
+}
+
+void matrixgraph_execute_agg_prim_destroy(void* handle) {
+  auto* task = static_cast<ExecuteAggPrim*>(handle);
+  delete task;
+}
+
+int matrixgraph_execute_agg_prim_set_num_streams(void* handle,
+                                                 uint32_t n_streams) {
+  set_device_from_env();
+  auto* task = static_cast<ExecuteAggPrim*>(handle);
+  if (!task) return 1;
+  try {
+    task->SetNumStreams(n_streams);
+  } catch (...) {
+    return 1;
+  }
+  return 0;
+}
+
+int matrixgraph_execute_agg_prim_compute(void* handle, int32_t prim,
+                                         const MatrixGraphFeatureValue* values,
+                                         uint32_t n,
+                                         MatrixGraphFeatureValue* out) {
+  set_device_from_env();
+  auto* task = static_cast<ExecuteAggPrim*>(handle);
+  if (!task || !values || !out) return 1;
+
+  std::vector<ExecuteFeatureValue> cpp_values;
+  cpp_values.reserve(n);
+  for (uint32_t i = 0; i < n; ++i) {
+    cpp_values.push_back(ToExecuteFeatureValue(values[i]));
+  }
+
+  ExecuteFeatureValue cpp_out;
+  try {
+    cpp_out = task->Compute(ToExecuteAggPrimEnum(prim), cpp_values.data(), n);
+  } catch (...) {
+    return 1;
+  }
+  *out = ToMatrixGraphFeatureValue(cpp_out);
+  return 0;
+}
+
+int matrixgraph_execute_agg_prim_compute_all(
+    void* handle, const MatrixGraphFeatureValue* values, uint32_t n,
+    MatrixGraphExecuteAllFeatures* out) {
+  set_device_from_env();
+  auto* task = static_cast<ExecuteAggPrim*>(handle);
+  if (!task || !values || !out) return 1;
+
+  std::vector<ExecuteFeatureValue> cpp_values;
+  cpp_values.reserve(n);
+  for (uint32_t i = 0; i < n; ++i) {
+    cpp_values.push_back(ToExecuteFeatureValue(values[i]));
+  }
+
+  ExecuteAllFeatures cpp_out;
+  try {
+    cpp_out = task->ComputeAll(cpp_values.data(), n);
+  } catch (...) {
+    return 1;
+  }
+  CopyExecuteAllFeaturesToC(cpp_out, out);
+  return 0;
+}
+
+int matrixgraph_execute_agg_prim_compute_batch(
+    void* handle, int32_t prim, const MatrixGraphFeatureValue* flat_values,
+    const uint32_t* offsets, uint32_t n_lists, MatrixGraphFeatureValue* out) {
+  set_device_from_env();
+  auto* task = static_cast<ExecuteAggPrim*>(handle);
+  if (!task || !flat_values || !offsets || !out) return 1;
+
+  auto lists = BuildExecuteValueLists(flat_values, offsets, n_lists);
+  std::vector<ExecuteFeatureValue> cpp_out;
+  try {
+    cpp_out = task->ComputeBatch(ToExecuteAggPrimEnum(prim), lists);
+  } catch (...) {
+    return 1;
+  }
+  if (cpp_out.size() != n_lists) return 1;
+  for (uint32_t i = 0; i < n_lists; ++i) {
+    out[i] = ToMatrixGraphFeatureValue(cpp_out[i]);
+  }
+  return 0;
+}
+
+int matrixgraph_execute_agg_prim_compute_batch_multi_prim(
+    void* handle, const MatrixGraphFeatureValue* flat_values,
+    const uint32_t* offsets, uint32_t n_lists, const int32_t* prims,
+    uint32_t n_primitives, MatrixGraphFeatureValue* out) {
+  set_device_from_env();
+  auto* task = static_cast<ExecuteAggPrim*>(handle);
+  if (!task || !flat_values || !offsets || !prims || !out) return 1;
+
+  auto lists = BuildExecuteValueLists(flat_values, offsets, n_lists);
+  std::vector<ExecuteAggPrimEnum> cpp_prims;
+  cpp_prims.reserve(n_primitives);
+  for (uint32_t i = 0; i < n_primitives; ++i) {
+    cpp_prims.push_back(ToExecuteAggPrimEnum(prims[i]));
+  }
+
+  std::vector<std::vector<ExecuteFeatureValue>> cpp_out;
+  try {
+    cpp_out = task->ComputeBatchMultiPrim(lists, cpp_prims);
+  } catch (...) {
+    return 1;
+  }
+  if (cpp_out.size() != n_lists) return 1;
+  for (uint32_t i = 0; i < n_lists; ++i) {
+    if (cpp_out[i].size() != n_primitives) return 1;
+    for (uint32_t j = 0; j < n_primitives; ++j) {
+      out[i * n_primitives + j] = ToMatrixGraphFeatureValue(cpp_out[i][j]);
+    }
+  }
+  return 0;
+}
+
+int matrixgraph_execute_agg_prim_compute_all_batch(
+    void* handle, const MatrixGraphFeatureValue* flat_values,
+    const uint32_t* offsets, uint32_t n_lists,
+    MatrixGraphExecuteAllFeatures* out) {
+  set_device_from_env();
+  auto* task = static_cast<ExecuteAggPrim*>(handle);
+  if (!task || !flat_values || !offsets || !out) return 1;
+
+  auto lists = BuildExecuteValueLists(flat_values, offsets, n_lists);
+  std::vector<ExecuteAllFeatures> cpp_out;
+  try {
+    cpp_out = task->ComputeAllBatch(lists);
+  } catch (...) {
+    return 1;
+  }
+  if (cpp_out.size() != n_lists) return 1;
+  for (uint32_t i = 0; i < n_lists; ++i) {
+    CopyExecuteAllFeaturesToC(cpp_out[i], &out[i]);
+  }
+  return 0;
+}
+
+int matrixgraph_subiso(
+    uint32_t p_num_vertices, uint32_t p_num_in_edges, uint32_t p_num_out_edges,
+    uint32_t p_max_vid, uint32_t p_min_vid, const uint8_t* p_csr_data,
+    uint64_t p_csr_data_size, const uint32_t* p_labels, uint32_t g_num_vertices,
+    uint32_t g_num_in_edges, uint32_t g_num_out_edges, uint32_t g_max_vid,
+    uint32_t g_min_vid, const uint8_t* g_csr_data, uint64_t g_csr_data_size,
+    const uint32_t* g_labels, int max_result_tables, int max_result_rows,
+    int max_result_cols, uint32_t* out_table_cols, uint32_t* out_table_rows,
+    uint32_t* out_headers_flat, uint32_t* out_data_flat, int* out_num_tables) {
+  set_device_from_env();
+  return SubIso::Run(p_num_vertices, p_num_in_edges, p_num_out_edges, p_max_vid,
+                     p_min_vid, p_csr_data, p_csr_data_size, p_labels,
+                     g_num_vertices, g_num_in_edges, g_num_out_edges, g_max_vid,
+                     g_min_vid, g_csr_data, g_csr_data_size, g_labels,
+                     max_result_tables, max_result_rows, max_result_cols,
+                     out_table_cols, out_table_rows, out_headers_flat,
+                     out_data_flat, out_num_tables);
+}
+
+}  // extern "C"
