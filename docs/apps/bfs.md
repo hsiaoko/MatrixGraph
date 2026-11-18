@@ -10,7 +10,7 @@ GPU **breadth-first search** from a single source on a CSR graph (`core/task/gpu
 |------|-------------|
 | `-g` | **Required.** Input graph directory (CSR). |
 | `-src` | Source vertex **local ID** (default `0`). |
-| `-backend` | `gpu` (default), or `cpu`, `cpu_serial`. |
+| `-backend` | `gpu` (default and only choice: the task has no host implementation, so a CPU backend is rejected). |
 
 ## Example
 

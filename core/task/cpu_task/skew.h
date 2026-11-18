@@ -5,7 +5,7 @@
 // is the sampled undirected diameter. Prints its result; returns nothing.
 #include "core/common/types.h"
 #include "core/data_structures/immutable_csr.cuh"
-#include "core/task/gpu_task/task_base.cuh"
+#include "core/task/cpu_task/cpu_task_base.h"
 
 #include <cstdint>
 #include <string>
@@ -15,7 +15,7 @@ namespace matrixgraph {
 namespace core {
 namespace task {
 
-class Skew : public TaskBase {
+class Skew : public CPUTaskBase {
  public:
   Skew(std::string data_graph_path, size_t sample_sources = 50,
        uint64_t random_seed = 42, size_t cpu_parallelism = 0)

@@ -14,7 +14,7 @@
 | `-diameter_samples` | Number of random BFS sources (default **50**). **`0` = exact** (all vertices). |
 | `-diameter_seed` | RNG seed for sampling (default **42**). |
 | `-cpu_parallel` | Max oneTBB workers for the parallel loop over sources (**`0` = default / unlimited**). |
-| `-backend` | `cpu` (default), or `cpu_serial`, `gpu`. |
+| `-backend` | `cpu` (default) or `cpu_serial`. Both run the same CPU task; `gpu` is rejected because this algorithm has no device implementation. |
 
 ## Example
 

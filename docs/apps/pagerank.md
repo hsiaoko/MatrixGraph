@@ -13,7 +13,7 @@ GPU **PageRank** on a CSR graph (`core/task/gpu_task/pagerank.cu`).
 | `-damping` | Damping factor in `(0, 1)` (default `0.85`). |
 | `-epsilon` | Convergence threshold `> 0` (default `1e-6`). |
 | `-max_iter` | Maximum iterations `> 0` (default `10`). |
-| `-backend` | `gpu` (default), or `cpu`, `cpu_serial`. |
+| `-backend` | `gpu` (default and only choice: the task has no host implementation, so a CPU backend is rejected). |
 
 ## Example
 

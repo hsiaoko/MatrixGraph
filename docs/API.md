@@ -44,6 +44,38 @@ engine->Run(bfs);
 Host-only dependencies such as yaml-cpp are allowed on this surface. The
 rules are specifically about CUDA and TBB.
 
+## Which backend runs which task
+
+There are two task contracts and one engine per execution space:
+
+- `task::CPUTaskBase` — host algorithms (`SubIsoCPU`, `LFTJSubIso`, `Skew`,
+  `Diameter`). `Backend::kCpuSerial` and `Backend::kCpuParallel` both run them;
+  the two differ only in the worker cap (`EngineOptions::max_threads`, and
+  `kCpuSerial` forces one worker).
+- `task::TaskBase` — device algorithms (`BFS`, `WCC`, `PageRank`, `SubIso`,
+  `GARMatch`, `GEMM`, `LFTJSubIsoGpu`, `ComputeFeaturesTask`). Only
+  `Backend::kGpu` runs them.
+
+A mismatch is a programming error and throws `util::Error(kUnsupported)`
+("CPU engine cannot run a GPU task", "GPU engine cannot run a CPU task"), so a
+wrong `-backend` fails at the call instead of silently doing something else.
+
+`ComputeFeaturesTask`, `ExecuteAggPrim` and `GraphAggregate` are service-style:
+their value comes from typed `Compute()` calls on buffers the caller supplies,
+and they are used directly rather than through `Engine::Run`. Their `Run`
+stays empty on purpose.
+
+Per executable, `-backend` defaults to the family the algorithm belongs to:
+
+| Executables | Default | Accepted |
+|-------------|---------|----------|
+| `bfs`, `wcc`, `pagerank`, `subiso`, `gar_match`, `gemm`, `lftj_subiso_gpu` | `gpu` | `gpu` only |
+| `diameter`, `skew`, `subiso_cpu`, `lftj_subiso` | `cpu` | `cpu`, `cpu_serial` |
+
+`apps/compute_features.cpp`, `apps/execute_agg_prim.cpp`,
+`apps/graph_aggregate.cpp` and the `graphrag_*` wrappers take no `-backend`:
+the first three drive service tasks directly, the last group calls kernels.
+
 ## What is not public yet
 
 Headers under `core/` outside the umbrellas are internal and move without

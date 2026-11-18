@@ -9,7 +9,7 @@ Computes **weakly connected components** on a graph in CSR form using the GPU Ha
 | Flag | Description |
 |------|-------------|
 | `-g` | **Required.** Root path of the input graph (CSR layout + `meta.yaml`, same as other apps). |
-| `-backend` | `gpu` (default), or `cpu`, `cpu_serial`. |
+| `-backend` | `gpu` (default and only choice: the task has no host implementation, so a CPU backend is rejected). |
 
 **Environment:** `MATRIXGRAPH_CUDA_DEVICE` — 0-based GPU id (default **0**). Required if you only have one GPU; previously the code targeted device 1 and could **crash (SIGSEGV)**.
 

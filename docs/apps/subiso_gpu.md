@@ -12,7 +12,7 @@
 | `-g` | **Required.** Data graph path (CSR dataset). |
 | `-e` | Data graph edge-list path (required by task constructor; see implementation for expected format). |
 | `-o` | **Required.** Output directory / path for results. |
-| `-backend` | `gpu` (default), or `cpu`, `cpu_serial`. |
+| `-backend` | `gpu` (default and only choice: the task has no host implementation, so a CPU backend is rejected). |
 
 ## Environment variables
 

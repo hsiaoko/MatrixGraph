@@ -16,7 +16,7 @@ GPU-accelerated Graph Association Rule (GAR) matching application. Queries graph
 |-----------|-------------|
 | `-config` | Path to GARMatch YAML config file (required) |
 | `-o` | Path for output results (required) |
-| `-backend` | `gpu` (default), or `cpu`, `cpu_serial`. |
+| `-backend` | `gpu` (default and only choice: the task has no host implementation, so a CPU backend is rejected). |
 | `-device` | CUDA device ID to use (default: 2) |
 
 ## Input Format

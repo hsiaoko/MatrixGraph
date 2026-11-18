@@ -5,7 +5,7 @@
 // sampled mode is a lower bound on the true diameter.
 #include "core/common/types.h"
 #include "core/data_structures/immutable_csr.cuh"
-#include "core/task/gpu_task/task_base.cuh"
+#include "core/task/cpu_task/cpu_task_base.h"
 
 #include <cstdint>
 #include <string>
@@ -20,7 +20,7 @@ namespace task {
 // Default: approximate — BFS from `sample_sources_` random vertices (max
 // eccentricity among them; never exceeds true diameter). `sample_sources_ == 0`
 // means exact: BFS from every vertex (O(n*(n+m))).
-class Diameter : public TaskBase {
+class Diameter : public CPUTaskBase {
  public:
   // cpu_parallelism: max TBB workers for the parallel BFS-source loop; 0 =
   // unlimited.
