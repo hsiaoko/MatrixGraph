@@ -1,0 +1,13 @@
+[GraphAggregate] Adding synthetic graph: 100 vertices, out-degree=3
+[GraphAggregate] Graph data replicated to 1 GPU(s) (5208 bytes each)
+[GraphAggregate] Loaded 2 attribute column(s) on 1 GPU(s)
+[GraphAggregate] Synthetic graph ready.
+compute_features rc=0
+count: type=1 i64=3 (want type=1 i64=3)
+sum:   type=2 f64=3 (want type=2 f64=3)
+pct:   type=2 f64=0.333333 (want type=2 f64=0.333333)
+TAGS_OK COUNT_OK SUM_OK PCT_OK
+[GraphAggregate::ComputeAll] max_neighbors=3 shared_mem=36936 bytes
+[GraphAggregate::ComputeAll] GPU kernel time: 0.141312 ms
+compute_all rc=0 count.type=1 count.i64=3 sum.type=2 sum.f64=3 dfeat.type=0
+ALL_TAGS_OK

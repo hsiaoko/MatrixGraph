@@ -1,0 +1,17 @@
+[GraphAggregate Synthetic Test] Starting...
+[GraphAggregate] Adding synthetic graph: 100 vertices, out-degree=3
+[GraphAggregate] Graph data replicated to 1 GPU(s) (5208 bytes each)
+[GraphAggregate] Loaded 2 attribute column(s) on 1 GPU(s)
+[GraphAggregate] Synthetic graph ready.
+FAIL sum at v=0 expected=3 got=0
+GRAPH_AGG_EXIT=1
+[ExecuteAggPrim Test] Single primitives...
+[ExecuteAggPrim Test] Single primitives PASSED
+[ExecuteAggPrim Test] Batch Sum...
+[ExecuteAggPrim Test] Batch PASSED
+[ExecuteAggPrim Test] ComputeAll...
+[ExecuteAggPrim Test] ComputeAll PASSED
+[ExecuteAggPrim Test] ComputeBatchMultiPrim...
+[ExecuteAggPrim Test] ComputeBatchMultiPrim PASSED
+[ExecuteAggPrim Test] ALL PASSED
+AGG_PRIM_EXIT=0

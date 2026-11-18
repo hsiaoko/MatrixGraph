@@ -1,0 +1,29 @@
+Internal ctest changing into directory: /tmp/mg-m0
+Test project /tmp/mg-m0
+    Start 1: HashMapStandalone
+1/6 Test #1: HashMapStandalone ................   Passed    8.20 sec
+    Start 2: AttributesHashmapStandalone
+2/6 Test #2: AttributesHashmapStandalone ......   Passed    8.14 sec
+    Start 3: GraphAggregateStandalone
+3/6 Test #3: GraphAggregateStandalone .........***Failed   31.83 sec
+[GraphAggregate Synthetic Test] Starting...
+[GraphAggregate] Adding synthetic graph: 100 vertices, out-degree=3
+[GraphAggregate] Graph data replicated to 1 GPU(s) (5208 bytes each)
+[GraphAggregate] Loaded 2 attribute column(s) on 1 GPU(s)
+[GraphAggregate] Synthetic graph ready.
+FAIL sum at v=0 expected=3 got=0
+
+    Start 4: ExecuteAggPrimStandalone
+4/6 Test #4: ExecuteAggPrimStandalone .........   Passed    8.20 sec
+    Start 5: HEAP
+5/6 Test #5: HEAP .............................   Passed    0.00 sec
+    Start 6: COMPUTE_FEATURES
+6/6 Test #6: COMPUTE_FEATURES .................   Passed    8.22 sec
+
+83% tests passed, 1 tests failed out of 6
+
+Total Test time (real) =  64.59 sec
+
+The following tests FAILED:
+	  3 - GraphAggregateStandalone (Failed)
+Errors while running CTest
