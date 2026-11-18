@@ -14,7 +14,7 @@
 - **M4**：U4.1 14 个 app 迁 `-backend`/`MakeEngine`（`669e6f6`，错后端干净拒绝）；U4.2 删 facade/`TaskType`/scheduler 集群 + 8 文档同步（`1b5cc92`）；U4.3 header-hygiene gate `scripts/check-headers.sh`（`afc9106`）；U4.4 GpuEngine 持有 stream 池、任务借用（`727fa6e`）。
 - **M5.1**：公共 C++ 面 `matrixgraph/matrixgraph.h` + 三个伞头，闸门扩到 12 头，`docs/API.md`（`3caec81`）。
 - **Phase 3 零 warning**：158 唯一位置 → **0**（干净 Release **与** Debug 实测均为 0，ctest 双 6/6），cap=0；提交 W1 正确性组 `ad03b60`、unused+默认值 `4a3b69d`、reorder+参数 `500ef15`、sign-compare+残余 `277be97`、宏/重载 `ff6cacc`、cap 归零 `900ae26`。第三方 14 行豁免在案。
-- **Phase 4（全部完成）**：clang-format 18.1.8 pinned + `.clang-format` 重写，163 文件格式化（`5b98cd3`）；拼写/宏/typedef（`f075407`）；9 个 kernel、52 个访问器（734 处）、12 个自由函数 PascalCase，`StoreStrategy` → enum class（`37aa26b`）；死注释清理 −149 行 / 22 文件（`c88ff67`）；责任头注释 76/103（`4bdbde5` 18 个 + `d687959` 58 个；1 个空头、10 个有理由跳过）；全树格式复归干净。教训：`kDefalut*` 前缀型标识符不能用 `\b` 词边界；`binary_search` 改名会误伤 `std::binary_search`。
+- **Phase 4（全部完成）**：clang-format 18.1.8 pinned + `.clang-format` 重写，163 文件格式化（`5b98cd3`）；拼写/宏/typedef（`f075407`）；9 个 kernel、52 个访问器（734 处）、12 个自由函数 PascalCase，`StoreStrategy` → enum class（`37aa26b`）；死注释清理 −149 行 / 22 文件（`c88ff67`）；责任头注释 76/103（`4bdbde5` 18 个 + `d687959` 58 个；1 个空头、10 个有理由跳过），2026-11-18 补齐最后 3 个（`b2f3b26`：`format_converter.cuh` 真缺口 + 2 个空占位注明），现 102 个头全部有文件级注释、扫描 missing=0；全树格式复归干净。教训：`kDefalut*` 前缀型标识符不能用 `\b` 词边界；`binary_search` 改名会误伤 `std::binary_search`。
 
 ## 验证协议（每个单元必做）
 
